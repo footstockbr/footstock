@@ -12,33 +12,29 @@ export async function GET(request: NextRequest) {
 
   try {
     // TODO: Implementar via /auto-flow execute
-    const [user, orders, positions, transactions] = await Promise.all([
-      prisma.user.findUnique({ where: { id: auth.user.id } }),
-      prisma.order.findMany({ where: { userId: auth.user.id } }),
-      prisma.position.findMany({ where: { userId: auth.user.id } }),
-      prisma.transaction.findMany({ where: { userId: auth.user.id } }),
-    ])
-
-    const exportData = { profile: user, orders, positions, transactions }
-
-    if (format === 'csv') {
-      // TODO: Implementar conversão para CSV via /auto-flow execute
-      return new NextResponse('exportação em CSV em desenvolvimento', {
-        status: 200,
-        headers: {
-          'Content-Type': 'text/csv',
-          'Content-Disposition': 'attachment; filename="foot-stock-dados.csv"',
-        },
-      })
-    }
-
-    return new NextResponse(JSON.stringify(exportData, null, 2), {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Disposition': 'attachment; filename="foot-stock-dados.json"',
+    // Registrar solicitação de exportação
+    await prisma.dataAccessLog.create({
+      data: {
+        userId: auth.user.id,
+        accessedBy: auth.user.id,
+        action: 'DATA_EXPORT_REQUEST',
+        details: { format },
       },
+    }).catch(() => {
+      // Não bloquear se dataAccessLog não existir ainda
     })
+
+    // Retornar 202 Accepted — exportação será processada em background
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          message: 'Exportação solicitada. Você receberá um email em breve.',
+          estimatedTime: 'até 15 dias úteis',
+        },
+      },
+      { status: 202 }
+    )
   } catch {
     return errors.server()
   }

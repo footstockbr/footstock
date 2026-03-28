@@ -1,33 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
-// Rotas públicas (sem autenticação)
-const PUBLIC_PATHS = [
+// ─── Configuração de rotas ─────────────────────────────────────────────────────
+
+/** Rotas de API públicas (sem autenticação) */
+const PUBLIC_API_PATHS = [
   '/api/v1/auth/register',
   '/api/v1/auth/login',
   '/api/v1/auth/forgot-password',
   '/api/v1/auth/reset-password',
+  '/api/v1/auth/webauthn/authenticate',
   '/api/v1/health',
   '/api/v1/payments/webhook',
 ]
 
+/** Rotas de página protegidas — redireciona para / se não autenticado */
+const PROTECTED_PAGE_ROUTES = [
+  '/mercado',
+  '/ativo',
+  '/portfolio',
+  '/noticias',
+  '/ligas',
+  '/comunidade',
+  '/assessor',
+  '/glossario',
+  '/conta',
+  '/planos',
+  '/inbox',
+  '/dividendos',
+  '/admin',
+  '/perfil',
+  '/onboarding',
+]
+
+/** Rotas de página de auth — redireciona para /mercado se já autenticado */
+const AUTH_PAGE_ROUTES = ['/', '/login', '/cadastro', '/recuperar-senha']
+
+// ─── Middleware ────────────────────────────────────────────────────────────────
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Não interceptar rotas não-API
-  if (!pathname.startsWith('/api/v1')) {
-    return NextResponse.next()
-  }
-
-  // Rotas públicas passam direto
-  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
-    return NextResponse.next()
-  }
-
   const response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
+    request: { headers: request.headers },
   })
 
   const supabase = createServerClient(
@@ -48,28 +63,65 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser()
+  // ─── API routes ──────────────────────────────────────────────────────────
+  if (pathname.startsWith('/api/v1')) {
+    // Rotas públicas passam direto
+    if (PUBLIC_API_PATHS.some((p) => pathname.startsWith(p))) {
+      return response
+    }
 
-  if (error || !user) {
-    return NextResponse.json(
-      { error: { code: 'AUTH_001', message: 'Sessão expirada. Faça login novamente.' } },
-      { status: 401 }
-    )
+    // Rotas protegidas — verificar autenticação
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser()
+
+    if (error || !user) {
+      return NextResponse.json(
+        { error: { code: 'AUTH_001', message: 'Sessão expirada. Faça login novamente.' } },
+        { status: 401 }
+      )
+    }
+
+    // Injetar userId para uso nos route handlers
+    const requestHeaders = new Headers(request.headers)
+    requestHeaders.set('x-user-id', user.id)
+    requestHeaders.set('x-user-email', user.email ?? '')
+
+    return NextResponse.next({ request: { headers: requestHeaders } })
   }
 
-  // Injetar userId no header para uso nas routes
-  const requestHeaders = new Headers(request.headers)
-  requestHeaders.set('x-user-id', user.id)
-  requestHeaders.set('x-user-email', user.email ?? '')
+  // ─── Page routes ──────────────────────────────────────────────────────────
+  if (PROTECTED_PAGE_ROUTES.some((r) => pathname.startsWith(r))) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-  return NextResponse.next({
-    request: { headers: requestHeaders },
-  })
+    if (!user) {
+      return NextResponse.redirect(new URL('/', request.url))
+    }
+
+    return response
+  }
+
+  if (AUTH_PAGE_ROUTES.some((r) => pathname === r)) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (user) {
+      return NextResponse.redirect(new URL('/mercado', request.url))
+    }
+  }
+
+  return response
 }
 
 export const config = {
-  matcher: ['/api/v1/:path*'],
+  matcher: [
+    // API routes
+    '/api/v1/:path*',
+    // Page routes — excluir statics e internals do Next.js
+    '/((?!_next/static|_next/image|favicon.ico|public/).*)',
+  ],
 }

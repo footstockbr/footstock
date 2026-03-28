@@ -1,0 +1,58 @@
+name: Staging Validate
+
+on:
+  workflow_dispatch:
+    inputs:
+      staging_url:
+        description: 'URL do preview Vercel'
+        required: true
+        type: string
+
+jobs:
+  health-check:
+    name: Health Check Staging
+    runs-on: ubuntu-latest
+    steps:
+      - name: Aguardar deploy estabilizar
+        run: sleep 15
+
+      - name: Verificar health endpoint
+        run: |
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "${{ inputs.staging_url }}/api/v1/health")
+          if [ "$RESPONSE" != "200" ]; then
+            echo "ERRO: /api/v1/health retornou HTTP $RESPONSE (esperado 200)"
+            exit 1
+          fi
+          echo "OK: /api/v1/health retornou HTTP 200"
+
+      - name: Verificar body do health check
+        run: |
+          BODY=$(curl -s "${{ inputs.staging_url }}/api/v1/health")
+          echo "Response body: $BODY"
+          STATUS=$(echo $BODY | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))")
+          if [ "$STATUS" != "ok" ] && [ "$STATUS" != "degraded" ]; then
+            echo "ERRO: status='$STATUS' (esperado ok ou degraded)"
+            exit 1
+          fi
+          echo "OK: status='$STATUS'"
+
+      - name: Verificar ausência de erros 500
+        run: |
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "${{ inputs.staging_url }}")
+          if [ "$RESPONSE" = "500" ] || [ "$RESPONSE" = "503" ]; then
+            echo "ERRO: Homepage retornou HTTP $RESPONSE"
+            exit 1
+          fi
+          echo "OK: Homepage retornou HTTP $RESPONSE"
+
+      - name: Verificar security headers
+        run: |
+          HEADERS=$(curl -sI "${{ inputs.staging_url }}")
+          echo "$HEADERS"
+          for header in "x-content-type-options" "x-frame-options" "strict-transport-security"; do
+            if ! echo "$HEADERS" | grep -qi "$header"; then
+              echo "AVISO: Header $header ausente"
+            else
+              echo "OK: Header $header presente"
+            fi
+          done

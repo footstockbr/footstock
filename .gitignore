@@ -1,24 +1,41 @@
-
-# Ambiente
-.env
-.env*.local
-test-users.md
-test-users.json
+# Dependencies
+node_modules/
+motor/node_modules/
 
 # Next.js
-node_modules/
 .next/
 out/
-.turbo/
-dist/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
+# Environment
+.env
+.env*.local
+!.env.example
+
+# Build
+dist/
+motor/dist/
+*.tsbuildinfo
 
 # OS
 .DS_Store
 Thumbs.db
 
+# IDE
+.idea/
+.vscode/settings.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# Sentry
+.sentryclirc
+
+# Legacy (kept for reference but excluded from new build)
+
+# Credenciais de desenvolvimento
+DEV-CREDENTIALS.md

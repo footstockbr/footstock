@@ -1,65 +1,95 @@
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { getAuthUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { list, errors } from '@/lib/api'
+import { errors } from '@/lib/api'
+import { tickerSchema } from '@/lib/validators/tickerSchema'
+import { PriceHistoryRepository } from '@/lib/repositories/PriceHistoryRepository'
+import type { ChartPeriod } from '@/lib/repositories/PriceHistoryRepository'
 
-const VALID_PERIODS = ['1m', '5m', '15m', '1h', '1d'] as const
-type Period = (typeof VALID_PERIODS)[number]
+const querySchema = z.object({
+  period: z.enum(['1D', '1W', '1M', '3M', '1Y', 'ALL']).default('1M'),
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+})
 
-// GET /api/v1/assets/:ticker/history?period=1h&limit=100&before=ISO8601
+// GET /api/v1/assets/:ticker/history?period=1M
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ ticker: string }> }
 ) {
-  const { ticker } = await params
-  const { searchParams } = request.nextUrl
+  const authResult = await getAuthUser()
+  if (!authResult) return errors.unauthorized()
 
-  const period = searchParams.get('period') as Period | null
-  const limitParam = Math.min(500, Math.max(1, parseInt(searchParams.get('limit') ?? '100', 10)))
-  const before = searchParams.get('before')
+  const { ticker: rawTicker } = await params
+  const tickerResult = tickerSchema.safeParse(rawTicker)
+  if (!tickerResult.success) {
+    console.warn('[SECURITY] Invalid ticker attempt:', {
+      raw: rawTicker,
+      ip: request.headers.get('x-forwarded-for'),
+    })
+    return NextResponse.json(
+      { error: { code: 'ASSET_051', message: 'Ativo inválido. Selecione um dos ativos disponíveis na plataforma.' } },
+      { status: 422 }
+    )
+  }
+  const ticker = tickerResult.data
 
-  if (!period || !VALID_PERIODS.includes(period)) {
-    return errors.validation('Período inválido. Use: 1m, 5m, 15m, 1h, 1d')
+  const parsed = querySchema.safeParse(
+    Object.fromEntries(request.nextUrl.searchParams)
+  )
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: { code: 'VAL_002', message: 'Período inválido. Use: 1D, 1W, 1M, 3M, 1Y ou ALL.' } },
+      { status: 400 }
+    )
+  }
+
+  const { period, from, to } = parsed.data as {
+    period: ChartPeriod
+    from?: string
+    to?: string
   }
 
   try {
-    const asset = await prisma.asset.findUnique({ where: { ticker: ticker.toUpperCase() } })
-    if (!asset) return errors.notFound('Ativo não encontrado.')
+    const asset = await prisma.asset.findUnique({ where: { ticker } })
+    if (!asset) {
+      return NextResponse.json(
+        { error: { code: 'ASSET_080', message: 'Ativo não encontrado.' } },
+        { status: 404 }
+      )
+    }
 
-    // TODO: Implementar via /auto-flow execute
-    // Verificar plano do usuário para acesso a histórico granular (Craque/Lenda)
-    const candles = await prisma.priceHistory.findMany({
-      where: {
-        ticker: ticker.toUpperCase(),
+    const priceHistory = await PriceHistoryRepository.findByTicker(ticker, {
+      period,
+      from: from ? new Date(from) : undefined,
+      to: to ? new Date(to) : undefined,
+    })
+
+    const granularity = PriceHistoryRepository.getGranularity(period)
+
+    const response = NextResponse.json({
+      data: priceHistory,
+      _meta: {
+        ticker,
         period,
-        ...(before && { timestamp: { lt: new Date(before) } }),
+        from: from ?? null,
+        to: to ?? null,
+        count: priceHistory.length,
+        granularity,
       },
-      orderBy: { timestamp: 'desc' },
-      take: limitParam,
     })
 
-    const total = await prisma.priceHistory.count({
-      where: { ticker: ticker.toUpperCase(), period },
-    })
+    // 1D → real-time, sem cache; outros → cache de 60s
+    if (period === '1D') {
+      response.headers.set('Cache-Control', 'no-store')
+    } else {
+      response.headers.set('Cache-Control', 'public, s-maxage=60')
+    }
 
-    const serialized = candles.map((c) => ({
-      id: c.id,
-      ticker: c.ticker,
-      open: c.open.toNumber(),
-      high: c.high.toNumber(),
-      low: c.low.toNumber(),
-      close: c.close.toNumber(),
-      volume: c.volume.toNumber(),
-      period: c.period as Period,
-      timestamp: c.timestamp.toISOString(),
-    }))
-
-    return list(serialized, {
-      page: 1,
-      limit: limitParam,
-      total,
-      hasNext: candles.length === limitParam,
-    })
-  } catch {
+    return response
+  } catch (err) {
+    console.error('[API] GET /assets/[ticker]/history error', err)
     return errors.server()
   }
 }

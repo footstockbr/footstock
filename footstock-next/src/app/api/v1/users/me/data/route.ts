@@ -20,7 +20,16 @@ export async function GET() {
     })
 
     const [user, orders, positions, transactions, consents] = await Promise.all([
-      prisma.user.findUnique({ where: { id: auth.user.id } }),
+      prisma.user.findUnique({
+        where: { id: auth.user.id },
+        select: {
+          id: true, email: true, name: true, phone: true,
+          birthDate: true, favoriteClub: true, investorProfile: true,
+          planType: true, fsBalance: true, tourCompleted: true,
+          createdAt: true, updatedAt: true,
+          // NUNCA retornar cpfHash — LGPD
+        },
+      }),
       prisma.order.findMany({ where: { userId: auth.user.id } }),
       prisma.position.findMany({ where: { userId: auth.user.id } }),
       prisma.transaction.findMany({ where: { userId: auth.user.id } }),

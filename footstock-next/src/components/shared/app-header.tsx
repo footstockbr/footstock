@@ -1,20 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { SessionIndicator } from "./session-indicator";
-import { MarketSession } from "@/lib/constants/market";
+import { SessionIndicator } from "@/components/market/session-indicator";
 import { ROUTES } from "@/lib/constants/routes";
 
 interface AppHeaderProps {
-  session?: MarketSession;
   notificationCount?: number;
   className?: string;
 }
 
 function AppHeader({
-  session = MarketSession.FECHADO,
   notificationCount = 0,
   className,
 }: AppHeaderProps) {
@@ -43,7 +41,7 @@ colors: primary (#C9A84C), background transparente
 elements: Bola de futebol + elemento gráfico financeiro
 avoid: Texto, complexidade excessiva, gradientes ruidosos
         */}
-        <img
+        <Image
           src="/logo-foot.png"
           alt="Foot Stock"
           width={32}
@@ -57,7 +55,9 @@ avoid: Texto, complexidade excessiva, gradientes ruidosos
 
       {/* Right actions */}
       <div data-testid="header-actions" className="flex items-center gap-3">
-        <SessionIndicator session={session} showLabel={false} />
+        {/* Mobile (≤640px): compact — só dot. Desktop: label + countdown */}
+        <SessionIndicator compact className="sm:hidden" />
+        <SessionIndicator className="hidden sm:flex" />
         <Link
           data-testid="header-notification-button"
           href={ROUTES.INBOX}

@@ -99,12 +99,18 @@ export interface Asset {
   haltReason?: string | null
   colors: { primary: string; secondary: string }
   financials: {
-    receita: number
-    elenco: number
-    marca: number
-    divida: number
-    freeFloat: number
-    multiplicador: number
+    receita?: number | null
+    elenco?: number | null
+    marca?: number | null
+    divida?: number | null
+    freeFloat?: number | null
+    multiplicador?: number | null
+    // Market detail computed fields
+    marketCap?: number | null
+    ipoPrice?: number | null
+    equityValue?: number | null
+    totalShares?: number | null
+    [key: string]: unknown
   }
   sentiment: AssetSentiment
   updatedAt: string

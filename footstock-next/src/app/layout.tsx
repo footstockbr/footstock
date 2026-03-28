@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Playfair_Display, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { DevOverlayProvider } from "@/components/dev/DevOverlayProvider";
+import { QueryProvider } from "@/components/providers/query-provider";
 import "./globals.css";
 
 const inter = Inter({
@@ -57,20 +58,22 @@ export default function RootLayout({
       className={`${inter.variable} ${playfair.variable} ${jetbrains.variable}`}
     >
       <body className="min-h-dvh bg-[#080808] text-[#f0ead6] antialiased">
-        {children}
-        {process.env.NODE_ENV === "development" && <DevOverlayProvider />}
-        <Toaster
-          theme="dark"
-          position="bottom-right"
-          toastOptions={{
-            style: {
-              background: "#141210",
-              border: "1px solid rgba(201,168,76,.18)",
-              color: "#f0ead6",
-              fontSize: "14px",
-            },
-          }}
-        />
+        <QueryProvider>
+          {children}
+          {process.env.NODE_ENV === "development" && <DevOverlayProvider />}
+          <Toaster
+            theme="dark"
+            position="bottom-right"
+            toastOptions={{
+              style: {
+                background: "#141210",
+                border: "1px solid rgba(201,168,76,.18)",
+                color: "#f0ead6",
+                fontSize: "14px",
+              },
+            }}
+          />
+        </QueryProvider>
       </body>
     </html>
   );

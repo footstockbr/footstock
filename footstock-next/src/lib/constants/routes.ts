@@ -4,11 +4,13 @@ export const ROUTES = {
   LOGIN: "/login",
   CADASTRO: "/cadastro",
   FORGOT_PASSWORD: "/recuperar-senha",
+  RESET_PASSWORD: "/redefinir-senha",
   VERIFY_AGE: "/verificar-idade",
 
   // App
   MERCADO: "/mercado",
   ATIVO: (ticker: string) => `/ativo/${ticker}`,
+  MERCADO_DETALHE: (ticker: string) => `/mercado/${ticker}`,
   PORTFOLIO: "/portfolio",
   NOTICIAS: "/noticias",
   LIGAS: "/ligas",
@@ -34,4 +36,19 @@ export const ROUTES = {
 
   // Club Portal
   CLUB: "/club",
+
+  // Perfil & LGPD
+  PERFIL: "/perfil",
+  PERFIL_CONSENTIMENTOS: "/perfil/consentimentos",
+
+  // Checkout
+  CHECKOUT: "/checkout",
+
+  // Dashboard (alias mercado)
+  DASHBOARD: "/mercado",
+
+  // Public
+  PRIVACY: "/privacidade",
+  TERMS: "/termos",
+  ONBOARDING: "/onboarding",
 } as const;

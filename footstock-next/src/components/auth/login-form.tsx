@@ -45,11 +45,7 @@ function LoginForm() {
         return;
       }
 
-      if (json.data?.requiresOnboarding) {
-        router.replace("/onboarding");
-      } else {
-        router.replace(ROUTES.MERCADO);
-      }
+      router.replace(ROUTES.MERCADO);
     } catch {
       toast.error("Erro ao conectar. Tente novamente.");
     } finally {

@@ -11,7 +11,7 @@ export const SESSION_COLORS: Record<MarketSession, string> = {
   [MarketSession.NEGOCIACAO]: "#8b5cf6",
   [MarketSession.CALL]: "#06b6d4",
   [MarketSession.AFTER_MARKET]: "#7c3aed",
-  [MarketSession.FECHADO]: "#ef4444",
+  [MarketSession.FECHADO]: "#6b7280",
 };
 
 export const SESSION_LABELS: Record<MarketSession, string> = {

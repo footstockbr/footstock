@@ -1,0 +1,28 @@
+{
+  "name": "foot-stock-motor",
+  "version": "1.0.0",
+  "description": "Motor de mercado Foot Stock — serviço standalone Railway",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "jest --config jest.config.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.0.0",
+    "date-fns-tz": "^3.2.0",
+    "dotenv": "^16.0.0",
+    "ioredis": "^5.3.0",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^22.0.0",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.3.0"
+  }
+}

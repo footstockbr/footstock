@@ -1,0 +1,87 @@
+// ============================================================================
+// Foot Stock Motor — AdminChannel
+// Subscreve no canal motor:control e despacha ações ao MarketEngine.
+// TODO: usar process.env.REDIS_URL com TLS quando NODE_ENV === 'production'
+// ============================================================================
+
+import type Redis from 'ioredis'
+import type { MarketEngine } from '../engine/MarketEngine'
+import { REDIS_CHANNELS } from '../types/events.types'
+import type { MotorControlEvent } from '../types/events.types'
+import { logger } from '../utils/logger'
+
+export class AdminChannel {
+  private subscriber: Redis
+  private engine: MarketEngine
+
+  constructor(subscriber: Redis, engine: MarketEngine) {
+    this.subscriber = subscriber
+    this.engine = engine
+  }
+
+  async start(): Promise<void> {
+    await this.subscriber.subscribe(REDIS_CHANNELS.MOTOR_CONTROL)
+    this.subscriber.on('message', (channel, message) => {
+      if (channel === REDIS_CHANNELS.MOTOR_CONTROL) {
+        this.handleControlMessage(message)
+      }
+    })
+    logger.info('[admin-channel] Subscrito em motor:control')
+  }
+
+  async stop(): Promise<void> {
+    await this.subscriber.unsubscribe(REDIS_CHANNELS.MOTOR_CONTROL)
+  }
+
+  private handleControlMessage(message: string): void {
+    let event: MotorControlEvent
+    try {
+      event = JSON.parse(message) as MotorControlEvent
+    } catch {
+      logger.error('[admin-channel] Mensagem inválida:', message)
+      return
+    }
+
+    logger.info(`[admin-channel] Recebida ação: ${event.type} | ativo: ${event.assetId ?? 'all'} | admin: ${event.adminId}`)
+
+    switch (event.type) {
+      case 'PAUSE_ASSET':
+        if (event.assetId) this.engine.pauseAsset(event.assetId)
+        break
+      case 'RESUME_ASSET':
+        if (event.assetId) this.engine.resumeAsset(event.assetId)
+        break
+      case 'INJECT_NEWS': {
+        const payload = event.payload ?? {}
+        const rawMagnitude = (payload.magnitude as number) ?? 0
+        const impact = (payload.impact as string) ?? 'NEUTRAL'
+        const magnitude = impact === 'NEGATIVE' ? -rawMagnitude : rawMagnitude
+        const durationTicks = (payload.durationTicks as number) ?? 10
+        if (event.assetId) {
+          this.engine.injectNewsImpact(event.assetId, magnitude, durationTicks)
+        }
+        break
+      }
+      case 'ADJUST_PRICE': {
+        const payload = event.payload ?? {}
+        const newPrice = payload.newPrice as number
+        if (event.assetId && newPrice > 0) {
+          this.engine.adjustPrice(event.assetId, newPrice)
+        }
+        break
+      }
+      case 'HALT_ALL': {
+        const halted = this.engine.haltAll()
+        logger.warn(`[admin-channel] HALT_ALL recebido — ${halted} ativos pausados`)
+        break
+      }
+      case 'RESUME_ALL': {
+        const resumed = this.engine.resumeAll()
+        logger.info(`[admin-channel] RESUME_ALL recebido — ${resumed} ativos retomados`)
+        break
+      }
+      default:
+        logger.warn(`[admin-channel] Tipo de ação desconhecido: ${event.type}`)
+    }
+  }
+}

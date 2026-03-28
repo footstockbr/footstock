@@ -58,6 +58,11 @@ export async function DELETE() {
 
     if (!sub) return errors.notFound('Nenhuma assinatura ativa encontrada.')
 
+    // Idempotente: se já cancelada, retorna sucesso sem duplicar notificação
+    if (sub.status === 'CANCELLED' || sub.status === 'EXPIRED') {
+      return ok(serializeSubscription(sub))
+    }
+
     const now = new Date()
     const daysSinceStart = (now.getTime() - sub.startsAt.getTime()) / (1000 * 60 * 60 * 24)
     const isWithinCoolingOff = daysSinceStart <= 7
@@ -73,6 +78,20 @@ export async function DELETE() {
         cancelledAt: now,
         cancellationLockExpiresAt: isWithinCoolingOff ? now : null,
       },
+    })
+
+    // Inserir notificação PLAN_CANCEL_ALERT
+    await prisma.notification.create({
+      data: {
+        userId: auth.user.id,
+        type: 'PLAN_CANCEL_ALERT',
+        title: 'Cancelamento solicitado',
+        body: 'Seu plano será rebaixado para Jogador ao final do período atual.',
+        read: false,
+      },
+    }).catch((err) => {
+      // Não bloquear resposta se notificação falhar
+      console.error('[subscriptions/me DELETE] Erro ao criar notificação:', err)
     })
 
     return ok(serializeSubscription(cancelled))

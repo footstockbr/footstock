@@ -1,0 +1,119 @@
+// ============================================================================
+// Foot Stock — DelayService
+// Aplica delay de cotação por plano do usuário.
+// DELAY_BY_PLAN está em milissegundos: JOGADOR=15s, CRAQUE=5s, LENDA=0.
+// ============================================================================
+
+import { DELAY_BY_PLAN } from '@/lib/constants/limits'
+import type { PlanType } from '@/lib/enums'
+import type { AssetListItem } from '@/types/market'
+import { prisma } from '@/lib/prisma'
+
+/**
+ * Retorna o delay em SEGUNDOS para exibição no frontend (campo _delaySeconds).
+ * Converte de ms para s.
+ */
+export function getDelaySeconds(planType: PlanType): number {
+  return Math.floor((DELAY_BY_PLAN[planType] ?? 0) / 1000)
+}
+
+/**
+ * Retorna o label humano do delay para o DelayBadge.
+ * Retorna null para plano LENDA (sem delay).
+ */
+export function getDelayLabel(planType: PlanType): string | null {
+  const delayMs = DELAY_BY_PLAN[planType] ?? 0
+  if (delayMs === 0) return null
+  const secs = delayMs / 1000
+  if (secs >= 60) return `${Math.round(secs / 60)} minutos`
+  return `${secs} segundos`
+}
+
+/**
+ * Retorna o header Cache-Control adequado para o plano.
+ */
+export function getCacheHint(planType: PlanType): string {
+  const secs = getDelaySeconds(planType)
+  if (secs === 0) return 'private, max-age=2'
+  return `private, max-age=${secs}`
+}
+
+/**
+ * Aplica delay de preço em um único ativo.
+ * Se LENDA (delay=0): retorna sem modificação.
+ * Se delay > 0: busca o preço histórico no instante (agora - delay).
+ */
+export async function applyPriceDelay(
+  asset: AssetListItem,
+  planType: PlanType
+): Promise<AssetListItem> {
+  const delayMs = DELAY_BY_PLAN[planType] ?? 0
+  if (delayMs === 0) return asset
+
+  const targetDate = new Date(Date.now() - delayMs)
+
+  const historicalRecord = await prisma.priceHistory.findFirst({
+    where: {
+      asset: { ticker: asset.ticker },
+      timestamp: { lte: targetDate },
+    },
+    orderBy: { timestamp: 'desc' },
+    select: { close: true },
+  })
+
+  if (!historicalRecord) {
+    console.warn(
+      '[DelayService] Sem histórico para ticker=%s em %s',
+      asset.ticker,
+      targetDate.toISOString()
+    )
+    return asset
+  }
+
+  const historicalPrice = Number(historicalRecord.close)
+  const change24h =
+    historicalPrice > 0
+      ? ((historicalPrice - asset.currentPrice) / asset.currentPrice) * 100
+      : asset.change24h
+
+  return { ...asset, currentPrice: historicalPrice, change24h }
+}
+
+/**
+ * Aplica delay em lote (1 query para todos os tickers).
+ * Se LENDA: retorna sem modificação.
+ */
+export async function applyDelayBatch(
+  assets: AssetListItem[],
+  planType: PlanType
+): Promise<AssetListItem[]> {
+  const delayMs = DELAY_BY_PLAN[planType] ?? 0
+  if (delayMs === 0 || assets.length === 0) return assets
+
+  const targetDate = new Date(Date.now() - delayMs)
+  const tickers = assets.map(a => a.ticker)
+
+  const records = await prisma.priceHistory.findMany({
+    where: {
+      asset: { ticker: { in: tickers } },
+      timestamp: { lte: targetDate },
+    },
+    orderBy: { timestamp: 'desc' },
+    distinct: ['assetId'],
+    select: { close: true, asset: { select: { ticker: true } } },
+  })
+
+  const priceByTicker = new Map<string, number>(
+    records.map(r => [r.asset.ticker, Number(r.close)])
+  )
+
+  return assets.map(asset => {
+    const historicalPrice = priceByTicker.get(asset.ticker)
+    if (!historicalPrice) return asset
+    const change24h =
+      asset.currentPrice > 0
+        ? ((historicalPrice - asset.currentPrice) / asset.currentPrice) * 100
+        : asset.change24h
+    return { ...asset, currentPrice: historicalPrice, change24h }
+  })
+}
