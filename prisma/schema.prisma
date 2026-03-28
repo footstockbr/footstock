@@ -1,0 +1,506 @@
+// prisma/schema.prisma
+// Gerado por /db-migration-create — 2026-03-28
+// Projeto: Foot Stock | ORM: Prisma | Database: PostgreSQL (Supabase)
+// Referência: output/docs/foot-stock/project/LLD.md v1.2
+//
+// IMPORTANTE: 9 partial indexes precisam de SQL raw pós-migration.
+// Ver: prisma/PRISMA-MIGRATION-GUIDE.md — seção "Partial Indexes"
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  // DATABASE_URL: connection string via pgbouncer (pooled) — Supabase
+  // DIRECT_URL: connection direta sem pool — obrigatória para migrations
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ====================================================================
+// USERS — Usuários da plataforma (app + admin via adminRole nullable)
+// ====================================================================
+model User {
+  id                      String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                   String   @unique @db.VarChar(255)
+  cpfHash                 String   @unique @db.Char(64)
+  name                    String   @db.VarChar(120)
+  phone                   String?  @db.VarChar(20)
+  birthDate               DateTime @db.Date
+  favoriteClub            String   @db.VarChar(10)
+  favoriteClubDisplayName String?  @db.VarChar(100)
+  userType                String   @default("NORMAL") @db.VarChar(20)
+  referredByCode          String?  @db.VarChar(20)
+  investorProfile         String   @db.VarChar(20)
+  planType                String   @default("JOGADOR") @db.VarChar(10)
+  fsBalance               Decimal  @default(2000.00) @db.Decimal(12, 2)
+  marginBlocked           Decimal  @default(0.00) @db.Decimal(12, 2)
+  tourCompleted           Boolean  @default(false)
+  ageVerificationPending  Boolean  @default(false)
+  adminRole               String?  @db.VarChar(20)
+  version                 Int      @default(0)
+  createdAt               DateTime @default(now()) @db.Timestamp(6)
+  updatedAt               DateTime @default(now()) @updatedAt @db.Timestamp(6)
+
+  // Relations
+  orders                Order[]
+  positions             Position[]
+  transactions          Transaction[]
+  notifications         Notification[]
+  forumPosts            ForumPost[]
+  consents              Consent[]
+  subscriptions         Subscription[]
+  affiliateCodes        AffiliateCode[]
+  affiliateTransactions AffiliateTransaction[]
+  pushSubscriptions     PushSubscription[]
+  leagueMembers         LeagueMember[]
+  dataAccessLogs        DataAccessLog[]       @relation("DataAccessUser")
+  dataAccessedBy        DataAccessLog[]       @relation("DataAccessedBy")
+  adminMarketActions    AdminMarketAction[]
+
+  // Indexes — partial indexes (adminRole, userType, referredByCode) requerem
+  // SQL raw pós-migration. Ver PRISMA-MIGRATION-GUIDE.md.
+  @@index([planType], map: "idx_users_plan_type")
+  @@index([adminRole], map: "idx_users_admin_role")
+  @@index([userType], map: "idx_users_user_type")
+  @@index([referredByCode], map: "idx_users_referred_by")
+  @@map("users")
+}
+
+// ====================================================================
+// ASSETS — 40 ativos negociáveis (20 Série A + 20 Série B)
+// currentPrice e currentSupply atualizados pelo motor a cada tick.
+// realName exibido APENAS no signup Step 3; displayName em todo o resto.
+// ====================================================================
+model Asset {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticker        String   @unique @db.VarChar(10)
+  realName      String   @db.VarChar(80)
+  displayName   String   @db.VarChar(100)
+  division      String   @db.Char(1)
+  currentPrice  Decimal  @db.Decimal(10, 4)
+  fairValue     Decimal  @db.Decimal(10, 4)
+  currentSupply BigInt
+  totalShares   BigInt
+  isHalted      Boolean  @default(false)
+  haltReason    String?  @db.VarChar(100)
+  colors        Json     @db.JsonB
+  financials    Json     @db.JsonB
+  sentiment     String   @default("NEUTRO") @db.VarChar(10)
+  updatedAt     DateTime @default(now()) @db.Timestamp(6)
+
+  // Nota: orders, positions, transactions, price_history e news referenciam
+  // ticker como VARCHAR sem FK constraint (intencional — performance do motor).
+
+  @@index([division], map: "idx_assets_division")
+  @@map("assets")
+}
+
+// ====================================================================
+// ORDERS — Ordens de compra/venda (motor lê status=PENDING a cada tick)
+// version: lock otimista para evitar double-execution
+// ticker: sem FK para assets (intencional — ver LLD seção 2.2)
+// ====================================================================
+model Order {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String    @db.Uuid
+  ticker          String    @db.VarChar(10)
+  type            String    @db.VarChar(15)
+  side            String    @db.VarChar(4)
+  quantity        Decimal   @db.Decimal(14, 4)
+  price           Decimal?  @db.Decimal(10, 4)
+  status          String    @default("PENDING") @db.VarChar(10)
+  stopLossPrice   Decimal?  @db.Decimal(10, 4)
+  takeProfitPrice Decimal?  @db.Decimal(10, 4)
+  scheduledAt     DateTime? @db.Timestamp(6)
+  feeAmount       Decimal?  @db.Decimal(8, 2)
+  executedAt      DateTime? @db.Timestamp(6)
+  expiresAt       DateTime? @db.Timestamp(6)
+  version         Int       @default(0)
+  createdAt       DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @db.Timestamp(6)
+
+  user         User          @relation(fields: [userId], references: [id])
+  transactions Transaction[]
+
+  // idx_orders_pending_scheduled é partial (WHERE status='PENDING')
+  // Substituir SQL gerado pelo Prisma — ver PRISMA-MIGRATION-GUIDE.md
+  @@index([userId, status], map: "idx_orders_user_status")
+  @@index([ticker, status], map: "idx_orders_ticker_status")
+  @@index([status, scheduledAt], map: "idx_orders_pending_scheduled")
+  @@map("orders")
+}
+
+// ====================================================================
+// POSITIONS — Posições abertas por usuário/ativo (lock otimista)
+// Campos de alavancagem incluídos conforme tabela de colunas + index
+// do LLD (DDL incompleto no LLD — campos ausentes no CREATE TABLE).
+// ticker: sem FK para assets (intencional — ver LLD seção 2.2)
+// ====================================================================
+model Position {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String   @db.Uuid
+  ticker             String   @db.VarChar(10)
+  quantity           Decimal  @db.Decimal(14, 4)
+  avgPrice           Decimal  @db.Decimal(10, 4)
+  side               String   @db.VarChar(5)
+  marginBlocked      Decimal  @default(0.00) @db.Decimal(12, 2)
+  leverageMultiplier Decimal  @default(1.0) @db.Decimal(3, 1)
+  leverageAmount     Decimal  @default(0.00) @db.Decimal(12, 2)
+  dailyInterestRate  Decimal  @default(0.00) @db.Decimal(6, 4)
+  interestAccrued    Decimal  @default(0.00) @db.Decimal(12, 2)
+  version            Int      @default(0)
+  createdAt          DateTime @default(now()) @db.Timestamp(6)
+  updatedAt          DateTime @default(now()) @updatedAt @db.Timestamp(6)
+
+  user User @relation(fields: [userId], references: [id])
+
+  // idx_positions_leverage é partial (WHERE leverageMultiplier > 1.0)
+  // Ver PRISMA-MIGRATION-GUIDE.md para SQL raw
+  @@unique([userId, ticker, side], map: "idx_positions_user_ticker_side")
+  @@index([userId], map: "idx_positions_user")
+  @@index([ticker], map: "idx_positions_ticker")
+  @@map("positions")
+}
+
+// ====================================================================
+// TRANSACTIONS — Ledger imutável (INSERT only; nunca UPDATE/DELETE)
+// ticker: sem FK para assets (intencional — ver LLD seção 2.2)
+// ====================================================================
+model Transaction {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String   @db.Uuid
+  orderId       String?  @db.Uuid
+  ticker        String   @db.VarChar(10)
+  type          String   @db.VarChar(12)
+  amount        Decimal  @db.Decimal(14, 4)
+  fsAmount      Decimal  @db.Decimal(12, 2)
+  balanceBefore Decimal  @db.Decimal(12, 2)
+  balanceAfter  Decimal  @db.Decimal(12, 2)
+  createdAt     DateTime @default(now()) @db.Timestamp(6)
+
+  user  User   @relation(fields: [userId], references: [id])
+  order Order? @relation(fields: [orderId], references: [id])
+
+  @@index([userId, createdAt(sort: Desc)], map: "idx_transactions_user_date")
+  @@index([userId, ticker], map: "idx_transactions_user_ticker")
+  @@map("transactions")
+}
+
+// ====================================================================
+// PRICE_HISTORY — OHLC por ativo e período (alimenta gráficos)
+// Inserido pelo motor a cada amostragem. Sem FK constraint (performance).
+// ticker: sem FK para assets (intencional — ver LLD seção 2.2)
+// ====================================================================
+model PriceHistory {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticker    String   @db.VarChar(10)
+  open      Decimal  @db.Decimal(10, 4)
+  high      Decimal  @db.Decimal(10, 4)
+  low       Decimal  @db.Decimal(10, 4)
+  close     Decimal  @db.Decimal(10, 4)
+  volume    Decimal  @db.Decimal(14, 4)
+  period    String   @db.VarChar(5)
+  timestamp DateTime @db.Timestamp(6)
+
+  @@unique([ticker, period, timestamp], map: "idx_price_history_unique")
+  @@index([ticker, period, timestamp(sort: Desc)], map: "idx_price_history_chart")
+  @@map("price_history")
+}
+
+// ====================================================================
+// SUBSCRIPTIONS — Assinaturas por usuário (histórico com status)
+// Um usuário pode ter múltiplas (ativa + CANCELLED anteriores).
+// CANCELLATION_LOCK: 7 dias entre solicitação e cancelamento efetivo.
+// bonusAmount/bonusScheduledAt: crédito FS$ pós período de arrependimento.
+// ====================================================================
+model Subscription {
+  id                        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                    String    @db.Uuid
+  planType                  String    @db.VarChar(10)
+  gateway                   String?   @db.VarChar(15)
+  period                    String?   @db.VarChar(7)
+  status                    String    @default("ACTIVE") @db.VarChar(20)
+  startsAt                  DateTime  @db.Timestamp(6)
+  expiresAt                 DateTime? @db.Timestamp(6)
+  trialEndsAt               DateTime? @db.Timestamp(6)
+  cancelledAt               DateTime? @db.Timestamp(6)
+  cancellationLockExpiresAt DateTime? @db.Timestamp(6)
+  bonusAmount               Decimal?  @db.Decimal(12, 2)
+  bonusScheduledAt          DateTime? @db.Timestamp(6)
+  bonusCreditedAt           DateTime? @db.Timestamp(6)
+  createdAt                 DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt                 DateTime  @default(now()) @updatedAt @db.Timestamp(6)
+
+  user                  User                   @relation(fields: [userId], references: [id])
+  payments              Payment[]
+  affiliateTransactions AffiliateTransaction[]
+
+  // idx_sub_expires é partial (WHERE status='ACTIVE')
+  // idx_sub_bonus_pending é partial (WHERE bonusCreditedAt IS NULL AND bonusAmount IS NOT NULL)
+  // Ver PRISMA-MIGRATION-GUIDE.md para SQL raw
+  @@index([userId, status], map: "idx_sub_user_status")
+  @@index([expiresAt], map: "idx_sub_expires")
+  @@index([bonusScheduledAt], map: "idx_sub_bonus_pending")
+  @@map("subscriptions")
+}
+
+// ====================================================================
+// PAYMENTS — Transações financeiras reais (R$) com gateways
+// Dados de cartão NUNCA armazenados (PCI-DSS delegado ao gateway).
+// ====================================================================
+model Payment {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subscriptionId       String    @db.Uuid
+  gateway              String    @db.VarChar(15)
+  gatewayTransactionId String?   @unique @db.VarChar(100)
+  amount               Decimal   @db.Decimal(10, 2)
+  currency             String    @default("BRL") @db.Char(3)
+  status               String    @db.VarChar(15)
+  gatewayMeta          Json?     @db.JsonB
+  processedAt          DateTime? @db.Timestamp(6)
+  createdAt            DateTime  @default(now()) @db.Timestamp(6)
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id])
+
+  @@map("payments")
+}
+
+// ====================================================================
+// NEWS — Notícias classificadas por ativo (injetadas no motor)
+// sentiment: -1.00 (bearish) a +1.00 (bullish)
+// ticker: sem FK para assets (intencional — ver LLD seção 2.2)
+// ====================================================================
+model News {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title          String    @db.VarChar(300)
+  source         String    @db.VarChar(50)
+  url            String?   @db.VarChar(500)
+  ticker         String    @db.VarChar(10)
+  sentiment      Decimal   @db.Decimal(3, 2)
+  impactCategory String    @db.VarChar(30)
+  publishedAt    DateTime  @db.Timestamp(6)
+  injectedAt     DateTime? @db.Timestamp(6)
+  createdAt      DateTime  @default(now()) @db.Timestamp(6)
+
+  @@index([ticker, publishedAt(sort: Desc)], map: "idx_news_ticker_published")
+  @@map("news")
+}
+
+// ====================================================================
+// SPONSORS — Patrocinadores de ligas
+// ====================================================================
+model Sponsor {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   @db.VarChar(100)
+  banners   Json     @default("{}") @db.JsonB
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+
+  leagues League[]
+
+  @@map("sponsors")
+}
+
+// ====================================================================
+// LEAGUES — Ligas competitivas (PUBLIC / FRIENDS / PRO)
+// ====================================================================
+model League {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   @db.VarChar(100)
+  type      String   @db.VarChar(10)
+  division  String   @db.VarChar(10)
+  duration  Int
+  sponsorId String?  @db.Uuid
+  startsAt  DateTime @db.Timestamp(6)
+  endsAt    DateTime @db.Timestamp(6)
+  status    String   @default("ACTIVE") @db.VarChar(10)
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+
+  sponsor Sponsor?       @relation(fields: [sponsorId], references: [id])
+  members LeagueMember[]
+
+  @@map("leagues")
+}
+
+// ====================================================================
+// LEAGUE_MEMBERS — Membros e ranking por liga
+// ====================================================================
+model LeagueMember {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  leagueId       String   @db.Uuid
+  userId         String   @db.Uuid
+  score          Decimal  @default(0) @db.Decimal(8, 2)
+  rank           Int?
+  scoreBreakdown Json     @default("{}") @db.JsonB
+  updatedAt      DateTime @default(now()) @updatedAt @db.Timestamp(6)
+
+  league League @relation(fields: [leagueId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([leagueId, userId], map: "idx_league_members_unique")
+  @@map("league_members")
+}
+
+// ====================================================================
+// FORUM_POSTS — Posts do fórum por clube (max 280 chars)
+// ====================================================================
+model ForumPost {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @db.Uuid
+  content   String   @db.VarChar(280)
+  ticker    String?  @db.VarChar(10)
+  status    String   @default("PUBLISHED") @db.VarChar(10)
+  likes     Int      @default(0)
+  flagged   Boolean  @default(false)
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamp(6)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("forum_posts")
+}
+
+// ====================================================================
+// NOTIFICATIONS — Inbox de notificações por usuário
+// ====================================================================
+model Notification {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @db.Uuid
+  type      String   @db.VarChar(25)
+  title     String   @db.VarChar(100)
+  body      String   @db.VarChar(300)
+  read      Boolean  @default(false)
+  metadata  Json     @default("{}") @db.JsonB
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+
+  user User @relation(fields: [userId], references: [id])
+
+  // idx_notifications_user_unread é partial (WHERE read = FALSE)
+  // Ver PRISMA-MIGRATION-GUIDE.md para SQL raw
+  @@index([userId, read], map: "idx_notifications_user_unread")
+  @@map("notifications")
+}
+
+// ====================================================================
+// CONSENTS — Consentimentos LGPD por usuário (imutável por finalidade)
+// ipAddress: tipo INET nativo PostgreSQL para validação de IP
+// ====================================================================
+model Consent {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @db.Uuid
+  purpose   String    @db.VarChar(50)
+  grantedAt DateTime  @default(now()) @db.Timestamp(6)
+  ipAddress String    @db.Inet
+  revoked   Boolean   @default(false)
+  revokedAt DateTime? @db.Timestamp(6)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("consents")
+}
+
+// ====================================================================
+// DATA_ACCESS_LOGS — Audit trail de acesso a dados (LGPD Art. 37)
+// userId: titular dos dados | accessedBy: quem acessou (admin ou self)
+// ====================================================================
+model DataAccessLog {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String   @db.Uuid
+  accessedBy String   @db.Uuid
+  action     String   @db.VarChar(50)
+  details    Json     @default("{}") @db.JsonB
+  timestamp  DateTime @default(now()) @db.Timestamp(6)
+
+  user           User @relation("DataAccessUser", fields: [userId], references: [id])
+  accessedByUser User @relation("DataAccessedBy", fields: [accessedBy], references: [id])
+
+  @@index([userId, timestamp(sort: Desc)], map: "idx_data_access_logs_user")
+  @@map("data_access_logs")
+}
+
+// ====================================================================
+// ADMIN_MARKET_ACTIONS — Auditoria de ações do admin no motor
+// ====================================================================
+model AdminMarketAction {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  adminId      String   @db.Uuid
+  action       String   @db.VarChar(50)
+  targetTicker String?  @db.VarChar(10)
+  details      Json     @default("{}") @db.JsonB
+  timestamp    DateTime @default(now()) @db.Timestamp(6)
+
+  admin User @relation(fields: [adminId], references: [id])
+
+  @@map("admin_market_actions")
+}
+
+// ====================================================================
+// AFFILIATE_CODES — Códigos de afiliado (influenciadores / times)
+// bankData: JSONB com dados bancários criptografados (PIX, banco, etc.)
+// ====================================================================
+model AffiliateCode {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId               String   @db.Uuid
+  code                 String   @unique @db.VarChar(20)
+  affiliateType        String   @db.VarChar(20)
+  commissionPercentage Decimal  @db.Decimal(5, 2)
+  bankData             Json?    @db.JsonB
+  active               Boolean  @default(true)
+  createdAt            DateTime @default(now()) @db.Timestamp(6)
+  updatedAt            DateTime @default(now()) @updatedAt @db.Timestamp(6)
+
+  user         User                   @relation(fields: [userId], references: [id])
+  transactions AffiliateTransaction[]
+
+  @@index([userId], map: "idx_affiliate_codes_user")
+  @@index([affiliateType], map: "idx_affiliate_codes_type")
+  @@map("affiliate_codes")
+}
+
+// ====================================================================
+// AFFILIATE_TRANSACTIONS — Comissões geradas por conversões de afiliado
+// ====================================================================
+model AffiliateTransaction {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  affiliateCodeId String    @db.Uuid
+  referredUserId  String    @db.Uuid
+  subscriptionId  String?   @db.Uuid
+  transactionType String    @db.VarChar(20)
+  amount          Decimal   @db.Decimal(12, 2)
+  status          String    @default("PENDING") @db.VarChar(15)
+  paidAt          DateTime? @db.Timestamp(6)
+  createdAt       DateTime  @default(now()) @db.Timestamp(6)
+
+  affiliateCode AffiliateCode @relation(fields: [affiliateCodeId], references: [id])
+  referredUser  User          @relation(fields: [referredUserId], references: [id])
+  subscription  Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  // idx_affiliate_tx_pending é partial (WHERE status='PENDING')
+  // Ver PRISMA-MIGRATION-GUIDE.md para SQL raw
+  @@index([affiliateCodeId], map: "idx_affiliate_tx_code")
+  @@index([status], map: "idx_affiliate_tx_pending")
+  @@index([referredUserId], map: "idx_affiliate_tx_referred")
+  @@map("affiliate_transactions")
+}
+
+// ====================================================================
+// PUSH_SUBSCRIPTIONS — Web Push API subscriptions por dispositivo/browser
+// endpoint: UNIQUE para evitar duplicatas de mesmo dispositivo
+// ====================================================================
+model PushSubscription {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @db.Uuid
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId], map: "idx_push_subs_user")
+  @@map("push_subscriptions")
+}

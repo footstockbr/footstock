@@ -1,0 +1,219 @@
+@import "tailwindcss";
+
+/* ─── CSS Variables — Foot Stock Design System v2.0 ─── */
+:root {
+  /* Backgrounds */
+  --bg-primary: #080808;
+  --bg-surface: #0f0e0b;
+  --bg-card: #141210;
+  --bg-elevated: #161d28;
+  --bg-overlay: rgba(8, 11, 18, 0.85);
+
+  /* Text */
+  --text-primary: #f0ead6;
+  --text-secondary: #7a7060;
+  --text-muted: #4a3d2a;
+
+  /* Accent / Gold */
+  --accent: #c9a84c;
+  --accent-hover: #d4b466;
+  --accent-gold: #c9a84c;
+  --accent-secondary: #38bdf8;
+
+  /* Semantic Colors */
+  --color-success: #22c55e;
+  --color-error: #ef4444;
+  --color-warning: #c9a84c;
+  --color-info: #38bdf8;
+
+  /* Price */
+  --price-up: #22c55e;
+  --price-down: #ef4444;
+  --price-neutral: #94a3b8;
+
+  /* Border */
+  --border-default: rgba(201, 168, 76, 0.18);
+  --border-focus: rgba(201, 168, 76, 0.5);
+  --border-error: #ef4444;
+
+  /* Plans */
+  --plan-jogador: #64748b;
+  --plan-craque: #38bdf8;
+  --plan-lenda: #c9a84c;
+}
+
+/* ─── Base Styles ─── */
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html {
+  color-scheme: dark;
+}
+
+html,
+body {
+  max-width: 100vw;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: Arial, Helvetica Neue, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Custom Scrollbar ─── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-surface);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(201, 168, 76, 0.2);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(201, 168, 76, 0.4);
+}
+
+/* ─── Focus Visible ─── */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ─── Accessibility: reduced motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─── Skeleton Shimmer ─── */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-card) 0%,
+    rgba(201, 168, 76, 0.06) 50%,
+    var(--bg-card) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+}
+
+/* ─── Gradient Utilities ─── */
+.gradient-accent {
+  background: linear-gradient(135deg, #c9a84c, #8a6820);
+}
+
+.gradient-section {
+  background: linear-gradient(160deg, #161008, #0d0b08);
+}
+
+/* ─── Safe area for iOS ─── */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.pb-nav {
+  padding-bottom: calc(56px + env(safe-area-inset-bottom));
+}
+
+/* ─── Animations ─── */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes tick-up {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  20% {
+    background-color: rgba(34, 197, 94, 0.15);
+  }
+}
+
+@keyframes tick-down {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  20% {
+    background-color: rgba(239, 68, 68, 0.15);
+  }
+}
+
+@keyframes slide-up {
+  0% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fade-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes splash-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  80% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+@keyframes splash-bg-fade {
+  0%,
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}

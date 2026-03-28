@@ -1,0 +1,55 @@
+import { NextRequest } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { list, errors } from '@/lib/api'
+import type { AssetDivision, AssetSentiment } from '@/types'
+
+// GET /api/v1/assets
+// Nota: /api/v1/market/assets é o path legado — use /api/v1/assets
+export async function GET(request: NextRequest) {
+  const { searchParams } = request.nextUrl
+
+  const division = searchParams.get('division') as AssetDivision | null
+  const sentiment = searchParams.get('sentiment') as AssetSentiment | null
+  const isHalted = searchParams.get('isHalted')
+
+  try {
+    // TODO: Implementar via /auto-flow execute
+    // Incluir lógica de delay de cotações para plano JOGADOR (60 min)
+    const where = {
+      ...(division && { division }),
+      ...(sentiment && { sentiment }),
+      ...(isHalted !== null && { isHalted: isHalted === 'true' }),
+    }
+
+    const assets = await prisma.asset.findMany({
+      where,
+      orderBy: [{ division: 'asc' }, { ticker: 'asc' }],
+    })
+
+    const serialized = assets.map((a) => ({
+      id: a.id,
+      ticker: a.ticker,
+      displayName: a.displayName,
+      division: a.division,
+      currentPrice: a.currentPrice.toNumber(),
+      fairValue: a.fairValue.toNumber(),
+      currentSupply: Number(a.currentSupply),
+      totalShares: Number(a.totalShares),
+      isHalted: a.isHalted,
+      haltReason: a.haltReason ?? null,
+      colors: a.colors as { primary: string; secondary: string },
+      financials: a.financials,
+      sentiment: a.sentiment,
+      updatedAt: a.updatedAt.toISOString(),
+    }))
+
+    return list(serialized, {
+      page: 1,
+      limit: serialized.length,
+      total: serialized.length,
+      hasNext: false,
+    })
+  } catch {
+    return errors.server()
+  }
+}

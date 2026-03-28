@@ -1,0 +1,566 @@
+// Foot Stock — Prisma Schema
+// Gerado por /back-end-build em 2026-03-28
+// Referência: output/docs/foot-stock/project/LLD.md
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum UserType {
+  NORMAL
+  TIME_PARCEIRO
+  INFLUENCIADOR
+}
+
+enum InvestorProfile {
+  INICIANTE
+  INTERMEDIARIO
+  AVANCADO
+  FA_FUTEBOL
+}
+
+enum PlanType {
+  JOGADOR
+  CRAQUE
+  LENDA
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  MONITOR
+  EDITOR
+  MODERADOR
+}
+
+enum OrderType {
+  MARKET
+  LIMIT
+  OCO
+  SHORT
+  SCHEDULED
+}
+
+enum OrderSide {
+  BUY
+  SELL
+}
+
+enum OrderStatus {
+  PENDING
+  EXECUTED
+  CANCELLED
+  EXPIRED
+  PARTIAL
+}
+
+enum PositionSide {
+  LONG
+  SHORT
+}
+
+enum AssetDivision {
+  A
+  B
+}
+
+enum AssetSentiment {
+  BULLISH
+  NEUTRO
+  BEARISH
+}
+
+enum TransactionType {
+  BUY
+  SELL
+  FEE
+  DIVIDEND
+  MARGIN_CALL
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  CANCELLED
+  EXPIRED
+  PENDING_PAYMENT
+}
+
+enum PaymentGateway {
+  MERCADO_PAGO
+  PAGSEGURO
+  PAYPAL
+}
+
+enum PaymentPeriod {
+  MONTHLY
+  ANNUAL
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REFUNDED
+  CHARGEBACK
+}
+
+enum ImpactCategory {
+  RESULTADO_ESPORTIVO
+  CONTRATACAO
+  FINANCEIRO
+  LESAO
+  SUSPENSAO
+  INSTITUCIONAL
+}
+
+enum LeagueType {
+  PUBLICA
+  AMIGOS
+  PRO
+}
+
+enum LeagueDivision {
+  BRONZE
+  PRATA
+  OURO
+  ABERTA
+}
+
+enum LeagueStatus {
+  PENDING
+  ACTIVE
+  FINISHED
+}
+
+enum PostStatus {
+  ACTIVE
+  REMOVED
+  FLAGGED
+}
+
+enum AffiliateType {
+  TIME_PARCEIRO
+  INFLUENCIADOR
+}
+
+enum CommissionType {
+  ROYALTY_PERCENTAGE
+  NEGOTIATED_COMMISSION
+}
+
+enum AffiliateTransactionType {
+  SIGNUP
+  SUBSCRIPTION_RENEWAL
+  UPGRADE
+}
+
+enum AffiliateTransactionStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id                      String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                   String          @unique @db.VarChar(255)
+  cpfHash                 String          @unique @db.Char(64)
+  name                    String          @db.VarChar(120)
+  phone                   String?         @db.VarChar(20)
+  birthDate               DateTime        @db.Date
+  favoriteClub            String          @db.VarChar(10)
+  favoriteClubDisplayName String?         @db.VarChar(100)
+  userType                UserType        @default(NORMAL)
+  referredByCode          String?         @db.VarChar(20)
+  investorProfile         InvestorProfile
+  planType                PlanType        @default(JOGADOR)
+  fsBalance               Decimal         @default(2000.00) @db.Decimal(12, 2)
+  marginBlocked           Decimal         @default(0.00) @db.Decimal(12, 2)
+  tourCompleted           Boolean         @default(false)
+  ageVerificationPending  Boolean         @default(false)
+  adminRole               AdminRole?
+  version                 Int             @default(0)
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+
+  orders               Order[]
+  positions            Position[]
+  transactions         Transaction[]
+  notifications        Notification[]
+  forumPosts           ForumPost[]
+  consents             Consent[]
+  dataAccessLogs       DataAccessLog[]  @relation("UserDataAccessLogs")
+  accessedDataLogs     DataAccessLog[]  @relation("AdminDataAccessLogs")
+  subscription         Subscription?
+  affiliateCodes       AffiliateCode[]
+  affiliateTransactions AffiliateTransaction[] @relation("ReferredUser")
+  pushSubscriptions    PushSubscription[]
+  adminActions         AdminMarketAction[]
+
+  @@index([email])
+  @@index([cpfHash])
+  @@index([planType])
+  @@index([userType])
+  @@index([referredByCode])
+  @@map("users")
+}
+
+model Asset {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticker         String         @unique @db.VarChar(10)
+  realName       String         @db.VarChar(80)
+  displayName    String         @db.VarChar(100)
+  division       AssetDivision
+  currentPrice   Decimal        @db.Decimal(10, 4)
+  fairValue      Decimal        @db.Decimal(10, 4)
+  currentSupply  BigInt
+  totalShares    BigInt
+  isHalted       Boolean        @default(false)
+  haltReason     String?        @db.VarChar(100)
+  colors         Json
+  financials     Json
+  sentiment      AssetSentiment @default(NEUTRO)
+  updatedAt      DateTime       @updatedAt
+
+  orders       Order[]
+  positions    Position[]
+  priceHistory PriceHistory[]
+  news         News[]
+
+  @@index([ticker])
+  @@index([division])
+  @@map("assets")
+}
+
+model Order {
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String      @db.Uuid
+  ticker          String      @db.VarChar(10)
+  type            OrderType
+  side            OrderSide
+  quantity        Decimal     @db.Decimal(14, 4)
+  price           Decimal?    @db.Decimal(10, 4)
+  status          OrderStatus @default(PENDING)
+  stopLossPrice   Decimal?    @db.Decimal(10, 4)
+  takeProfitPrice Decimal?    @db.Decimal(10, 4)
+  scheduledAt     DateTime?
+  feeAmount       Decimal?    @db.Decimal(8, 2)
+  executedAt      DateTime?
+  expiresAt       DateTime?
+  version         Int         @default(0)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id])
+  asset        Asset         @relation(fields: [ticker], references: [ticker])
+  transactions Transaction[]
+
+  @@index([userId, status])
+  @@index([ticker, status])
+  @@map("orders")
+}
+
+model Position {
+  id                  String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId              String       @db.Uuid
+  ticker              String       @db.VarChar(10)
+  quantity            Decimal      @db.Decimal(14, 4)
+  avgPrice            Decimal      @db.Decimal(10, 4)
+  side                PositionSide
+  marginBlocked       Decimal      @default(0) @db.Decimal(12, 2)
+  leverageMultiplier  Decimal      @default(1.0) @db.Decimal(3, 1)
+  leverageAmount      Decimal      @default(0.0) @db.Decimal(12, 2)
+  dailyInterestRate   Decimal      @default(0.0) @db.Decimal(6, 4)
+  interestAccrued     Decimal      @default(0.0) @db.Decimal(10, 2)
+  version             Int          @default(0)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id])
+  asset Asset @relation(fields: [ticker], references: [ticker])
+
+  @@index([userId])
+  @@index([ticker])
+  @@map("positions")
+}
+
+model Transaction {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String          @db.Uuid
+  orderId       String?         @db.Uuid
+  ticker        String          @db.VarChar(10)
+  type          TransactionType
+  amount        Decimal         @db.Decimal(14, 4)
+  fsAmount      Decimal         @db.Decimal(12, 2)
+  balanceBefore Decimal         @db.Decimal(12, 2)
+  balanceAfter  Decimal         @db.Decimal(12, 2)
+  createdAt     DateTime        @default(now())
+
+  user  User   @relation(fields: [userId], references: [id])
+  order Order? @relation(fields: [orderId], references: [id])
+
+  @@index([userId])
+  @@index([ticker])
+  @@map("transactions")
+}
+
+model PriceHistory {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticker    String   @db.VarChar(10)
+  open      Decimal  @db.Decimal(10, 4)
+  high      Decimal  @db.Decimal(10, 4)
+  low       Decimal  @db.Decimal(10, 4)
+  close     Decimal  @db.Decimal(10, 4)
+  volume    Decimal  @db.Decimal(18, 4)
+  period    String   @db.VarChar(4)
+  timestamp DateTime
+
+  asset Asset @relation(fields: [ticker], references: [ticker])
+
+  @@index([ticker, period, timestamp(sort: Desc)])
+  @@map("price_history")
+}
+
+model Subscription {
+  id                        String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                    String             @unique @db.Uuid
+  planType                  PlanType
+  gateway                   PaymentGateway
+  period                    PaymentPeriod
+  status                    SubscriptionStatus
+  startsAt                  DateTime
+  expiresAt                 DateTime?
+  trialEndsAt               DateTime?
+  cancelledAt               DateTime?
+  cancellationLockExpiresAt DateTime?
+  createdAt                 DateTime           @default(now())
+  updatedAt                 DateTime           @updatedAt
+
+  user                  User                   @relation(fields: [userId], references: [id])
+  payments              Payment[]
+  affiliateTransactions AffiliateTransaction[]
+
+  @@map("subscriptions")
+}
+
+model Payment {
+  id                   String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subscriptionId       String         @db.Uuid
+  gateway              PaymentGateway
+  gatewayTransactionId String         @unique @db.VarChar(255)
+  amount               Decimal        @db.Decimal(10, 2)
+  currency             String         @default("BRL") @db.VarChar(3)
+  status               PaymentStatus
+  gatewayMeta          Json?
+  processedAt          DateTime?
+  createdAt            DateTime       @default(now())
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id])
+
+  @@index([subscriptionId])
+  @@map("payments")
+}
+
+model News {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title          String         @db.VarChar(255)
+  source         String         @db.VarChar(100)
+  url            String         @db.VarChar(500)
+  ticker         String         @db.VarChar(10)
+  sentiment      Decimal        @db.Decimal(4, 3)
+  impactCategory ImpactCategory
+  publishedAt    DateTime
+  injectedAt     DateTime       @default(now())
+  createdAt      DateTime       @default(now())
+
+  asset Asset @relation(fields: [ticker], references: [ticker])
+
+  @@index([ticker])
+  @@index([injectedAt(sort: Desc)])
+  @@map("news")
+}
+
+model League {
+  id        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String         @db.VarChar(60)
+  type      LeagueType
+  division  LeagueDivision
+  duration  Int
+  sponsorId String?        @db.Uuid
+  startsAt  DateTime
+  endsAt    DateTime?
+  status    LeagueStatus   @default(PENDING)
+  createdAt DateTime       @default(now())
+
+  sponsor Sponsor?       @relation(fields: [sponsorId], references: [id])
+  members LeagueMember[]
+
+  @@map("leagues")
+}
+
+model LeagueMember {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  leagueId       String   @db.Uuid
+  userId         String   @db.Uuid
+  score          Decimal  @default(0) @db.Decimal(12, 4)
+  rank           Int      @default(0)
+  scoreBreakdown Json?
+  updatedAt      DateTime @updatedAt
+
+  league League @relation(fields: [leagueId], references: [id])
+
+  @@unique([leagueId, userId])
+  @@index([leagueId, score(sort: Desc)])
+  @@map("league_members")
+}
+
+model ForumPost {
+  id        String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String     @db.Uuid
+  content   String     @db.VarChar(280)
+  ticker    String?    @db.VarChar(10)
+  status    PostStatus @default(ACTIVE)
+  likes     Int        @default(0)
+  flagged   Boolean    @default(false)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([ticker])
+  @@index([status])
+  @@map("forum_posts")
+}
+
+model Notification {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @db.Uuid
+  type      String   @db.VarChar(40)
+  title     String   @db.VarChar(120)
+  body      String   @db.VarChar(500)
+  read      Boolean  @default(false)
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+model Consent {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @db.Uuid
+  purpose   String   @db.VarChar(60)
+  grantedAt DateTime @default(now())
+  ipAddress String?  @db.VarChar(45)
+  revoked   Boolean  @default(false)
+  revokedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("consents")
+}
+
+model DataAccessLog {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String   @db.Uuid
+  accessedBy  String   @db.Uuid
+  action      String   @db.VarChar(60)
+  details     Json?
+  timestamp   DateTime @default(now())
+
+  user     User @relation("UserDataAccessLogs", fields: [userId], references: [id])
+  accessor User @relation("AdminDataAccessLogs", fields: [accessedBy], references: [id])
+
+  @@index([userId])
+  @@index([timestamp(sort: Desc)])
+  @@map("data_access_logs")
+}
+
+model Sponsor {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   @db.VarChar(120)
+  banners   Json?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  leagues League[]
+
+  @@map("sponsors")
+}
+
+model AdminMarketAction {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  adminId      String   @db.Uuid
+  action       String   @db.VarChar(40)
+  targetTicker String?  @db.VarChar(10)
+  details      Json?
+  timestamp    DateTime @default(now())
+
+  admin User @relation(fields: [adminId], references: [id])
+
+  @@index([adminId])
+  @@index([timestamp(sort: Desc)])
+  @@map("admin_market_actions")
+}
+
+model AffiliateCode {
+  id                   String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId               String        @db.Uuid
+  code                 String        @unique @db.VarChar(20)
+  affiliateType        AffiliateType
+  commissionPercentage Decimal       @db.Decimal(5, 2)
+  bankData             Json?
+  active               Boolean       @default(true)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  user         User                   @relation(fields: [userId], references: [id])
+  transactions AffiliateTransaction[]
+
+  @@map("affiliate_codes")
+}
+
+model AffiliateTransaction {
+  id                String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  affiliateCodeId   String                     @db.Uuid
+  referredUserId    String                     @db.Uuid
+  subscriptionId    String                     @db.Uuid
+  transactionType   AffiliateTransactionType
+  amount            Decimal                    @db.Decimal(10, 2)
+  status            AffiliateTransactionStatus @default(PENDING)
+  paidAt            DateTime?
+  createdAt         DateTime                   @default(now())
+
+  affiliateCode AffiliateCode @relation(fields: [affiliateCodeId], references: [id])
+  referredUser  User          @relation("ReferredUser", fields: [referredUserId], references: [id])
+  subscription  Subscription  @relation(fields: [subscriptionId], references: [id])
+
+  @@map("affiliate_transactions")
+}
+
+model PushSubscription {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String   @db.Uuid
+  endpoint    String   @db.VarChar(500)
+  p256dh      String   @db.VarChar(200)
+  auth        String   @db.VarChar(100)
+  userAgent   String?  @db.VarChar(255)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
