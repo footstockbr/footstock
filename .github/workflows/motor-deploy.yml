@@ -1,0 +1,40 @@
+name: Deploy Motor (Railway)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'motor/**'
+      - '.github/workflows/motor-deploy.yml'
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  deploy-motor:
+    name: Deploy Motor para Railway
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: motor/package-lock.json
+
+      - name: Instalar dependências do Motor
+        working-directory: motor
+        run: npm ci
+
+      - name: Verificar tipos TypeScript
+        working-directory: motor
+        run: npx tsc --noEmit
+
+      - name: Deploy no Railway
+        uses: bervProject/railway-deploy@main
+        with:
+          railway_token: ${{ secrets.RAILWAY_TOKEN }}
+          service: motor
