@@ -2,16 +2,13 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["gru1"],
   "functions": {
-    "api/v1/admin/**": {
+    "app/api/v1/admin/**": {
       "maxDuration": 30
     },
-    "api/v1/motor/**": {
-      "maxDuration": 10
-    },
-    "api/v1/**": {
+    "app/api/v1/**": {
       "maxDuration": 15
     },
-    "api/cron/**": {
+    "app/api/cron/**": {
       "maxDuration": 30
     }
   },
