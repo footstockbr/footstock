@@ -73,7 +73,7 @@ export async function GET() {
     }).catch(() => [])
 
     return NextResponse.json({ incidents: incidents ?? [] })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Erro ao buscar incidentes' }, { status: 500 })
   }
 }

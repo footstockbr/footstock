@@ -49,7 +49,7 @@ export async function GET() {
     }) ?? []
 
     return NextResponse.json({ credentials })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Erro ao buscar credenciais' }, { status: 500 })
   }
 }
