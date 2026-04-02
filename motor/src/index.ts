@@ -35,55 +35,65 @@ async function main() {
   const redis = await RedisClientService.getInstance()
   const leader = new LeaderElection(redis, MOTOR_ID)
   const engine = new MarketEngine(redis)
+  const healthService = MotorHealthService.getInstance(redis)
 
-  // Tentar ganhar liderança
-  const isLeader = await leader.tryAcquire()
+  let adminChannel: AdminChannel | null = null
 
-  if (!isLeader) {
+  /**
+   * Inicializa tudo que precisa rodar quando esta instância se torna líder.
+   * Chamado tanto no startup direto quanto ao adquirir liderança via polling.
+   */
+  async function onBecameLeader(): Promise<void> {
+    logger.info('[motor] Liderança adquirida! Iniciando engine...')
+
+    // Registrar horário de início
+    await redis.set('motor:started_at', new Date().toISOString(), 'EX', 86400).catch(() => null)
+
+    // Canal de controle admin — garante que funciona mesmo após blue-green deploy
+    if (!adminChannel) {
+      const adminSubscriber = RedisClientService.createSubscriber()
+      adminChannel = new AdminChannel(adminSubscriber, engine)
+      await adminChannel.start()
+      logger.info('[motor] AdminChannel iniciado')
+    }
+
+    await engine.start()
+
+    // Callback ao perder liderança: parar engine e reiniciar polling para recuperação
+    leader.onLeadershipLost = () => {
+      logger.warn('[motor] Liderança perdida — parando engine e aguardando re-aquisição...')
+      engine.stop().catch(err => logger.error('[motor] Erro ao parar engine:', err))
+      startPolling()
+    }
+  }
+
+  /** Polling de 5s para assumir liderança se o líder atual morrer. */
+  function startPolling(): void {
     logger.info('[motor] Instância secundária: aguardando liderança...')
-    // Polling a cada 5s para assumir liderança se o líder morrer
     const interval = setInterval(async () => {
       const acquired = await leader.tryAcquire()
       if (acquired) {
         clearInterval(interval)
-        logger.info('[motor] Liderança adquirida! Iniciando engine...')
-        await engine.start()
-        // Parar engine se liderança for perdida durante operação
-        leader.onLeadershipLost = () => {
-          logger.warn('[motor] Liderança perdida durante operação — parando engine.')
-          engine.stop().catch(err => logger.error('[motor] Erro ao parar engine após perda de liderança:', err))
-        }
+        await onBecameLeader()
       }
     }, 5_000)
-    return
   }
 
-  logger.info('[motor] Liderança adquirida! Iniciando engine...')
-
-  // Registrar horário de início (TTL longo — reset a cada deploy)
-  const healthService = MotorHealthService.getInstance(redis)
-  await redis.set('motor:started_at', new Date().toISOString(), 'EX', 86400).catch(() => null)
-
-  // Canal de controle admin (HALT_ASSET, RELEASE_HALT, INJECT_NEWS, etc.)
-  const adminSubscriber = RedisClientService.createSubscriber()
-  const adminChannel = new AdminChannel(adminSubscriber, engine)
-  await adminChannel.start()
-  logger.info('[motor] AdminChannel iniciado')
-
-  await engine.start()
-
-  // Parar engine se liderança for perdida durante operação (ex: deploy blue-green)
-  leader.onLeadershipLost = () => {
-    logger.warn('[motor] Liderança perdida durante operação — parando engine para evitar ticks duplicados.')
-    engine.stop().catch(err => logger.error('[motor] Erro ao parar engine após perda de liderança:', err))
+  // Tentar ganhar liderança imediatamente
+  const isLeader = await leader.tryAcquire()
+  if (isLeader) {
+    await onBecameLeader()
+  } else {
+    startPolling()
   }
 
   // Graceful shutdown
   const shutdown = async (signal: string) => {
     logger.info(`[motor] Recebido ${signal}. Encerrando...`)
     await healthService.publishOffline()
-    await adminChannel.stop()
-    await adminSubscriber.quit()
+    if (adminChannel) {
+      await adminChannel.stop()
+    }
     await engine.stop()
     await leader.release()
     await redis.quit()
