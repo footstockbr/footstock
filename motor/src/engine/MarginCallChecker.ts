@@ -81,7 +81,7 @@ export class MarginCallChecker {
       const pnl = (avgPrice - currentPrice) * position.quantity - interestAccrued
       const returnAmount = marginBlocked + pnl
 
-      await this.prisma.$transaction(async (tx: PrismaClient) => {
+      await this.prisma.$transaction(async (tx) => {
         const user = await tx.user.findUniqueOrThrow({ where: { id: position.userId } })
 
         const balanceBefore = Number(user.fsBalance)

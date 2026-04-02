@@ -113,7 +113,7 @@ export class OrderMatcher {
     executionPrice: number,
   ): Promise<void> {
     try {
-      await this.prisma.$transaction(async (tx: PrismaClient) => {
+      await this.prisma.$transaction(async (tx) => {
         const user = await tx.user.findUniqueOrThrow({ where: { id: order.userId } })
 
         const operationValue = order.quantity * executionPrice
@@ -164,7 +164,7 @@ export class OrderMatcher {
     reason: string,
   ): Promise<void> {
     try {
-      await this.prisma.$transaction(async (tx: PrismaClient) => {
+      await this.prisma.$transaction(async (tx) => {
         // Executar perna disparada
         const user = await tx.user.findUniqueOrThrow({ where: { id: executedLeg.userId } })
         const operationValue = executedLeg.quantity * executionPrice

@@ -67,7 +67,7 @@ export class ScheduledOrderRunner {
         ? now.getTime() - order.scheduledAt.getTime()
         : 0
 
-      await this.prisma.$transaction(async (tx: PrismaClient) => {
+      await this.prisma.$transaction(async (tx) => {
         const user = await tx.user.findUniqueOrThrow({ where: { id: order.userId } })
         const operationValue = order.quantity * price
         const feeAmount = calculateFee(operationValue)

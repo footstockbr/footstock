@@ -267,7 +267,7 @@ export class MarketEngine {
         low: tick.low,
         close: tick.price,
         volume: BigInt(tick.volume),
-        sessionType: tick.sessionType as string,
+        sessionType: tick.sessionType as any,
       },
     })
   }

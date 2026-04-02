@@ -57,7 +57,7 @@ export class OrderExecutor {
   ): Promise<void> {
     try {
       // Executar atomicamente via Prisma transaction inline
-      await this.prisma.$transaction(async (tx: PrismaClient) => {
+      await this.prisma.$transaction(async (tx) => {
         const user = await tx.user.findUniqueOrThrow({ where: { id: order.userId } })
 
         // Cálculos de taxa (INTAKE canônico: taxa fixa por faixa de valor)
