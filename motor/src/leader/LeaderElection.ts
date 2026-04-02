@@ -17,6 +17,8 @@ export class LeaderElection {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null
   private fencingToken = 0
   private _isLeader = false
+  /** Callback disparado quando a liderança é perdida durante operação. */
+  onLeadershipLost?: () => void
 
   constructor(redis: Redis, motorId: string) {
     // Validar formato do motorId para evitar injection nos Lua scripts
@@ -75,6 +77,8 @@ export class LeaderElection {
           console.error('[leader] Falha ao renovar liderança! Encerrando heartbeat.')
           this._isLeader = false
           this.stopHeartbeat()
+          // Notificar o engine para parar de publicar ticks
+          this.onLeadershipLost?.()
         }
       } catch (err) {
         // Erro de conexão: loga mas NÃO muda isLeader — apenas quando renewLease() retorna false

@@ -102,7 +102,7 @@ function AssetCardInner({
       className={cn(
         'relative flex flex-col gap-2 p-3 rounded-xl',
         'bg-bg-card border border-border-default cursor-pointer min-h-[88px]',
-        'hover:border-accent/30 transition-colors',
+        'hover:border-accent/30',
         'focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2',
         asset.isHalted && 'opacity-70 pointer-events-none cursor-not-allowed',
         className

@@ -48,6 +48,11 @@ async function main() {
         clearInterval(interval)
         logger.info('[motor] Liderança adquirida! Iniciando engine...')
         await engine.start()
+        // Parar engine se liderança for perdida durante operação
+        leader.onLeadershipLost = () => {
+          logger.warn('[motor] Liderança perdida durante operação — parando engine.')
+          engine.stop().catch(err => logger.error('[motor] Erro ao parar engine após perda de liderança:', err))
+        }
       }
     }, 5_000)
     return
@@ -66,6 +71,12 @@ async function main() {
   logger.info('[motor] AdminChannel iniciado')
 
   await engine.start()
+
+  // Parar engine se liderança for perdida durante operação (ex: deploy blue-green)
+  leader.onLeadershipLost = () => {
+    logger.warn('[motor] Liderança perdida durante operação — parando engine para evitar ticks duplicados.')
+    engine.stop().catch(err => logger.error('[motor] Erro ao parar engine após perda de liderança:', err))
+  }
 
   // Graceful shutdown
   const shutdown = async (signal: string) => {
