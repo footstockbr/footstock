@@ -70,6 +70,23 @@ export class AdminChannel {
         }
         break
       }
+      case 'HALT_ASSET': {
+        // Admin halt individual via REST /admin/motor/halt/:ticker
+        // Bloqueia processamento de preço do ativo (complementa motor:halt:{ticker} no Redis)
+        if (event.assetId) {
+          this.engine.pauseAsset(event.assetId)
+          logger.warn(`[admin-channel] HALT_ASSET: ativo ${event.assetId} pausado por admin ${event.adminId}`)
+        }
+        break
+      }
+      case 'RELEASE_HALT': {
+        // Liberação de halt individual via REST DELETE /admin/motor/halt/:ticker
+        if (event.assetId) {
+          this.engine.resumeAsset(event.assetId)
+          logger.info(`[admin-channel] RELEASE_HALT: ativo ${event.assetId} retomado por admin ${event.adminId}`)
+        }
+        break
+      }
       case 'HALT_ALL': {
         const halted = this.engine.haltAll()
         logger.warn(`[admin-channel] HALT_ALL recebido — ${halted} ativos pausados`)

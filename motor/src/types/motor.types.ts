@@ -119,6 +119,8 @@ export type AdminActionType =
   | 'ADJUST_PRICE'
   | 'HALT_ALL'
   | 'RESUME_ALL'
+  | 'HALT_ASSET'    // Halt individual por admin (via REST /admin/motor/halt/:ticker)
+  | 'RELEASE_HALT'  // Liberação de halt individual por admin
 
 export interface AdminAction {
   type: AdminActionType

@@ -9,6 +9,8 @@ import { logger } from './utils/logger'
 import { LeaderElection } from './leader/LeaderElection'
 import { MarketEngine } from './engine/MarketEngine'
 import { RedisClientService } from './services/RedisClientService'
+import { MotorHealthService } from './services/MotorHealthService'
+import { AdminChannel } from './broadcast/AdminChannel'
 
 const MOTOR_ID = `motor-${process.env.RAILWAY_REPLICA_ID ?? 'local'}-${Date.now()}`
 
@@ -52,11 +54,25 @@ async function main() {
   }
 
   logger.info('[motor] Liderança adquirida! Iniciando engine...')
+
+  // Registrar horário de início (TTL longo — reset a cada deploy)
+  const healthService = MotorHealthService.getInstance(redis)
+  await redis.set('motor:started_at', new Date().toISOString(), 'EX', 86400).catch(() => null)
+
+  // Canal de controle admin (HALT_ASSET, RELEASE_HALT, INJECT_NEWS, etc.)
+  const adminSubscriber = RedisClientService.createSubscriber()
+  const adminChannel = new AdminChannel(adminSubscriber, engine)
+  await adminChannel.start()
+  logger.info('[motor] AdminChannel iniciado')
+
   await engine.start()
 
   // Graceful shutdown
   const shutdown = async (signal: string) => {
     logger.info(`[motor] Recebido ${signal}. Encerrando...`)
+    await healthService.publishOffline()
+    await adminChannel.stop()
+    await adminSubscriber.quit()
     await engine.stop()
     await leader.release()
     await redis.quit()

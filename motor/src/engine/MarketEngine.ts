@@ -78,17 +78,24 @@ export class MarketEngine {
     const assets = await this.prisma.asset.findMany({ where: { isActive: true } })
 
     for (const asset of assets) {
+      // Warm start: closePrice = currentPrice para evitar circuit breaker imediato
+      // no reinício do motor (L9 compara currentPrice vs closePrice).
+      // O closePrice do DB reflete o preço histórico de seed, mas o motor pode
+      // ter rodado por horas/dias e os preços derivaram. Usar currentPrice como
+      // âncora inicial é o comportamento correto — CB só dispara para movimentos
+      // bruscos a partir do momento de (re)inicialização.
+      const currentPriceNum = Number(asset.currentPrice)
       const state: AssetState = {
         id: asset.id,
         ticker: asset.ticker,
         cluster: asset.cluster as AssetState['cluster'],
         state: CLUB_STATE_BY_TICKER[asset.ticker] ?? '',
-        currentPrice: Number(asset.currentPrice),
-        openPrice: Number(asset.openPrice),
-        highPrice: Number(asset.currentPrice),
-        lowPrice: Number(asset.currentPrice),
-        closePrice: Number(asset.closePrice),
-        fairValue: Number((asset as any).fairValue ?? asset.closePrice),
+        currentPrice: currentPriceNum,
+        openPrice: currentPriceNum,
+        highPrice: currentPriceNum,
+        lowPrice: currentPriceNum,
+        closePrice: currentPriceNum,   // warm start: âncora do CB = preço atual
+        fairValue: Number((asset as any).fairValue ?? asset.currentPrice),
         volume: 0,
         variance: 0.0001,  // Variância GARCH inicial
         pendingBuyVolume: 0,
@@ -187,10 +194,11 @@ export class MarketEngine {
       }
     }
 
+    // Heartbeat SEMPRE publicado (mesmo sessão FECHADO ou halt global — motor está vivo)
+    await this.healthService.publishTick()
+
     if (ticks.length > 0) {
       await this.redis.publish(REDIS_CHANNELS.MARKET_TICK, serializeTick(ticks))
-      // Publicar heartbeat de saúde do motor
-      await this.healthService.publishTick()
     }
 
     // Atualizar mapa de deltas para L10_Correlation no próximo tick

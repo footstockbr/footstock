@@ -1,9 +1,20 @@
+# ============================================================================
+# Foot Stock Motor — Railway Service Config
+#
+# IMPORTANTE: Configure o serviço no painel Railway com:
+#   Root Directory = / (raiz do repositório)
+#
+# Isso garante que o build context inclua tanto motor/ quanto prisma/,
+# que é necessário para o prisma generate funcionar corretamente.
+# ============================================================================
+
 [build]
 builder = "dockerfile"
-dockerfilePath = "Dockerfile"
+dockerfilePath = "motor/Dockerfile"
 
 [deploy]
 startCommand = "node dist/index.js"
 healthcheckPath = "/health"
 healthcheckTimeout = 30
 restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 5
