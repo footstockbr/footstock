@@ -15,6 +15,7 @@ const mockState = (overrides: Partial<AssetState> = {}): AssetState => ({
   id: 'asset_001',
   ticker: 'FLM3',
   cluster: 'A_TOP',
+  state: 'SP',
   currentPrice: 28.50,
   openPrice: 28.00,
   highPrice: 29.00,

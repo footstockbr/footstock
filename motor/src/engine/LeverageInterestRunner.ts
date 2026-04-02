@@ -50,7 +50,7 @@ export class LeverageInterestRunner {
     logger.info(`[LeverageInterest] Cobrando juros de ${positions.length} posições alavancadas (${today})`)
 
     const results = await Promise.allSettled(
-      positions.map(pos => this._chargePosition(pos, today))
+      positions.map((pos: { id: string; userId: string; leverageAmount: unknown; interestAccrued: unknown; quantity: number; avgPrice: unknown }) => this._chargePosition(pos as Parameters<typeof this._chargePosition>[0], today))
     )
 
     const failed = results.filter(r => r.status === 'rejected').length

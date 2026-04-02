@@ -10,10 +10,9 @@ export type DevTestUserProfile = {
   clubName?: string
 }
 
-// Senha lida de variável de ambiente — visível no bundle do cliente (necessário para LoginForm).
-// Configure NEXT_PUBLIC_DEV_TEST_PASSWORD no .env.local (ignorado pelo .gitignore).
-// Fallback só em caso de ambiente sem .env (ex: CI sem segredo configurado).
-const DEV_PASSWORD = process.env.NEXT_PUBLIC_DEV_TEST_PASSWORD ?? process.env.DEV_TEST_PASSWORD ?? 'Change-Me-In-EnvLocal!'
+// Senha dos usuários de teste — visível nos botões da tela de login de qualquer forma.
+// Para sobrescrever: NEXT_PUBLIC_DEV_TEST_PASSWORD no .env.local.
+const DEV_PASSWORD = process.env.NEXT_PUBLIC_DEV_TEST_PASSWORD ?? 'FootStock@Dev2026!'
 
 export const DEV_TEST_USERS: Record<string, DevTestUserProfile> = {
   'superadmin@foot-stock.test': {

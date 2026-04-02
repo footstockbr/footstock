@@ -5,6 +5,7 @@ const baseState = (): AssetState => ({
   id: 'asset_001',
   ticker: 'FLM3',
   cluster: 'A_TOP',
+  state: 'SP',
   currentPrice: 28.00,
   openPrice: 28.00,
   highPrice: 28.00,
