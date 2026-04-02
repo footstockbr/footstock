@@ -7,6 +7,7 @@ on:
       - 'motor/**'
       - 'Dockerfile'
       - 'docker-compose.yml'
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
