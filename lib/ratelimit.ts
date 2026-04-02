@@ -10,8 +10,8 @@ function createRedisClient(): Redis | null {
   const token = process.env.UPSTASH_REDIS_REST_TOKEN
   if (!url || !token) {
     if (process.env.NODE_ENV === 'production') {
-      throw new Error(
-        'UPSTASH_REDIS_REST_URL e UPSTASH_REDIS_REST_TOKEN são obrigatórios em produção para rate limiting.'
+      console.warn(
+        '[ratelimit] UPSTASH_REDIS_REST_URL e UPSTASH_REDIS_REST_TOKEN não configurados — rate limiting desabilitado.'
       )
     }
     return null
