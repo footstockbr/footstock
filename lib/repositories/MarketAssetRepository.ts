@@ -48,6 +48,8 @@ export class MarketAssetRepository {
         OR: [
           { ticker: { contains: search, mode: 'insensitive' } },
           { name: { contains: search, mode: 'insensitive' } },
+          // searchText: aliases internos (nomes reais, apelidos) — nunca retornado ao cliente
+          { searchText: { contains: search, mode: 'insensitive' } },
         ],
       }),
     }
