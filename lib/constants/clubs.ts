@@ -247,6 +247,56 @@ export const CLUB_TICKER_ALIASES: Record<string, string> = {
   PMB3: 'TIS3', VNO3: 'TIS3',
 }
 
+/**
+ * Aliases de busca por nome real — APENAS para uso interno no filtro de pesquisa.
+ * NUNCA renderizar estes valores para o cliente final.
+ * Permite que o usuário pesquise "Flamengo" e encontre "Urubu da Gávea FC".
+ */
+export const CLUB_SEARCH_ALIASES: Record<string, string[]> = {
+  // Série A
+  URU3: ['flamengo', 'fla', 'mengao', 'mengão', 'urubu', 'nação', 'nacao', 'gavea', 'gávea'],
+  POR4: ['palmeiras', 'pal', 'porco', 'verdao', 'verdão', 'palestra', 'alviverde'],
+  TIM3: ['corinthians', 'cor', 'timao', 'timão', 'coringao', 'coringão', 'alvinegro paulistano'],
+  TRI4: ['sao paulo', 'são paulo', 'spfc', 'soberano', 'tricolor paulistano', 'morumbi'],
+  GAL3: ['atletico mineiro', 'atlético mineiro', 'galo', 'cam', 'atletico', 'atlético', 'galo doido', 'lagoinha'],
+  FOG3: ['botafogo', 'fogao', 'fogão', 'bot', 'estrela solitaria', 'estrela solitária', 'general severiano', 'manequinho'],
+  COL3: ['internacional', 'inter', 'colorado', 'int', 'beira-rio', 'beira rio'],
+  IMO3: ['gremio', 'grêmio', 'gre', 'imortal', 'tricolor gaucho', 'tricolor gaúcho', 'arena gremio'],
+  RAP3: ['cruzeiro', 'raposa', 'cru', 'celeste', 'mineirao', 'mineirão'],
+  MAL4: ['vasco', 'vasco da gama', 'vas', 'cruz de malta', 'gigante da colina', 'sao januario', 'são januário'],
+  TRI3: ['bahia', 'bah', 'tricolor baiano', 'esquadrao', 'esquadrão', 'fonte nova'],
+  GUE4: ['fluminense', 'flu', 'tricolor das laranjeiras', 'laranjeiras', 'nec', 'guerreiro'],
+  TOR3: ['bragantino', 'red bull bragantino', 'rb bragantino', 'brg', 'massa bruta', 'nabi', 'nabi abi chedid'],
+  LEM3: ['mirassol', 'mir', 'leaozinho', 'leãozinho', 'maiao', 'maião'],
+  BAL4: ['santos', 'san', 'peixe', 'baleia', 'vila belmiro'],
+  FUR3: ['athletico paranaense', 'athletico', 'atletico paranaense', 'atlético paranaense', 'cap', 'furacao', 'furacão', 'huracán', 'capao da imbuia', 'capão da imbuia', 'liga'],
+  VOA4: ['coritiba', 'coxa', 'cfc', 'vovo', 'vovô', 'couto', 'couto pereira'],
+  CON3: ['chapecoense', 'chape', 'cha', 'conda', 'arena conda', 'arena condá'],
+  LEA3: ['remo', 'rem', 'leao azul', 'leão azul', 'baenao', 'baenão'],
+  LEB3: ['vitoria', 'vitória', 'vit', 'leao da barra', 'leão da barra', 'barradao', 'barradão'],
+  // Série B
+  COE3: ['america mineiro', 'américa mineiro', 'coelho', 'ame', 'america-mg', 'independencia', 'independência'],
+  CAV4: ['atletico goianiense', 'atlético goianiense', 'acg', 'dragao goiano', 'dragão goiano', 'cavalo'],
+  DRA3: ['goias', 'goiás', 'goi', 'esmeraldino', 'serrinha'],
+  LEI4: ['avai', 'avaí', 'ava', 'leao da ilha', 'leão da ilha', 'ressacada'],
+  PAN3: ['botafogo-sp', 'botafogo sp', 'botafogo ribeirão preto', 'botafogo ribeirao preto', 'btc', 'pantera', 'mogiana', 'santa cruz botafogo'],
+  VOZ3: ['ceara', 'ceará', 'cec', 'vovo do castelao', 'vovô do castelão', 'vozao', 'vozão', 'castelão'],
+  GAP3: ['crb', 'clube de regatas brasil', 'galo do crb', 'pajucara', 'pajuçara', 'alagoas'],
+  TIG4: ['criciumense', 'criciuma', 'criciúma', 'tigre criciumense', 'heriberto hulse', 'heriberto hülse'],
+  DOU4: ['cuiaba', 'cuiabá', 'cui', 'dourado', 'pantanal', 'arena pantanal'],
+  LEP4: ['fortaleza', 'fore', 'leao do pici', 'leão do pici', 'pici', 'castelão fortaleza'],
+  PER3: ['coritiba cearense', 'cgc', 'periquito', 'serrana', 'guarani-ce'],
+  IND4: ['juventude', 'juv', 'indio', 'índio', 'serra gaucha', 'serra gaúcha', 'caxias do sul', 'alfredo jaconi'],
+  TUB3: ['guarani', 'guarany', 'tubarao', 'tubarão', 'bugre', 'brinco de ouro'],
+  NAF3: ['nautico', 'náutico', 'nau', 'timbu', 'aflitos'],
+  TIV3: ['novorizontino', 'novo', 'nov', 'ntl', 'tigre do vale', 'vale do peixe', 'jorge ismael'],
+  FAS3: ['operario', 'operário', 'ope', 'fantasma', 'campos gerais', 'germânico', 'germanico'],
+  MAC4: ['ponte preta', 'pon', 'macaca', 'majestoso', 'moises lucarelli'],
+  ABT4: ['sao bernardo', 'são bernardo', 'sbr', 'tigre abc', 'grande abc', 'primeiro de maio'],
+  LEI3: ['sport', 'sport recife', 'spt', 'leao da ilha do retiro', 'leão da ilha do retiro', 'ilha do retiro'],
+  TIS3: ['vila nova', 'pmb', 'tigre goiano', 'onofre lopes', 'serra dourada'],
+}
+
 export function normalizeClubTicker(ticker: string): string {
   const normalized = ticker.trim().toUpperCase()
   return CLUB_TICKER_ALIASES[normalized] ?? normalized

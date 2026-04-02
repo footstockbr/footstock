@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { CLUBS } from '@/lib/constants/clubs'
+import { CLUBS, CLUB_SEARCH_ALIASES } from '@/lib/constants/clubs'
 import { Input } from '@/components/ui/Input'
 import { Btn } from '@/components/ui/Btn'
 import { cn } from '@/lib/utils/cn'
@@ -19,10 +19,13 @@ export function Step3ClubSelect({ onNext, onBack, defaultValue }: Step3ClubSelec
   const debouncedSearch = useDebounce(search, 300)
 
   const filtered = debouncedSearch
-    ? CLUBS.filter((c) =>
-        c.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        c.ticker.toLowerCase().includes(debouncedSearch.toLowerCase()),
-      )
+    ? CLUBS.filter((c) => {
+        const q = debouncedSearch.toLowerCase()
+        if (c.name.toLowerCase().includes(q)) return true
+        if (c.ticker.toLowerCase().includes(q)) return true
+        // mecanismo interno: aliases de nomes reais — nunca renderizados ao usuário
+        return (CLUB_SEARCH_ALIASES[c.ticker] ?? []).some((alias) => alias.includes(q))
+      })
     : CLUBS
 
   return (
@@ -40,7 +43,7 @@ export function Step3ClubSelect({ onNext, onBack, defaultValue }: Step3ClubSelec
       <div
         role="radiogroup"
         aria-label="Selecione um clube"
-        className="grid grid-cols-3 sm:grid-cols-5 gap-2 max-h-[320px] overflow-y-auto"
+        className="grid grid-cols-3 gap-2 max-h-[320px] overflow-y-auto"
       >
         {filtered.length === 0 ? (
           <p className="col-span-full text-center text-sm text-text-muted py-8">
