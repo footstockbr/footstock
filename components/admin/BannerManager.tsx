@@ -12,6 +12,7 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { BANNER_POSITIONS, type AdSponsorDto, type BannerPosition } from '@/lib/types/sponsors'
+import { maskDateInput, displayToIso, isoToDisplay } from '@/lib/utils/formatDate'
 
 const sponsorSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório.'),
@@ -48,22 +49,43 @@ export function BannerManager({ initial, onSuccess, onCancel }: BannerManagerPro
   )
   const [submitError, setSubmitError] = useState<string | null>(null)
 
+  const defaultStartsIso = initial ? initial.startsAt.slice(0, 10) : new Date().toISOString().slice(0, 10)
+  const defaultEndsIso = initial
+    ? initial.endsAt.slice(0, 10)
+    : new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)
+
+  const [startsDisplay, setStartsDisplay] = useState(() => isoToDisplay(defaultStartsIso))
+  const [endsDisplay, setEndsDisplay] = useState(() => isoToDisplay(defaultEndsIso))
+
   const {
     register,
     handleSubmit,
+    setValue,
     control,
     formState: { errors, isSubmitting },
   } = useForm<SponsorFields>({
     resolver: zodResolver(sponsorSchema),
     defaultValues: {
       name: initial?.name ?? '',
-      startsAt: initial ? initial.startsAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
-      endsAt: initial
-        ? initial.endsAt.slice(0, 10)
-        : new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+      startsAt: defaultStartsIso,
+      endsAt: defaultEndsIso,
       active: initial?.active ?? false,
     },
   })
+
+  function handleStartsChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const masked = maskDateInput(e.target.value)
+    setStartsDisplay(masked)
+    const iso = displayToIso(masked)
+    setValue('startsAt', iso, { shouldValidate: iso.length === 10 })
+  }
+
+  function handleEndsChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const masked = maskDateInput(e.target.value)
+    setEndsDisplay(masked)
+    const iso = displayToIso(masked)
+    setValue('endsAt', iso, { shouldValidate: iso.length === 10 })
+  }
 
   function updateBannerField(
     position: BannerPosition,
@@ -142,8 +164,12 @@ export function BannerManager({ initial, onSuccess, onCancel }: BannerManagerPro
         <div className="flex-1">
           <label className="mb-1 block text-xs text-zinc-400">Início</label>
           <input
-            type="date"
-            {...register('startsAt')}
+            type="text"
+            placeholder="dd/mm/aaaa"
+            inputMode="numeric"
+            maxLength={10}
+            value={startsDisplay}
+            onChange={handleStartsChange}
             className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#F0B90B]"
           />
           {errors.startsAt && (
@@ -153,8 +179,12 @@ export function BannerManager({ initial, onSuccess, onCancel }: BannerManagerPro
         <div className="flex-1">
           <label className="mb-1 block text-xs text-zinc-400">Fim</label>
           <input
-            type="date"
-            {...register('endsAt')}
+            type="text"
+            placeholder="dd/mm/aaaa"
+            inputMode="numeric"
+            maxLength={10}
+            value={endsDisplay}
+            onChange={handleEndsChange}
             className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[#F0B90B]"
           />
           {errors.endsAt && (

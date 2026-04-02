@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Button } from '@/components/ui/button'
@@ -7,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { formatCPF, formatPhone } from '@/lib/utils/validators'
 import { step1Schema, type Step1Data } from '@/lib/schemas/auth.schema'
 import type { WizardData } from '../register-wizard'
+import { maskDateInput, displayToIso } from '@/lib/utils/format'
 
 interface Step1Props {
   data: WizardData
@@ -14,6 +16,7 @@ interface Step1Props {
 }
 
 export function Step1PersonalData({ data, onNext }: Step1Props) {
+  const [birthDisplay, setBirthDisplay] = useState('')
   const {
     register,
     handleSubmit,
@@ -29,6 +32,13 @@ export function Step1PersonalData({ data, onNext }: Step1Props) {
     },
     mode: 'onBlur',
   })
+
+  function handleBirthDateChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const masked = maskDateInput(e.target.value)
+    setBirthDisplay(masked)
+    const iso = displayToIso(masked)
+    setValue('birthDate', iso, { shouldValidate: iso.length === 10 })
+  }
 
   const handleCPFChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatCPF(e.target.value)
@@ -74,11 +84,15 @@ export function Step1PersonalData({ data, onNext }: Step1Props) {
       <Input
         data-testid="form-register-birthdate-input"
         label="Data de nascimento"
-        type="date"
+        type="text"
+        placeholder="dd/mm/aaaa"
+        inputMode="numeric"
+        maxLength={10}
         autoComplete="bday"
         hint="Você deve ter ao menos 18 anos"
         error={errors.birthDate?.message}
-        {...register('birthDate')}
+        value={birthDisplay}
+        onChange={handleBirthDateChange}
       />
 
       <Input

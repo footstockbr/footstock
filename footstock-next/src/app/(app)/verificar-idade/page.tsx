@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useActionState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Metadata } from 'next'
@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { ROUTES } from '@/lib/constants/routes'
 import { verifyAgeAction } from '@/actions/age-verification'
 import { initialActionState } from '@/lib/action-utils'
+import { maskDateInput, displayToIso } from '@/lib/utils/format'
 
 export default function VerificarIdadePage() {
   const router = useRouter()
@@ -16,6 +17,8 @@ export default function VerificarIdadePage() {
     verifyAgeAction,
     initialActionState
   )
+  const [birthDisplay, setBirthDisplay] = useState('')
+  const birthIso = displayToIso(birthDisplay)
 
   useEffect(() => {
     if (state.success) {
@@ -44,10 +47,16 @@ export default function VerificarIdadePage() {
           >
             Data de Nascimento
           </label>
+          {/* hidden input envia ISO (YYYY-MM-DD) para o Server Action */}
+          <input type="hidden" name="birthDate" value={birthIso} />
           <input
             id="birthDate"
-            name="birthDate"
-            type="date"
+            type="text"
+            placeholder="dd/mm/aaaa"
+            inputMode="numeric"
+            maxLength={10}
+            value={birthDisplay}
+            onChange={(e) => setBirthDisplay(maskDateInput(e.target.value))}
             required
             aria-required="true"
             aria-describedby={

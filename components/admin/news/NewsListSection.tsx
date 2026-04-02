@@ -1,8 +1,10 @@
 'use client'
 
+import { useState } from 'react'
 import { STATUS_BADGE, STATUS_LABEL } from './types'
 import type { EditorialNews, EditorialStatus } from './types'
 import { NEWS_STATUS } from '@/lib/enums'
+import { maskDateInput, displayToIso, isoToDisplay } from '@/lib/utils/formatDate'
 
 interface NewsListSectionProps {
   items: EditorialNews[]
@@ -37,6 +39,31 @@ export function NewsListSection({
   onUpdateStatus,
   onDelete,
 }: NewsListSectionProps) {
+  const [fromDisplay, setFromDisplay] = useState(() => fromFilter ? isoToDisplay(fromFilter) : '')
+  const [toDisplay, setToDisplay] = useState(() => toFilter ? isoToDisplay(toFilter) : '')
+
+  function handleFromChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const masked = maskDateInput(e.target.value)
+    setFromDisplay(masked)
+    if (masked.length === 0) {
+      onFromFilterChange('')
+    } else {
+      const iso = displayToIso(masked)
+      if (iso) onFromFilterChange(iso)
+    }
+  }
+
+  function handleToChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const masked = maskDateInput(e.target.value)
+    setToDisplay(masked)
+    if (masked.length === 0) {
+      onToFilterChange('')
+    } else {
+      const iso = displayToIso(masked)
+      if (iso) onToFilterChange(iso)
+    }
+  }
+
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
       <div className="mb-3 grid gap-3 md:grid-cols-4">
@@ -65,18 +92,24 @@ export function NewsListSection({
         <label className="text-xs text-zinc-400">
           De
           <input
-            type="date"
-            value={fromFilter}
-            onChange={e => onFromFilterChange(e.target.value)}
+            type="text"
+            placeholder="dd/mm/aaaa"
+            inputMode="numeric"
+            maxLength={10}
+            value={fromDisplay}
+            onChange={handleFromChange}
             className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
           />
         </label>
         <label className="text-xs text-zinc-400">
           Até
           <input
-            type="date"
-            value={toFilter}
-            onChange={e => onToFilterChange(e.target.value)}
+            type="text"
+            placeholder="dd/mm/aaaa"
+            inputMode="numeric"
+            maxLength={10}
+            value={toDisplay}
+            onChange={handleToChange}
             className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
           />
         </label>

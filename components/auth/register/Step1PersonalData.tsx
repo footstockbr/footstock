@@ -1,17 +1,20 @@
 'use client'
 
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { step1Schema, type Step1Input } from '@/lib/schemas/auth.schema'
 import { Input } from '@/components/ui/Input'
 import { Btn } from '@/components/ui/Btn'
 import { formatCPF, formatPhone } from '@/lib/utils/validators'
+import { maskDateInput, displayToIso } from '@/lib/utils/formatDate'
 
 interface Step1PersonalDataProps {
   onNext: (data: Step1Input) => void
 }
 
 export function Step1PersonalData({ onNext }: Step1PersonalDataProps) {
+  const [birthDisplay, setBirthDisplay] = useState('')
   const {
     register,
     handleSubmit,
@@ -20,6 +23,13 @@ export function Step1PersonalData({ onNext }: Step1PersonalDataProps) {
   } = useForm<Step1Input>({
     resolver: zodResolver(step1Schema),
   })
+
+  function handleBirthDateChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const masked = maskDateInput(e.target.value)
+    setBirthDisplay(masked)
+    const iso = displayToIso(masked)
+    setValue('birthDate', iso, { shouldValidate: iso.length === 10 })
+  }
 
   return (
     <form onSubmit={handleSubmit(onNext)} className="flex flex-col gap-4" noValidate>
@@ -51,11 +61,15 @@ export function Step1PersonalData({ onNext }: Step1PersonalDataProps) {
       />
 
       <Input
-        {...register('birthDate')}
         label="Data de nascimento"
-        type="date"
+        type="text"
+        placeholder="dd/mm/aaaa"
+        inputMode="numeric"
+        maxLength={10}
+        value={birthDisplay}
+        onChange={handleBirthDateChange}
         error={errors.birthDate?.message}
-        hint="Minimo 18 anos"
+        hint="Mínimo 18 anos"
         required
         data-testid="input-birthDate"
       />
