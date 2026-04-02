@@ -23,9 +23,10 @@ jobs:
         run: npm i -g @railway/cli
 
       - name: Deploy para Railway
-        run: railway up --service motor --detach
+        run: railway up --service motor --environment production --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: 45677912-3487-4978-b20b-fc7cdb8b93cf
 
       - name: Deploy summary
         run: |
