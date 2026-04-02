@@ -7,6 +7,7 @@
 // ============================================================================
 
 import { useState, useEffect, useRef } from 'react'
+import { getSupabaseClient } from '@/lib/auth/session'
 
 interface NewsItem {
   id: string
@@ -26,8 +27,20 @@ export default function TickerNewsTape() {
     let es: EventSource | null = null
     let retryCount = 0
 
-    function connect() {
-      es = new EventSource('/api/v1/news/stream')
+    async function connect() {
+      // EventSource não suporta headers — passa token como query param
+      let sseUrl = '/api/v1/news/stream'
+      try {
+        const supabase = getSupabaseClient()
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.access_token) {
+          sseUrl = `/api/v1/news/stream?token=${encodeURIComponent(session.access_token)}`
+        }
+      } catch {
+        // Supabase indisponível — tenta sem token
+      }
+
+      es = new EventSource(sseUrl)
 
       es.onopen = () => {
         retryCount = 0

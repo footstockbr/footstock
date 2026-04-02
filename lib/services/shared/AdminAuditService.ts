@@ -6,7 +6,6 @@
 // ============================================================================
 
 import { prisma } from '@/lib/prisma'
-import type { AdminMarketAction } from '@prisma/client'
 import type { Prisma } from '@prisma/client'
 
 // ---------------------------------------------------------------------------
@@ -50,11 +49,13 @@ class AdminAuditService {
 
   /**
    * Retorna as ações admin mais recentes para exibição no painel.
+   * Usa `select` explícito (sem `include + as never`) para evitar
+   * problemas de serialização e type mismatch em runtime.
    */
   async getRecentActions(
     limit = 50,
     filters?: { ticker?: string; action?: string }
-  ): Promise<AdminMarketAction[]> {
+  ) {
     return prisma.adminMarketAction.findMany({
       where: {
         ...(filters?.ticker ? { ticker: filters.ticker } : {}),
@@ -62,9 +63,20 @@ class AdminAuditService {
       },
       orderBy: { createdAt: 'desc' },
       take: Math.min(limit, 100),
-      include: {
+      select: {
+        id: true,
+        adminId: true,
+        assetId: true,
+        action: true,
+        reason: true,
+        ticker: true,
+        details: true,
+        ipAddress: true,
+        previousPrice: true,
+        newPrice: true,
+        createdAt: true,
         admin: { select: { name: true, email: true } },
-      } as never,
+      },
     })
   }
 }

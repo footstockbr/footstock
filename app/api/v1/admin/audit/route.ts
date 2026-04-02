@@ -22,11 +22,21 @@ export const GET = withAdmin('admin:audit')(async (request: NextRequest) => {
     return NextResponse.json({ success: false, error: { code: 'SYS_001', message: 'Falha ao carregar audit log' } }, { status: 500 })
   }
 
-  // Prisma Decimal fields are not JSON-serializable — convert explicitly
+  // Map each field explicitly — no spread of Prisma objects.
+  // Decimal → Number, Date → ISO string, relations → plain objects.
   const serialized = actions.map(a => ({
-    ...a,
+    id: a.id,
+    adminId: a.adminId,
+    assetId: a.assetId,
+    action: a.action,
+    reason: a.reason,
+    ticker: a.ticker,
+    details: a.details,
+    ipAddress: a.ipAddress,
     previousPrice: a.previousPrice != null ? Number(a.previousPrice) : null,
     newPrice: a.newPrice != null ? Number(a.newPrice) : null,
+    createdAt: a.createdAt instanceof Date ? a.createdAt.toISOString() : a.createdAt,
+    admin: a.admin ? { name: a.admin.name, email: a.admin.email } : null,
   }))
 
   return NextResponse.json({ data: serialized })

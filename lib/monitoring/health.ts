@@ -189,10 +189,17 @@ export async function runDetailedChecks(): Promise<DetailedHealthReport> {
   }
 }
 
-/** Status geral: 'error' se qualquer componente crítico falhar */
+/**
+ * Status geral para HTTP status code.
+ * Apenas DB é componente CRÍTICO (503 se falhar).
+ * Redis/Motor são informativos — reportados no body mas não causam 503.
+ * Sem Redis configurado (ex: Upstash ausente no Vercel), retorna 'degraded' (200).
+ */
 export function getOverallStatus(report: DetailedHealthReport): 'ok' | 'degraded' | 'error' {
+  // DB down = 503 (crítico)
+  if (report.components.db.status === 'error') return 'error'
+  // Qualquer componente não-ok = degraded (200)
   const statuses = Object.values(report.components).map(c => c.status)
-  if (statuses.includes('error')) return 'error'
-  if (statuses.includes('degraded')) return 'degraded'
+  if (statuses.includes('error') || statuses.includes('degraded')) return 'degraded'
   return 'ok'
 }
