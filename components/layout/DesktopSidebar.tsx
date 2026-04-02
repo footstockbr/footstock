@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
+import { LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { ROUTES } from '@/lib/constants/routes'
 import { signOut } from '@/lib/auth'
@@ -80,13 +81,14 @@ export function DesktopSidebar() {
           onClick={() => void handleLogout()}
           disabled={isLoggingOut}
           className={cn(
-            'w-full rounded-md px-3 py-2 text-sm min-h-[44px] text-left transition-colors',
+            'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm min-h-[44px] transition-colors',
             isLoggingOut
               ? 'cursor-not-allowed text-text-muted bg-bg-card/40'
               : 'text-text-secondary hover:text-text-primary hover:bg-bg-card'
           )}
         >
-          {isLoggingOut ? 'Saindo...' : 'Sair'}
+          <LogOut size={18} aria-hidden="true" />
+          <span>{isLoggingOut ? 'Saindo...' : 'Sair'}</span>
         </button>
       </div>
     </aside>
