@@ -31,7 +31,7 @@
       ]
     },
     "extra": {
-      "webUrl": "https://footstock.com.br",
+      "webUrl": "https://footstock.vercel.app",
       "eas": {
         "projectId": "84d3ed49-7490-4a6a-abca-45613d996503"
       }
