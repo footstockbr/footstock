@@ -53,8 +53,11 @@ export function maskDateInput(value: string): string {
 /** Converte dd/mm/aaaa → YYYY-MM-DD (ISO). Retorna '' se incompleto/inválido. */
 export function displayToIso(display: string): string {
   const parts = display.split('/')
-  if (parts.length !== 3 || parts[2].length !== 4) return ''
-  const [dd, mm, yyyy] = parts
+  if (parts.length !== 3) return ''
+  const dd = parts[0]!
+  const mm = parts[1]!
+  const yyyy = parts[2]!
+  if (yyyy.length !== 4) return ''
   return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`
 }
 
