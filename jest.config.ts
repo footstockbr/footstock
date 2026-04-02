@@ -21,6 +21,8 @@ const config = {
     'tests/a11y/',
     // Testes de contrato têm config Jest isolada — executar via npm run test:contracts
     'tests/contracts/',
+    // Testes de integração requerem banco de dados — não disponível no CI/Vercel
+    'tests/integration/',
   ],
   collectCoverageFrom: [
     'lib/**/*.{ts,tsx}',
