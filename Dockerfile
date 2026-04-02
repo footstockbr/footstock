@@ -10,7 +10,7 @@ WORKDIR /app
 COPY motor/ ./
 COPY prisma/ ./prisma/
 COPY --from=deps /app/node_modules ./node_modules
-RUN npx prisma generate
+RUN npx --yes prisma@^6 generate
 RUN npm run build
 
 # Stage 3: Runtime (imagem final mínima)
