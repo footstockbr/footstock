@@ -7,6 +7,7 @@
 
 import { Suspense } from 'react'
 import type { Metadata } from 'next'
+import { cookies } from 'next/headers'
 import { withClubAuth } from '@/lib/auth/club-auth'
 import { ClubMetrics } from '@/components/club/ClubMetrics'
 import { FansByPlanChart } from '@/components/club/FansByPlan'
@@ -51,11 +52,18 @@ export async function generateMetadata(): Promise<Metadata> {
 // Fetch de métricas (server-side)
 // ---------------------------------------------------------------------------
 
+async function getCookieHeader(): Promise<string> {
+  const cookieStore = await cookies()
+  return cookieStore.getAll().map(c => `${c.name}=${c.value}`).join('; ')
+}
+
 async function fetchClubMetrics(): Promise<ClubMetricsData | null> {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+    const cookieHeader = await getCookieHeader()
     const res = await fetch(`${baseUrl}/api/v1/club/metrics`, {
-      cache: 'no-store', // sempre fresh do Redis
+      cache: 'no-store',
+      headers: { Cookie: cookieHeader },
     })
     if (!res.ok) return null
     const json = await res.json() as { success: boolean; data: ClubMetricsData }
@@ -72,8 +80,10 @@ async function fetchClubMetrics(): Promise<ClubMetricsData | null> {
 async function fetchClubAffiliate(): Promise<ClubAffiliateData | null> {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+    const cookieHeader = await getCookieHeader()
     const res = await fetch(`${baseUrl}/api/v1/club/affiliate`, {
       cache: 'no-store',
+      headers: { Cookie: cookieHeader },
     })
     if (!res.ok) return null
     const json = await res.json() as { success: boolean; data: ClubAffiliateData }

@@ -7,6 +7,7 @@
 // ============================================================================
 
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { authedFetch } from '@/lib/api/authed-fetch'
 import { Server, Database, Zap, Activity, RefreshCw, AlertTriangle, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { Card } from '@/components/ui/Card'
@@ -84,7 +85,7 @@ export function SystemStatus({ className }: SystemStatusProps) {
   const fetchStatus = useCallback(async (manual = false) => {
     if (manual) setIsRefreshing(true)
     try {
-      const res = await fetch('/api/v1/health/detailed', { cache: 'no-store' })
+      const res = await authedFetch('/api/v1/health/detailed', { cache: 'no-store' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json: HealthDetailedResponse = await res.json()
       setData(json)

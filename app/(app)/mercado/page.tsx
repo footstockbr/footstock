@@ -8,7 +8,7 @@ import { dehydrate, HydrationBoundary, QueryClient } from '@tanstack/react-query
 import { AppLayout } from '@/components/layout'
 import MarketPage from '@/components/market/MarketPage'
 import { SponsorBanner } from '@/components/banners/SponsorBanner'
-import { prefetchMarketData } from '@/hooks/useMarketData'
+import { prefetchMarketData } from '@/lib/server/prefetch-market'
 
 // Dados de mercado near-real-time — sempre SSR dinâmico
 export const dynamic = 'force-dynamic'

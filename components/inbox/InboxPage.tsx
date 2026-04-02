@@ -43,7 +43,7 @@ export function InboxPage() {
   const handleMarkAllRead = async () => {
     setMarkingAll(true)
     try {
-      const res = await authedFetch('/api/v1/me/notifications/read-all', { method: 'POST' })
+      const res = await authedFetch('/api/v1/me/notifications', { method: 'PATCH' })
       if (res.ok) {
         setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
       }

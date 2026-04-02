@@ -16,5 +16,12 @@ export const GET = withAdmin('admin:audit')(async (request: NextRequest) => {
 
   const actions = await adminAuditService.getRecentActions(limit, { ticker, action })
 
-  return NextResponse.json({ data: actions })
+  // Prisma Decimal fields are not JSON-serializable — convert explicitly
+  const serialized = actions.map(a => ({
+    ...a,
+    previousPrice: a.previousPrice != null ? Number(a.previousPrice) : null,
+    newPrice: a.newPrice != null ? Number(a.newPrice) : null,
+  }))
+
+  return NextResponse.json({ data: serialized })
 })
