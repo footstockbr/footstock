@@ -55,7 +55,9 @@ export function withAuth(handler: RouteHandler) {
       )
 
       const authHeader = req.headers.get('Authorization')
-      const token = authHeader?.replace('Bearer ', '')
+      // SSE clients (EventSource) cannot set headers — accept ?token= query param as fallback
+      const queryToken = req.nextUrl.searchParams.get('token')
+      const token = authHeader?.replace('Bearer ', '') ?? queryToken ?? undefined
 
       if (!token) {
         // DEV local fallback: autenticação por cookie HttpOnly (sem Supabase)

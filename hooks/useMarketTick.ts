@@ -6,6 +6,7 @@
 // ============================================================================
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { getSupabaseClient } from '@/lib/auth/session'
 
 export interface TickData {
   assetId: string
@@ -85,12 +86,24 @@ export function useMarketTick(options: UseMarketTickOptions = {}): UseMarketTick
     }
   }, [])
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (!mountedRef.current || !enabled) return
 
     cleanup()
 
-    const es = new EventSource(SSE_URL)
+    // EventSource cannot set custom headers — pass Bearer token as ?token= query param
+    let sseUrl = SSE_URL
+    try {
+      const supabase = getSupabaseClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) {
+        sseUrl = `${SSE_URL}?token=${encodeURIComponent(session.access_token)}`
+      }
+    } catch {
+      // Supabase indisponível — tenta sem token (resultará em 401 e reconexão)
+    }
+
+    const es = new EventSource(sseUrl)
     eventSourceRef.current = es
 
     es.onopen = () => {

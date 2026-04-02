@@ -12,6 +12,7 @@ import {
 } from '@tanstack/react-query'
 import type { AssetFilters, AssetApiResponse, AssetListItem } from '@/types/market'
 import { queryKeys } from '@/lib/constants/query-keys'
+import { authedFetch } from '@/lib/api/authed-fetch'
 
 /**
  * Hook de listagem infinita de ativos.
@@ -29,7 +30,7 @@ export function useInfiniteMarketData(filters: AssetFilters) {
       params.set('page', String(pageParam ?? 1))
       params.set('limit', '20')
 
-      const res = await fetch(`/api/v1/assets?${params}`)
+      const res = await authedFetch(`/api/v1/assets?${params}`)
       if (!res.ok) {
         const errorBody = await res.json().catch(() => ({}))
         throw new Error((errorBody as { error?: { code?: string } })?.error?.code ?? 'FETCH_ERROR')

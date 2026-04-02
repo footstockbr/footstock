@@ -14,7 +14,13 @@ export const GET = withAdmin('admin:audit')(async (request: NextRequest) => {
   const ticker = sp.get('ticker') ?? undefined
   const action = sp.get('action') ?? undefined
 
-  const actions = await adminAuditService.getRecentActions(limit, { ticker, action })
+  let actions: Awaited<ReturnType<typeof adminAuditService.getRecentActions>>
+  try {
+    actions = await adminAuditService.getRecentActions(limit, { ticker, action })
+  } catch (err) {
+    console.error('[audit/route] getRecentActions failed:', err)
+    return NextResponse.json({ success: false, error: { code: 'SYS_001', message: 'Falha ao carregar audit log' } }, { status: 500 })
+  }
 
   // Prisma Decimal fields are not JSON-serializable — convert explicitly
   const serialized = actions.map(a => ({

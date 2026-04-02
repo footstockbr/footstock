@@ -38,7 +38,7 @@ export function DesktopSidebar() {
   }
 
   return (
-    <aside className="hidden md:flex md:w-64 md:h-dvh md:sticky md:top-0 md:self-start md:flex-col md:border-r md:border-border-default md:bg-bg-surface/70 md:relative md:z-40 md:pointer-events-auto md:overflow-hidden">
+    <aside className="hidden md:flex md:w-64 md:h-dvh md:sticky md:top-0 md:self-start md:flex-col md:border-r md:border-border-default md:bg-bg-surface/70 md:z-40 md:pointer-events-auto md:overflow-hidden">
       <div className="h-14 border-b border-border-default px-4 flex items-center">
         <Link href={ROUTES.DASHBOARD} className="flex items-center gap-2">
           <Image
