@@ -4,12 +4,28 @@
 // ============================================================================
 
 import './config/env'   // fail-fast para variáveis ausentes
+import http from 'http'
 import { logger } from './utils/logger'
 import { LeaderElection } from './leader/LeaderElection'
 import { MarketEngine } from './engine/MarketEngine'
 import { RedisClientService } from './services/RedisClientService'
 
 const MOTOR_ID = `motor-${process.env.RAILWAY_REPLICA_ID ?? 'local'}-${Date.now()}`
+
+// Health check HTTP server para Railway/Docker
+const PORT = parseInt(process.env.PORT ?? '3001', 10)
+const healthServer = http.createServer((req, res) => {
+  if (req.url === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ status: 'ok', id: MOTOR_ID }))
+  } else {
+    res.writeHead(404)
+    res.end()
+  }
+})
+healthServer.listen(PORT, () => {
+  logger.info(`[motor] Health server escutando na porta ${PORT}`)
+})
 
 async function main() {
   logger.info(`[motor] Iniciando instância: ${MOTOR_ID}`)
