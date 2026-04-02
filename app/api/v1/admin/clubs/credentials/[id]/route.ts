@@ -20,9 +20,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (password) data.passwordHash = await bcrypt.hash(password, 12)
 
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (prisma as any).clubCredential?.update({ where: { id }, data })
     return NextResponse.json({ success: true })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Erro ao atualizar' }, { status: 500 })
   }
 }
@@ -38,9 +39,10 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
 
   const { id } = await params
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (prisma as any).clubCredential?.delete({ where: { id } })
     return NextResponse.json({ success: true })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Erro ao revogar credencial' }, { status: 500 })
   }
 }

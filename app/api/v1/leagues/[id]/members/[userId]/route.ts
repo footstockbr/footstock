@@ -13,6 +13,7 @@ export async function DELETE(
   const { id, userId: targetUserId } = await params
 
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const league = await (prisma as any).league?.findUnique({ where: { id } })
     if (!league) return NextResponse.json({ error: 'Liga não encontrada' }, { status: 404 })
 
@@ -26,10 +27,12 @@ export async function DELETE(
       return NextResponse.json({ error: 'Não é possível remover o criador da liga' }, { status: 400 })
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (prisma as any).leagueMember?.deleteMany({
       where: { leagueId: id, userId: targetUserId },
     })
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (prisma as any).notification?.create({
       data: {
         userId: targetUserId,
@@ -40,7 +43,7 @@ export async function DELETE(
     }).catch(() => null)
 
     return NextResponse.json({ success: true, message: 'Participante removido' })
-  } catch (error) {
+  } catch {
     console.error('[League Remove Member]', error)
     return NextResponse.json({ error: 'Erro ao remover participante' }, { status: 500 })
   }

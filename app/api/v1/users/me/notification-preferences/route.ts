@@ -14,6 +14,7 @@ export async function GET() {
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const prefs = await (prisma as any).notificationPreference?.findMany({
       where: { userId: auth.user.id },
     }) ?? []
@@ -46,6 +47,7 @@ export async function PATCH(request: Request) {
   try {
     await Promise.all(
       preferences.map((pref) =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (prisma as any).notificationPreference?.upsert({
           where: { userId_type_channel: { userId: auth.user.id, type: pref.type, channel: pref.channel } },
           update: { enabled: pref.enabled },
@@ -55,7 +57,7 @@ export async function PATCH(request: Request) {
     )
 
     return NextResponse.json({ success: true })
-  } catch (error) {
+  } catch {
     console.error('[NotificationPreferences PATCH]', error)
     return NextResponse.json({ error: 'Erro ao salvar preferências' }, { status: 500 })
   }

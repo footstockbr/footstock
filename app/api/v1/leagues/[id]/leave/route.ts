@@ -11,6 +11,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   const userId = auth.user.id
 
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const league = await (prisma as any).league?.findUnique({
       where: { id },
       include: { members: true },
@@ -27,12 +28,13 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
       return NextResponse.json({ error: 'Você não é membro desta liga' }, { status: 400 })
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (prisma as any).leagueMember?.deleteMany({
       where: { leagueId: id, userId },
     })
 
     return NextResponse.json({ success: true, message: 'Você saiu da liga com sucesso' })
-  } catch (error) {
+  } catch {
     console.error('[League Leave]', error)
     return NextResponse.json({ error: 'Erro ao sair da liga' }, { status: 500 })
   }

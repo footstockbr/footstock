@@ -23,7 +23,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let body: unknown
 
   // sendBeacon pode enviar como text/plain ou application/json
-  const contentType = req.headers.get('content-type') ?? ''
   try {
     const text = await req.text()
     body = JSON.parse(text)

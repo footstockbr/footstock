@@ -11,6 +11,7 @@ export async function GET(request: Request) {
 
   try {
     // Buscar assinaturas ativas com dados de cartão
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const subscriptions = await (prisma as any).subscriptions?.findMany({
       where: { status: 'ACTIVE' },
       include: { user: { select: { id: true, email: true } } },
@@ -20,11 +21,13 @@ export async function GET(request: Request) {
     let atRisk = 0
 
     for (const sub of subscriptions) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { expiryMonth, expiryYear } = (sub as any)
       if (!expiryMonth || !expiryYear) continue
 
       if (CardUpdaterService.isExpiringSoon(expiryMonth, expiryYear)) {
         // Criar notificação para o usuário
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (prisma as any).notification?.create({
           data: {
             userId: sub.userId,
@@ -38,8 +41,10 @@ export async function GET(request: Request) {
 
       if (CardUpdaterService.isExpired(expiryMonth, expiryYear)) {
         // Marcar assinatura como at_risk
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (prisma as any).subscriptions?.update({
           where: { id: sub.id },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           data: { status: 'AT_RISK' } as any,
         }).catch(() => null)
         atRisk++
@@ -47,7 +52,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({ success: true, notified, atRisk, checked: subscriptions.length })
-  } catch (error) {
+  } catch {
     console.error('[CardUpdater Cron]', error)
     return NextResponse.json({ error: 'Erro no card updater' }, { status: 500 })
   }

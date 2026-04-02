@@ -26,6 +26,7 @@ export async function POST(request: Request) {
 
   try {
     // Usar auditLog ou tabela genérica conforme schema disponível
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const incident = await (prisma as any).securityIncident?.create({
       data: {
         type,
@@ -50,7 +51,7 @@ export async function POST(request: Request) {
       },
       warning: isUrgent ? 'URGENTE: Prazo ANPD em menos de 24h' : undefined,
     })
-  } catch (error) {
+  } catch {
     console.error('[Incidents] Erro ao registrar:', error)
     return NextResponse.json({ error: 'Erro ao registrar incidente' }, { status: 500 })
   }
@@ -66,12 +67,13 @@ export async function GET() {
   }
 
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const incidents = await (prisma as any).securityIncident?.findMany({
       orderBy: { detectedAt: 'desc' },
     }).catch(() => [])
 
     return NextResponse.json({ incidents: incidents ?? [] })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Erro ao buscar incidentes' }, { status: 500 })
   }
 }

@@ -12,7 +12,7 @@
 import { NextRequest } from 'next/server'
 import { testPrisma, TEST_EMAIL_DOMAIN } from './setup'
 import { buildRegisterPayload, buildTestEmail } from './helpers/factory.helper'
-import { buildNextRequest, parseResponse } from './helpers/auth.helper'
+import { parseResponse } from './helpers/auth.helper'
 
 // ─── Import route handlers ────────────────────────────────────────────────────
 // Importados aqui para aproveitar o mock de @supabase/ssr do setup.ts.

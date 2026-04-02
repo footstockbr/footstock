@@ -18,7 +18,7 @@ import {
   createTestOrder,
   buildTestEmail,
 } from './helpers/factory.helper'
-import { mockAuthAsUser, mockAuthInvalid, buildNextRequest, parseResponse } from './helpers/auth.helper'
+import { mockAuthAsUser, buildNextRequest, parseResponse } from './helpers/auth.helper'
 
 // ─── Setup global da suite ────────────────────────────────────────────────────
 

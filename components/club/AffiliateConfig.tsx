@@ -46,7 +46,7 @@ interface AffiliateConfigProps {
   initialData?: AffiliateBankData | null
 }
 
-export function AffiliateConfig({ clubId, initialData }: AffiliateConfigProps) {
+export function AffiliateConfig({ clubId: _clubId, initialData }: AffiliateConfigProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { toasts, toast, removeToast } = useToast()
 

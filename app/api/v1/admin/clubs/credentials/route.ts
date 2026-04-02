@@ -20,12 +20,13 @@ export async function POST(request: Request) {
 
   try {
     const passwordHash = await bcrypt.hash(password, 12)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const credential = await (prisma as any).clubCredential?.create({
       data: { clubId, email, passwordHash, createdBy: admin.id, active: true },
     })
 
     return NextResponse.json({ success: true, id: credential?.id ?? 'created' }, { status: 201 })
-  } catch (error) {
+  } catch {
     console.error('[ClubCredentials POST]', error)
     return NextResponse.json({ error: 'Erro ao criar credencial' }, { status: 500 })
   }
@@ -41,13 +42,14 @@ export async function GET() {
   }
 
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const credentials = await (prisma as any).clubCredential?.findMany({
       select: { id: true, clubId: true, email: true, active: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
     }) ?? []
 
     return NextResponse.json({ credentials })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Erro ao buscar credenciais' }, { status: 500 })
   }
 }

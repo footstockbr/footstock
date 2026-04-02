@@ -34,6 +34,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       data: { planType: newPlan },
     })
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (prisma as any).auditLog?.create({
       data: {
         action: 'PROMOTE_PLAN',
@@ -44,7 +45,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }).catch(() => null)
 
     return NextResponse.json({ success: true, user: { id: updated.id, planType: newPlan } })
-  } catch (error) {
+  } catch {
     console.error('[PromotePlan]', error)
     return NextResponse.json({ error: 'Erro ao promover plano' }, { status: 500 })
   }

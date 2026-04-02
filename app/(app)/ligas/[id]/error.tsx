@@ -7,7 +7,6 @@
 import * as Sentry from '@sentry/nextjs'
 import { useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { AlertTriangle, RefreshCw, ArrowLeft } from 'lucide-react'
 import { AppLayout } from '@/components/layout'
 
@@ -18,8 +17,6 @@ export default function LigaDetalheError({
   error: Error & { digest?: string }
   reset: () => void
 }) {
-  const router = useRouter()
-
   useEffect(() => {
     Sentry.captureException(error)
   }, [error])

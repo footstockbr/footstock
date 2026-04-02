@@ -214,7 +214,7 @@ describe('OrderService — Cancelamento de ordens', () => {
       status: 'OPEN',
     })
 
-    const balanceBefore = (await testPrisma.user.findUnique({ where: { id: lendaUser.id } }))!.fsBalance.toNumber()
+    const _balanceBefore = (await testPrisma.user.findUnique({ where: { id: lendaUser.id } }))!.fsBalance.toNumber()
 
     const cancelled = await orderService.cancelOrder(lendaUser.id, order.id)
     expect(cancelled.status).toBe('CANCELLED')

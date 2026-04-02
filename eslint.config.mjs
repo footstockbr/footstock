@@ -45,6 +45,22 @@ const eslintConfig = [
       ],
     },
   },
+  // Relaxar regras em arquivos de teste
+  {
+    files: [
+      '**/*.test.ts',
+      '**/*.test.tsx',
+      '**/*.spec.ts',
+      '**/*.spec.tsx',
+      '**/tests/**/*.ts',
+      '**/tests/**/*.tsx',
+    ],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-require-imports': 'off',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+    },
+  },
   {
     ignores: [
       'node_modules/',
@@ -54,6 +70,10 @@ const eslintConfig = [
       'prisma/seed/',
       'scripts/',
       'footstock-next/',
+      'footstock-web/',
+      'motor/dist/',
+      'motor/coverage/',
+      '.stryker-tmp/',
       'next-env.d.ts',
     ],
   },

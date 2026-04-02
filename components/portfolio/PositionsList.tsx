@@ -25,23 +25,8 @@ interface PositionsListProps {
 export function PositionsList({ positions, isLoading, isError, onRetry }: PositionsListProps) {
   const router = useRouter()
 
-  if (isLoading) {
-    return (
-      <div className="space-y-2">
-        {[0, 1, 2].map((i) => (
-          <Skeleton key={i} className="min-h-[64px] w-full rounded-xl" />
-        ))}
-      </div>
-    )
-  }
-
-  if (isError) {
-    return (
-      <ErrorState message="Erro ao carregar posições" onRetry={onRetry} />
-    )
-  }
-
   // RESOLVED: T005 – sort/filter sem useMemo executado a cada render
+  // Hooks devem vir antes de qualquer early return (Rules of Hooks)
   const regular = useMemo(
     () =>
       positions
@@ -59,6 +44,22 @@ export function PositionsList({ positions, isLoading, isError, onRetry }: Positi
     (ticker: string) => router.push(`/mercado?ticker=${ticker}&action=sell`),
     [router]
   )
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2">
+        {[0, 1, 2].map((i) => (
+          <Skeleton key={i} className="min-h-[64px] w-full rounded-xl" />
+        ))}
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <ErrorState message="Erro ao carregar posições" onRetry={onRetry} />
+    )
+  }
 
   if (regular.length === 0) {
     return (

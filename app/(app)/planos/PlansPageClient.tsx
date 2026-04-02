@@ -46,7 +46,6 @@ export default function PlansPageClient() {
     setSelectedPeriod,
     selectedGateway,
     setSelectedGateway,
-    isCheckingOut,
     isCancelling,
     error,
     showCancellationWarning,
