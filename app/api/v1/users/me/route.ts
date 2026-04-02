@@ -69,7 +69,7 @@ async function patchHandler(req: NextRequest, { user }: AuthContext) {
 
 async function deleteHandler(req: NextRequest, { user }: AuthContext) {
   // Bloquear exclusão se houver assinatura ativa
-  const activeSub = await prisma.subscription.findUnique({
+  const activeSub = await prisma.subscription.findFirst({
     where: { userId: user.id },
   })
   if (activeSub && activeSub.status !== 'CANCELLED' && activeSub.status !== 'EXPIRED') {
