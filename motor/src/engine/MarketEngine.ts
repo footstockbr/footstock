@@ -43,6 +43,8 @@ export class MarketEngine {
   private leverageInterestRunner: LeverageInterestRunner
   /** Deltas percentuais do tick anterior — alimenta L10_Correlation. */
   private previousTickDeltas = new Map<string, PreviousTickDelta>()
+  /** Sessão do tick anterior — detecta transições para resetar âncora do CB. */
+  private previousSessionType: SessionType | null = null
 
   constructor(redis: Redis) {
     this.redis = redis
@@ -121,6 +123,15 @@ export class MarketEngine {
     const sessionType = sessionManager.getCurrentSession()
     const volatilityMultiplier = sessionManager.getVolatilityMultiplier(sessionType)
     const ticks: MotorTick[] = []
+
+    // Transição de sessão: resetar closePrice para evitar CB acumulado entre sessões
+    if (this.previousSessionType !== null && this.previousSessionType !== sessionType) {
+      logger.info(`[engine] Transição de sessão: ${this.previousSessionType} → ${sessionType} — resetando âncoras do CB`)
+      for (const state of this.assetStates.values()) {
+        state.closePrice = state.currentPrice
+      }
+    }
+    this.previousSessionType = sessionType
 
     for (const [assetId, state] of this.assetStates) {
       if (state.isPaused) continue
@@ -292,15 +303,18 @@ export class MarketEngine {
   }
 
   private async updateAssetPrices(): Promise<void> {
-    const updates = [...this.assetStates.values()].map(state =>
-      this.prisma.asset.update({
+    const updates = [...this.assetStates.values()].map(state => {
+      // Atualizar closePrice junto com currentPrice — o CB deve detectar
+      // movimentos bruscos (>8% em 20s), não drift gradual acumulado desde o startup.
+      state.closePrice = state.currentPrice
+      return this.prisma.asset.update({
         where: { id: state.id },
         data: {
           currentPrice: state.currentPrice,
           volume: BigInt(state.volume),
         },
       })
-    )
+    })
     await Promise.allSettled(updates)
   }
 
