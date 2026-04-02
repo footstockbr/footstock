@@ -30,6 +30,9 @@ const securityHeaders = [
       "img-src 'self' data: blob: https:",
       "font-src 'self' https://fonts.gstatic.com",
       `connect-src 'self' https://*.supabase.co ${sentryIngestHost} wss://*.supabase.co`,
+      // Sentry Replay cria Web Workers a partir de blob URLs para compressão de sessão.
+      // Sem worker-src o browser usa script-src como fallback, que bloqueia blob:.
+      "worker-src blob:",
       "frame-ancestors 'none'",
     ].join('; '),
   },

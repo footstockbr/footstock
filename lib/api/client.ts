@@ -3,40 +3,16 @@
 // ============================================================================
 
 import axios, { type AxiosInstance, type AxiosError } from 'axios'
-import { createClient } from '@supabase/supabase-js'
 import { API_TIMEOUT_MS } from '@/lib/constants/timing'
 import type { ApiResponse, ApiErrorResponse } from '@/types/api'
-
-// ---------------------------------------------------------------------------
-// Supabase client (browser-only, singleton)
-// ---------------------------------------------------------------------------
-
-let supabaseClient: ReturnType<typeof createClient> | null = null
-let missingPublicEnvWarned = false
+// Reutiliza o singleton createBrowserClient (@supabase/ssr) que armazena sessão
+// em cookies — alinhado com o SSR do Next.js e com o fluxo de login admin.
+// NÃO criar um segundo createClient aqui pois usaria localStorage e não veria
+// a sessão salva em cookies, causando 401 em todas as requisições.
+import { getSupabaseClient } from '@/lib/auth/session'
 
 const publicEnv = {
-  supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
-  supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   appUrl: process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
-}
-
-function getSupabaseClient() {
-  if (!supabaseClient && typeof window !== 'undefined') {
-    if (!publicEnv.supabaseUrl || !publicEnv.supabaseAnonKey) {
-      if (!missingPublicEnvWarned) {
-        console.error(
-          'NEXT_PUBLIC_SUPABASE_URL/NEXT_PUBLIC_SUPABASE_ANON_KEY ausentes no client.'
-        )
-        missingPublicEnvWarned = true
-      }
-      return null
-    }
-    supabaseClient = createClient(
-      publicEnv.supabaseUrl,
-      publicEnv.supabaseAnonKey
-    )
-  }
-  return supabaseClient
 }
 
 // ---------------------------------------------------------------------------
