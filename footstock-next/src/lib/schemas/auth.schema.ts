@@ -55,3 +55,24 @@ export const step2Schema = registerBase
     path: ['confirmPassword'],
   })
 export type Step2Data = z.infer<typeof step2Schema>
+
+// ─── Login ────────────────────────────────────────────────────────────────────
+
+export const loginSchema = z.object({
+  email: z.string().email('Informe um email válido'),
+  password: z.string().min(8, 'Senha deve ter no mínimo 8 caracteres'),
+})
+export type LoginFormData = z.infer<typeof loginSchema>
+
+// ─── Reset password ───────────────────────────────────────────────────────────
+
+export const resetPasswordSchema = z
+  .object({
+    newPassword: z.string().min(8, 'A senha deve ter pelo menos 8 caracteres'),
+    confirmPassword: z.string().min(1, 'Confirme a senha'),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: 'As senhas não coincidem',
+    path: ['confirmPassword'],
+  })
+export type ResetPasswordFormData = z.infer<typeof resetPasswordSchema>

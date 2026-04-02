@@ -44,6 +44,14 @@ export const ERROR_CODES = {
   PAY_003: 'PAY-003',
   PAY_004: 'PAY-004',
 
+  // ---- REGISTER (3) ----
+  REG_001: 'REG-001',
+  REG_002: 'REG-002',
+  REG_003: 'REG-003',
+
+  // ---- AGE (1) ----
+  AGE_001: 'AGE-001',
+
   // ---- SYSTEM (6) ----
   SYS_001: 'SYS-001',
   SYS_002: 'SYS-002',
@@ -51,6 +59,29 @@ export const ERROR_CODES = {
   SYS_004: 'SYS-004',
   SYS_005: 'SYS-005',
   SYS_006: 'SYS-006',
+
+  // ---- POSITIONS / PORTFOLIO (module-15) ----
+  POS_050: 'POS-050',
+  POS_080: 'POS-080',
+
+  // ---- RATE LIMIT (module-18, module-21) ----
+  RATE_001: 'RATE-001',
+  RATE_002: 'RATE-002',
+
+  // ---- AI / ASSESSOR (module-21) ----
+  AI_050: 'AI-050',
+  AI_051: 'AI-051',
+
+  // ---- ADMIN (module-22) ----
+  ADMIN_050: 'ADMIN-050',
+  ASSET_051: 'ASSET-051',
+
+  // ---- CLUB PORTAL (module-25) ----
+  ADMIN_051: 'ADMIN-051',
+
+  // ---- AFFILIATE (module-25) ----
+  AFFILIATE_001: 'AFFILIATE-001',
+  AFFILIATE_002: 'AFFILIATE-002',
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
@@ -97,6 +128,14 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   'PAY-003': 'Assinatura não encontrada.',
   'PAY-004': 'Período de carência para cancelamento não atingido.',
 
+  // REGISTER
+  'REG-001': 'Já existe uma conta com este CPF.',
+  'REG-002': 'Este e-mail já está cadastrado.',
+  'REG-003': 'Muitas tentativas de cadastro. Tente novamente em 1 hora.',
+
+  // AGE
+  'AGE-001': 'Você deve ter ao menos 18 anos para se cadastrar.',
+
   // SYSTEM
   'SYS-001': 'Erro interno do servidor.',
   'SYS-002': 'Serviço temporariamente indisponível.',
@@ -104,4 +143,27 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   'SYS-004': 'Taxa de requisições excedida. Tente novamente em instantes.',
   'SYS-005': 'Recurso não encontrado.',
   'SYS-006': 'Erro de comunicação com serviço externo.',
+
+  // POSITIONS / PORTFOLIO
+  'POS-050': 'Posição liquidada por margem insuficiente.',
+  'POS-080': 'Posição não encontrada.',
+
+  // RATE LIMIT
+  'RATE-001': 'Limite de postagens atingido. Tente novamente em instantes.',
+  'RATE-002': 'Limite de consultas ao Assessor IA atingido (10/hora).',
+
+  // AI / ASSESSOR
+  'AI-050': 'O Assessor IA está disponível a partir do plano Craque.',
+  'AI-051': 'O Assessor IA está temporariamente indisponível. Tente novamente.',
+
+  // ADMIN
+  'ADMIN-050': 'Permissão insuficiente para esta ação administrativa.',
+  'ASSET-051': 'Ticker inválido ou não encontrado na lista de ativos.',
+
+  // CLUB PORTAL
+  'ADMIN-051': 'Acesso a dados de outro clube não permitido.',
+
+  // AFFILIATE
+  'AFFILIATE-001': 'Sem código de afiliado ativo.',
+  'AFFILIATE-002': 'CPF/CNPJ inválido.',
 } as const;

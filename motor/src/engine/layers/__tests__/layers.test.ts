@@ -1,3 +1,6 @@
+/**
+ * @jest-environment node
+ */
 import { L1_OrderUnbalance } from '../L1_OrderUnbalance'
 import { L2_Anchor } from '../L2_Anchor'
 import { L3_GARCH } from '../L3_GARCH'
@@ -17,6 +20,7 @@ const mockState = (overrides: Partial<AssetState> = {}): AssetState => ({
   highPrice: 29.00,
   lowPrice: 27.50,
   closePrice: 28.00,
+  fairValue: 28.00,
   volume: 50000,
   variance: 0.0001,
   pendingBuyVolume: 1000,
@@ -31,11 +35,14 @@ const mockParams = (overrides: Partial<ClusterParams> = {}): ClusterParams => ({
   cluster: 'A_TOP',
   baseVolume: 50000,
   drift: 0.0,
-  garchAlpha: 0.08,
-  garchBeta: 0.90,
+  theta: 0.12,
+  sigma: 0.0018,
+  garchAlpha: 0.12,
+  garchBeta: 0.85,
   lambdaKyle: 0.0001,
   spread: 0.0005,
-  maxTickChange: 0.03,
+  maxTickChange: 0.0035,
+  ofiDecay: 0.91,
   ...overrides,
 })
 
@@ -136,13 +143,15 @@ describe('L6_SupplyScaling', () => {
   })
 
   test('drift positivo gera delta positivo proporcional ao preço', () => {
-    const state = mockState({ currentPrice: 100 })
+    // volume=0 → amplification=1 → deltaPrice = drift * price * 1
+    const state = mockState({ currentPrice: 100, volume: 0 })
     const result = l6.applyLayer(state, mockParams({ drift: 0.001 }), 0)
     expect(result.deltaPrice).toBeCloseTo(0.1)
   })
 
   test('drift negativo gera delta negativo (Série B menor liquidez)', () => {
-    const state = mockState({ currentPrice: 50 })
+    // volume=0 → amplification=1 → deltaPrice = drift * price * 1
+    const state = mockState({ currentPrice: 50, volume: 0 })
     const result = l6.applyLayer(state, mockParams({ drift: -0.002 }), 0)
     expect(result.deltaPrice).toBeCloseTo(-0.1)
   })

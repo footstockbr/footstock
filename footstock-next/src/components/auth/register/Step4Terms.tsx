@@ -36,19 +36,19 @@ function ConsentItem({ id, label, description, required, checked, onChange, test
         checked={checked}
         onChange={onChange}
         required={required}
-        className="mt-0.5 accent-[#c9a84c] w-4 h-4 flex-shrink-0"
+        className="mt-0.5 accent-[#F0B90B] w-4 h-4 flex-shrink-0"
         aria-required={required}
       />
       <div>
-        <span className="text-sm text-[#f0ead6]">
+        <span className="text-sm text-[#EAECEF]">
           {label}
           {required && (
-            <span className="text-[#ef4444] ml-1" aria-hidden="true">
+            <span className="text-[#F6465D] ml-1" aria-hidden="true">
               *
             </span>
           )}
         </span>
-        {description && <p className="text-xs text-[#7a7060] mt-0.5">{description}</p>}
+        {description && <p className="text-xs text-[#929AA5] mt-0.5">{description}</p>}
       </div>
     </label>
   )
@@ -113,20 +113,21 @@ export function Step4Terms({ data, onComplete }: Step4Props) {
   }
 
   return (
-    <div data-testid="form-register-step4" className="flex flex-col gap-5">
+    <form data-testid="form-register-step4" className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); void handleSubmit() }}>
       {/* Termos obrigatórios */}
-      <div className="flex flex-col gap-3 bg-[#141210] border border-[rgba(201,168,76,.18)] rounded-lg p-4">
+      <fieldset className="flex flex-col gap-3 bg-[#1E2329] border border-[rgba(240,185,11,.18)] rounded-lg p-4">
+        <legend className="sr-only">Consentimentos obrigatórios</legend>
         <ConsentItem
           id="consent-terms"
           testId="form-register-terms-checkbox"
           label={
             <>
               Aceito os{' '}
-              <Link href={ROUTES.TERMS} target="_blank" rel="noopener" className="text-[#c9a84c] underline">
+              <Link href={ROUTES.TERMS} target="_blank" rel="noopener" className="text-[#F0B90B] underline">
                 Termos de Uso
               </Link>{' '}
               e a{' '}
-              <Link href={ROUTES.PRIVACY} target="_blank" rel="noopener" className="text-[#c9a84c] underline">
+              <Link href={ROUTES.PRIVACY} target="_blank" rel="noopener" className="text-[#F0B90B] underline">
                 Política de Privacidade
               </Link>
             </>
@@ -135,17 +136,17 @@ export function Step4Terms({ data, onComplete }: Step4Props) {
           checked={consents.terms}
           onChange={() => toggleConsent('terms')}
         />
-        <p className="text-xs text-[#4a3d2a] ml-7">
+        <p className="text-xs text-[#707A8A] ml-7">
           O Foot Stock é uma plataforma educacional de simulação financeira. Usuários devem ter 18
           anos conforme o ECA Digital (Lei 14.790/2023).
         </p>
-      </div>
+      </fieldset>
 
       {/* Consentimentos opcionais */}
-      <div className="flex flex-col gap-3 bg-[#141210] border border-[rgba(201,168,76,.18)] rounded-lg p-4">
-        <p className="text-xs font-medium text-[#7a7060] uppercase tracking-wide">
+      <fieldset className="flex flex-col gap-3 bg-[#1E2329] border border-[rgba(240,185,11,.18)] rounded-lg p-4">
+        <legend className="text-xs font-medium text-[#929AA5] uppercase tracking-wide">
           Opcionais
-        </p>
+        </legend>
         <ConsentItem
           id="consent-marketing"
           label="Receber comunicações de marketing"
@@ -167,21 +168,21 @@ export function Step4Terms({ data, onComplete }: Step4Props) {
           checked={consents.thirdParty}
           onChange={() => toggleConsent('thirdParty')}
         />
-      </div>
+      </fieldset>
 
       <Button
         data-testid="form-register-submit-button"
+        type="submit"
         variant="primary"
         size="lg"
         fullWidth
         isLoading={isSubmitting}
         disabled={!consents.terms}
         aria-disabled={!consents.terms}
-        onClick={handleSubmit}
         className="mt-2"
       >
         Criar minha conta
       </Button>
-    </div>
+    </form>
   )
 }

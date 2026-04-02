@@ -2,9 +2,10 @@ import { NextRequest } from 'next/server'
 import { getAuthUser, hasAdminRole, serializeUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { list, errors, parsePagination, buildPagination } from '@/lib/api'
-import type { PlanType, AdminRole } from '@/types'
+import type { PlanType, AdminRole, UserType } from '@/types'
 
 // GET /api/v1/admin/users — MONITOR+
+// Suporta filtros: search, planType, adminRole, status (active/suspended), userType, page
 export async function GET(request: NextRequest) {
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()
@@ -16,23 +17,27 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl
   const planType = searchParams.get('planType') as PlanType | null
   const adminRole = searchParams.get('adminRole') as AdminRole | null
+  const userType = searchParams.get('userType') as UserType | null
+  const status = searchParams.get('status') // 'active' | 'suspended'
   const search = searchParams.get('search')
   const { page, limit, skip } = parsePagination(searchParams)
 
   try {
-    // Registrar acesso de dados sensíveis
     await prisma.dataAccessLog.create({
       data: {
         userId: auth.user.id,
         accessedBy: auth.user.id,
         action: 'ADMIN_LIST_USERS',
-        details: { filters: { planType, adminRole, search } },
+        details: { filters: { planType, adminRole, userType, status, search } },
       },
     })
 
     const where = {
       ...(planType && { planType }),
       ...(adminRole && { adminRole }),
+      ...(userType && { userType }),
+      ...(status === 'suspended' && { suspendedAt: { not: null } }),
+      ...(status === 'active' && { suspendedAt: null }),
       ...(search && {
         OR: [
           { name: { contains: search, mode: 'insensitive' as const } },
@@ -47,11 +52,25 @@ export async function GET(request: NextRequest) {
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
+        include: {
+          affiliateCodes: {
+            select: { code: true, affiliateType: true, commissionPercentage: true },
+            take: 1,
+          },
+        },
       }),
       prisma.user.count({ where }),
     ])
 
-    return list(users.map(serializeUser), buildPagination(page, limit, total))
+    const serialized = users.map((u) => ({
+      ...serializeUser(u),
+      status: u.suspendedAt ? 'suspended' : 'active',
+      suspendedAt: u.suspendedAt?.toISOString() ?? null,
+      suspensionReason: u.suspensionReason ?? null,
+      affiliateCode: u.affiliateCodes[0] ?? null,
+    }))
+
+    return list(serialized, buildPagination(page, limit, total))
   } catch {
     return errors.server()
   }

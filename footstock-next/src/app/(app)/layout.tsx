@@ -7,11 +7,11 @@ import { MotorOfflineBanner } from "@/components/market/motor-offline-banner";
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <MotorStatusProvider>
-      <div data-testid="app-shell" className="min-h-dvh flex flex-col bg-[#080808]">
+      <div data-testid="app-shell" className="min-h-dvh flex flex-col bg-[#0B0E11]">
         {/* Skip navigation */}
         <a
           href="#main-content"
-          className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[500] focus:bg-[#c9a84c] focus:text-[#080808] focus:px-4 focus:py-2 focus:rounded-md focus:font-medium"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[500] focus:bg-[#F0B90B] focus:text-[#0B0E11] focus:px-4 focus:py-2 focus:rounded-md focus:font-medium"
         >
           Pular para o conteúdo
         </a>

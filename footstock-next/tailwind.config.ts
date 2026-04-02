@@ -120,12 +120,17 @@ const config: Config = {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.3" },
         },
+        "slide-in-right": {
+          "0%": { transform: "translateX(100%)", opacity: "0" },
+          "100%": { transform: "translateX(0)", opacity: "1" },
+        },
       },
       animation: {
         shimmer: "shimmer 2s linear infinite",
         "tick-up": "tick-up 0.8s ease-out",
         "tick-down": "tick-down 0.8s ease-out",
         "slide-up": "slide-up 0.3s ease-out",
+        "slide-in-right": "slide-in-right 0.25s ease-out",
         "fade-in": "fade-in 0.2s ease-out",
         "splash-in": "splash-in 2.8s ease-in-out forwards",
         "splash-bg-fade": "splash-bg-fade 2.8s ease-in-out forwards",

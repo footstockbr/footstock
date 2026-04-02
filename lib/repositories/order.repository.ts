@@ -1,4 +1,6 @@
 import { prisma } from '@/lib/prisma'
+import { validateTransition } from '@/lib/contracts/order-contract'
+import type { OrderStatus as AppOrderStatus } from '@/lib/enums'
 import type { Order, Prisma, OrderStatus } from '@prisma/client'
 
 export class OrderRepository {
@@ -37,6 +39,9 @@ export class OrderRepository {
   }
 
   async updateStatus(id: string, status: OrderStatus, executedPrice?: number): Promise<Order> {
+    const order = await prisma.order.findUniqueOrThrow({ where: { id } })
+    validateTransition(order.status as AppOrderStatus, status as AppOrderStatus, id)
+
     return prisma.order.update({
       where: { id },
       data: {

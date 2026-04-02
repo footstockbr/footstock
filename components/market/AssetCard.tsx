@@ -6,6 +6,7 @@
 // Exibe NOME FICTÍCIO (asset.name) — nunca o nome real do clube.
 // ============================================================================
 
+import { memo } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { WifiOff, Star } from 'lucide-react'
@@ -13,14 +14,19 @@ import { cn } from '@/lib/utils/cn'
 import { Badge } from '@/components/ui/Badge'
 import { Spark } from '@/components/ui/Spark'
 import { PriceDisplay } from '@/components/ui/PriceDisplay'
-import { useMarketTick } from '@/hooks/useMarketTick'
+import { InfoIcon } from '@/components/ui/InfoIcon'
+import { FIELD_TERM_MAP } from '@/lib/data/glossary'
+import type { TickData } from '@/hooks/useMarketTick'
 import { usePriceFlash } from '@/hooks/usePriceFlash'
 import type { AssetListItem } from '@/types/market'
 import type { Sentiment } from '@/lib/enums'
+import { getClubDisplayName } from '@/lib/constants/clubs'
 
 interface AssetCardProps {
   asset: AssetListItem
   isFavorite?: boolean
+  tick?: TickData
+  isStreamConnected?: boolean
   onClick?: () => void
   className?: string
 }
@@ -35,15 +41,17 @@ function sentimentLabel(sentiment: Sentiment): string {
   }
 }
 
-export default function AssetCard({ asset, isFavorite = false, onClick, className }: AssetCardProps) {
+// RESOLVED: T003 – React.memo ausente em AssetCard (hot path SSE)
+function AssetCardInner({
+  asset,
+  isFavorite = false,
+  tick,
+  isStreamConnected = true,
+  onClick,
+  className,
+}: AssetCardProps) {
   const router = useRouter()
-
-  // Hook SSE — subscreve apenas o ticker deste card
-  const { ticks, isConnected } = useMarketTick({
-    tickers: [asset.ticker],
-  })
-
-  const tick = ticks.get(asset.ticker)
+  const displayName = getClubDisplayName(asset.ticker, asset.name)
 
   // Preços: tick em tempo real tem prioridade; fallback para snapshot da API
   const displayPrice = tick?.price ?? asset.currentPrice
@@ -74,7 +82,7 @@ export default function AssetCard({ asset, isFavorite = false, onClick, classNam
   }
 
   const ariaLabel = [
-    `Ativo: ${asset.name}`,
+    `Ativo: ${displayName}`,
     `preço: FS$ ${displayPrice.toFixed(2)}`,
     `variação: ${displayChange >= 0 ? '+' : ''}${displayChange.toFixed(2)}%`,
     asset.isHalted ? 'SUSPENSO' : null,
@@ -94,8 +102,8 @@ export default function AssetCard({ asset, isFavorite = false, onClick, classNam
       className={cn(
         'relative flex flex-col gap-2 p-3 rounded-xl',
         'bg-bg-card border border-border-default cursor-pointer min-h-[88px]',
-        'hover:border-violet-500/30 transition-colors',
-        'focus-visible:outline-2 focus-visible:outline-violet-500 focus-visible:outline-offset-2',
+        'hover:border-accent/30 transition-colors',
+        'focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2',
         asset.isHalted && 'opacity-70 pointer-events-none cursor-not-allowed',
         className
       )}
@@ -106,7 +114,7 @@ export default function AssetCard({ asset, isFavorite = false, onClick, classNam
         {asset.logoUrl ? (
           <Image
             src={asset.logoUrl}
-            alt={asset.name}
+            alt={displayName}
             width={40}
             height={40}
             className="rounded-full flex-shrink-0 object-cover"
@@ -132,29 +140,34 @@ export default function AssetCard({ asset, isFavorite = false, onClick, classNam
             data-testid="asset-card-name"
             className="text-xs text-text-secondary truncate"
           >
-            {asset.name}
+            {displayName}
           </span>
         </div>
 
-        <Badge
-          data-testid="asset-card-sentiment-badge"
-          variant="sentiment"
-          sentiment={asset.sentiment}
-          className="flex-shrink-0"
-        >
-          {sentimentLabel(asset.sentiment)}
-        </Badge>
+        <span className="flex items-center gap-1 flex-shrink-0">
+          <Badge
+            data-testid="asset-card-sentiment-badge"
+            variant="sentiment"
+            sentiment={asset.sentiment}
+          >
+            {sentimentLabel(asset.sentiment)}
+          </Badge>
+          <InfoIcon glossarySlug={FIELD_TERM_MAP['sentimento-de-mercado']} />
+        </span>
       </div>
 
       {/* Linha 2: Preço + Variação */}
       <div className={cn('flex items-baseline gap-3 rounded px-1', flashClass)}>
-        <PriceDisplay
-          data-testid="asset-card-price"
-          price={displayPrice}
-          change={displayChange}
-          showChange={false}
-          size="sm"
-        />
+        <span className="inline-flex items-center gap-1">
+          <PriceDisplay
+            data-testid="asset-card-price"
+            price={displayPrice}
+            change={displayChange}
+            showChange={false}
+            size="sm"
+          />
+          <InfoIcon glossarySlug={FIELD_TERM_MAP['preco-fs']} />
+        </span>
         <span
           data-testid="asset-card-change"
           className={cn(
@@ -168,12 +181,15 @@ export default function AssetCard({ asset, isFavorite = false, onClick, classNam
 
       {/* Linha 3: Sparkline + OFI */}
       <div className="flex items-end justify-between">
-        <Spark
-          data-testid="asset-card-sparkline"
-          data={asset.priceHistory}
-          width={60}
-          height={28}
-        />
+        <span className="inline-flex items-end gap-1">
+          <Spark
+            data-testid="asset-card-sparkline"
+            data={asset.priceHistory}
+            width={60}
+            height={28}
+          />
+          <InfoIcon glossarySlug={FIELD_TERM_MAP['volatilidade']} />
+        </span>
         {/* Mini-barra OFI: buy/sell visual */}
         <div
           data-testid="asset-card-ofi-bar"
@@ -199,11 +215,11 @@ export default function AssetCard({ asset, isFavorite = false, onClick, classNam
       )}
 
       {/* Ícone offline */}
-      {!isConnected && (
+      {!isStreamConnected && (
         <WifiOff
           data-testid="asset-card-offline-icon"
           size={12}
-          className="absolute top-2 right-2 text-text-tertiary"
+          className="absolute top-2 right-2 text-text-muted"
           aria-hidden="true"
         />
       )}
@@ -212,10 +228,22 @@ export default function AssetCard({ asset, isFavorite = false, onClick, classNam
       {isFavorite && (
         <Star
           size={12}
-          className="absolute top-2 left-2 text-violet-400 fill-violet-400"
+          className="absolute top-2 left-2 text-accent-gold fill-accent-gold"
           aria-hidden="true"
         />
       )}
     </article>
   )
 }
+
+const AssetCard = memo(AssetCardInner, (prev, next) =>
+  prev.asset.ticker === next.asset.ticker &&
+  prev.tick?.price === next.tick?.price &&
+  prev.tick?.changePercent === next.tick?.changePercent &&
+  prev.isStreamConnected === next.isStreamConnected &&
+  prev.isFavorite === next.isFavorite &&
+  prev.asset.isHalted === next.asset.isHalted &&
+  prev.className === next.className
+)
+
+export default AssetCard

@@ -61,8 +61,48 @@ export type PaymentPeriod = 'MONTHLY' | 'ANNUAL'
 export type ImpactCategory = 'RESULTADO_ESPORTIVO' | 'CONTRATACAO' | 'FINANCEIRO' | 'LESAO' | 'SUSPENSAO' | 'INSTITUCIONAL'
 export type LeagueType = 'PUBLICA' | 'AMIGOS' | 'PRO'
 export type LeagueDivision = 'BRONZE' | 'PRATA' | 'OURO' | 'ABERTA'
+/** Alias semântico para LeagueDivision — usado nos contratos de scoring */
+export type LeagueCategory = LeagueDivision
+export type LeagueDuration = '1S' | '1M' | 'TEMPORADA'
 export type LeagueStatus = 'PENDING' | 'ACTIVE' | 'FINISHED'
+export type ScorePillar = 'RENTABILIDADE' | 'SOFISTICACAO' | 'DIVERSIFICACAO' | 'CONSISTENCIA' | 'BONUS_EDUCATIVO'
 export type PostStatus = 'ACTIVE' | 'REMOVED' | 'FLAGGED'
+
+// module-19: 16 tipos de notificação (NOTIFICATION-SPEC v1.0)
+export type NotificationType =
+  | 'ORDER_EXECUTED'
+  | 'ORDER_CANCELLED'
+  | 'MARGIN_CALL_ALERT'
+  | 'CIRCUIT_BREAKER'
+  | 'NEWS_FAVORITE_CLUB'
+  | 'PAYMENT_CONFIRMED'
+  | 'PAYMENT_FAILED'
+  | 'PLAN_CANCEL_ALERT'
+  | 'DIVIDEND_CREDITED'
+  | 'BONUS_CREDITED'
+  | 'LEAGUE_RESULT'
+  | 'ADMIN_BROADCAST'
+  | 'CANCELLATION_LOCK_ACTIVE'
+  | 'CANCELLATION_LOCK_LIQUIDATED'
+
+export interface NotificationDTO {
+  id: string
+  userId: string
+  type: NotificationType | string
+  title: string
+  body: string
+  read: boolean
+  metadata?: Record<string, unknown> | null
+  createdAt: string
+}
+
+export interface SendNotificationOptions {
+  userId: string
+  type: NotificationType
+  title: string
+  body: string
+  metadata?: Record<string, unknown>
+}
 
 // ─── Entidades ─────────────────────────────────────────────────────────────────
 
@@ -192,16 +232,7 @@ export interface Subscription {
   updatedAt: string
 }
 
-export interface Notification {
-  id: string
-  userId: string
-  type: string
-  title: string
-  body: string
-  read: boolean
-  metadata?: Record<string, unknown> | null
-  createdAt: string
-}
+export interface Notification extends NotificationDTO {}
 
 export interface NewsItem {
   id: string
@@ -228,16 +259,33 @@ export interface ForumPost {
   updatedAt: string
 }
 
+export interface ScoreBreakdown {
+  rentabilidade: number   // 0-35
+  sofisticacao: number    // 0-25
+  diversificacao: number  // 0-20
+  consistencia: number    // 0-15
+  bonusEducativo: number  // 0-5
+  total: number           // soma dos pilares
+  finalScore: number      // total × fatorEquidade
+  fatorEquidade: number
+}
+
 export interface League {
   id: string
   name: string
+  slug: string
   type: LeagueType
-  division: LeagueDivision
-  duration: number
+  division: LeagueDivision   // = category
+  duration: LeagueDuration
   sponsorId?: string | null
   startsAt: string
   endsAt?: string | null
   status: LeagueStatus
+  createdBy?: string | null
+  memberCount?: number
+  isMember?: boolean
+  userRank?: number | null
+  sponsor?: { id: string; name: string; logoUrl?: string | null } | null
   createdAt: string
 }
 
@@ -245,16 +293,23 @@ export interface LeagueMember {
   id: string
   leagueId: string
   userId: string
-  score: number
+  score: number       // = finalScore
   rank: number
-  scoreBreakdown?: {
-    rentabilidade?: number
-    sofisticacao?: number
-    diversificacao?: number
-    consistencia?: number
-    educativo?: number
-  } | null
+  joinedAt?: string
+  lastScoreAt?: string | null
+  scoreBreakdown?: ScoreBreakdown | null
   updatedAt: string
+}
+
+export interface LeagueMemberRanking {
+  rank: number
+  userId: string
+  userName: string
+  userPlan: PlanType
+  userAvatarUrl?: string | null
+  score: ScoreBreakdown
+  joinedAt: string
+  isCurrentUser?: boolean
 }
 
 export interface AIAnalysis {

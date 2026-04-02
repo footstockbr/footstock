@@ -2,10 +2,16 @@ import type { QuantLayer } from './base'
 import type { AssetState, ClusterParams, LayerResult } from '../../types/motor.types'
 
 /**
- * L7 - Pressure Queue (News Impact)
- * Simula o impacto de notícias injetadas pelo admin.
- * O impacto decai linearmente ao longo dos ticks restantes.
+ * L7 - Pressure Queue (News Impact Absorption)
+ * INTAKE canônico:
+ * - PRESSURE_SPREAD_TICKS = 10 (distribui impacto em ordens sintéticas)
+ * - ABSORPTION_TICKS = 40 (ajuste gradual do fair value, ~80s)
+ * - Spot cap: ±2.5% de movimento instantâneo por notícia
  */
+const PRESSURE_SPREAD_TICKS = 10
+const ABSORPTION_TICKS = 40
+const SPOT_CAP = 0.025 // ±2.5% max instantâneo
+
 export class L7_PressureQueue implements QuantLayer {
   name = 'L7_PressureQueue'
 
@@ -14,9 +20,26 @@ export class L7_PressureQueue implements QuantLayer {
       return { layer: this.name, deltaPrice: 0 }
     }
 
-    // Decaimento linear (normalizado para 0-1 assumindo max 10 ticks)
-    const decayFactor = Math.min(1, state.newsImpactTicks / 10)
-    const deltaPrice = state.newsImpact * decayFactor * state.currentPrice
+    // Fase 1: Spread (primeiros PRESSURE_SPREAD_TICKS ticks) — impacto rápido
+    // Fase 2: Absorption (ABSORPTION_TICKS ticks) — decaimento gradual
+    const totalTicks = PRESSURE_SPREAD_TICKS + ABSORPTION_TICKS
+    const ticksElapsed = totalTicks - state.newsImpactTicks
+
+    let decayFactor: number
+    if (ticksElapsed < PRESSURE_SPREAD_TICKS) {
+      // Fase spread: impacto forte, decai de 1.0 a ~0.5
+      decayFactor = 1 - (ticksElapsed / PRESSURE_SPREAD_TICKS) * 0.5
+    } else {
+      // Fase absorption: decai de 0.5 a 0
+      const absorptionProgress = (ticksElapsed - PRESSURE_SPREAD_TICKS) / ABSORPTION_TICKS
+      decayFactor = 0.5 * (1 - absorptionProgress)
+    }
+
+    let deltaPrice = state.newsImpact * decayFactor * state.currentPrice
+
+    // Spot cap: limitar impacto instantâneo a ±2.5%
+    const maxDelta = SPOT_CAP * state.currentPrice
+    deltaPrice = Math.max(-maxDelta, Math.min(maxDelta, deltaPrice))
 
     // Decrementar ticks restantes
     state.newsImpactTicks -= 1
@@ -24,7 +47,12 @@ export class L7_PressureQueue implements QuantLayer {
     return {
       layer: this.name,
       deltaPrice,
-      metadata: { newsImpact: state.newsImpact, ticksRemaining: state.newsImpactTicks },
+      metadata: {
+        newsImpact: state.newsImpact,
+        ticksRemaining: state.newsImpactTicks,
+        decayFactor,
+        phase: ticksElapsed < PRESSURE_SPREAD_TICKS ? 0 : 1, // 0=spread, 1=absorption
+      },
     }
   }
 }

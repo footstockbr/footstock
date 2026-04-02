@@ -23,7 +23,7 @@ export default async function PerfilPage() {
 
   return (
     <div data-testid="perfil-page" className="px-4 py-4 flex flex-col gap-4">
-      <h1 className="text-lg font-bold text-[#f0ead6]">Meu Perfil</h1>
+      <h1 className="text-lg font-bold text-[#EAECEF]">Meu Perfil</h1>
 
       <ProfileInfo user={user} />
 

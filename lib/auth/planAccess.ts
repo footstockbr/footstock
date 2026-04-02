@@ -3,6 +3,7 @@
 // ============================================================================
 
 import type { PlanType } from '@/lib/enums'
+import { PLAN_HIERARCHY } from '@/lib/enums'
 
 /** Features disponiveis por plano */
 export type PlanFeature =
@@ -27,7 +28,6 @@ const PLAN_FEATURES: Record<PlanType, PlanFeature[]> = {
   CRAQUE: [
     'delayed_30m',
     'limit_orders',
-    'oco_orders',
     'scheduled_orders',
     'ai_analysis',
     'portfolio_metrics',
@@ -50,13 +50,6 @@ const PLAN_FEATURES: Record<PlanType, PlanFeature[]> = {
   ],
 }
 
-/** Hierarquia numerica dos planos */
-const PLAN_HIERARCHY: Record<PlanType, number> = {
-  JOGADOR: 0,
-  CRAQUE: 1,
-  LENDA: 2,
-}
-
 /** Verifica se o plano tem acesso a uma feature especifica */
 export function planHasFeature(plan: PlanType, feature: PlanFeature): boolean {
   return PLAN_FEATURES[plan]?.includes(feature) ?? false
@@ -72,4 +65,4 @@ export function hasPlanAccess(userPlan: PlanType, requiredPlan: PlanType): boole
   return PLAN_HIERARCHY[userPlan] >= PLAN_HIERARCHY[requiredPlan]
 }
 
-export { PLAN_FEATURES, PLAN_HIERARCHY }
+export { PLAN_FEATURES }

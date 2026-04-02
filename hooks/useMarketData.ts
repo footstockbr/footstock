@@ -11,6 +11,7 @@ import {
   type QueryClient,
 } from '@tanstack/react-query'
 import type { AssetFilters, AssetApiResponse, AssetListItem } from '@/types/market'
+import { queryKeys } from '@/lib/constants/query-keys'
 
 /**
  * Hook de listagem infinita de ativos.
@@ -18,7 +19,7 @@ import type { AssetFilters, AssetApiResponse, AssetListItem } from '@/types/mark
  */
 export function useInfiniteMarketData(filters: AssetFilters) {
   return useInfiniteQuery<AssetApiResponse, Error>({
-    queryKey: ['assets', filters] as const,
+    queryKey: queryKeys.assets.list(filters),
     queryFn: async ({ pageParam }) => {
       const params = new URLSearchParams()
       if (filters.division) params.set('division', filters.division)
@@ -58,7 +59,7 @@ export function flattenAssets(
  */
 export async function prefetchMarketData(queryClient: QueryClient) {
   await queryClient.prefetchInfiniteQuery({
-    queryKey: ['assets', {}] as const,
+    queryKey: queryKeys.assets.list(),
     queryFn: async ({ pageParam }) => {
       const res = await fetch(
         `/api/v1/assets?limit=20&page=${pageParam ?? 1}`,

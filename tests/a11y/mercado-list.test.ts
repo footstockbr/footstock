@@ -138,9 +138,9 @@ test.describe('/mercado — Acessibilidade (WCAG 2.1 AA)', () => {
       window.__clsValue = 0
       const observer = new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
-          // @ts-ignore — layout-shift entries have hadRecentInput
+          // @ts-expect-error — layout-shift entries have hadRecentInput (non-standard PerformanceEntry field)
           if (!entry.hadRecentInput) {
-            // @ts-ignore
+            // @ts-expect-error — entry.value exists on layout-shift PerformanceEntry
             window.__clsValue += entry.value
           }
         }

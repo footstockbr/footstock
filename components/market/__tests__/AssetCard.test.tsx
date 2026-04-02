@@ -3,7 +3,7 @@
 // ============================================================================
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { render, screen, fireEvent } = require('@testing-library/react')
+const { render, screen } = require('@testing-library/react')
 import AssetCard from '../AssetCard'
 import type { AssetListItem } from '@/types/market'
 
@@ -26,6 +26,18 @@ jest.mock('next/navigation', () => ({
 jest.mock('next/image', () => ({
   __esModule: true,
   default: ({ src, alt }: { src: string; alt: string }) => <img src={src} alt={alt} />,
+}))
+
+// Modal uses dialog.showModal() which is not supported in jsdom
+jest.mock('@/components/ui/Modal', () => ({
+  Modal: ({ children, isOpen, title }: { children: React.ReactNode; isOpen: boolean; title: string }) =>
+    isOpen ? <div role="dialog" aria-label={title}>{children}</div> : null,
+}))
+
+// getClubDisplayName can remap tickers — return fallback name for test predictability
+jest.mock('@/lib/constants/clubs', () => ({
+  ...jest.requireActual('@/lib/constants/clubs'),
+  getClubDisplayName: (_ticker: string, fallbackName?: string | null) => fallbackName ?? _ticker,
 }))
 
 const mockUseMarketTick = jest.requireMock('@/hooks/useMarketTick').useMarketTick
@@ -120,16 +132,7 @@ describe('AssetCard', () => {
   })
 
   it('exibe ícone offline quando isConnected = false', () => {
-    mockUseMarketTick.mockReturnValue({
-      ticks: new Map(),
-      isConnected: false,
-      isDelayed: false,
-      lastUpdate: null,
-      error: null,
-      reconnect: jest.fn(),
-    })
-
-    render(<AssetCard asset={makeAsset()} />)
+    render(<AssetCard asset={makeAsset()} isStreamConnected={false} />)
     expect(screen.getByTestId('asset-card-offline-icon')).toBeInTheDocument()
   })
 
@@ -166,18 +169,9 @@ describe('AssetCard', () => {
   })
 
   it('usa preço do tick quando disponível', () => {
-    const ticksMap = new Map()
-    ticksMap.set('VAR1', { price: 45.0, changePercent: 5.88, ticker: 'VAR1' })
-    mockUseMarketTick.mockReturnValue({
-      ticks: ticksMap,
-      isConnected: true,
-      isDelayed: false,
-      lastUpdate: Date.now(),
-      error: null,
-      reconnect: jest.fn(),
-    })
+    const tick = { price: 45.0, changePercent: 5.88, ticker: 'VAR1', assetId: 'asset-var1', open: 43.0, high: 46.0, low: 42.0, close: 45.0, volume: 1000, change: 3.0, sessionType: 'REGULAR' as const, timestamp: Date.now() }
 
-    render(<AssetCard asset={makeAsset({ currentPrice: 42.5 })} />)
+    render(<AssetCard asset={makeAsset({ currentPrice: 42.5 })} tick={tick} />)
     // O preço deveria ser 45.00 (do tick, não 42.50 do asset)
     const priceEl = screen.getByTestId('asset-card-price')
     expect(priceEl).toHaveTextContent('45.00')

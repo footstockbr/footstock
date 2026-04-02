@@ -27,7 +27,7 @@ export function LGPDActions() {
     <>
       <Card data-testid="lgpd-actions">
         <div className="p-4 pb-2">
-          <p className="text-sm font-semibold text-[#f0ead6] mb-3">
+          <p className="text-sm font-semibold text-[#EAECEF] mb-3">
             Privacidade e dados
           </p>
           <div className="flex flex-col gap-1">
@@ -39,7 +39,7 @@ export function LGPDActions() {
               onClick={handleExport}
               isLoading={exportState === "loading"}
               disabled={exportState === "loading"}
-              className="justify-start text-[#7a7060] hover:text-[#f0ead6] min-h-[44px]"
+              className="justify-start text-[#929AA5] hover:text-[#EAECEF] min-h-[44px]"
               data-testid="lgpd-export-btn"
             >
               <svg
@@ -69,7 +69,7 @@ export function LGPDActions() {
                 variant="ghost"
                 size="sm"
                 fullWidth
-                className="justify-start text-[#7a7060] hover:text-[#f0ead6] min-h-[44px]"
+                className="justify-start text-[#929AA5] hover:text-[#EAECEF] min-h-[44px]"
                 data-testid="lgpd-consents-link"
               >
                 <svg
@@ -96,7 +96,7 @@ export function LGPDActions() {
               size="sm"
               fullWidth
               onClick={() => setIsDeleteOpen(true)}
-              className="justify-start text-[#ef4444] hover:text-[#ef4444] hover:bg-[rgba(239,68,68,.08)] min-h-[44px]"
+              className="justify-start text-[#F6465D] hover:text-[#F6465D] hover:bg-[rgba(239,68,68,.08)] min-h-[44px]"
               data-testid="lgpd-delete-btn"
             >
               <svg

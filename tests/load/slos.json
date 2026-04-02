@@ -1,0 +1,71 @@
+{
+  "_comment": "SLOs extraídos do PRD (RNF Performance) — p95 < 200ms CRUD, p95 < 500ms consultas agregadas",
+  "_source": "output/docs/foot-stock/project/PRD.md — Seção Requisitos Não Funcionais > Performance",
+  "_fase_alvo": "Fase 1: 500 DAU, 50 ordens/min",
+  "global": {
+    "error_rate_max": 0.01,
+    "check_pass_rate_min": 0.95
+  },
+  "scenarios": {
+    "health": {
+      "p95_ms": 100,
+      "p99_ms": 200,
+      "type": "static",
+      "description": "Health check endpoint — baseline sem auth"
+    },
+    "login": {
+      "p95_ms": 800,
+      "p99_ms": 2000,
+      "type": "auth",
+      "description": "Autenticação via Supabase JWT — alta criticidade"
+    },
+    "assets_list": {
+      "p95_ms": 200,
+      "p99_ms": 500,
+      "type": "crud_read",
+      "description": "Listagem dos 40 ativos — endpoint mais acessado"
+    },
+    "asset_detail": {
+      "p95_ms": 200,
+      "p99_ms": 500,
+      "type": "crud_read",
+      "description": "Detalhe de um ativo — segundo mais acessado"
+    },
+    "asset_history": {
+      "p95_ms": 500,
+      "p99_ms": 1000,
+      "type": "aggregated",
+      "description": "Histórico OHLC — consulta agregada pesada (candles)"
+    },
+    "orders_list": {
+      "p95_ms": 200,
+      "p99_ms": 500,
+      "type": "crud_read",
+      "description": "Listagem paginada de ordens do usuário"
+    },
+    "order_create": {
+      "p95_ms": 800,
+      "p99_ms": 2000,
+      "type": "crud_write",
+      "description": "Criação de ordem — alto impacto financeiro, lock otimista"
+    },
+    "positions": {
+      "p95_ms": 200,
+      "p99_ms": 500,
+      "type": "crud_read",
+      "description": "Posições abertas do portfólio"
+    },
+    "transactions": {
+      "p95_ms": 500,
+      "p99_ms": 1000,
+      "type": "aggregated",
+      "description": "Extrato de movimentações — consulta histórica paginada"
+    },
+    "news_feed": {
+      "p95_ms": 500,
+      "p99_ms": 1000,
+      "type": "aggregated",
+      "description": "Feed de notícias — aggregation + Redis cache (TTL 5min)"
+    }
+  }
+}

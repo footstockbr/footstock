@@ -10,7 +10,7 @@ export interface AgeVerificationResult {
 /**
  * Verifica se o usuário tem 18+ anos via FlagCheck API.
  * Retry 3x com backoff exponencial.
- * Fallback para autodeclaração se FlagCheck indisponível.
+ * Se FlagCheck indisponível, bloqueia o cadastro (ECA Digital exige verificação técnica).
  *
  * NUNCA loga o CPF em plaintext.
  */
@@ -25,9 +25,14 @@ export async function verifyAge(
     return { isAdult: false, verified: true, method: 'date_only' }
   }
 
-  // Se FlagCheck não configurado, retornar verificação por data apenas
+  // Sem FlagCheck configurado não é possível concluir verificação técnica
   if (!process.env.FLAGCHECK_API_URL || !process.env.FLAGCHECK_API_KEY) {
-    return { isAdult: true, verified: false, method: 'self_declaration' }
+    return {
+      isAdult: false,
+      verified: false,
+      method: 'self_declaration',
+      message: 'Verificação automática indisponível. Tente novamente em instantes.',
+    }
   }
 
   const flagCheckResult = await callFlagCheckWithRetry(cpf, 3)
@@ -40,12 +45,12 @@ export async function verifyAge(
     }
   }
 
-  // Fallback: autodeclaração com pendência de verificação manual
+  // Fallback: bloqueia cadastro sem verificação técnica concluída
   return {
-    isAdult: true,
+    isAdult: false,
     verified: false,
     method: 'self_declaration',
-    message: 'Verificação automática indisponível. Verificação manual pode ser solicitada.',
+    message: 'Verificação automática indisponível. Tente novamente em instantes.',
   }
 }
 

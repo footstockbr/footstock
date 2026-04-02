@@ -12,6 +12,7 @@ export const ROUTES = {
   ATIVO: (ticker: string) => `/ativo/${ticker}`,
   MERCADO_DETALHE: (ticker: string) => `/mercado/${ticker}`,
   PORTFOLIO: "/portfolio",
+  ORDENS: "/ordens",
   NOTICIAS: "/noticias",
   LIGAS: "/ligas",
   COMUNIDADE: "/comunidade",

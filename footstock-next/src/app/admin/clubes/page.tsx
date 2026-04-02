@@ -20,42 +20,42 @@ export default function AdminClubesPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-[#f0ead6] flex items-center gap-2">
-            <Trophy className="h-5 w-5 text-[#c9a84c]" />
+          <h1 className="text-xl font-bold text-[#EAECEF] flex items-center gap-2">
+            <Trophy className="h-5 w-5 text-[#F0B90B]" />
             Clubes
           </h1>
-          <p className="text-sm text-[#7a7060]">40 clubes · gestão de ativos e supply</p>
+          <p className="text-sm text-[#929AA5]">40 clubes · gestão de ativos e supply</p>
         </div>
       </div>
 
-      <div className="bg-[#141210] rounded-xl border border-[rgba(201,168,76,.1)] overflow-hidden">
+      <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-[rgba(201,168,76,.1)] bg-[rgba(201,168,76,.02)]">
-              <th className="text-left px-4 py-3 text-xs text-[#7a7060] font-medium">Clube</th>
-              <th className="text-right px-4 py-3 text-xs text-[#7a7060] font-medium">Preço</th>
-              <th className="text-right px-4 py-3 text-xs text-[#7a7060] font-medium">Variação</th>
-              <th className="text-right px-4 py-3 text-xs text-[#7a7060] font-medium">Supply</th>
-              <th className="text-right px-4 py-3 text-xs text-[#7a7060] font-medium">Holders</th>
+            <tr className="border-b border-[rgba(240,185,11,.1)] bg-[rgba(240,185,11,.02)]">
+              <th className="text-left px-4 py-3 text-xs text-[#929AA5] font-medium">Clube</th>
+              <th className="text-right px-4 py-3 text-xs text-[#929AA5] font-medium">Preço</th>
+              <th className="text-right px-4 py-3 text-xs text-[#929AA5] font-medium">Variação</th>
+              <th className="text-right px-4 py-3 text-xs text-[#929AA5] font-medium">Supply</th>
+              <th className="text-right px-4 py-3 text-xs text-[#929AA5] font-medium">Holders</th>
             </tr>
           </thead>
           <tbody>
             {CLUBS.map((club) => (
-              <tr key={club.ticker} className="border-b border-[rgba(201,168,76,.04)] hover:bg-[rgba(201,168,76,.02)]">
+              <tr key={club.ticker} className="border-b border-[rgba(240,185,11,.04)] hover:bg-[rgba(240,185,11,.02)]">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold font-mono text-[#c9a84c] w-12">{club.ticker}</span>
+                    <span className="text-xs font-bold font-mono text-[#F0B90B] w-12">{club.ticker}</span>
                     <span className="text-sm text-[#c5b99a]">{club.name}</span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-right font-mono text-sm text-[#f0ead6]">{club.price}</td>
+                <td className="px-4 py-3 text-right font-mono text-sm text-[#EAECEF]">{club.price}</td>
                 <td className="px-4 py-3 text-right">
-                  <span className={`text-sm font-mono font-medium flex items-center justify-end gap-0.5 ${club.positive ? "text-[#4ade80]" : "text-[#ef4444]"}`}>
+                  <span className={`text-sm font-mono font-medium flex items-center justify-end gap-0.5 ${club.positive ? "text-[#4ade80]" : "text-[#F6465D]"}`}>
                     {club.positive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
                     {club.change}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-right font-mono text-xs text-[#7a7060]">{club.supply}</td>
+                <td className="px-4 py-3 text-right font-mono text-xs text-[#929AA5]">{club.supply}</td>
                 <td className="px-4 py-3 text-right font-mono text-sm text-[#c5b99a]">{club.holders}</td>
               </tr>
             ))}

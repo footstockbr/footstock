@@ -14,7 +14,10 @@ export class PositionRepository {
   }
 
   async findByUserAndAsset(userId: string, assetId: string): Promise<Position | null> {
-    return prisma.position.findUnique({ where: { userId_assetId: { userId, assetId } } })
+    return prisma.position.findFirst({
+      where: { userId, assetId, status: 'OPEN' },
+      orderBy: { createdAt: 'desc' },
+    })
   }
 
   async upsert(
@@ -22,15 +25,26 @@ export class PositionRepository {
     assetId: string,
     data: { quantity: number; avgPrice: number; totalInvested: number }
   ): Promise<Position> {
-    return prisma.position.upsert({
-      where: { userId_assetId: { userId, assetId } },
-      create: { userId, assetId, ...data },
-      update: data,
+    const existing = await prisma.position.findFirst({
+      where: { userId, assetId, status: 'OPEN' },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    })
+
+    if (existing) {
+      return prisma.position.update({
+        where: { id: existing.id },
+        data,
+      })
+    }
+
+    return prisma.position.create({
+      data: { userId, assetId, ...data },
     })
   }
 
   async delete(userId: string, assetId: string): Promise<void> {
-    await prisma.position.delete({ where: { userId_assetId: { userId, assetId } } })
+    await prisma.position.deleteMany({ where: { userId, assetId, status: 'OPEN' } })
   }
 }
 

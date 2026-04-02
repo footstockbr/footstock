@@ -86,7 +86,7 @@ export function SessionIndicator({ compact = false, className }: SessionIndicato
             {label}
           </span>
           {countdownText && (
-            <span className="text-xs text-[#7a7060]">{countdownText}</span>
+            <span className="text-xs text-[#929AA5]">{countdownText}</span>
           )}
         </>
       )}

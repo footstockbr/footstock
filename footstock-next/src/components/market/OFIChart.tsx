@@ -26,7 +26,7 @@ export function OFIChart({ ticker, period, onChartReady }: OFIChartProps) {
       width: containerRef.current.clientWidth,
       height: 80,
       layout: {
-        background: { color: '#141210' },
+        background: { color: '#1E2329' },
         textColor: '#6b7280',
       },
       grid: {
@@ -69,7 +69,7 @@ export function OFIChart({ ticker, period, onChartReady }: OFIChartProps) {
       ofiData.map((d) => ({
         time: (new Date(d.timestamp).getTime() / 1000) as unknown as import('lightweight-charts').Time,
         value: d.ofi,
-        color: d.ofi >= 0 ? '#38bdf8' : '#ef4444',
+        color: d.ofi >= 0 ? '#F0B90B' : '#F6465D',
       }))
     )
   }, [ofiData])
@@ -77,7 +77,7 @@ export function OFIChart({ ticker, period, onChartReady }: OFIChartProps) {
   if (isLoading) {
     return (
       <div
-        className="flex items-center justify-center bg-[#141210] rounded-lg"
+        className="flex items-center justify-center bg-[#1E2329] rounded-lg"
         style={{ height: 80 }}
         aria-busy="true"
       >
@@ -89,10 +89,10 @@ export function OFIChart({ ticker, period, onChartReady }: OFIChartProps) {
   if (isError) {
     return (
       <div
-        className="flex items-center justify-center bg-[#141210] rounded-lg"
+        className="flex items-center justify-center bg-[#1E2329] rounded-lg"
         style={{ height: 80 }}
       >
-        <button onClick={() => refetch()} className="text-xs text-[#7a7060] underline">
+        <button onClick={() => refetch()} className="text-xs text-[#929AA5] underline">
           Recarregar OFI
         </button>
       </div>

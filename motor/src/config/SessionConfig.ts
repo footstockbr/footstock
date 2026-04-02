@@ -15,37 +15,37 @@ export type { SessionType, SessionWindow }
 export const SESSION_SCHEDULE: SessionWindow[] = [
   {
     type: 'PRE_ABERTURA',
-    startHour: 8,
-    startMinute: 0,
-    endHour: 9,
-    endMinute: 30,
+    startHour: 10,
+    startMinute: 45,
+    endHour: 11,
+    endMinute: 0,
     volatilityMultiplier: 0.30,
   },
   {
     type: 'NEGOCIACAO',
-    startHour: 9,
-    startMinute: 30,
-    endHour: 17,
-    endMinute: 0,
+    startHour: 11,
+    startMinute: 0,
+    endHour: 0,
+    endMinute: 45,
     volatilityMultiplier: 1.00,
   },
   {
     type: 'CALL',
-    startHour: 17,
-    startMinute: 0,
-    endHour: 17,
-    endMinute: 30,
+    startHour: 0,
+    startMinute: 45,
+    endHour: 1,
+    endMinute: 0,
     volatilityMultiplier: 0.20,
   },
   {
     type: 'AFTER_MARKET',
-    startHour: 17,
-    startMinute: 30,
-    endHour: 18,
-    endMinute: 0,
+    startHour: 1,
+    startMinute: 0,
+    endHour: 1,
+    endMinute: 30,
     volatilityMultiplier: 0.10,
   },
-  // FECHADO: 18:00–08:00 BRT (demais horários) — tratado como default no SessionManager
+  // FECHADO: 01:30–10:45 BRT (demais horários) — tratado como default no SessionManager
 ]
 
 /**
@@ -53,10 +53,10 @@ export const SESSION_SCHEDULE: SessionWindow[] = [
  */
 export const CLOSED_SESSION: SessionWindow = {
   type: 'FECHADO',
-  startHour: 18,
-  startMinute: 0,
-  endHour: 8,
-  endMinute: 0,
+  startHour: 1,
+  startMinute: 30,
+  endHour: 10,
+  endMinute: 45,
   volatilityMultiplier: 0.00,
 }
 
@@ -73,11 +73,11 @@ export const DEFAULT_VOLATILITY_BASE = 0.02
  */
 export function getSessionColor(session: SessionType): string {
   const colors: Record<SessionType, string> = {
-    PRE_ABERTURA: '#c9a84c',
-    NEGOCIACAO: '#8b5cf6',
-    CALL: '#06b6d4',
-    AFTER_MARKET: '#7c3aed',
-    FECHADO: '#ef4444',
+    PRE_ABERTURA: '#f5a623',
+    NEGOCIACAO: '#6c63ff',
+    CALL: '#38bdf8',
+    AFTER_MARKET: '#8b5cf6',
+    FECHADO: '#f43f5e',
   }
   return colors[session] ?? '#6b7280'
 }

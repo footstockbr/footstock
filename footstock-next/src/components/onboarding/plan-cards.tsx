@@ -52,31 +52,31 @@ export function PlanCards({ onSelect, onSkip, currentPlan }: PlanCardsProps) {
   return (
     <div className="flex flex-col gap-4">
       <div className="text-center mb-2">
-        <h2 className="text-xl font-bold text-[#f0ead6]">Escolha seu plano</h2>
-        <p className="text-sm text-[#7a7060] mt-1">Você pode mudar depois</p>
+        <h2 className="text-xl font-bold text-[#EAECEF]">Escolha seu plano</h2>
+        <p className="text-sm text-[#929AA5] mt-1">Você pode mudar depois</p>
       </div>
 
       {/* Jogador (gratuito) */}
       <div
         data-testid="plan-card-jogador"
-        className="flex flex-col gap-3 bg-[#141210] border border-[rgba(201,168,76,.18)] rounded-xl p-4"
+        className="flex flex-col gap-3 bg-[#1E2329] border border-[rgba(240,185,11,.18)] rounded-xl p-4"
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-[#f0ead6]">
+            <span className="font-semibold text-[#EAECEF]">
               ⚽ {PLAN_LABELS[PlanType.JOGADOR]}
             </span>
             {currentPlan === PlanType.JOGADOR && (
               <Badge variant="default" size="sm">Seu plano atual</Badge>
             )}
           </div>
-          <span className="text-base font-bold text-[#f0ead6]">Grátis</span>
+          <span className="text-base font-bold text-[#EAECEF]">Grátis</span>
         </div>
         <ul className="flex flex-col gap-1">
           {PLAN_FEATURES_DISPLAY[PlanType.JOGADOR].map((f) => (
             <li
               key={f}
-              className="flex items-center gap-2 text-xs text-[#7a7060]"
+              className="flex items-center gap-2 text-xs text-[#929AA5]"
             >
               <span className="text-[#5a5040]" aria-hidden="true">
                 →
@@ -99,7 +99,7 @@ export function PlanCards({ onSelect, onSkip, currentPlan }: PlanCardsProps) {
       {/* Craque */}
       <div
         data-testid="plan-card-craque"
-        className="flex flex-col gap-3 bg-[#141210] border border-[rgba(56,189,248,.3)] rounded-xl p-4 relative"
+        className="flex flex-col gap-3 bg-[#1E2329] border border-[rgba(56,189,248,.3)] rounded-xl p-4 relative"
       >
         <Badge
           variant="success"
@@ -110,7 +110,7 @@ export function PlanCards({ onSelect, onSkip, currentPlan }: PlanCardsProps) {
         </Badge>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-[#38bdf8]">
+            <span className="font-semibold text-[#F0B90B]">
               ⭐ {PLAN_LABELS[PlanType.CRAQUE]}
             </span>
             {currentPlan === PlanType.CRAQUE && (
@@ -118,11 +118,11 @@ export function PlanCards({ onSelect, onSkip, currentPlan }: PlanCardsProps) {
             )}
           </div>
           <div className="text-right">
-            <span className="text-base font-bold text-[#f0ead6]">
+            <span className="text-base font-bold text-[#EAECEF]">
               R$&nbsp;19,90
             </span>
-            <span className="text-xs text-[#7a7060]">/mês</span>
-            <p className="text-[10px] text-[#22c55e]">
+            <span className="text-xs text-[#929AA5]">/mês</span>
+            <p className="text-[10px] text-[#2EBD85]">
               ou R$&nbsp;191/ano
               <span className="ml-1 opacity-80">(-20%)</span>
             </p>
@@ -132,9 +132,9 @@ export function PlanCards({ onSelect, onSkip, currentPlan }: PlanCardsProps) {
           {PLAN_FEATURES_DISPLAY[PlanType.CRAQUE].map((f) => (
             <li
               key={f}
-              className="flex items-center gap-2 text-xs text-[#7a7060]"
+              className="flex items-center gap-2 text-xs text-[#929AA5]"
             >
-              <span className="text-[#22c55e]" aria-hidden="true">
+              <span className="text-[#2EBD85]" aria-hidden="true">
                 ✓
               </span>
               {f}
@@ -155,11 +155,11 @@ export function PlanCards({ onSelect, onSkip, currentPlan }: PlanCardsProps) {
       {/* Lenda */}
       <div
         data-testid="plan-card-lenda"
-        className="flex flex-col gap-3 bg-[#141210] border border-[rgba(201,168,76,.3)] rounded-xl p-4"
+        className="flex flex-col gap-3 bg-[#1E2329] border border-[rgba(240,185,11,.3)] rounded-xl p-4"
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-[#c9a84c]">
+            <span className="font-semibold text-[#F0B90B]">
               👑 {PLAN_LABELS[PlanType.LENDA]}
             </span>
             {currentPlan === PlanType.LENDA && (
@@ -167,19 +167,19 @@ export function PlanCards({ onSelect, onSkip, currentPlan }: PlanCardsProps) {
             )}
           </div>
           <div className="text-right">
-            <span className="text-base font-bold text-[#f0ead6]">
+            <span className="text-base font-bold text-[#EAECEF]">
               R$&nbsp;39,90
             </span>
-            <span className="text-xs text-[#7a7060]">/mês</span>
+            <span className="text-xs text-[#929AA5]">/mês</span>
           </div>
         </div>
         <ul className="flex flex-col gap-1">
           {PLAN_FEATURES_DISPLAY[PlanType.LENDA].map((f) => (
             <li
               key={f}
-              className="flex items-center gap-2 text-xs text-[#7a7060]"
+              className="flex items-center gap-2 text-xs text-[#929AA5]"
             >
-              <span className="text-[#c9a84c]" aria-hidden="true">
+              <span className="text-[#F0B90B]" aria-hidden="true">
                 ★
               </span>
               {f}
@@ -200,7 +200,7 @@ export function PlanCards({ onSelect, onSkip, currentPlan }: PlanCardsProps) {
       <button
         type="button"
         onClick={onSkip}
-        className="text-xs text-[#7a7060] hover:text-[#f0ead6] text-center mt-1 transition-colors min-h-[44px] flex items-center justify-center"
+        className="text-xs text-[#929AA5] hover:text-[#EAECEF] text-center mt-1 transition-colors min-h-[44px] flex items-center justify-center"
         data-testid="plan-skip"
       >
         Pular por agora, começar com Jogador

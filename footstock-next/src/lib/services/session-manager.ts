@@ -20,10 +20,11 @@ export interface SessionWindow {
 }
 
 const SESSION_SCHEDULE: SessionWindow[] = [
-  { type: MarketSession.PRE_ABERTURA, startHour: 8, startMinute: 0, endHour: 9, endMinute: 30, volatilityMultiplier: 0.30 },
-  { type: MarketSession.NEGOCIACAO, startHour: 9, startMinute: 30, endHour: 17, endMinute: 0, volatilityMultiplier: 1.00 },
-  { type: MarketSession.CALL, startHour: 17, startMinute: 0, endHour: 17, endMinute: 30, volatilityMultiplier: 0.20 },
-  { type: MarketSession.AFTER_MARKET, startHour: 17, startMinute: 30, endHour: 18, endMinute: 0, volatilityMultiplier: 0.10 },
+  { type: MarketSession.PRE_ABERTURA, startHour: 10, startMinute: 45, endHour: 11, endMinute: 0,  volatilityMultiplier: 0.30 },
+  { type: MarketSession.NEGOCIACAO,   startHour: 11, startMinute: 0,  endHour: 17, endMinute: 30, volatilityMultiplier: 1.00 },
+  { type: MarketSession.CALL,         startHour: 17, startMinute: 30, endHour: 17, endMinute: 45, volatilityMultiplier: 0.20 },
+  // AFTER_MARKET: 17:45 → 01:30 (cruza meia-noite — endHour usa 24+ para representar wrap)
+  { type: MarketSession.AFTER_MARKET, startHour: 17, startMinute: 45, endHour: 25, endMinute: 30, volatilityMultiplier: 0.10 },
 ]
 
 export interface NextTransition {
@@ -37,7 +38,13 @@ function findSession(hour: number, minute: number): MarketSession {
   for (const w of SESSION_SCHEDULE) {
     const start = w.startHour * 60 + w.startMinute
     const end = w.endHour * 60 + w.endMinute
-    if (timeMinutes >= start && timeMinutes < end) return w.type
+    if (end > 24 * 60) {
+      // Janela que cruza meia-noite: ativa se >= start OU < (end - 24h)
+      const endWrapped = end - 24 * 60
+      if (timeMinutes >= start || timeMinutes < endWrapped) return w.type
+    } else {
+      if (timeMinutes >= start && timeMinutes < end) return w.type
+    }
   }
   return MarketSession.FECHADO
 }

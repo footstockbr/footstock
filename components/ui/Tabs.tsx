@@ -14,10 +14,12 @@ export interface TabsProps {
   value: string
   onChange: (value: string) => void
   className?: string
+  /** aria-label para o tablist — obrigatorio para WCAG 2.1 AA */
+  'aria-label'?: string
 }
 
 /** Tabs com indicador ativo animado e navegacao por teclado */
-export function Tabs({ tabs, value, onChange, className }: TabsProps) {
+export function Tabs({ tabs, value, onChange, className, 'aria-label': ariaLabel }: TabsProps) {
   const tabListRef = useRef<HTMLDivElement>(null)
 
   const handleKeyDown = (e: React.KeyboardEvent, index: number) => {
@@ -54,6 +56,7 @@ export function Tabs({ tabs, value, onChange, className }: TabsProps) {
     <div
       ref={tabListRef}
       role="tablist"
+      aria-label={ariaLabel}
       className={cn(
         'flex gap-1 bg-bg-surface p-1 rounded-lg border border-border-muted',
         className

@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { getAuthUser, hasPlan } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
+import { getAIAnalyzeRateLimit } from '@/lib/ratelimit'
 import type { AIAnalysis } from '@/types'
 
 // GET /api/v1/ai/analyze?ticker=URU3
@@ -17,6 +18,14 @@ export async function GET(request: NextRequest) {
       'O Assessor IA está disponível a partir do plano Craque.',
       'CRAQUE'
     )
+  }
+
+  // Rate limit: 10 req/h por userId (conforme INTAKE — controle billing Anthropic)
+  const rateLimiter = getAIAnalyzeRateLimit()
+  const { success, reset } = await rateLimiter.limit(auth.user.id)
+  if (!success) {
+    const resetAt = new Date(reset).toISOString()
+    return errors.rateLimit('Limite de análises atingido. Tente novamente em breve.', resetAt)
   }
 
   const ticker = request.nextUrl.searchParams.get('ticker')

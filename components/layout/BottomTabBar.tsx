@@ -5,10 +5,10 @@ import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils/cn'
 import { ROUTES } from '@/lib/constants/routes'
 
-const tabs = [
+const BASE_TABS = [
   {
     href: ROUTES.DASHBOARD,
-    label: 'Inicio',
+    label: 'Dashboard',
     icon: (active: boolean) => (
       <svg
         className="w-5 h-5"
@@ -134,6 +134,8 @@ const tabs = [
  */
 export function BottomTabBar() {
   const pathname = usePathname()
+  const currentPath = pathname ?? ''
+  const tabs = BASE_TABS
 
   return (
     <nav
@@ -143,8 +145,8 @@ export function BottomTabBar() {
       <div className="flex h-14">
         {tabs.map((tab) => {
           const isActive =
-            pathname === tab.href ||
-            (tab.href !== ROUTES.DASHBOARD && pathname.startsWith(tab.href))
+            currentPath === tab.href ||
+            (tab.href !== ROUTES.DASHBOARD && currentPath.startsWith(tab.href))
           return (
             <Link
               key={tab.href}

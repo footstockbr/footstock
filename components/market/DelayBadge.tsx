@@ -9,6 +9,7 @@
 import Link from 'next/link'
 import { Clock } from 'lucide-react'
 import type { PlanType } from '@/lib/enums'
+import { ROUTES } from '@/lib/constants'
 
 interface DelayBadgeProps {
   planType: PlanType
@@ -38,7 +39,7 @@ export default function DelayBadge({ planType, delaySeconds }: DelayBadgeProps) 
       <Clock size={14} className="flex-shrink-0" aria-hidden="true" />
       <span>{label}</span>
       <Link
-        href="/planos"
+        href={ROUTES.PLANOS}
         data-testid="delay-badge-upgrade-link"
         className="ml-1 underline hover:text-yellow-300 focus:outline-none focus:ring-1 focus:ring-yellow-400 rounded transition-colors"
         title="Faça upgrade para Lenda para cotações em tempo real"

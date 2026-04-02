@@ -21,14 +21,14 @@ function StatCard({
   className,
 }: StatCardProps) {
   const subColors = {
-    positive: "text-[#22c55e]",
-    negative: "text-[#ef4444]",
-    neutral: "text-[#7a7060]",
+    positive: "text-[#2EBD85]",
+    negative: "text-[#F6465D]",
+    neutral: "text-[#929AA5]",
   };
 
   if (isLoading) {
     return (
-      <div className={cn("bg-[#141210] rounded-lg border border-[rgba(201,168,76,.18)] p-4", className)}>
+      <div className={cn("bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.18)] p-4", className)}>
         <Skeleton className="h-3 w-24 mb-3" />
         <Skeleton className="h-5 w-32 mb-2" />
         <Skeleton className="h-3 w-16" />
@@ -39,17 +39,17 @@ function StatCard({
   return (
     <div
       className={cn(
-        "bg-[#141210] rounded-lg border border-[rgba(201,168,76,.18)] p-4 shadow-sm",
+        "bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.18)] p-4 shadow-sm",
         className
       )}
     >
       <div className="flex items-start justify-between mb-1">
-        <span className="text-xs uppercase tracking-widest text-[#7a7060] font-medium">
+        <span className="text-xs uppercase tracking-widest text-[#929AA5] font-medium">
           {label}
         </span>
-        {icon && <span className="text-[#7a7060]">{icon}</span>}
+        {icon && <span className="text-[#929AA5]">{icon}</span>}
       </div>
-      <p className="text-xl font-extrabold font-mono text-[#f0ead6] mt-1">
+      <p className="text-xl font-extrabold font-mono text-[#EAECEF] mt-1">
         {value}
       </p>
       {subValue && (

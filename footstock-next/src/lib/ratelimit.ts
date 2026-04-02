@@ -34,6 +34,7 @@ let _authRateLimit: Ratelimit | null = null
 let _forgotPasswordRateLimit: Ratelimit | null = null
 let _webAuthnRateLimit: Ratelimit | null = null
 let _registerRateLimit: Ratelimit | null = null
+let _aiAnalyzeRateLimit: Ratelimit | null = null
 
 /**
  * Rate limiter para login: 10 requisições por 5 minutos por IP.
@@ -76,4 +77,16 @@ export function getRegisterRateLimit(): Ratelimit {
     _registerRateLimit = createRatelimit(Ratelimit.slidingWindow(5, '1 h'), 'rl:auth:register')
   }
   return _registerRateLimit
+}
+
+/**
+ * Rate limiter para Assessor IA: 10 requisições por hora por userId.
+ * Aplica-se ao plano Craque. Lenda herda o mesmo limite (custo por req é alto).
+ * Conforme INTAKE: máximo 10 req/h/usuário para controle de billing Anthropic.
+ */
+export function getAIAnalyzeRateLimit(): Ratelimit {
+  if (!_aiAnalyzeRateLimit) {
+    _aiAnalyzeRateLimit = createRatelimit(Ratelimit.slidingWindow(10, '1 h'), 'rl:ai:analyze')
+  }
+  return _aiAnalyzeRateLimit
 }

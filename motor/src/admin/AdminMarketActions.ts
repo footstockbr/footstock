@@ -59,13 +59,16 @@ export class AdminMarketActions {
   private async handleInjectNews(action: AdminAction): Promise<{ success: boolean; message: string }> {
     if (!action.assetId) return { success: false, message: 'assetId obrigatório' }
 
-    const { impact, magnitude, durationTicks } = action.payload as {
-      impact: 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL'
+    const { impact, magnitude, durationTicks, sentiment } = action.payload as {
+      impact: string
       magnitude: number
       durationTicks: number
+      sentiment?: number
     }
 
-    const signedMagnitude = impact === 'NEGATIVE' ? -Math.abs(magnitude) : magnitude
+    // Sinal derivado do sentimento (numérico) ou do campo impact (string)
+    const isNegative = (sentiment !== undefined && sentiment < 0) || impact === 'NEGATIVE'
+    const signedMagnitude = isNegative ? -Math.abs(magnitude) : magnitude
     this.engine.injectNewsImpact(action.assetId, signedMagnitude, durationTicks ?? 10)
     await this.auditLogger.log(action)
 

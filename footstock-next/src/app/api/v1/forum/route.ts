@@ -2,11 +2,14 @@ import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { getAuthUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { ok, created, list, errors, parsePagination, buildPagination } from '@/lib/api'
+import { ok, created, list, errors, error, parsePagination, buildPagination } from '@/lib/api'
 import type { PostStatus } from '@/types'
 
+// Zod valida apenas tipo e presença do campo; os limites de tamanho (min/max)
+// são validados explicitamente abaixo para garantir os códigos FORUM_021 e
+// FORUM_050 — sem que o VAL_001 genérico os torne inalcançáveis.
 const CreateForumPostSchema = z.object({
-  content: z.string().min(1).max(280),
+  content: z.string({ required_error: 'Conteúdo é obrigatório.' }),
   ticker: z.string().max(10).optional(),
 })
 
@@ -100,6 +103,17 @@ export async function POST(request: NextRequest) {
     }
 
     const { content, ticker } = parsed.data
+
+    // Validar vazio — FORUM_021
+    if (content.trim().length === 0) {
+      return error('FORUM_021', 'Conteúdo não pode ser vazio.', 422)
+    }
+
+    // Validar limite de caracteres — FORUM_050
+    if (content.length > 280) {
+      return error('FORUM_050', `${content.length}/280 caracteres — limite excedido.`, 422)
+    }
+
     const { clean, flagged } = sanitizeContent(content)
 
     const post = await prisma.forumPost.create({

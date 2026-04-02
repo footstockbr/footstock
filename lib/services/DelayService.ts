@@ -1,7 +1,7 @@
 // ============================================================================
 // Foot Stock — DelayService
 // Aplica delay de cotação por plano do usuário.
-// DELAY_BY_PLAN está em milissegundos: JOGADOR=15s, CRAQUE=5s, LENDA=0.
+// DELAY_BY_PLAN está em milissegundos: JOGADOR=1h, CRAQUE=30min, LENDA=0.
 // ============================================================================
 
 import { DELAY_BY_PLAN } from '@/lib/constants/limits'
@@ -25,7 +25,14 @@ export function getDelayLabel(planType: PlanType): string | null {
   const delayMs = DELAY_BY_PLAN[planType] ?? 0
   if (delayMs === 0) return null
   const secs = delayMs / 1000
-  if (secs >= 60) return `${Math.round(secs / 60)} minutos`
+  if (secs >= 3600) {
+    const hours = Math.round(secs / 3600)
+    return hours === 1 ? '1 hora' : `${hours} horas`
+  }
+  if (secs >= 60) {
+    const mins = Math.round(secs / 60)
+    return mins === 1 ? '1 minuto' : `${mins} minutos`
+  }
   return `${secs} segundos`
 }
 

@@ -31,14 +31,14 @@ export function TourReactivation() {
     <Card data-testid="tour-reactivation">
       <div className="p-4 flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium text-[#f0ead6]">
+          <p className="text-sm font-medium text-[#EAECEF]">
             Tour de boas-vindas
           </p>
-          <p className="text-xs text-[#7a7060] mt-0.5">
+          <p className="text-xs text-[#929AA5] mt-0.5">
             Refaça o tour para relembrar as funcionalidades
           </p>
           {error && (
-            <p role="alert" className="text-xs text-[#ef4444] mt-1">
+            <p role="alert" className="text-xs text-[#F6465D] mt-1">
               {error}
             </p>
           )}

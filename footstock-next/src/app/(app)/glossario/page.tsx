@@ -26,18 +26,18 @@ const TERMS = [
 export default function GlossarioPage() {
   return (
     <div className="px-4 pt-4">
-      <h1 className="text-lg font-bold text-[#f0ead6] mb-1 flex items-center gap-2">
-        <BookOpen className="h-5 w-5 text-[#c9a84c]" />
+      <h1 className="text-lg font-bold text-[#EAECEF] mb-1 flex items-center gap-2">
+        <BookOpen className="h-5 w-5 text-[#F0B90B]" />
         Glossário
       </h1>
-      <p className="text-sm text-[#7a7060] mb-4">116 termos de mercado financeiro</p>
+      <p className="text-sm text-[#929AA5] mb-4">116 termos de mercado financeiro</p>
 
       <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#4a3d2a]" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#707A8A]" />
         <input
           type="search"
           placeholder="Buscar termo..."
-          className="h-10 w-full rounded-lg border border-[rgba(201,168,76,.18)] bg-[#0f0e0b] pl-9 pr-3 text-sm text-[#f0ead6] placeholder:text-[#4a3d2a] focus:outline-none focus:border-[rgba(201,168,76,.4)]"
+          className="h-10 w-full rounded-lg border border-[rgba(240,185,11,.18)] bg-[#181A20] pl-9 pr-3 text-sm text-[#EAECEF] placeholder:text-[#707A8A] focus:outline-none focus:border-[rgba(240,185,11,.4)]"
         />
       </div>
 
@@ -45,10 +45,10 @@ export default function GlossarioPage() {
         {TERMS.map((item) => (
           <div
             key={item.term}
-            className="bg-[#141210] rounded-lg border border-[rgba(201,168,76,.1)] p-4"
+            className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.1)] p-4"
           >
-            <p className="text-sm font-semibold text-[#c9a84c] mb-1">{item.term}</p>
-            <p className="text-sm text-[#7a7060] leading-relaxed">{item.def}</p>
+            <p className="text-sm font-semibold text-[#F0B90B] mb-1">{item.term}</p>
+            <p className="text-sm text-[#929AA5] leading-relaxed">{item.def}</p>
           </div>
         ))}
       </div>

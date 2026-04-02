@@ -2,7 +2,7 @@
 // Foot Stock — Testes do BaseService
 // ============================================================================
 
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client'
 import { BaseService, PRISMA_ERROR_MAP } from '../base'
 import { AppError } from '@/lib/api/errors'
 import { ERROR_CODES, ERROR_MESSAGES } from '@/lib/constants/errors'

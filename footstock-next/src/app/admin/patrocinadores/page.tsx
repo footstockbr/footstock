@@ -19,11 +19,11 @@ export default function AdminPatrocinadoresPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-[#f0ead6] flex items-center gap-2">
-            <HandshakeIcon className="h-5 w-5 text-[#c9a84c]" />
+          <h1 className="text-xl font-bold text-[#EAECEF] flex items-center gap-2">
+            <HandshakeIcon className="h-5 w-5 text-[#F0B90B]" />
             Patrocinadores
           </h1>
-          <p className="text-sm text-[#7a7060]">Contratos e receita de patrocínio</p>
+          <p className="text-sm text-[#929AA5]">Contratos e receita de patrocínio</p>
         </div>
         <Button variant="primary" size="sm">
           <Plus className="h-4 w-4 mr-1" />
@@ -37,17 +37,17 @@ export default function AdminPatrocinadoresPage() {
         <StatCard label="Cobertura de Clubes" value="18/40" subValue="45% com patrocínio" />
       </div>
 
-      <div className="bg-[#141210] rounded-xl border border-[rgba(201,168,76,.1)] p-4">
+      <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
         <div className="flex flex-col gap-3">
           {SPONSORS.map((sponsor) => (
-            <div key={sponsor.id} className="flex items-center justify-between py-2 border-b border-[rgba(201,168,76,.04)] last:border-0">
+            <div key={sponsor.id} className="flex items-center justify-between py-2 border-b border-[rgba(240,185,11,.04)] last:border-0">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-[rgba(201,168,76,.1)] flex items-center justify-center">
-                  <DollarSign className="h-4 w-4 text-[#c9a84c]" />
+                <div className="w-9 h-9 rounded-lg bg-[rgba(240,185,11,.1)] flex items-center justify-center">
+                  <DollarSign className="h-4 w-4 text-[#F0B90B]" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-[#f0ead6]">{sponsor.name}</p>
-                  <p className="text-xs text-[#7a7060]">{sponsor.club} · {sponsor.type}</p>
+                  <p className="text-sm font-medium text-[#EAECEF]">{sponsor.name}</p>
+                  <p className="text-xs text-[#929AA5]">{sponsor.club} · {sponsor.type}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">

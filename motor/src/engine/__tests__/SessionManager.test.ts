@@ -1,3 +1,6 @@
+/**
+ * @jest-environment node
+ */
 // ============================================================================
 // SessionManager — Testes Unitários
 // Cobre: limites de sessão BRT, horário de verão (DST), volatilidade,
@@ -16,26 +19,33 @@ function brtWinter(hour: number, minute = 0): Date {
   return new Date(dateStr)
 }
 
-// ─── Helper: cria Date UTC para um horário BRT de verão (UTC-2) ───────────
-function brtSummer(utcIso: string): Date {
+// ─── Helper: cria Date UTC para um horário BRT sem DST ───────────
+function brtNoDst(utcIso: string): Date {
   return new Date(utcIso)
 }
+
+// Foot Stock schedule (BRT):
+//   FECHADO:      01:30 – 10:45
+//   PRE_ABERTURA: 10:45 – 11:00
+//   NEGOCIACAO:   11:00 – 00:45 (next day)
+//   CALL:         00:45 – 01:00
+//   AFTER_MARKET: 01:00 – 01:30
 
 describe('SessionManager', () => {
   describe('getCurrentSession — limites de horário (inverno UTC-3)', () => {
     test.each<[number, number, SessionType]>([
-      [7, 59, 'FECHADO'],
-      [8, 0, 'PRE_ABERTURA'],
-      [9, 29, 'PRE_ABERTURA'],
-      [9, 30, 'NEGOCIACAO'],
-      [16, 59, 'NEGOCIACAO'],
-      [17, 0, 'CALL'],
-      [17, 29, 'CALL'],
-      [17, 30, 'AFTER_MARKET'],
-      [17, 59, 'AFTER_MARKET'],
-      [18, 0, 'FECHADO'],
-      [22, 0, 'FECHADO'],
-      [0, 0, 'FECHADO'],
+      [1, 29, 'AFTER_MARKET'],
+      [1, 30, 'FECHADO'],
+      [10, 44, 'FECHADO'],
+      [10, 45, 'PRE_ABERTURA'],
+      [10, 59, 'PRE_ABERTURA'],
+      [11, 0, 'NEGOCIACAO'],
+      [16, 0, 'NEGOCIACAO'],
+      [23, 59, 'NEGOCIACAO'],
+      [0, 44, 'NEGOCIACAO'],
+      [0, 45, 'CALL'],
+      [0, 59, 'CALL'],
+      [1, 0, 'AFTER_MARKET'],
     ])('%02d:%02d BRT → %s', (hour, minute, expected) => {
       const sm = new SessionManager(() => brtWinter(hour, minute))
       expect(sm.getCurrentSession()).toBe(expected)
@@ -45,24 +55,23 @@ describe('SessionManager', () => {
   describe('getCurrentSession — sem DST (Brasil eliminou horário de verão em 2019)', () => {
     // O Brasil eliminou o horário de verão pelo Decreto 9.528/2018.
     // A partir de 2019, America/Sao_Paulo é sempre UTC-3 (sem DST).
-    // Os testes verificam que date-fns-tz usa a regra IANA correta (sem offset de +1h em novembro).
 
-    test('15 Nov 2026 12:30 UTC = 09:30 BRT (UTC-3, sem DST) → NEGOCIACAO', () => {
-      // 12:30 UTC - 3h = 09:30 BRT → início inclusivo de NEGOCIACAO
-      const sm = new SessionManager(() => brtSummer('2026-11-15T12:30:00.000Z'))
+    test('15 Nov 2026 14:00 UTC = 11:00 BRT (UTC-3, sem DST) → NEGOCIACAO', () => {
+      // 14:00 UTC - 3h = 11:00 BRT → início de NEGOCIACAO
+      const sm = new SessionManager(() => brtNoDst('2026-11-15T14:00:00.000Z'))
       expect(sm.getCurrentSession()).toBe('NEGOCIACAO')
     })
 
-    test('15 Nov 2026 20:00 UTC = 17:00 BRT (UTC-3, sem DST) → CALL', () => {
-      // 20:00 UTC - 3h = 17:00 BRT → início de CALL (17:00-17:30)
-      const sm = new SessionManager(() => brtSummer('2026-11-15T20:00:00.000Z'))
+    test('15 Nov 2026 03:45 UTC = 00:45 BRT (UTC-3, sem DST) → CALL', () => {
+      // 03:45 UTC - 3h = 00:45 BRT → início de CALL
+      const sm = new SessionManager(() => brtNoDst('2026-11-15T03:45:00.000Z'))
       expect(sm.getCurrentSession()).toBe('CALL')
     })
 
-    test('15 Nov 2026 11:30 UTC = 08:30 BRT (UTC-3, sem DST) → PRE_ABERTURA', () => {
-      // 11:30 UTC - 3h = 08:30 BRT → PRE_ABERTURA (08:00-09:30)
-      // Confirma que date-fns-tz NÃO aplica offset UTC-2 (como seria se DST fosse ativo)
-      const sm = new SessionManager(() => brtSummer('2026-11-15T11:30:00.000Z'))
+    test('15 Nov 2026 13:45 UTC = 10:45 BRT (UTC-3, sem DST) → PRE_ABERTURA', () => {
+      // 13:45 UTC - 3h = 10:45 BRT → início de PRE_ABERTURA
+      // Confirma que date-fns-tz NÃO aplica offset UTC-2 (sem DST)
+      const sm = new SessionManager(() => brtNoDst('2026-11-15T13:45:00.000Z'))
       expect(sm.getCurrentSession()).toBe('PRE_ABERTURA')
     })
   })
@@ -106,7 +115,7 @@ describe('SessionManager', () => {
     })
 
     test('dentro de PRE_ABERTURA → próxima sessão é NEGOCIACAO', () => {
-      const sm = new SessionManager(() => brtWinter(8, 30)) // 08:30 BRT = PRE_ABERTURA
+      const sm = new SessionManager(() => brtWinter(10, 50)) // 10:50 BRT = PRE_ABERTURA
       const { session } = sm.getNextTransition()
       expect(session).toBe('NEGOCIACAO')
     })
@@ -125,29 +134,29 @@ describe('SessionManager', () => {
     })
 
     test('PRE_ABERTURA → true', () => {
-      const sm = new SessionManager(() => brtWinter(8, 30))
+      const sm = new SessionManager(() => brtWinter(10, 50))
       expect(sm.isMarketOpen()).toBe(true)
     })
 
     test('FECHADO → false', () => {
-      const sm = new SessionManager(() => brtWinter(22, 0))
+      const sm = new SessionManager(() => brtWinter(5, 0))
       expect(sm.isMarketOpen()).toBe(false)
     })
 
     test('CALL → false', () => {
-      const sm = new SessionManager(() => brtWinter(17, 15))
+      const sm = new SessionManager(() => brtWinter(0, 50))
       expect(sm.isMarketOpen()).toBe(false)
     })
 
     test('AFTER_MARKET → false', () => {
-      const sm = new SessionManager(() => brtWinter(17, 45))
+      const sm = new SessionManager(() => brtWinter(1, 15))
       expect(sm.isMarketOpen()).toBe(false)
     })
   })
 
   describe('injeção de clock', () => {
     test('aceita clock customizado para testes determinísticos', () => {
-      const fixedTime = brtWinter(9, 30) // exatamente 09:30 → NEGOCIACAO (inclusivo)
+      const fixedTime = brtWinter(11, 0) // exatamente 11:00 → NEGOCIACAO (inclusivo)
       const sm = new SessionManager(() => fixedTime)
       expect(sm.getCurrentSession()).toBe('NEGOCIACAO')
     })

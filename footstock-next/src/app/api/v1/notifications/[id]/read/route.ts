@@ -1,9 +1,10 @@
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { notificationRepository } from '@/lib/repositories/NotificationRepository'
 import { ok, errors } from '@/lib/api'
 
 // PATCH /api/v1/notifications/:id/read
+// SYS_080 (404) se não encontrada ou não pertence ao usuário (previne IDOR)
 export async function PATCH(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -14,27 +15,16 @@ export async function PATCH(
   const { id } = await params
 
   try {
-    const notification = await prisma.notification.findUnique({ where: { id } })
-
-    if (!notification) return errors.notFound('Notificação não encontrada.')
-    if (notification.userId !== auth.user.id) return errors.forbidden()
-
-    const updated = await prisma.notification.update({
-      where: { id },
-      data: { read: true },
-    })
-
-    return ok({
-      id: updated.id,
-      userId: updated.userId,
-      type: updated.type,
-      title: updated.title,
-      body: updated.body,
-      read: updated.read,
-      metadata: updated.metadata as Record<string, unknown> | null,
-      createdAt: updated.createdAt.toISOString(),
-    })
-  } catch {
+    const updated = await notificationRepository.markAsRead(id, auth.user.id)
+    return ok(updated)
+  } catch (err: unknown) {
+    const code = (err as { code?: string }).code
+    if (code === 'NOT_FOUND') {
+      return NextResponse.json(
+        { error: { code: 'SYS_080', message: 'Notificação não encontrada.' } },
+        { status: 404 }
+      )
+    }
     return errors.server()
   }
 }

@@ -86,8 +86,8 @@ export default function PlanosPage() {
   return (
     <div data-testid="planos-page" className="px-4 pt-4 pb-8">
       <div className="text-center mb-6">
-        <h1 className="text-xl font-bold text-[#f0ead6] mb-1">Escolha seu plano</h1>
-        <p className="text-sm text-[#7a7060]">
+        <h1 className="text-xl font-bold text-[#EAECEF] mb-1">Escolha seu plano</h1>
+        <p className="text-sm text-[#929AA5]">
           Invista em dados melhores. Cancele quando quiser.
         </p>
       </div>
@@ -103,8 +103,8 @@ export default function PlanosPage() {
               data-testid={`plano-card-${plan.type.toLowerCase()}`}
               className={`rounded-xl border p-5 relative ${
                 isCraque
-                  ? "bg-[rgba(201,168,76,.06)] border-[rgba(201,168,76,.4)] shadow-[0_0_24px_rgba(201,168,76,.12)]"
-                  : "bg-[#141210] border-[rgba(201,168,76,.12)]"
+                  ? "bg-[rgba(240,185,11,.06)] border-[rgba(240,185,11,.4)] shadow-[0_0_24px_rgba(240,185,11,.12)]"
+                  : "bg-[#1E2329] border-[rgba(240,185,11,.12)]"
               }`}
             >
               {plan.badge && (
@@ -119,24 +119,24 @@ export default function PlanosPage() {
                 <div className="flex items-center gap-3">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                     plan.type === PlanType.LENDA
-                      ? "bg-[rgba(201,168,76,.2)]"
+                      ? "bg-[rgba(240,185,11,.2)]"
                       : isCraque
-                      ? "bg-[rgba(201,168,76,.15)]"
+                      ? "bg-[rgba(240,185,11,.15)]"
                       : "bg-[rgba(120,110,90,.15)]"
                   }`}>
                     <Icon className={`h-5 w-5 ${
-                      plan.type === PlanType.JOGADOR ? "text-[#7a7060]" : "text-[#c9a84c]"
+                      plan.type === PlanType.JOGADOR ? "text-[#929AA5]" : "text-[#F0B90B]"
                     }`} />
                   </div>
                   <div>
-                    <p className="text-base font-bold text-[#f0ead6]">{plan.name}</p>
-                    <p className="text-xs text-[#7a7060]">{plan.description}</p>
+                    <p className="text-base font-bold text-[#EAECEF]">{plan.name}</p>
+                    <p className="text-xs text-[#929AA5]">{plan.description}</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className="text-xl font-bold font-mono text-[#f0ead6]">{plan.price}</span>
+                  <span className="text-xl font-bold font-mono text-[#EAECEF]">{plan.price}</span>
                   {plan.period && (
-                    <span className="text-xs text-[#7a7060]">{plan.period}</span>
+                    <span className="text-xs text-[#929AA5]">{plan.period}</span>
                   )}
                 </div>
               </div>
@@ -151,9 +151,9 @@ export default function PlanosPage() {
                 {plan.missing.map((feature) => (
                   <li key={feature} className="flex items-center gap-2 opacity-40">
                     <div className="h-3.5 w-3.5 flex-shrink-0 flex items-center justify-center">
-                      <div className="h-px w-3 bg-[#7a7060]" />
+                      <div className="h-px w-3 bg-[#929AA5]" />
                     </div>
-                    <span className="text-sm text-[#7a7060]">{feature}</span>
+                    <span className="text-sm text-[#929AA5]">{feature}</span>
                   </li>
                 ))}
               </ul>
@@ -173,10 +173,10 @@ export default function PlanosPage() {
       </div>
 
       <div className="mt-6 text-center">
-        <p className="text-xs text-[#4a3d2a]">
+        <p className="text-xs text-[#707A8A]">
           Pagamento seguro via Stripe · Cancele a qualquer momento
         </p>
-        <Link href={ROUTES.CONTA} className="text-xs text-[#7a7060] underline mt-1 inline-block">
+        <Link href={ROUTES.CONTA} className="text-xs text-[#929AA5] underline mt-1 inline-block">
           Voltar para minha conta
         </Link>
       </div>

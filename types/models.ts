@@ -216,20 +216,39 @@ export interface News {
 }
 
 /** Liga de competição entre usuários */
+export type LeagueDuration = '1S' | '1M' | 'TEMPORADA';
+
+/** Liga de competição entre usuários */
 export interface League {
   id: string;
   name: string;
-  description: string;
+  description?: string;
   type: LeagueType;
-  creatorId: string;
-  maxMembers: number;
-  entryFee: number;
-  prizePool: number;
-  startDate: string;
-  endDate: string;
-  isActive: boolean;
+  status?: 'ACTIVE' | 'FINISHED';
+  division?: 'ABERTA' | 'BRONZE' | 'PRATA' | 'OURO';
+  duration?: LeagueDuration;
+  memberCount?: number;
+  endsAt?: string | null;
+  emblemUrl?: string | null;
+  sponsorId?: string | null;
+  createdBy?: string;
+  slug?: string;
+  startsAt?: string;
+  isMember?: boolean;
+  userRank?: number | null;
+  creatorId?: string;
+  maxMembers?: number;
+  entryFee?: number;
+  prizePool?: number;
+  startDate?: string;
+  endDate?: string;
+  isActive?: boolean;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
+  sponsor?: {
+    id: string;
+    name: string;
+  } | null;
 }
 
 /** Membro participante de uma liga */
@@ -237,12 +256,37 @@ export interface LeagueMember {
   id: string;
   leagueId: string;
   userId: string;
-  portfolioValue: number;
+  portfolioValue?: number;
+  score?: number;
   rank: number;
-  pnl: number;
-  pnlPercent: number;
+  pnl?: number;
+  pnlPercent?: number;
   joinedAt: string;
-  updatedAt: string;
+  lastScoreAt?: string | null;
+  scoreBreakdown?: ScoreBreakdown | null;
+  updatedAt?: string;
+}
+
+export interface ScoreBreakdown {
+  rentabilidade: number;
+  sofisticacao: number;
+  diversificacao: number;
+  consistencia: number;
+  bonusEducativo: number;
+  total: number;
+  finalScore: number;
+  fatorEquidade: number;
+}
+
+export interface LeagueMemberRanking {
+  rank: number;
+  userId: string;
+  userName: string;
+  userPlan: PlanType;
+  userAvatarUrl?: string | null;
+  score: ScoreBreakdown;
+  joinedAt: string;
+  isCurrentUser?: boolean;
 }
 
 /** Post no fórum da comunidade */

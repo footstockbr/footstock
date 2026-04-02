@@ -72,10 +72,6 @@ export class SessionManager {
     const brt = toZonedTime(utcNow, BRT_TIMEZONE)
     const currentHour = brt.getHours()
     const currentMinute = brt.getMinutes()
-    const currentSession = this._findSession(currentHour, currentMinute)
-
-    // Encontrar próxima janela de sessão na ordem cronológica
-    const sorted = [...SESSION_SCHEDULE]
     const nextWindow = this._findNextWindow(currentHour, currentMinute)
 
     const transitionAt = this._buildTransitionDate(brt, nextWindow)
@@ -104,7 +100,11 @@ export class SessionManager {
     for (const window of SESSION_SCHEDULE) {
       const start = window.startHour * 60 + window.startMinute
       const end = window.endHour * 60 + window.endMinute
-      if (timeMinutes >= start && timeMinutes < end) {
+      const isWrapped = start > end
+      const isInWindow = isWrapped
+        ? timeMinutes >= start || timeMinutes < end
+        : timeMinutes >= start && timeMinutes < end
+      if (isInWindow) {
         return window.type
       }
     }
@@ -113,15 +113,20 @@ export class SessionManager {
 
   private _findNextWindow(hour: number, minute: number): SessionWindow {
     const timeMinutes = hour * 60 + minute
-    // Encontrar próxima janela que ainda não começou hoje
+    let best: SessionWindow | null = null
+    let bestDiff = Number.POSITIVE_INFINITY
+
+    // Menor distância positiva até o próximo início, considerando rollover de 24h
     for (const window of SESSION_SCHEDULE) {
       const start = window.startHour * 60 + window.startMinute
-      if (start > timeMinutes) {
-        return window
+      let diff = (start - timeMinutes + 1440) % 1440
+      if (diff === 0) diff = 1440
+      if (diff < bestDiff) {
+        bestDiff = diff
+        best = window
       }
     }
-    // Além da última janela do dia → próximo dia, primeira sessão (PRE_ABERTURA)
-    return SESSION_SCHEDULE[0]!
+    return best ?? SESSION_SCHEDULE[0]!
   }
 
   private _buildTransitionDate(brtNow: Date, window: SessionWindow): Date {

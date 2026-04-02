@@ -6,23 +6,23 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-[#161d28] border-[rgba(201,168,76,.18)] text-[#7a7060]",
+        default: "bg-[#202630] border-[rgba(240,185,11,.18)] text-[#929AA5]",
         jogador:
           "bg-[rgba(100,116,139,.2)] border-[rgba(100,116,139,.3)] text-[#64748b]",
         craque:
-          "bg-[rgba(56,189,248,.2)] border-[rgba(56,189,248,.3)] text-[#38bdf8]",
+          "bg-[rgba(56,189,248,.2)] border-[rgba(56,189,248,.3)] text-[#F0B90B]",
         lenda:
-          "bg-[rgba(201,168,76,.2)] border-[rgba(201,168,76,.3)] text-[#c9a84c]",
+          "bg-[rgba(240,185,11,.2)] border-[rgba(240,185,11,.3)] text-[#F0B90B]",
         success:
-          "bg-[rgba(34,197,94,.2)] border-[rgba(34,197,94,.3)] text-[#22c55e]",
+          "bg-[rgba(34,197,94,.2)] border-[rgba(34,197,94,.3)] text-[#2EBD85]",
         "success-strong":
-          "bg-[rgba(34,197,94,.3)] border-[rgba(34,197,94,.4)] text-[#22c55e]",
+          "bg-[rgba(34,197,94,.3)] border-[rgba(34,197,94,.4)] text-[#2EBD85]",
         error:
-          "bg-[rgba(239,68,68,.2)] border-[rgba(239,68,68,.3)] text-[#ef4444]",
+          "bg-[rgba(239,68,68,.2)] border-[rgba(239,68,68,.3)] text-[#F6465D]",
         warning:
-          "bg-[rgba(201,168,76,.2)] border-[rgba(201,168,76,.3)] text-[#c9a84c]",
+          "bg-[rgba(240,185,11,.2)] border-[rgba(240,185,11,.3)] text-[#F0B90B]",
         info:
-          "bg-[rgba(56,189,248,.2)] border-[rgba(56,189,248,.3)] text-[#38bdf8]",
+          "bg-[rgba(56,189,248,.2)] border-[rgba(56,189,248,.3)] text-[#F0B90B]",
       },
       size: {
         xs: "px-1.5 py-0.5 text-[10px]",

@@ -9,51 +9,66 @@ export const CLUSTER_PARAMS: Record<AssetCluster, ClusterParams> = {
     cluster: 'A_TOP',
     baseVolume: 50_000,
     drift: 0.0,
-    garchAlpha: 0.08,
-    garchBeta: 0.90,
+    theta: 0.12,              // INTAKE: OU reversion speed
+    sigma: 0.0018,            // INTAKE: OU volatility (ex: URU3)
+    garchAlpha: 0.12,         // INTAKE canônico
+    garchBeta: 0.85,          // INTAKE canônico
     lambdaKyle: 0.0001,
     spread: 0.0005,
-    maxTickChange: 0.02,    // max 2% por tick
+    maxTickChange: 0.0035,    // INTAKE: 0.35% por tick
+    ofiDecay: 0.91,           // INTAKE: decay A_TOP
   },
   A_MID: {
     cluster: 'A_MID',
     baseVolume: 20_000,
     drift: 0.0,
-    garchAlpha: 0.10,
-    garchBeta: 0.88,
+    theta: 0.10,
+    sigma: 0.0022,
+    garchAlpha: 0.12,
+    garchBeta: 0.85,
     lambdaKyle: 0.0002,
     spread: 0.001,
-    maxTickChange: 0.025,
+    maxTickChange: 0.0035,
+    ofiDecay: 0.93,
   },
   A_SMALL: {
     cluster: 'A_SMALL',
     baseVolume: 8_000,
     drift: 0.0,
-    garchAlpha: 0.15,
-    garchBeta: 0.83,
+    theta: 0.08,
+    sigma: 0.0028,
+    garchAlpha: 0.12,
+    garchBeta: 0.85,
     lambdaKyle: 0.0005,
     spread: 0.002,
-    maxTickChange: 0.03,
+    maxTickChange: 0.0035,
+    ofiDecay: 0.95,
   },
   B_LIQUID: {
     cluster: 'B_LIQUID',
     baseVolume: 3_000,
-    drift: -0.0002,          // leve pressão vendedora
-    garchAlpha: 0.20,
-    garchBeta: 0.78,
+    drift: -0.0002,           // leve pressão vendedora
+    theta: 0.06,
+    sigma: 0.0035,
+    garchAlpha: 0.12,
+    garchBeta: 0.85,
     lambdaKyle: 0.001,
     spread: 0.005,
-    maxTickChange: 0.04,
+    maxTickChange: 0.0035,
+    ofiDecay: 0.96,
   },
   B_ILLIQ: {
     cluster: 'B_ILLIQ',
     baseVolume: 500,
-    drift: -0.0005,          // pressão vendedora mais forte
-    garchAlpha: 0.25,
-    garchBeta: 0.73,
+    drift: -0.0005,           // pressão vendedora mais forte
+    theta: 0.04,
+    sigma: 0.0045,
+    garchAlpha: 0.12,
+    garchBeta: 0.85,
     lambdaKyle: 0.003,
     spread: 0.015,
-    maxTickChange: 0.05,    // max 5% por tick (mais volátil)
+    maxTickChange: 0.0035,
+    ofiDecay: 0.97,           // INTAKE: decay B_ILLIQ
   },
 }
 

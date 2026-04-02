@@ -25,6 +25,7 @@ describe('UserRepository', () => {
     investorProfile: null,
     tourCompleted: false,
     favoriteClub: null,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     fsBalance: 10000 as any,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -63,6 +64,7 @@ describe('UserRepository', () => {
   })
 
   test('updateBalance incrementa saldo com operação atômica', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updatedUser = { ...mockUser, fsBalance: 10500 as any }
     ;(prisma.user.update as jest.Mock).mockResolvedValue(updatedUser)
     const result = await userRepository.updateBalance('cuid_test_001', 500)
@@ -74,6 +76,7 @@ describe('UserRepository', () => {
   })
 
   test('updateBalance com delta negativo debita saldo', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updatedUser = { ...mockUser, fsBalance: 9500 as any }
     ;(prisma.user.update as jest.Mock).mockResolvedValue(updatedUser)
     await userRepository.updateBalance('cuid_test_001', -500)

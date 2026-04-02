@@ -187,6 +187,8 @@ model User {
   tourCompleted           Boolean         @default(false)
   ageVerificationPending  Boolean         @default(false)
   adminRole               AdminRole?
+  suspendedAt             DateTime?
+  suspensionReason        String?         @db.VarChar(500)
   version                 Int             @default(0)
   createdAt               DateTime        @default(now())
   updatedAt               DateTime        @updatedAt
@@ -204,6 +206,8 @@ model User {
   affiliateTransactions AffiliateTransaction[] @relation("ReferredUser")
   pushSubscriptions    PushSubscription[]
   adminActions         AdminMarketAction[]
+  leagueMembers        LeagueMember[]
+  glossaryInteractions GlossaryInteraction[]
 
   @@index([email])
   @@index([cpfHash])
@@ -377,6 +381,7 @@ model News {
   ticker         String         @db.VarChar(10)
   sentiment      Decimal        @db.Decimal(4, 3)
   impactCategory ImpactCategory
+  status         String         @default("published") @db.VarChar(20)
   publishedAt    DateTime
   injectedAt     DateTime       @default(now())
   createdAt      DateTime       @default(now())
@@ -384,6 +389,7 @@ model News {
   asset Asset @relation(fields: [ticker], references: [ticker])
 
   @@index([ticker])
+  @@index([status])
   @@index([injectedAt(sort: Desc)])
   @@map("news")
 }
@@ -391,35 +397,53 @@ model News {
 model League {
   id        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name      String         @db.VarChar(60)
+  slug      String         @unique @db.VarChar(80)
   type      LeagueType
   division  LeagueDivision
-  duration  Int
+  duration  String         @db.VarChar(12) // '1S' | '1M' | 'TEMPORADA'
   sponsorId String?        @db.Uuid
+  createdBy String?        @db.Uuid
   startsAt  DateTime
   endsAt    DateTime?
-  status    LeagueStatus   @default(PENDING)
+  status    LeagueStatus   @default(ACTIVE)
   createdAt DateTime       @default(now())
 
   sponsor Sponsor?       @relation(fields: [sponsorId], references: [id])
   members LeagueMember[]
 
+  @@index([type, status])
   @@map("leagues")
 }
 
 model LeagueMember {
-  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  leagueId       String   @db.Uuid
-  userId         String   @db.Uuid
-  score          Decimal  @default(0) @db.Decimal(12, 4)
-  rank           Int      @default(0)
-  scoreBreakdown Json?
-  updatedAt      DateTime @updatedAt
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  leagueId       String    @db.Uuid
+  userId         String    @db.Uuid
+  score          Decimal   @default(0) @db.Decimal(12, 4) // = finalScore
+  rank           Int       @default(0)
+  scoreBreakdown Json?     // ScoreBreakdown completo em JSON
+  joinedAt       DateTime  @default(now())
+  lastScoreAt    DateTime?
+  updatedAt      DateTime  @updatedAt
 
-  league League @relation(fields: [leagueId], references: [id])
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([leagueId, userId])
   @@index([leagueId, score(sort: Desc)])
   @@map("league_members")
+}
+
+model GlossaryInteraction {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @db.Uuid
+  termSlug  String   @db.VarChar(100)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("glossary_interactions")
 }
 
 model ForumPost {
@@ -552,7 +576,7 @@ model AffiliateTransaction {
 model PushSubscription {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId      String   @db.Uuid
-  endpoint    String   @db.VarChar(500)
+  endpoint    String   @unique @db.VarChar(500)
   p256dh      String   @db.VarChar(200)
   auth        String   @db.VarChar(100)
   userAgent   String?  @db.VarChar(255)

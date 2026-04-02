@@ -1,40 +1,46 @@
-name: Deploy Motor (Railway)
+name: Motor Deploy
 
 on:
   push:
     branches: [main]
     paths:
       - 'motor/**'
-      - '.github/workflows/motor-deploy.yml'
-
-env:
-  NODE_VERSION: '22'
+      - 'Dockerfile'
+      - 'docker-compose.yml'
 
 jobs:
-  deploy-motor:
-    name: Deploy Motor para Railway
+  build-and-deploy:
+    name: Build Docker + Deploy Railway
     runs-on: ubuntu-latest
-    environment: production
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.1.0
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: motor/package-lock.json
+          node-version: '22'
 
-      - name: Instalar dependências do Motor
-        working-directory: motor
-        run: npm ci
+      - name: Login no Railway Registry
+        run: echo "${{ secrets.RAILWAY_TOKEN }}" | docker login ${{ secrets.RAILWAY_REGISTRY_URL }} -u _ --password-stdin
 
-      - name: Verificar tipos TypeScript
-        working-directory: motor
-        run: npx tsc --noEmit
+      - name: Build Docker image
+        run: docker build -t ${{ secrets.RAILWAY_REGISTRY_URL }}/foot-stock-motor:${{ github.sha }} -f Dockerfile .
 
-      - name: Deploy no Railway
-        uses: bervProject/railway-deploy@main
-        with:
-          railway_token: ${{ secrets.RAILWAY_TOKEN }}
-          service: motor
+      - name: Push para Railway Registry
+        run: docker push ${{ secrets.RAILWAY_REGISTRY_URL }}/foot-stock-motor:${{ github.sha }}
+
+      - name: Instalar Railway CLI
+        run: npm i -g @railway/cli
+
+      - name: Trigger redeploy Railway
+        run: railway up --service motor --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Deploy summary
+        run: |
+          echo "### Motor deployado no Railway SHA ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY

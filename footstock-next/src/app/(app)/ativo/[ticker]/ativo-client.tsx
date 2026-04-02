@@ -19,18 +19,18 @@ export function AtivoClient({ ticker }: AtivoClientProps) {
         </TabsList>
 
         <TabsContent data-testid="ativo-content-grafico" value="grafico" className="mt-4">
-          <div className="h-48 bg-[#141210] rounded-lg border border-[rgba(201,168,76,.1)] flex items-center justify-center">
+          <div className="h-48 bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.1)] flex items-center justify-center">
             <div className="text-center">
-              <TrendingUp className="h-8 w-8 text-[#4a3d2a] mx-auto mb-2" />
-              <p className="text-sm text-[#7a7060]">Gráfico OHLC</p>
-              <p className="text-xs text-[#4a3d2a] mt-1">Integração com backend pendente</p>
+              <TrendingUp className="h-8 w-8 text-[#707A8A] mx-auto mb-2" />
+              <p className="text-sm text-[#929AA5]">Gráfico OHLC</p>
+              <p className="text-xs text-[#707A8A] mt-1">Integração com backend pendente</p>
             </div>
           </div>
         </TabsContent>
 
         <TabsContent data-testid="ativo-content-ordens" value="ordens" className="mt-4">
           <div id="operar" data-testid="ativo-order-form" className="flex flex-col gap-3">
-            <h2 className="text-base font-semibold text-[#f0ead6]">Nova Ordem</h2>
+            <h2 className="text-base font-semibold text-[#EAECEF]">Nova Ordem</h2>
             <Tabs defaultValue="mercado">
               <TabsList data-testid="ativo-order-type-tabs">
                 <TabsTrigger data-testid="ativo-order-type-mercado" value="mercado">Mercado</TabsTrigger>
@@ -38,18 +38,18 @@ export function AtivoClient({ ticker }: AtivoClientProps) {
                 <TabsTrigger data-testid="ativo-order-type-agendada" value="agendada">Agendada</TabsTrigger>
               </TabsList>
               <TabsContent value="mercado" className="mt-3">
-                <div className="bg-[#141210] rounded-lg border border-[rgba(201,168,76,.1)] p-4 text-center">
-                  <p className="text-sm text-[#7a7060]">Formulário de ordem — backend pendente</p>
+                <div className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.1)] p-4 text-center">
+                  <p className="text-sm text-[#929AA5]">Formulário de ordem — backend pendente</p>
                 </div>
               </TabsContent>
               <TabsContent value="limitada" className="mt-3">
-                <div className="bg-[#141210] rounded-lg border border-[rgba(201,168,76,.1)] p-4 text-center">
-                  <p className="text-sm text-[#7a7060]">Ordem limitada — backend pendente</p>
+                <div className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.1)] p-4 text-center">
+                  <p className="text-sm text-[#929AA5]">Ordem limitada — backend pendente</p>
                 </div>
               </TabsContent>
               <TabsContent value="agendada" className="mt-3">
-                <div className="bg-[#141210] rounded-lg border border-[rgba(201,168,76,.1)] p-4 text-center">
-                  <p className="text-sm text-[#7a7060]">Ordem agendada — backend pendente</p>
+                <div className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.1)] p-4 text-center">
+                  <p className="text-sm text-[#929AA5]">Ordem agendada — backend pendente</p>
                 </div>
               </TabsContent>
             </Tabs>
@@ -57,28 +57,28 @@ export function AtivoClient({ ticker }: AtivoClientProps) {
         </TabsContent>
 
         <TabsContent value="analise" className="mt-4">
-          <div className="bg-[#141210] rounded-lg border border-[rgba(201,168,76,.1)] p-4 text-center">
-            <p className="text-sm text-[#7a7060]">Análise técnica — backend pendente</p>
+          <div className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.1)] p-4 text-center">
+            <p className="text-sm text-[#929AA5]">Análise técnica — backend pendente</p>
           </div>
         </TabsContent>
 
         <TabsContent value="info" className="mt-4">
-          <div className="bg-[#141210] rounded-lg border border-[rgba(201,168,76,.1)] p-4 space-y-2">
-            <div className="flex justify-between py-1.5 border-b border-[rgba(201,168,76,.06)]">
-              <span className="text-xs text-[#7a7060]">Ticker</span>
-              <span className="text-xs font-mono font-bold text-[#f0ead6]">{ticker}</span>
+          <div className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.1)] p-4 space-y-2">
+            <div className="flex justify-between py-1.5 border-b border-[rgba(240,185,11,.06)]">
+              <span className="text-xs text-[#929AA5]">Ticker</span>
+              <span className="text-xs font-mono font-bold text-[#EAECEF]">{ticker}</span>
             </div>
-            <div className="flex justify-between py-1.5 border-b border-[rgba(201,168,76,.06)]">
-              <span className="text-xs text-[#7a7060]">Divisão</span>
-              <span className="text-xs text-[#f0ead6]">Série A</span>
+            <div className="flex justify-between py-1.5 border-b border-[rgba(240,185,11,.06)]">
+              <span className="text-xs text-[#929AA5]">Divisão</span>
+              <span className="text-xs text-[#EAECEF]">Série A</span>
             </div>
-            <div className="flex justify-between py-1.5 border-b border-[rgba(201,168,76,.06)]">
-              <span className="text-xs text-[#7a7060]">Supply total</span>
-              <span className="text-xs font-mono text-[#f0ead6]">10.000 ações</span>
+            <div className="flex justify-between py-1.5 border-b border-[rgba(240,185,11,.06)]">
+              <span className="text-xs text-[#929AA5]">Supply total</span>
+              <span className="text-xs font-mono text-[#EAECEF]">10.000 ações</span>
             </div>
             <div className="flex justify-between py-1.5">
-              <span className="text-xs text-[#7a7060]">Sessão atual</span>
-              <span className="text-xs text-[#8b5cf6]">Negociação</span>
+              <span className="text-xs text-[#929AA5]">Sessão atual</span>
+              <span className="text-xs text-[#2EBD85]">Negociação</span>
             </div>
           </div>
         </TabsContent>

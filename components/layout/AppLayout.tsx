@@ -1,5 +1,6 @@
 import { AppHeader } from './AppHeader'
 import { BottomTabBar } from './BottomTabBar'
+import { DesktopSidebar } from './DesktopSidebar'
 
 /**
  * Layout padrao das telas autenticadas.
@@ -8,12 +9,16 @@ import { BottomTabBar } from './BottomTabBar'
  */
 export function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col min-h-dvh bg-bg-primary">
-      <AppHeader />
-      <main className="flex-1 pb-[calc(56px+env(safe-area-inset-bottom))] md:pb-0">
-        {children}
-      </main>
-      <BottomTabBar />
+    <div className="flex min-h-dvh bg-bg-primary">
+      <DesktopSidebar />
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <AppHeader />
+        <div className="flex-1 pb-[calc(56px+env(safe-area-inset-bottom))] md:pb-0">
+          {children}
+        </div>
+        <BottomTabBar />
+      </div>
     </div>
   )
 }

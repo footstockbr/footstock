@@ -8,10 +8,11 @@
 
 import { useQuery } from '@tanstack/react-query'
 import type { User } from '@/types/models'
+import { queryKeys } from '@/lib/constants/query-keys'
 
 export function useCurrentUser() {
   return useQuery<User | null, Error>({
-    queryKey: ['current-user'],
+    queryKey: queryKeys.currentUser.all,
     queryFn: async () => {
       const res = await fetch('/api/v1/me')
       if (res.status === 401) return null

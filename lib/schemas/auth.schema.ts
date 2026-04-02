@@ -106,7 +106,11 @@ export const registerSchema = z
         }),
       }),
       marketing: z.boolean().default(false),
+      analytics: z.boolean().default(false),
+      thirdParty: z.boolean().default(false),
     }),
+    userType: z.enum(['NORMAL', 'TIME_PARCEIRO', 'INFLUENCIADOR']).default('NORMAL'),
+    referredByCode: z.string().max(50).optional(),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: 'As senhas não conferem.',
@@ -149,6 +153,36 @@ export const resetPasswordSchema = z
     path: ['confirmPassword'],
   });
 
+/** Schema de troca de senha (usuário autenticado) */
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z
+      .string({ required_error: 'Senha atual é obrigatória.' })
+      .min(1, 'Senha atual é obrigatória.'),
+    newPassword: z
+      .string({ required_error: 'Nova senha é obrigatória.' })
+      .min(8, 'Senha deve ter no mínimo 8 caracteres.')
+      .max(128, 'Senha deve ter no máximo 128 caracteres.')
+      .regex(/[A-Z]/, 'Senha deve conter ao menos uma letra maiúscula.')
+      .regex(/[a-z]/, 'Senha deve conter ao menos uma letra minúscula.')
+      .regex(/\d/, 'Senha deve conter ao menos um número.')
+      .regex(
+        /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/,
+        'Senha deve conter ao menos um caractere especial.',
+      ),
+    confirmPassword: z.string({
+      required_error: 'Confirmação de senha é obrigatória.',
+    }),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: 'As senhas não conferem.',
+    path: ['confirmPassword'],
+  })
+  .refine((data) => data.currentPassword !== data.newPassword, {
+    message: 'A nova senha deve ser diferente da senha atual.',
+    path: ['newPassword'],
+  });
+
 // ---------------------------------------------------------------------------
 // Tipos inferidos dos schemas
 // ---------------------------------------------------------------------------
@@ -157,3 +191,32 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
+// ---------------------------------------------------------------------------
+// Step schemas para wizard multi-etapas
+// ---------------------------------------------------------------------------
+
+/** Step 1: Dados pessoais */
+export const step1Schema = registerSchema.innerType().pick({
+  name: true,
+  phone: true,
+  birthDate: true,
+  cpf: true,
+});
+
+/** Step 2: Acesso (email + senha) */
+export const step2Schema = registerSchema
+  .innerType()
+  .pick({
+    email: true,
+    password: true,
+    confirmPassword: true,
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: 'As senhas não conferem.',
+    path: ['confirmPassword'],
+  });
+
+export type Step1Input = z.infer<typeof step1Schema>;
+export type Step2Input = z.infer<typeof step2Schema>;

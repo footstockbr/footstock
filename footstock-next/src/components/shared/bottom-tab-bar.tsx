@@ -38,7 +38,7 @@ function BottomTabBar() {
     <>
       <nav
         data-testid="bottom-tab-bar"
-        className="fixed bottom-0 left-0 right-0 z-[200] h-14 flex items-center bg-[#0f0e0b] border-t border-[rgba(201,168,76,.1)]"
+        className="fixed bottom-0 left-0 right-0 z-[200] h-14 flex items-center bg-[#181A20] border-t border-[rgba(240,185,11,.1)]"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         aria-label="Navegação principal"
       >
@@ -53,7 +53,7 @@ function BottomTabBar() {
               aria-current={isActive ? "page" : undefined}
               className={cn(
                 "flex-1 flex flex-col items-center justify-center gap-0.5 py-2 transition-colors",
-                isActive ? "text-[#c9a84c]" : "text-[#4a3d2a] hover:text-[#7a7060]"
+                isActive ? "text-[#F0B90B]" : "text-[#707A8A] hover:text-[#929AA5]"
               )}
             >
               <Icon className="h-5 w-5" />
@@ -66,7 +66,7 @@ function BottomTabBar() {
         <button
           data-testid="bottom-tab-mais"
           onClick={() => setMoreOpen(true)}
-          className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[#4a3d2a] hover:text-[#7a7060] transition-colors"
+          className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[#707A8A] hover:text-[#929AA5] transition-colors"
           aria-label="Mais opções"
         >
           <MoreHorizontal className="h-5 w-5" />
@@ -83,10 +83,10 @@ function BottomTabBar() {
               href={item.href}
               data-testid={`drawer-mais-item-${item.label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "-")}`}
               onClick={() => setMoreOpen(false)}
-              className="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-[rgba(201,168,76,.06)] transition-colors"
+              className="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-[rgba(240,185,11,.06)] transition-colors"
             >
               <span className="text-xl w-7 text-center">{item.emoji}</span>
-              <span className="text-sm font-medium text-[#f0ead6]">{item.label}</span>
+              <span className="text-sm font-medium text-[#EAECEF]">{item.label}</span>
             </Link>
           ))}
         </nav>

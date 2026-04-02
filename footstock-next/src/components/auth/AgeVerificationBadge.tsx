@@ -21,7 +21,7 @@ export function AgeVerificationBadge({
       <div
         className={cn(
           'inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full',
-          'bg-[rgba(34,197,94,.12)] text-[#22c55e] border border-[rgba(34,197,94,.25)]',
+          'bg-[rgba(34,197,94,.12)] text-[#2EBD85] border border-[rgba(34,197,94,.25)]',
           className
         )}
         title="Maioridade verificada via FlagCheck (ECA Digital)"
@@ -37,7 +37,7 @@ export function AgeVerificationBadge({
       <div
         className={cn(
           'inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full',
-          'bg-[rgba(201,168,76,.1)] text-[#c9a84c] border border-[rgba(201,168,76,.25)]',
+          'bg-[rgba(240,185,11,.1)] text-[#F0B90B] border border-[rgba(240,185,11,.25)]',
           className
         )}
         title="Verificação de maioridade pendente"

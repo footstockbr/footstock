@@ -8,9 +8,15 @@ jest.mock('@/lib/prisma', () => ({
       count: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      findUniqueOrThrow: jest.fn(),
     },
     $transaction: jest.fn(),
   },
+}))
+
+jest.mock('@/lib/contracts/order-contract', () => ({
+  validateTransition: jest.fn(), // allow all transitions in tests
+  canTransition: jest.fn().mockReturnValue(true),
 }))
 
 const mockPrisma = prisma as jest.Mocked<typeof prisma>
@@ -35,7 +41,8 @@ describe('OrderRepository', () => {
   beforeEach(() => jest.clearAllMocks())
 
   test('findOpenByAsset retorna ordens abertas de um ativo', async () => {
-    mockPrisma.order.findMany.mockResolvedValue([mockOrder] as any)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(mockPrisma.order.findMany as jest.Mock).mockResolvedValue([mockOrder] as any)
     const result = await orderRepository.findOpenByAsset('asset_001')
     expect(result).toHaveLength(1)
     expect(mockPrisma.order.findMany).toHaveBeenCalledWith({
@@ -45,7 +52,7 @@ describe('OrderRepository', () => {
   })
 
   test('findOpenByAsset retorna array vazio quando não há ordens', async () => {
-    mockPrisma.order.findMany.mockResolvedValue([])
+    ;(mockPrisma.order.findMany as jest.Mock).mockResolvedValue([])
     const result = await orderRepository.findOpenByAsset('asset_inexistente')
     expect(result).toEqual([])
   })
@@ -73,20 +80,25 @@ describe('OrderRepository', () => {
   })
 
   test('create retorna ordem criada', async () => {
-    mockPrisma.order.create.mockResolvedValue(mockOrder as any)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(mockPrisma.order.create as jest.Mock).mockResolvedValue(mockOrder as any)
     const result = await orderRepository.create({
       user: { connect: { id: 'user_001' } },
       asset: { connect: { id: 'asset_001' } },
       type: 'MARKET',
       side: 'BUY',
       quantity: 100,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
     expect(result.id).toBe('order_001')
   })
 
   test('updateStatus atualiza status da ordem', async () => {
     const filledOrder = { ...mockOrder, status: 'FILLED', executedPrice: 25.5 }
-    mockPrisma.order.update.mockResolvedValue(filledOrder as any)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(mockPrisma.order.findUniqueOrThrow as unknown as jest.Mock).mockResolvedValue(mockOrder)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(mockPrisma.order.update as jest.Mock).mockResolvedValue(filledOrder as any)
     const result = await orderRepository.updateStatus('order_001', 'FILLED', 25.5)
     expect(result.status).toBe('FILLED')
     expect(mockPrisma.order.update).toHaveBeenCalledWith({
@@ -97,7 +109,10 @@ describe('OrderRepository', () => {
 
   test('updateStatus sem executedPrice não inclui o campo', async () => {
     const cancelledOrder = { ...mockOrder, status: 'CANCELLED' }
-    mockPrisma.order.update.mockResolvedValue(cancelledOrder as any)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(mockPrisma.order.findUniqueOrThrow as unknown as jest.Mock).mockResolvedValue(mockOrder)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(mockPrisma.order.update as jest.Mock).mockResolvedValue(cancelledOrder as any)
     await orderRepository.updateStatus('order_001', 'CANCELLED')
     expect(mockPrisma.order.update).toHaveBeenCalledWith({
       where: { id: 'order_001' },

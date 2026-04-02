@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ROUTES } from '@/lib/constants/routes'
 import { getSession } from '@/lib/auth/session'
-import { LoadingSpinner } from '@/components/feedback/LoadingSpinner'
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 
 export interface AuthGuardProps {
   children: React.ReactNode

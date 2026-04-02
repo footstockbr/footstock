@@ -29,8 +29,8 @@ export function SubscriptionManage() {
           role="alert"
           className={`fixed bottom-24 left-4 right-4 z-50 p-3 rounded-lg text-sm ${
             toast.type === "success"
-              ? "bg-[rgba(34,197,94,.15)] border border-[rgba(34,197,94,.3)] text-[#22c55e]"
-              : "bg-[rgba(239,68,68,.15)] border border-[rgba(239,68,68,.3)] text-[#ef4444]"
+              ? "bg-[rgba(34,197,94,.15)] border border-[rgba(34,197,94,.3)] text-[#2EBD85]"
+              : "bg-[rgba(239,68,68,.15)] border border-[rgba(239,68,68,.3)] text-[#F6465D]"
           }`}
         >
           {toast.msg}
@@ -49,7 +49,7 @@ export function SubscriptionManage() {
         variant="ghost"
         size="sm"
         onClick={() => setIsOpen(true)}
-        className="text-[#ef4444] hover:text-[#ef4444]"
+        className="text-[#F6465D] hover:text-[#F6465D]"
         data-testid="subscription-cancel-btn"
       >
         Cancelar
@@ -63,7 +63,7 @@ export function SubscriptionManage() {
         size="sm"
       >
         <div className="flex flex-col gap-3">
-          <p className="text-sm text-[#7a7060]">
+          <p className="text-sm text-[#929AA5]">
             Tem certeza? Você pode reativar a qualquer momento.
           </p>
           <div className="flex gap-2">

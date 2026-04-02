@@ -28,7 +28,7 @@ const adminActionSchema = z.discriminatedUnion('type', [
     assetId: z.string().cuid(),
     reason: z.string().min(10).max(500),
     payload: z.object({
-      impact: z.enum(['POSITIVE', 'NEGATIVE', 'NEUTRAL']),
+      impact: z.enum(['FINANCEIRA_CRITICA', 'ESPORTIVA_MAJORITARIA', 'MERCADO_ATIVOS', 'INTEGRIDADE_SAUDE', 'INSTITUCIONAL', 'ESPORTIVA_MENOR']),
       magnitude: z.number().min(0.1).max(1.0),
       durationTicks: z.number().int().min(1).max(150),
     }),
@@ -145,5 +145,5 @@ async function getHandler(_req: NextRequest, _ctx: AuthContext): Promise<NextRes
   }
 }
 
-export const POST = withAdmin('market_actions')(postHandler)
-export const GET = withAdmin('market_view')(getHandler)
+export const POST = withAdmin('motor:control')(postHandler)
+export const GET = withAdmin('motor:read')(getHandler)

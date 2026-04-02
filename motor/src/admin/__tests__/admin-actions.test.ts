@@ -1,3 +1,6 @@
+/**
+ * @jest-environment node
+ */
 import { AdminMarketActions } from '../AdminMarketActions'
 import type { AdminAction } from '../../types/motor.types'
 
@@ -152,10 +155,15 @@ describe('AdminMarketActions', () => {
       timestamp: Date.now(),
     }
 
+    // findUnique retorna null → previousPrice = undefined
+    mockPrisma.asset.findUnique.mockResolvedValue(null)
+    mockPrisma.asset.update.mockResolvedValue({})
+
     const result = await actions.handle(action)
     expect(result.success).toBe(true)
     expect(mockEngine.adjustPrice).toHaveBeenCalledWith('asset_001', 35.00)
-    expect(mockLogger.log).toHaveBeenCalledWith(action)
+    // log é chamado com (action, previousPrice, newPrice)
+    expect(mockLogger.log).toHaveBeenCalledWith(action, undefined, 35)
   })
 
   test('ADJUST_PRICE sem assetId retorna erro', async () => {

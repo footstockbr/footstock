@@ -11,17 +11,17 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary:
-          "bg-[#c9a84c] text-[#080808] hover:bg-[#d4b466] shadow-[0_8px_32px_rgba(201,168,76,.3)]",
+          "bg-[#F0B90B] text-[#0B0E11] hover:bg-[#FCD535] shadow-[0_8px_32px_rgba(240,185,11,.3)]",
         secondary:
-          "bg-[#161d28] text-[#f0ead6] border border-[rgba(201,168,76,.18)] hover:border-[rgba(201,168,76,.4)]",
+          "bg-[#202630] text-[#EAECEF] border border-[rgba(240,185,11,.18)] hover:border-[rgba(240,185,11,.4)]",
         ghost:
-          "bg-transparent text-[#7a7060] hover:bg-[#0f0e0b] hover:text-[#f0ead6]",
+          "bg-transparent text-[#929AA5] hover:bg-[#181A20] hover:text-[#EAECEF]",
         destructive:
-          "bg-[#ef4444] text-white hover:opacity-90",
+          "bg-[#F6465D] text-white hover:opacity-90",
         plan:
-          "bg-[#c9a84c] text-[#080808] hover:bg-[#f6ab22] font-semibold",
+          "bg-[#F0B90B] text-[#0B0E11] hover:bg-[#f6ab22] font-semibold",
         outline:
-          "border border-[rgba(201,168,76,.25)] text-[#c9a84c] hover:bg-[rgba(201,168,76,.08)]",
+          "border border-[rgba(240,185,11,.25)] text-[#F0B90B] hover:bg-[rgba(240,185,11,.08)]",
       },
       size: {
         sm: "h-8 px-3 text-sm rounded-md",
@@ -68,11 +68,15 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         className={cn(buttonVariants({ variant, size, fullWidth, className }))}
         ref={ref}
         disabled={disabled || isLoading}
+        aria-disabled={disabled || isLoading}
         aria-busy={isLoading}
         {...props}
       >
         {isLoading ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            <span className="sr-only">Carregando...</span>
+          </>
         ) : (
           children
         )}

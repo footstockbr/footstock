@@ -127,7 +127,7 @@ export default function OnboardingPage() {
         {errorMsg && (
           <div
             role="alert"
-            className="mb-4 p-3 rounded-lg bg-[rgba(239,68,68,.1)] border border-[rgba(239,68,68,.3)] text-sm text-[#ef4444]"
+            className="mb-4 p-3 rounded-lg bg-[rgba(239,68,68,.1)] border border-[rgba(239,68,68,.3)] text-sm text-[#F6465D]"
           >
             {errorMsg}
             <button

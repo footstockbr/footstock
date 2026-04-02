@@ -29,11 +29,11 @@ function EmptyState({
       )}
     >
       {icon && (
-        <div className="text-4xl text-[#4a3d2a] mb-1">{icon}</div>
+        <div className="text-4xl text-[#707A8A] mb-1">{icon}</div>
       )}
-      <p className="text-base font-medium text-[#f0ead6]">{title}</p>
+      <p className="text-base font-medium text-[#EAECEF]">{title}</p>
       {description && (
-        <p className="text-sm text-[#7a7060] max-w-xs">{description}</p>
+        <p className="text-sm text-[#929AA5] max-w-xs">{description}</p>
       )}
       {action && (
         <Button

@@ -7,11 +7,11 @@ export enum MarketSession {
 }
 
 export const SESSION_COLORS: Record<MarketSession, string> = {
-  [MarketSession.PRE_ABERTURA]: "#c9a84c",
-  [MarketSession.NEGOCIACAO]: "#8b5cf6",
-  [MarketSession.CALL]: "#06b6d4",
-  [MarketSession.AFTER_MARKET]: "#7c3aed",
-  [MarketSession.FECHADO]: "#6b7280",
+  [MarketSession.PRE_ABERTURA]: "#F0B90B",
+  [MarketSession.NEGOCIACAO]: "#2EBD85",
+  [MarketSession.CALL]: "#929AA5",
+  [MarketSession.AFTER_MARKET]: "#707A8A",
+  [MarketSession.FECHADO]: "#F6465D",
 };
 
 export const SESSION_LABELS: Record<MarketSession, string> = {

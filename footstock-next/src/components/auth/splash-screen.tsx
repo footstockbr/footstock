@@ -31,7 +31,7 @@ function SplashScreen({ onComplete }: SplashScreenProps) {
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[#080808]"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B0E11]"
       role="status"
       aria-label="Carregando Foot Stock"
       style={{
@@ -56,7 +56,7 @@ description: Logo principal do Foot Stock para a splash screen. Bola de futebol 
 context: Tela de splash (carregamento inicial do app)
 style: Premium, minimalista, ouro sobre preto
 mood: Confiante, premium, esportivo-financeiro
-colors: #C9A84C (ouro) como cor principal
+colors: #F0B90B (ouro) como cor principal
 elements: Bola de futebol + gráfico estilizado de trading
 avoid: Texto, cores frias, complexidade excessiva
         */}
@@ -68,10 +68,10 @@ avoid: Texto, cores frias, complexidade excessiva
           className="w-20 h-20 object-contain"
         />
         <div className="flex flex-col items-center gap-1">
-          <h1 className="text-2xl font-bold text-[#f0ead6] tracking-tight">
+          <h1 className="text-2xl font-bold text-[#EAECEF] tracking-tight">
             Foot Stock
           </h1>
-          <p className="text-sm text-[#4a3d2a]">O mercado do futebol</p>
+          <p className="text-sm text-[#707A8A]">O mercado do futebol</p>
         </div>
 
         {/* Loading dots */}
@@ -79,7 +79,7 @@ avoid: Texto, cores frias, complexidade excessiva
           {[0, 0.2, 0.4].map((delay, i) => (
             <span
               key={i}
-              className="w-1.5 h-1.5 rounded-full bg-[#c9a84c]"
+              className="w-1.5 h-1.5 rounded-full bg-[#F0B90B]"
               style={{
                 animation: `pulse-dot 1s ease-in-out infinite`,
                 animationDelay: `${delay}s`,

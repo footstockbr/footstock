@@ -2,25 +2,30 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Bell } from "lucide-react";
+import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
 import { SessionIndicator } from "@/components/market/session-indicator";
 import { ROUTES } from "@/lib/constants/routes";
 
+// Dynamic import — evita SSR issues com Supabase hooks + React Query
+const NotificationBell = dynamic(
+  () => import("@/components/notifications/NotificationBell").then((m) => ({ default: m.NotificationBell })),
+  {
+    ssr: false,
+    loading: () => <div className="w-[44px] h-[44px]" aria-hidden="true" />,
+  }
+)
+
 interface AppHeaderProps {
-  notificationCount?: number;
   className?: string;
 }
 
-function AppHeader({
-  notificationCount = 0,
-  className,
-}: AppHeaderProps) {
+function AppHeader({ className }: AppHeaderProps) {
   return (
     <header
       data-testid="header"
       className={cn(
-        "sticky top-0 z-[200] h-14 flex items-center justify-between px-4 border-b border-[rgba(201,168,76,.1)]",
+        "sticky top-0 z-[200] h-14 flex items-center justify-between px-4 border-b border-[rgba(240,185,11,.1)]",
         "bg-[rgba(15,14,11,0.92)] backdrop-blur-md",
         className
       )}
@@ -37,7 +42,7 @@ description: Logo símbolo do Foot Stock. Bola de futebol estilizada com element
 context: Header do app, ícone de navegação
 style: Minimalista, linhas finas, dourado sobre preto
 mood: Premium, esportivo, financeiro
-colors: primary (#C9A84C), background transparente
+colors: primary (#F0B90B), background transparente
 elements: Bola de futebol + elemento gráfico financeiro
 avoid: Texto, complexidade excessiva, gradientes ruidosos
         */}
@@ -48,27 +53,17 @@ avoid: Texto, complexidade excessiva, gradientes ruidosos
           height={32}
           className="w-8 h-8 object-contain"
         />
-        <span className="text-base font-bold text-[#f0ead6] tracking-tight hidden sm:block">
+        <span className="text-base font-bold text-[#EAECEF] tracking-tight hidden sm:block">
           Foot Stock
         </span>
       </Link>
 
       {/* Right actions */}
-      <div data-testid="header-actions" className="flex items-center gap-3">
+      <div data-testid="header-actions" className="flex items-center gap-2">
         {/* Mobile (≤640px): compact — só dot. Desktop: label + countdown */}
         <SessionIndicator compact className="sm:hidden" />
         <SessionIndicator className="hidden sm:flex" />
-        <Link
-          data-testid="header-notification-button"
-          href={ROUTES.INBOX}
-          className="relative p-2 rounded-md text-[#7a7060] hover:text-[#f0ead6] hover:bg-[#0f0e0b] transition-colors"
-          aria-label={`Notificações${notificationCount > 0 ? ` — ${notificationCount} novas` : ""}`}
-        >
-          <Bell className="h-5 w-5" />
-          {notificationCount > 0 && (
-            <span className="absolute top-1 right-1 w-2 h-2 bg-[#c9a84c] rounded-full" />
-          )}
-        </Link>
+        <NotificationBell />
       </div>
     </header>
   );

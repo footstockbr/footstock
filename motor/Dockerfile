@@ -1,3 +1,6 @@
+# DEPRECATED: Use o Dockerfile na raiz do projeto para builds de producao.
+# Este arquivo e legado e nao esta alinhado com as specs do module-26-devops.
+# O Dockerfile da raiz tem 3 stages, usuario nao-root e HEALTHCHECK.
 FROM node:22-alpine AS builder
 WORKDIR /app
 COPY package*.json ./

@@ -24,12 +24,20 @@ export interface MotorControlEvent {
 
 // ─── news:inject ─────────────────────────────────────────────────────────
 
+export type ImpactCategoryType =
+  | 'FINANCEIRA_CRITICA'
+  | 'ESPORTIVA_MAJORITARIA'
+  | 'MERCADO_ATIVOS'
+  | 'INTEGRIDADE_SAUDE'
+  | 'INSTITUCIONAL'
+  | 'ESPORTIVA_MENOR'
+
 export interface NewsInjectEvent {
   type: 'NEWS'
   assetId: string
-  impact: 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL'
-  magnitude: number        // 0.0 a 1.0
-  durationTicks: number    // Quantos ticks o efeito persiste
+  impact: ImpactCategoryType
+  magnitude: number        // derivado de IMPACT_MAGNITUDE
+  durationTicks: number
 }
 
 // ─── Union types para serialização Redis ─────────────────────────────────

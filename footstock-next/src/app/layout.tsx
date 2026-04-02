@@ -41,8 +41,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  userScalable: false,
-  themeColor: "#080808",
+  themeColor: "#0B0E11",
 };
 
 export default function RootLayout({
@@ -53,11 +52,11 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
-      suppressHydrationWarning
+      suppressHydrationWarning /* extensões de browser (Grammarly, 1Password) injetam atributos no <html> */
       style={{ colorScheme: "dark" }}
       className={`${inter.variable} ${playfair.variable} ${jetbrains.variable}`}
     >
-      <body className="min-h-dvh bg-[#080808] text-[#f0ead6] antialiased">
+      <body className="min-h-dvh bg-[#0B0E11] text-[#EAECEF] antialiased">
         <QueryProvider>
           {children}
           {process.env.NODE_ENV === "development" && <DevOverlayProvider />}
@@ -66,9 +65,9 @@ export default function RootLayout({
             position="bottom-right"
             toastOptions={{
               style: {
-                background: "#141210",
-                border: "1px solid rgba(201,168,76,.18)",
-                color: "#f0ead6",
+                background: "#1E2329",
+                border: "1px solid rgba(240,185,11,.18)",
+                color: "#EAECEF",
                 fontSize: "14px",
               },
             }}

@@ -22,19 +22,19 @@ export default function ClubPortalPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 pt-6 pb-8">
       {/* Club header */}
-      <div className="flex items-center gap-4 bg-[#141210] rounded-xl border border-[rgba(201,168,76,.18)] p-5 mb-6">
-        <div className="w-14 h-14 rounded-full bg-[rgba(201,168,76,.15)] flex items-center justify-center">
-          <Trophy className="h-7 w-7 text-[#c9a84c]" />
+      <div className="flex items-center gap-4 bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.18)] p-5 mb-6">
+        <div className="w-14 h-14 rounded-full bg-[rgba(240,185,11,.15)] flex items-center justify-center">
+          <Trophy className="h-7 w-7 text-[#F0B90B]" />
         </div>
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-lg font-bold text-[#f0ead6]">Flamengo</h1>
+            <h1 className="text-lg font-bold text-[#EAECEF]">Flamengo</h1>
             <Badge variant="craque" size="xs">FLAM4</Badge>
           </div>
-          <p className="text-sm text-[#7a7060]">Portal Oficial do Clube</p>
+          <p className="text-sm text-[#929AA5]">Portal Oficial do Clube</p>
         </div>
         <div className="text-right">
-          <p className="text-xl font-bold font-mono text-[#f0ead6]">FS$ 87,40</p>
+          <p className="text-xl font-bold font-mono text-[#EAECEF]">FS$ 87,40</p>
           <p className="text-sm font-mono text-[#4ade80]">+3,2%</p>
         </div>
       </div>
@@ -54,14 +54,14 @@ export default function ClubPortalPage() {
             <Link
               key={item.label}
               href={item.href}
-              className="flex items-center gap-4 p-4 rounded-xl bg-[#141210] border border-[rgba(201,168,76,.1)] hover:border-[rgba(201,168,76,.25)] hover:bg-[rgba(201,168,76,.04)] transition-all"
+              className="flex items-center gap-4 p-4 rounded-xl bg-[#1E2329] border border-[rgba(240,185,11,.1)] hover:border-[rgba(240,185,11,.25)] hover:bg-[rgba(240,185,11,.04)] transition-all"
             >
-              <div className="w-9 h-9 rounded-lg bg-[rgba(201,168,76,.1)] flex items-center justify-center flex-shrink-0">
-                <Icon className="h-4.5 w-4.5 text-[#c9a84c]" />
+              <div className="w-9 h-9 rounded-lg bg-[rgba(240,185,11,.1)] flex items-center justify-center flex-shrink-0">
+                <Icon className="h-4.5 w-4.5 text-[#F0B90B]" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-semibold text-[#f0ead6]">{item.label}</p>
-                <p className="text-xs text-[#7a7060]">{item.description}</p>
+                <p className="text-sm font-semibold text-[#EAECEF]">{item.label}</p>
+                <p className="text-xs text-[#929AA5]">{item.description}</p>
               </div>
             </Link>
           );
@@ -69,7 +69,7 @@ export default function ClubPortalPage() {
       </div>
 
       <div className="mt-6 text-center">
-        <Link href={ROUTES.MERCADO} className="text-xs text-[#7a7060] hover:text-[#c9a84c] transition-colors">
+        <Link href={ROUTES.MERCADO} className="text-xs text-[#929AA5] hover:text-[#F0B90B] transition-colors">
           ← Voltar ao mercado
         </Link>
       </div>

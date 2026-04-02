@@ -1,3 +1,6 @@
+/**
+ * @jest-environment node
+ */
 import axios from 'axios'
 
 // Mock axios e supabase ANTES do import
@@ -59,6 +62,7 @@ describe('API Client', () => {
   test('axios.create e chamado com configuracao correta', () => {
     // Re-import para trigger o modulo
     jest.isolateModules(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('../client')
     })
     expect(axios.create).toHaveBeenCalledWith(
@@ -73,6 +77,7 @@ describe('API Client', () => {
 
   test('interceptors de request e response sao registrados', () => {
     jest.isolateModules(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('../client')
     })
     const instance = (axios.create as jest.Mock).mock.results[0]?.value
@@ -86,6 +91,7 @@ describe('API Client', () => {
 describe('API Client helpers', () => {
   test('modulo exporta funcoes tipadas', () => {
     jest.isolateModules(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const client = require('../client')
       expect(typeof client.apiGet).toBe('function')
       expect(typeof client.apiPost).toBe('function')

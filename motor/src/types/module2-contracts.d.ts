@@ -15,8 +15,8 @@ export type { SessionType } from './motor.types'
 /**
  * Mapa de cores por SessionType (hex).
  * Owner: module-2/TASK-1 — lib/constants/market.ts (SESSION_COLORS)
- * Valores: PRE_ABERTURA=#c9a84c, NEGOCIACAO=#8b5cf6, CALL=#06b6d4,
- *          AFTER_MARKET=#7c3aed, FECHADO=#ef4444
+ * Valores: PRE_ABERTURA=#f5a623, NEGOCIACAO=#6c63ff, CALL=#38bdf8,
+ *          AFTER_MARKET=#8b5cf6, FECHADO=#f43f5e
  * No motor: cores não são consumidas diretamente — apenas SessionType e volatilityMultiplier
  */
 // SESSION_COLORS não é importada no motor (uso exclusivo no Next.js)

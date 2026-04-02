@@ -6,10 +6,20 @@ motor/node_modules/
 .next/
 out/
 
-# Environment
+# Environment — TUDO que contém credenciais deve ser ignorado
 .env
-.env*.local
+.env.local
+.env.*.local
+.env.development
+.env.staging
+.env.production
+.env.docker
+.env.deploy
+.env.test
+.mcp.json
 !.env.example
+!.env.docker.example
+!.env.*.example
 
 # Build
 dist/
@@ -39,3 +49,27 @@ coverage/
 
 # Credenciais de desenvolvimento
 DEV-CREDENTIALS.md
+
+# MCP Sync
+.env.deploy
+.mcp.json
+
+# Certificados e chaves
+*.pem
+*.key
+*.cert
+*.p12
+*.pfx
+
+# Arquivos sensíveis de serviços
+.railway/
+serviceAccountKey.json
+firebase-adminsdk-*.json
+
+
+# Stryker mutation test sandboxes (contêm cópias de .env com credenciais)
+.stryker-tmp/
+
+# Load test results (gerados em runtime — não versionar)
+tests/load/results/*.json
+tests/load/results/*.html

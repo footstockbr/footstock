@@ -59,6 +59,15 @@ export const INVESTOR_PROFILE_LABELS: Record<InvestorProfile, string> = {
   FA: 'Analista Fundamentalista',
 } as const;
 
+/** Labels dos roles administrativos */
+export const ADMIN_ROLE_LABELS = {
+  SUPER_ADMIN: 'SuperAdmin',
+  ADMINISTRADOR: 'Administrador',
+  MONITOR: 'Monitor',
+  EDITOR: 'Editor',
+  MODERADOR: 'Moderador',
+} as const;
+
 /** Labels de navegação principal */
 export const NAV_LABELS = {
   HOME: 'Início',

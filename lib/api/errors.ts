@@ -43,10 +43,20 @@ export function handleApiError(error: unknown): ErrorResponse {
     }
   }
 
+  // Prisma P2025 (record not found) → POS_080 (Posição não encontrada)
   if (error instanceof Error) {
+    const message = error.message || ''
+    if (message.includes('P2025')) {
+      return {
+        code: ERROR_CODES.POS_080,
+        message: ERROR_MESSAGES['POS-080'],
+      }
+    }
+
+    // Default: SYS_001
     return {
       code: ERROR_CODES.SYS_001,
-      message: error.message || ERROR_MESSAGES['SYS-001'],
+      message: message || ERROR_MESSAGES['SYS-001'],
     }
   }
 

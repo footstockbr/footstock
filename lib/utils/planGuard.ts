@@ -2,16 +2,10 @@
 // Foot Stock — Guard de acesso por plano de assinatura
 // ============================================================================
 
-import { PLAN_TYPE } from '@/lib/enums'
+import { PLAN_TYPE, PLAN_HIERARCHY } from '@/lib/enums'
 import type { PlanType } from '@/lib/enums'
-import { ORDER_LIMITS_BY_PLAN } from '@/lib/constants/limits'
+import { DAILY_ORDER_LIMITS_BY_PLAN } from '@/lib/services/plan-order-limits'
 import type { User } from '@/types/models'
-
-const PLAN_HIERARCHY: Record<PlanType, number> = {
-  JOGADOR: 0,
-  CRAQUE: 1,
-  LENDA: 2,
-}
 
 /** Erro lancado quando o usuario tenta acessar recurso acima do seu plano */
 export class PlanUpgradeError extends Error {
@@ -60,5 +54,7 @@ export function getUpgradePlan(currentPlan: PlanType): PlanType | null {
  * @returns true se AINDA pode criar ordens, false se atingiu o limite
  */
 export function checkDailyOrderLimit(userPlan: PlanType, currentDayOrders: number): boolean {
-  return currentDayOrders < ORDER_LIMITS_BY_PLAN[userPlan]
+  const dailyLimit = DAILY_ORDER_LIMITS_BY_PLAN[userPlan]
+  if (dailyLimit === Infinity) return true
+  return currentDayOrders < dailyLimit
 }

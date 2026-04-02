@@ -1,0 +1,55 @@
+// ============================================================================
+// Foot Stock Motor — Estado (UF) por Ticker
+// Usado para correlação regional inter-ativos (mesmo estado = rho bonus).
+// INTAKE: clubes do mesmo estado recebem rho adicional de 0.10.
+// ============================================================================
+
+/**
+ * Mapa de UF por ticker canônico do INTAKE.
+ * Baseado nos clubes fictícios e seus correspondentes regionais reais.
+ */
+export const CLUB_STATE_BY_TICKER: Record<string, string> = {
+  // Série A
+  URU3: 'RJ',  // Urubu da Gavea (Flamengo-like)
+  POR4: 'SP',  // Porco do Parque (Palmeiras-like)
+  TIM3: 'SP',  // Timao do Sao Jorge (Corinthians-like)
+  TRI4: 'SP',  // Tricolor do Morumbi (São Paulo-like)
+  GAL3: 'MG',  // Galo da Lagoinha (Atlético MG-like)
+  FOG3: 'RJ',  // Estrela do General Severiano (Botafogo-like)
+  COL3: 'RS',  // Colorado do Beira-Rio (Internacional-like)
+  IMO3: 'RS',  // Imortal da Arena (Grêmio-like)
+  RAP3: 'MG',  // Raposa do Mineirao (Cruzeiro-like)
+  MAL4: 'RJ',  // Cruz de Malta de Sao Januario (Vasco-like)
+  TRI3: 'BA',  // Tricolor da Fonte Nova (Bahia-like)
+  GUE4: 'RJ',  // Guerreiro das Laranjeiras (Fluminense-like)
+  TOR3: 'SP',  // Touro do Nabi (Red Bull Bragantino-like)
+  LEM3: 'SP',  // Leaozinho do Maiao (Mirassol-like)
+  BAL4: 'SP',  // Baleia da Vila Belmiro (Santos-like)
+  FUR3: 'PR',  // Furacao do Capao da Imbuia (Athletico PR-like)
+  VOA4: 'PR',  // Vovo Alemao do Couto (Coritiba-like)
+  CON3: 'SC',  // Conda da Arena Verde (Chapecoense-like)
+  LEA3: 'PA',  // Leao Azul do Baenao (Remo-like)
+  LEB3: 'BA',  // Leao da Barra (Vitória-like)
+
+  // Série B
+  COE3: 'MG',  // Coelho do Calafate (América MG-like)
+  CAV4: 'MG',  // Cavalo de Tiradentes (Tombense-like)
+  DRA3: 'GO',  // Dragao do Cerradao (Atlético GO-like)
+  LEI4: 'SC',  // Leao da Ilha (Avaí-like)
+  PAN3: 'SP',  // Pantera da Mogiana (Botafogo SP-like)
+  VOZ3: 'CE',  // Vovo do Castelao (Ceará-like)
+  GAP3: 'AL',  // Galo da Pajucara (CRB-like)
+  TIG4: 'SC',  // Tigre do Heriberto (Joinville-like)
+  DOU4: 'MT',  // Dourado do Pantanal (Cuiabá-like)
+  LEP4: 'CE',  // Leao do Pici (Fortaleza-like)
+  PER3: 'GO',  // Periquito da Serrinha (Goiás-like)
+  IND4: 'RS',  // Indio da Serra Gaucha (Juventude-like)
+  TUB3: 'SP',  // Tubarao do Cafe (Guarani-like)
+  NAF3: 'PE',  // Timbu dos Aflitos (Náutico-like)
+  TIV3: 'SC',  // Tigre do Vale do Peixe (Joinville/Criciúma-like)
+  FAS3: 'PR',  // Fantasma dos Campos Gerais (Operário PR-like)
+  MAC4: 'SP',  // Macaca do Majestoso (Ponte Preta-like)
+  ABT4: 'SP',  // Tigre do Grande ABC (São Bernardo-like)
+  LEI3: 'PE',  // Leao da Ilha do Retiro (Sport-like)
+  TIS3: 'GO',  // Tigre da Serra Dourada (Vila Nova-like)
+}

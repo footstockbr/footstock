@@ -25,10 +25,20 @@ function Modal({
   className,
 }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
+
+  // Captura o trigger antes de abrir
+  useEffect(() => {
+    if (isOpen) {
+      triggerRef.current = document.activeElement as HTMLElement;
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
+      dialogRef.current?.focus();
     } else {
       document.body.style.overflow = "";
     }
@@ -37,12 +47,36 @@ function Modal({
     };
   }, [isOpen]);
 
+  // Escape + focus trap + retorno de foco
   useEffect(() => {
+    if (!isOpen) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen) onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key === "Tab" && dialogRef.current) {
+        const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last?.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first?.focus();
+        }
+      }
     };
+
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      triggerRef.current?.focus();
+    };
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
@@ -63,8 +97,10 @@ function Modal({
       }}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         className={cn(
-          "w-full bg-[#141210] rounded-xl border border-[rgba(201,168,76,.18)] shadow-lg animate-fade-in",
+          "w-full bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.18)] shadow-lg animate-fade-in focus:outline-none",
           sizeClasses[size],
           className
         )}
@@ -73,13 +109,13 @@ function Modal({
         aria-labelledby={title ? "modal-title" : undefined}
       >
         {title && (
-          <div className="flex items-center justify-between px-5 py-4 border-b border-[rgba(201,168,76,.1)]">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[rgba(240,185,11,.1)]">
             <div>
-              <h2 id="modal-title" className="text-base font-semibold text-[#f0ead6]">
+              <h2 id="modal-title" className="text-base font-semibold text-[#EAECEF]">
                 {title}
               </h2>
               {description && (
-                <p className="text-sm text-[#7a7060] mt-0.5">{description}</p>
+                <p className="text-sm text-[#929AA5] mt-0.5">{description}</p>
               )}
             </div>
             <Button

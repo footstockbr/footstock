@@ -37,21 +37,21 @@ export function ComunidadeClient() {
           {MOCK_POSTS.map((post) => (
             <div
               key={post.id}
-              className="bg-[#141210] rounded-lg border border-[rgba(201,168,76,.18)] p-4"
+              className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.18)] p-4"
             >
               <div className="flex items-center gap-2 mb-2">
                 <Avatar name={post.author} size="sm" />
                 <div>
-                  <p className="text-sm font-medium text-[#f0ead6]">{post.author}</p>
-                  <p className="text-[10px] text-[#4a3d2a]">{post.time}</p>
+                  <p className="text-sm font-medium text-[#EAECEF]">{post.author}</p>
+                  <p className="text-[10px] text-[#707A8A]">{post.time}</p>
                 </div>
               </div>
-              <p className="text-sm text-[#7a7060] leading-relaxed">{post.content}</p>
+              <p className="text-sm text-[#929AA5] leading-relaxed">{post.content}</p>
               <div className="flex items-center gap-4 mt-3">
-                <button className="flex items-center gap-1 text-xs text-[#7a7060] hover:text-[#c9a84c] transition-colors">
+                <button className="flex items-center gap-1 text-xs text-[#929AA5] hover:text-[#F0B90B] transition-colors">
                   ❤️ {post.likes}
                 </button>
-                <button className="flex items-center gap-1 text-xs text-[#7a7060] hover:text-[#c9a84c] transition-colors">
+                <button className="flex items-center gap-1 text-xs text-[#929AA5] hover:text-[#F0B90B] transition-colors">
                   💬 {post.replies} respostas
                 </button>
               </div>
@@ -63,9 +63,9 @@ export function ComunidadeClient() {
       <TabsContent value="glossario" className="mt-4">
         <div className="flex flex-col gap-2">
           {GLOSSARY.map((item) => (
-            <div key={item.term} className="bg-[#141210] rounded-lg border border-[rgba(201,168,76,.1)] p-4">
-              <p className="text-sm font-mono font-bold text-[#c9a84c] mb-1">{item.term}</p>
-              <p className="text-sm text-[#7a7060]">{item.def}</p>
+            <div key={item.term} className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.1)] p-4">
+              <p className="text-sm font-mono font-bold text-[#F0B90B] mb-1">{item.term}</p>
+              <p className="text-sm text-[#929AA5]">{item.def}</p>
             </div>
           ))}
         </div>

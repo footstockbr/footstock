@@ -4,7 +4,7 @@
 
 import { canAccess, getPermissions, type AdminResource } from '../canAccess'
 
-/** Todos os 21 recursos do sistema */
+/** Todos os 24 recursos do sistema */
 const ALL_RESOURCES: AdminResource[] = [
   'users:read',
   'users:write',
@@ -25,13 +25,16 @@ const ALL_RESOURCES: AdminResource[] = [
   'forum:moderate',
   'financial:read',
   'financial:write',
+  'engagement:read',
   'admin:dashboard',
   'admin:audit',
+  'admin:manage',
+  'gateway:config',
 ]
 
 describe('canAccess RBAC', () => {
   describe('SUPER_ADMIN', () => {
-    test('acessa todos os 21 recursos', () => {
+    test('acessa todos os 24 recursos', () => {
       for (const resource of ALL_RESOURCES) {
         expect(canAccess('SUPER_ADMIN', resource)).toBe(true)
       }
@@ -63,16 +66,24 @@ describe('canAccess RBAC', () => {
       expect(canAccess('ADMINISTRADOR', 'users:delete')).toBe(false)
     })
 
-    test('nao acessa admin:audit', () => {
-      expect(canAccess('ADMINISTRADOR', 'admin:audit')).toBe(false)
+    test('acessa admin:audit', () => {
+      expect(canAccess('ADMINISTRADOR', 'admin:audit')).toBe(true)
     })
 
     test('acessa motor:control', () => {
       expect(canAccess('ADMINISTRADOR', 'motor:control')).toBe(true)
     })
 
-    test('nao acessa financial:write', () => {
-      expect(canAccess('ADMINISTRADOR', 'financial:write')).toBe(false)
+    test('acessa financial:write (INTAKE: so gateway:config e restrito)', () => {
+      expect(canAccess('ADMINISTRADOR', 'financial:write')).toBe(true)
+    })
+
+    test('nao acessa admin:manage', () => {
+      expect(canAccess('ADMINISTRADOR', 'admin:manage')).toBe(false)
+    })
+
+    test('nao acessa gateway:config', () => {
+      expect(canAccess('ADMINISTRADOR', 'gateway:config')).toBe(false)
     })
   })
 
@@ -81,28 +92,29 @@ describe('canAccess RBAC', () => {
       expect(canAccess('MONITOR', 'motor:read')).toBe(true)
     })
 
-    test('nao pode controlar motor', () => {
-      expect(canAccess('MONITOR', 'motor:control')).toBe(false)
-    })
-
-    test('nao pode escrever usuarios', () => {
-      expect(canAccess('MONITOR', 'users:write')).toBe(false)
-    })
-
-    test('nao pode escrever noticias', () => {
-      expect(canAccess('MONITOR', 'news:write')).toBe(false)
-    })
-
     test('pode acessar dashboard', () => {
       expect(canAccess('MONITOR', 'admin:dashboard')).toBe(true)
     })
 
-    test('acessa apenas recursos de leitura', () => {
+    test('nao pode controlar motor', () => {
+      expect(canAccess('MONITOR', 'motor:control')).toBe(false)
+    })
+
+    test('nao pode ler usuarios', () => {
+      expect(canAccess('MONITOR', 'users:read')).toBe(false)
+    })
+
+    test('nao pode ler noticias', () => {
+      expect(canAccess('MONITOR', 'news:read')).toBe(false)
+    })
+
+    test('nao pode ler financeiro', () => {
+      expect(canAccess('MONITOR', 'financial:read')).toBe(false)
+    })
+
+    test('acessa apenas dashboard e motor em modo leitura', () => {
       const monitorPerms = getPermissions('MONITOR')
-      const writeResources = monitorPerms.filter(
-        (r) => r.includes(':write') || r.includes(':delete') || r.includes(':control') || r.includes(':halt') || r.includes(':price') || r.includes(':suspend') || r.includes(':moderate')
-      )
-      expect(writeResources).toHaveLength(0)
+      expect(monitorPerms).toEqual(['admin:dashboard', 'motor:read'])
     })
   })
 
@@ -141,8 +153,8 @@ describe('canAccess RBAC', () => {
       expect(canAccess('MODERADOR', 'forum:moderate')).toBe(true)
     })
 
-    test('pode moderar ligas', () => {
-      expect(canAccess('MODERADOR', 'leagues:moderate')).toBe(true)
+    test('nao pode moderar ligas', () => {
+      expect(canAccess('MODERADOR', 'leagues:moderate')).toBe(false)
     })
 
     test('pode ler forum', () => {
@@ -157,26 +169,38 @@ describe('canAccess RBAC', () => {
       expect(canAccess('MODERADOR', 'news:write')).toBe(false)
     })
 
-    test('pode ler usuarios', () => {
-      expect(canAccess('MODERADOR', 'users:read')).toBe(true)
+    test('nao pode ler usuarios', () => {
+      expect(canAccess('MODERADOR', 'users:read')).toBe(false)
+    })
+
+    test('pode suspender usuarios', () => {
+      expect(canAccess('MODERADOR', 'users:suspend')).toBe(true)
+    })
+
+    test('pode ler engajamento', () => {
+      expect(canAccess('MODERADOR', 'engagement:read')).toBe(true)
     })
   })
 
   describe('getPermissions', () => {
-    test('SUPER_ADMIN retorna 21 permissoes', () => {
-      expect(getPermissions('SUPER_ADMIN')).toHaveLength(21)
+    test('SUPER_ADMIN retorna 24 permissoes', () => {
+      expect(getPermissions('SUPER_ADMIN')).toHaveLength(24)
     })
 
-    test('MONITOR retorna 8 permissoes de leitura', () => {
-      expect(getPermissions('MONITOR')).toHaveLength(8)
+    test('ADMINISTRADOR retorna 21 permissoes', () => {
+      expect(getPermissions('ADMINISTRADOR')).toHaveLength(21)
     })
 
-    test('EDITOR retorna 5 permissoes', () => {
-      expect(getPermissions('EDITOR')).toHaveLength(5)
+    test('MONITOR retorna 2 permissoes (dashboard + motor)', () => {
+      expect(getPermissions('MONITOR')).toHaveLength(2)
     })
 
-    test('MODERADOR retorna 6 permissoes', () => {
-      expect(getPermissions('MODERADOR')).toHaveLength(6)
+    test('EDITOR retorna 4 permissoes', () => {
+      expect(getPermissions('EDITOR')).toHaveLength(4)
+    })
+
+    test('MODERADOR retorna 5 permissoes', () => {
+      expect(getPermissions('MODERADOR')).toHaveLength(5)
     })
   })
 })

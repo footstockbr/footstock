@@ -6,13 +6,14 @@ export interface SparkProps {
   /** Altura em px */
   height?: number
   className?: string
+  'data-testid'?: string
 }
 
 /**
  * Sparkline SVG minimalista para historico de preco.
  * Tamanho padrao: 60x28px.
  */
-export function Spark({ data, width = 60, height = 28, className }: SparkProps) {
+export function Spark({ data, width = 60, height = 28, className, 'data-testid': dataTestId }: SparkProps) {
   if (data.length < 2) return null
 
   const min = Math.min(...data)
@@ -34,6 +35,7 @@ export function Spark({ data, width = 60, height = 28, className }: SparkProps) 
       height={height}
       viewBox={`0 0 ${width} ${height}`}
       className={className}
+      data-testid={dataTestId}
       aria-hidden="true"
     >
       <polyline

@@ -1,28 +1,15 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { toast } from "sonner";
 import { ChevronLeft, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ROUTES } from "@/lib/constants/routes";
-
-const schema = z
-  .object({
-    newPassword: z.string().min(8, "A senha deve ter pelo menos 8 caracteres"),
-    confirmPassword: z.string().min(1, "Confirme a senha"),
-  })
-  .refine((data) => data.newPassword === data.confirmPassword, {
-    message: "As senhas não coincidem",
-    path: ["confirmPassword"],
-  });
-
-type FormData = z.infer<typeof schema>;
+import { resetPasswordSchema, type ResetPasswordFormData as FormData } from "@/lib/schemas/auth.schema";
 
 interface ResetPasswordFormProps {
   token: string | null;
@@ -35,14 +22,13 @@ interface ResetPasswordFormProps {
  */
 export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
 
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isSubmitting },
   } = useForm<FormData>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(resetPasswordSchema),
     mode: "onBlur",
   });
 
@@ -51,13 +37,13 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
     return (
       <div className="w-full max-w-sm flex flex-col items-center gap-4 text-center py-8">
         <AlertTriangle className="h-12 w-12 text-[#f59e0b]" />
-        <h1 className="text-xl font-bold text-[#f0ead6]">Link inválido</h1>
-        <p className="text-sm text-[#7a7060]">
+        <h1 className="text-xl font-bold text-[#EAECEF]">Link inválido</h1>
+        <p className="text-sm text-[#929AA5]">
           Este link de redefinição de senha é inválido ou já foi utilizado.
         </p>
         <Link
           href={ROUTES.FORGOT_PASSWORD}
-          className="text-sm text-[#c9a84c] hover:text-[#d4b466] transition-colors"
+          className="text-sm text-[#F0B90B] hover:text-[#FCD535] transition-colors"
         >
           Solicitar novo link
         </Link>
@@ -66,7 +52,6 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
   }
 
   const onSubmit = async ({ newPassword }: FormData) => {
-    setIsLoading(true);
     try {
       const res = await fetch("/api/v1/auth/reset-password", {
         method: "POST",
@@ -90,8 +75,6 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
       router.replace(ROUTES.HOME);
     } catch {
       toast.error("Erro ao redefinir senha. Verifique sua conexão e tente novamente.");
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -99,14 +82,14 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
     <div className="w-full max-w-sm">
       <Link
         href={ROUTES.FORGOT_PASSWORD}
-        className="flex items-center gap-1 text-sm text-[#7a7060] hover:text-[#f0ead6] transition-colors mb-6"
+        className="flex items-center gap-1 text-sm text-[#929AA5] hover:text-[#EAECEF] transition-colors mb-6"
       >
         <ChevronLeft className="h-4 w-4" />
         Recuperar senha
       </Link>
 
-      <h1 className="text-xl font-bold text-[#f0ead6] mb-1">Redefinir senha</h1>
-      <p className="text-sm text-[#7a7060] mb-6">
+      <h1 className="text-xl font-bold text-[#EAECEF] mb-1">Redefinir senha</h1>
+      <p className="text-sm text-[#929AA5] mb-6">
         Defina uma nova senha para a sua conta.
       </p>
 
@@ -126,7 +109,7 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
           error={errors.confirmPassword?.message}
           {...register("confirmPassword")}
         />
-        <Button type="submit" variant="primary" size="lg" fullWidth isLoading={isLoading}>
+        <Button type="submit" variant="primary" size="lg" fullWidth isLoading={isSubmitting}>
           Redefinir senha
         </Button>
       </form>

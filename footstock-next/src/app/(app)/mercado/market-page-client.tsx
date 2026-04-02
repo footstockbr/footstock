@@ -68,32 +68,33 @@ export function MarketPageClient() {
   return (
     <div className="flex flex-col" data-testid="mercado-page">
       {/* Delay badge (for Jogador plan) */}
-      {/* <div className="px-4 py-2 bg-[rgba(201,168,76,.08)] border-b border-[rgba(201,168,76,.1)]">
+      {/* <div className="px-4 py-2 bg-[rgba(240,185,11,.08)] border-b border-[rgba(240,185,11,.1)]">
         <div data-testid="delay-badge" className="flex items-center gap-2">
-          <Clock className="h-3.5 w-3.5 text-[#c9a84c]" />
-          <span className="text-xs text-[#c9a84c]">Dados com 1h de atraso</span>
-          <Link href={ROUTES.PLANOS} className="text-xs text-[#c9a84c] underline ml-auto">Fazer upgrade →</Link>
+          <Clock className="h-3.5 w-3.5 text-[#F0B90B]" />
+          <span className="text-xs text-[#F0B90B]">Dados com 1h de atraso</span>
+          <Link href={ROUTES.PLANOS} className="text-xs text-[#F0B90B] underline ml-auto">Fazer upgrade →</Link>
         </div>
       </div> */}
 
       {/* Search */}
-      <div className="px-4 pt-4 pb-3 border-b border-[rgba(201,168,76,.08)]">
+      <div className="px-4 pt-4 pb-3 border-b border-[rgba(240,185,11,.08)]">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#4a3d2a]" aria-hidden />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#707A8A]" aria-hidden="true" />
           <input
             data-testid="market-search-input"
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar clube ou ticker..."
-            className="h-10 w-full rounded-lg border border-[rgba(201,168,76,.18)] bg-[#0f0e0b] pl-9 pr-9 text-sm text-[#f0ead6] placeholder:text-[#4a3d2a] focus:outline-none focus:border-[rgba(201,168,76,.4)]"
+            aria-label="Buscar clube ou ticker"
+            className="h-10 w-full rounded-lg border border-[rgba(240,185,11,.18)] bg-[#181A20] pl-9 pr-9 text-sm text-[#EAECEF] placeholder:text-[#707A8A] focus:outline-none focus:border-[rgba(240,185,11,.4)]"
           />
           {search && (
             <button
               data-testid="market-search-clear"
               onClick={() => setSearch("")}
               aria-label="Limpar busca"
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#7a7060] hover:text-[#f0ead6]"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#929AA5] hover:text-[#EAECEF]"
             >
               <X className="h-4 w-4" />
             </button>
@@ -104,48 +105,56 @@ export function MarketPageClient() {
       {/* Filters */}
       <div
         data-testid="market-filters"
-        className="px-4 py-2.5 flex flex-col gap-2 border-b border-[rgba(201,168,76,.08)]"
+        className="px-4 py-2.5 flex flex-col gap-2 border-b border-[rgba(240,185,11,.08)]"
       >
-        <div className="flex gap-1.5 flex-wrap">
-          {(["all", "A", "B"] as const).map((d) => (
-            <button
-              key={d}
-              data-testid={`market-filter-division-${d === "all" ? "all" : d.toLowerCase()}`}
-              onClick={() => setDivision(d)}
-              className={cn(
-                "px-3 py-1 rounded-full text-xs font-medium border transition-all",
-                division === d
-                  ? "bg-[rgba(139,92,246,.2)] border-[#8b5cf6] text-white"
-                  : "bg-transparent border-[rgba(201,168,76,.18)] text-[#7a7060] hover:border-[rgba(201,168,76,.35)]"
-              )}
-            >
-              {d === "all" ? "Todos" : `Série ${d}`}
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-1.5 flex-wrap">
-          {(["all", "positive", "neutral", "negative"] as const).map((s) => (
-            <button
-              key={s}
-              data-testid={`market-filter-sentiment-${s}`}
-              onClick={() => setSentiment(s)}
-              className={cn(
-                "px-3 py-1 rounded-full text-xs font-medium border transition-all",
-                sentiment === s
-                  ? s === "positive"
-                    ? "bg-[rgba(34,197,94,.2)] border-[#22c55e] text-[#22c55e]"
-                    : s === "negative"
-                    ? "bg-[rgba(239,68,68,.2)] border-[#ef4444] text-[#ef4444]"
-                    : s === "neutral"
-                    ? "bg-[rgba(148,163,184,.2)] border-[#94a3b8] text-[#94a3b8]"
-                    : "bg-[rgba(139,92,246,.2)] border-[#8b5cf6] text-white"
-                  : "bg-transparent border-[rgba(201,168,76,.18)] text-[#7a7060] hover:border-[rgba(201,168,76,.35)]"
-              )}
-            >
-              {s === "all" ? "Todos" : s === "positive" ? "Positivo" : s === "neutral" ? "Neutro" : "Negativo"}
-            </button>
-          ))}
-        </div>
+        <fieldset className="border-0 p-0 m-0">
+          <legend className="sr-only">Filtrar por divisão</legend>
+          <div className="flex gap-1.5 flex-wrap">
+            {(["all", "A", "B"] as const).map((d) => (
+              <button
+                key={d}
+                data-testid={`market-filter-division-${d === "all" ? "all" : d.toLowerCase()}`}
+                onClick={() => setDivision(d)}
+                aria-pressed={division === d}
+                className={cn(
+                  "px-3 py-1 rounded-full text-xs font-medium border transition-all",
+                  division === d
+                    ? "bg-[rgba(46,189,133,.2)] border-[#2EBD85] text-white"
+                    : "bg-transparent border-[rgba(240,185,11,.18)] text-[#929AA5] hover:border-[rgba(240,185,11,.35)]"
+                )}
+              >
+                {d === "all" ? "Todos" : `Série ${d}`}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+        <fieldset className="border-0 p-0 m-0">
+          <legend className="sr-only">Filtrar por sentimento</legend>
+          <div className="flex gap-1.5 flex-wrap">
+            {(["all", "positive", "neutral", "negative"] as const).map((s) => (
+              <button
+                key={s}
+                data-testid={`market-filter-sentiment-${s}`}
+                onClick={() => setSentiment(s)}
+                aria-pressed={sentiment === s}
+                className={cn(
+                  "px-3 py-1 rounded-full text-xs font-medium border transition-all",
+                  sentiment === s
+                    ? s === "positive"
+                      ? "bg-[rgba(34,197,94,.2)] border-[#2EBD85] text-[#2EBD85]"
+                      : s === "negative"
+                      ? "bg-[rgba(239,68,68,.2)] border-[#F6465D] text-[#F6465D]"
+                      : s === "neutral"
+                      ? "bg-[rgba(148,163,184,.2)] border-[#94a3b8] text-[#94a3b8]"
+                      : "bg-[rgba(46,189,133,.2)] border-[#2EBD85] text-white"
+                    : "bg-transparent border-[rgba(240,185,11,.18)] text-[#929AA5] hover:border-[rgba(240,185,11,.35)]"
+                )}
+              >
+                {s === "all" ? "Todos" : s === "positive" ? "Positivo" : s === "neutral" ? "Neutro" : "Negativo"}
+              </button>
+            ))}
+          </div>
+        </fieldset>
       </div>
 
       {/* Asset list */}

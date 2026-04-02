@@ -1,3 +1,6 @@
+/**
+ * @jest-environment node
+ */
 // ============================================================================
 // Agentes de Mercado — Testes de Comportamento
 // Cobre: BaseAgent, MarketMakerAgent, MomentumAgent, ContrarianAgent,

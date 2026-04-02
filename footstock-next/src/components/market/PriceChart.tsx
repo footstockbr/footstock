@@ -62,15 +62,15 @@ export function PriceChart({
       width: containerRef.current.clientWidth,
       height: 300,
       layout: {
-        background: { color: '#141210' },
+        background: { color: '#1E2329' },
         textColor: '#9ca3af',
       },
       grid: {
         vertLines: { color: '#1f2937' },
         horzLines: { color: '#1f2937' },
       },
-      rightPriceScale: { borderColor: '#2a2010' },
-      timeScale: { borderColor: '#2a2010', timeVisible: true },
+      rightPriceScale: { borderColor: '#2B3139' },
+      timeScale: { borderColor: '#2B3139', timeVisible: true },
     })
 
     chartRef.current = chart
@@ -103,16 +103,16 @@ export function PriceChart({
 
     if (chartType === 'candle') {
       const series = chart.addCandlestickSeries({
-        upColor: colors?.primary ?? '#22c55e',
-        downColor: '#ef4444',
+        upColor: colors?.primary ?? '#2EBD85',
+        downColor: '#F6465D',
         borderVisible: false,
-        wickUpColor: colors?.primary ?? '#22c55e',
-        wickDownColor: '#ef4444',
+        wickUpColor: colors?.primary ?? '#2EBD85',
+        wickDownColor: '#F6465D',
       })
       mainSeriesRef.current = series
     } else {
       const series = chart.addLineSeries({
-        color: colors?.primary ?? '#C9A84C',
+        color: colors?.primary ?? '#F0B90B',
         lineWidth: 2,
       })
       mainSeriesRef.current = series
@@ -150,7 +150,7 @@ export function PriceChart({
     if (showMM9 && candles.length > 0) {
       if (!mm9Ref.current) {
         mm9Ref.current = chart.addLineSeries({
-          color: '#38bdf8',
+          color: '#F0B90B',
           lineWidth: 1,
           priceLineVisible: false,
         })
@@ -251,7 +251,7 @@ export function PriceChart({
   if (isLoading) {
     return (
       <div
-        className="flex items-center justify-center bg-[#141210] rounded-lg"
+        className="flex items-center justify-center bg-[#1E2329] rounded-lg"
         style={{ height: 300 }}
         aria-busy="true"
         aria-label="Carregando gráfico de preços..."
@@ -283,15 +283,15 @@ export function PriceChart({
   if (isRateLimited && rateError) {
     return (
       <div
-        className="flex flex-col items-center justify-center gap-2 bg-[#141210] rounded-lg p-4"
+        className="flex flex-col items-center justify-center gap-2 bg-[#1E2329] rounded-lg p-4"
         style={{ height: 300 }}
       >
-        <p className="text-sm text-[#7a7060]">
+        <p className="text-sm text-[#929AA5]">
           Muitas requisições. Aguardando {rateLimitCountdown}s para tentar novamente.
         </p>
         <button
           onClick={() => refetch()}
-          className="text-xs text-[#C9A84C] underline"
+          className="text-xs text-[#F0B90B] underline"
         >
           Tentar agora
         </button>
@@ -302,15 +302,15 @@ export function PriceChart({
   if (isError) {
     return (
       <div
-        className="flex flex-col items-center justify-center gap-2 bg-[#141210] rounded-lg p-4"
+        className="flex flex-col items-center justify-center gap-2 bg-[#1E2329] rounded-lg p-4"
         style={{ height: 300 }}
       >
-        <p className="text-sm text-[#7a7060]">
+        <p className="text-sm text-[#929AA5]">
           Dados de histórico indisponíveis. Tente novamente.
         </p>
         <button
           onClick={() => refetch()}
-          className="text-xs bg-[#C9A84C] text-[#080808] px-3 py-1.5 rounded font-semibold"
+          className="text-xs bg-[#F0B90B] text-[#0B0E11] px-3 py-1.5 rounded font-semibold"
         >
           Tentar novamente
         </button>
@@ -326,7 +326,7 @@ export function PriceChart({
     >
       {/* Halt badge */}
       {isHalted && (
-        <span className="absolute top-2 right-2 z-10 bg-[#ef4444] text-white text-xs font-bold px-2 py-0.5 rounded-full animate-pulse">
+        <span className="absolute top-2 right-2 z-10 bg-[#F6465D] text-white text-xs font-bold px-2 py-0.5 rounded-full animate-pulse">
           SUSPENSO
         </span>
       )}
@@ -346,8 +346,8 @@ export function PriceChart({
               data-testid={`period-btn-${p}`}
               className={`text-xs min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 px-3 py-2 md:px-2 md:py-0.5 rounded transition-colors ${
                 activePeriod === p
-                  ? 'bg-[#C9A84C] text-[#080808] font-semibold'
-                  : 'text-[#7a7060] hover:text-[#F0EAD6]'
+                  ? 'bg-[#F0B90B] text-[#0B0E11] font-semibold'
+                  : 'text-[#929AA5] hover:text-[#EAECEF]'
               } ${isHalted ? 'cursor-not-allowed opacity-50' : ''}`}
               title={
                 isHalted
@@ -368,7 +368,7 @@ export function PriceChart({
               onClick={() => setChartType(t)}
               data-testid={`toggle-chart-${t}`}
               className={`text-xs min-h-[44px] md:min-h-0 px-3 py-2 md:px-2 md:py-0.5 rounded ${
-                chartType === t ? 'bg-[#2a2010] text-[#F0EAD6]' : 'text-[#7a7060]'
+                chartType === t ? 'bg-[#2B3139] text-[#EAECEF]' : 'text-[#929AA5]'
               }`}
             >
               {t === 'candle' ? 'Candle' : 'Linha'}
@@ -383,8 +383,8 @@ export function PriceChart({
             data-testid="toggle-mm9"
             className={`text-xs min-h-[44px] md:min-h-0 px-3 py-2 md:px-2 md:py-0.5 rounded border ${
               showMM9
-                ? 'border-[#38bdf8] text-[#38bdf8] bg-[#38bdf810]'
-                : 'border-[#2a2010] text-[#7a7060]'
+                ? 'border-[#F0B90B] text-[#F0B90B] bg-[#F0B90B10]'
+                : 'border-[#2B3139] text-[#929AA5]'
             }`}
           >
             MM9
@@ -395,7 +395,7 @@ export function PriceChart({
             className={`text-xs min-h-[44px] md:min-h-0 px-3 py-2 md:px-2 md:py-0.5 rounded border ${
               showMM21
                 ? 'border-[#a855f7] text-[#a855f7] bg-[#a855f710]'
-                : 'border-[#2a2010] text-[#7a7060]'
+                : 'border-[#2B3139] text-[#929AA5]'
             }`}
           >
             MM21
@@ -410,10 +410,10 @@ export function PriceChart({
             data-testid="toggle-bollinger"
             className={`text-xs px-2 py-0.5 rounded border flex items-center gap-1 ${
               !canUseBollinger
-                ? 'border-[#2a2010] text-[#4a3d2a] cursor-not-allowed opacity-60'
+                ? 'border-[#2B3139] text-[#707A8A] cursor-not-allowed opacity-60'
                 : showBollinger
                 ? 'border-[#f59e0b] text-[#f59e0b] bg-[#f59e0b10]'
-                : 'border-[#2a2010] text-[#7a7060]'
+                : 'border-[#2B3139] text-[#929AA5]'
             }`}
             title={canUseBollinger ? undefined : 'Disponível no plano Lenda'}
             aria-label={canUseBollinger ? 'Bollinger Bands' : 'Bollinger Bands — disponível no plano Lenda'}

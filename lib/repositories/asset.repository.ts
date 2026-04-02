@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import type { Asset, Prisma } from '@prisma/client'
+import type { Asset } from '@prisma/client'
 
 export class AssetRepository {
   async findAll(activeOnly = true): Promise<Asset[]> {

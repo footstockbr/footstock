@@ -10,6 +10,7 @@ const baseState = (): AssetState => ({
   highPrice: 28.00,
   lowPrice: 28.00,
   closePrice: 28.00,
+  fairValue: 28.00,
   volume: 50000,
   variance: 0.0001,
   pendingBuyVolume: 0,
@@ -23,11 +24,14 @@ const baseParams = (): ClusterParams => ({
   cluster: 'A_TOP',
   baseVolume: 50000,
   drift: 0.0,
-  garchAlpha: 0.08,
-  garchBeta: 0.90,
+  theta: 0.12,
+  sigma: 0.0018,
+  garchAlpha: 0.12,
+  garchBeta: 0.85,
   lambdaKyle: 0.0001,
   spread: 0.0005,
-  maxTickChange: 0.02,
+  maxTickChange: 0.0035,
+  ofiDecay: 0.91,
 })
 
 describe('PriceCalculator (integração)', () => {

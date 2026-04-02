@@ -10,6 +10,7 @@ export interface PriceDisplayProps {
   /** Tamanho do texto */
   size?: 'sm' | 'md' | 'lg' | 'xl'
   className?: string
+  'data-testid'?: string
 }
 
 const sizeMap = {
@@ -26,6 +27,7 @@ export function PriceDisplay({
   showChange = true,
   size = 'md',
   className,
+  'data-testid': dataTestId,
 }: PriceDisplayProps) {
   const isPositive = (change ?? 0) > 0
   const isNegative = (change ?? 0) < 0
@@ -37,7 +39,7 @@ export function PriceDisplay({
   const changePrefix = isPositive ? '+' : ''
 
   return (
-    <div className={cn('flex items-baseline gap-2 font-mono', className)}>
+    <div className={cn('flex items-baseline gap-2 font-mono', className)} data-testid={dataTestId}>
       <span className={cn('text-text-primary tabular-nums', sizeMap[size].price)}>
         FS${price.toFixed(2)}
       </span>

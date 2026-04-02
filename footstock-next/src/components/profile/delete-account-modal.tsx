@@ -75,10 +75,10 @@ export function DeleteAccountModal({
       <div className="flex flex-col gap-4">
         {/* Aviso */}
         <div className="bg-[rgba(239,68,68,.1)] border border-[rgba(239,68,68,.3)] rounded-lg p-3">
-          <p className="text-xs text-[#ef4444] font-medium">
+          <p className="text-xs text-[#F6465D] font-medium">
             Esta ação é permanente
           </p>
-          <p className="text-xs text-[#7a7060] mt-1">
+          <p className="text-xs text-[#929AA5] mt-1">
             Seus dados pessoais serão anonimizados. Registros financeiros são
             mantidos por obrigação legal (5 anos).
           </p>
@@ -88,7 +88,7 @@ export function DeleteAccountModal({
         <div>
           <label
             htmlFor="delete-reason"
-            className="text-sm font-medium text-[#7a7060] block mb-1.5"
+            className="text-sm font-medium text-[#929AA5] block mb-1.5"
           >
             Motivo da exclusão
           </label>
@@ -96,7 +96,7 @@ export function DeleteAccountModal({
             id="delete-reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            className="w-full h-11 bg-[#141210] border border-[rgba(201,168,76,.18)] rounded-md px-3 text-sm text-[#f0ead6] focus:border-[#c9a84c] focus:outline-none focus:ring-1 focus:ring-[#c9a84c]"
+            className="w-full h-11 bg-[#1E2329] border border-[rgba(240,185,11,.18)] rounded-md px-3 text-sm text-[#EAECEF] focus:border-[#F0B90B] focus:outline-none focus:ring-1 focus:ring-[#F0B90B]"
           >
             <option value="">Selecione um motivo</option>
             {DELETE_REASONS.map((r) => (

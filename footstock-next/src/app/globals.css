@@ -1,45 +1,67 @@
 @import "tailwindcss";
 
-/* ─── CSS Variables — Foot Stock Design System v2.0 ─── */
+/* ─── CSS Variables — Foot Stock Design System v2.0 (Ouro Premium) ─── */
+/* Paleta definida pelo cliente — Esquema Ouro + Preto Quente */
+/* Ver: DESIGN.md para documentação completa */
 :root {
-  /* Backgrounds */
+  /* Backgrounds — Preto Quente */
   --bg-primary: #080808;
   --bg-surface: #0f0e0b;
   --bg-card: #141210;
-  --bg-elevated: #161d28;
-  --bg-overlay: rgba(8, 11, 18, 0.85);
+  --bg-elevated: #1a1815;
+  --bg-overlay: rgba(8, 8, 8, 0.85);
+  --bg-input: rgba(201, 168, 76, 0.04);
 
-  /* Text */
-  --text-primary: #f0ead6;
+  /* Text — Tons Quentes */
+  --text-primary: #F0EAD6;
   --text-secondary: #7a7060;
   --text-muted: #4a3d2a;
+  --text-disabled: #2a2010;
 
-  /* Accent / Gold */
-  --accent: #c9a84c;
-  --accent-hover: #d4b466;
-  --accent-gold: #c9a84c;
-  --accent-secondary: #38bdf8;
+  /* Accent / Ouro (Primary) */
+  --accent: #C9A84C;
+  --accent-hover: #D4B466;
+  --accent-light: #D4B466;
+  --accent-extra: #E8C96A;
+  --accent-gold: #C9A84C;
+  --accent-muted: rgba(201, 168, 76, 0.10);
+  --accent-dim: rgba(201, 168, 76, 0.07);
+  --accent-secondary: #D4B466;
 
   /* Semantic Colors */
   --color-success: #22c55e;
-  --color-error: #ef4444;
-  --color-warning: #c9a84c;
+  --color-success-muted: rgba(34, 197, 94, 0.1);
+  --color-error: #e05555;
+  --color-error-muted: rgba(224, 85, 85, 0.1);
+  --color-warning: #f97316;
+  --color-warning-muted: rgba(249, 115, 22, 0.1);
   --color-info: #38bdf8;
+  --color-info-muted: rgba(56, 189, 248, 0.1);
 
-  /* Price */
+  /* Price / Trading */
   --price-up: #22c55e;
-  --price-down: #ef4444;
-  --price-neutral: #94a3b8;
+  --price-down: #e05555;
+  --price-neutral: #7a7060;
+  --depth-buy-bg: rgba(34, 197, 94, 0.1);
+  --depth-sell-bg: rgba(224, 85, 85, 0.1);
 
   /* Border */
-  --border-default: rgba(201, 168, 76, 0.18);
-  --border-focus: rgba(201, 168, 76, 0.5);
-  --border-error: #ef4444;
+  --border-default: #2a2010;
+  --border-focus: #C9A84C;
+  --border-error: #e05555;
+  --border-line: #1a1815;
 
   /* Plans */
-  --plan-jogador: #64748b;
-  --plan-craque: #38bdf8;
-  --plan-lenda: #c9a84c;
+  --plan-jogador: #7a7060;
+  --plan-craque: #C9A84C;
+  --plan-lenda: linear-gradient(135deg, #C9A84C, #8a6820);
+
+  /* Session Colors */
+  --session-pre-abertura: #f97316;
+  --session-negociacao: #C9A84C;
+  --session-call: #38bdf8;
+  --session-after-market: #8b5cf6;
+  --session-fechado: #e05555;
 }
 
 /* ─── Base Styles ─── */
@@ -58,7 +80,7 @@ body {
   max-width: 100vw;
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  font-family: Arial, Helvetica Neue, sans-serif;
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -69,14 +91,14 @@ body {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--bg-surface);
+  background: var(--bg-primary);
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(201, 168, 76, 0.2);
+  background: var(--border-default);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(201, 168, 76, 0.4);
+  background: var(--text-muted);
 }
 
 /* ─── Focus Visible ─── */
@@ -100,20 +122,20 @@ body {
   background: linear-gradient(
     90deg,
     var(--bg-card) 0%,
-    rgba(201, 168, 76, 0.06) 50%,
+    var(--bg-elevated) 50%,
     var(--bg-card) 100%
   );
   background-size: 200% 100%;
-  animation: shimmer 2s linear infinite;
+  animation: shimmer 1.5s linear infinite;
 }
 
 /* ─── Gradient Utilities ─── */
 .gradient-accent {
-  background: linear-gradient(135deg, #c9a84c, #8a6820);
+  background: linear-gradient(135deg, #C9A84C, #8a6820);
 }
 
 .gradient-section {
-  background: linear-gradient(160deg, #161008, #0d0b08);
+  background: linear-gradient(160deg, var(--bg-surface), var(--bg-primary));
 }
 
 /* ─── Safe area for iOS ─── */
@@ -141,7 +163,7 @@ body {
     background-color: transparent;
   }
   20% {
-    background-color: rgba(34, 197, 94, 0.15);
+    background-color: rgba(46, 189, 133, 0.15);
   }
 }
 
@@ -151,7 +173,7 @@ body {
     background-color: transparent;
   }
   20% {
-    background-color: rgba(239, 68, 68, 0.15);
+    background-color: rgba(246, 70, 93, 0.15);
   }
 }
 

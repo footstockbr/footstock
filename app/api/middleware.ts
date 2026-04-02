@@ -58,6 +58,17 @@ export function withAuth(handler: RouteHandler) {
       const token = authHeader?.replace('Bearer ', '')
 
       if (!token) {
+        // DEV local fallback: autenticação por cookie HttpOnly (sem Supabase)
+        if (process.env.NODE_ENV !== 'production') {
+          const devAuthRaw = req.cookies.get('fs_dev_auth')?.value
+          const devAuthEmail = devAuthRaw ? decodeURIComponent(devAuthRaw) : null
+          if (devAuthEmail) {
+            const devUser = await prisma.user.findUnique({ where: { email: devAuthEmail } })
+            if (devUser) {
+              return handler(req, { user: devUser as unknown as User })
+            }
+          }
+        }
         return errorResponse(ERROR_CODES.AUTH_010, ERROR_MESSAGES['AUTH-010'], 401)
       }
 
@@ -78,7 +89,17 @@ export function withAuth(handler: RouteHandler) {
         return errorResponse(ERROR_CODES.AUTH_010, ERROR_MESSAGES['AUTH-010'], 401)
       }
 
-      return handler(req, { user: dbUser as unknown as User })
+      // Invariante de domínio: contas administrativas são sempre operacionais
+      // e não podem carregar plano pago.
+      const normalizedUser =
+        dbUser.adminRole && dbUser.planType !== 'JOGADOR'
+          ? await prisma.user.update({
+              where: { id: dbUser.id },
+              data: { planType: 'JOGADOR' },
+            })
+          : dbUser
+
+      return handler(req, { user: normalizedUser as unknown as User })
     } catch {
       return errorResponse(ERROR_CODES.SYS_001, ERROR_MESSAGES['SYS-001'], 500)
     }
@@ -101,7 +122,7 @@ export function withAdmin(resource: AdminResource) {
       }
 
       if (!canAccess(user.adminRole as AdminRole, resource)) {
-        return errorResponse(ERROR_CODES.AUTH_009, ERROR_MESSAGES['AUTH-009'], 403)
+        return errorResponse(ERROR_CODES.ADMIN_050, ERROR_MESSAGES['ADMIN-050'], 403)
       }
 
       return handler(req, { user })

@@ -23,11 +23,11 @@ function PasswordStrength({ password }: { password: string }) {
 
   const labels = ['Muito fraca', 'Fraca', 'Regular', 'Forte', 'Muito forte']
   const colors = [
-    'bg-[#ef4444]',
-    'bg-[#ef4444]',
-    'bg-[#c9a84c]',
-    'bg-[#22c55e]/80',
-    'bg-[#22c55e]',
+    'bg-[#F6465D]',
+    'bg-[#F6465D]',
+    'bg-[#F0B90B]',
+    'bg-[#2EBD85]/80',
+    'bg-[#2EBD85]',
   ]
 
   if (!password) return null
@@ -39,12 +39,12 @@ function PasswordStrength({ password }: { password: string }) {
           <div
             key={i}
             className={`h-1 flex-1 rounded-full transition-all ${
-              i <= score ? colors[score] : 'bg-[#2a2010]'
+              i <= score ? colors[score] : 'bg-[#2B3139]'
             }`}
           />
         ))}
       </div>
-      <p className="text-xs text-[#7a7060]" aria-live="polite">
+      <p className="text-xs text-[#929AA5]" aria-live="polite">
         Força da senha: {labels[score]}
       </p>
     </div>
@@ -57,7 +57,7 @@ export function Step2Access({ data, onNext }: Step2Props) {
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isSubmitting },
   } = useForm<Step2Data>({
     resolver: zodResolver(step2Schema),
     defaultValues: {
@@ -122,6 +122,7 @@ export function Step2Access({ data, onNext }: Step2Props) {
         variant="primary"
         size="lg"
         fullWidth
+        isLoading={isSubmitting}
         className="mt-2"
       >
         Próximo →

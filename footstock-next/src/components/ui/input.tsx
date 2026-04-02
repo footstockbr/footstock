@@ -32,23 +32,26 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     const inputId = id || label?.toLowerCase().replace(/\s+/g, "-");
     const inputType =
       showPasswordToggle ? (showPassword ? "text" : "password") : type;
+    const errorId = error ? `${inputId}-error` : undefined;
+    const hintId = hint && !error ? `${inputId}-hint` : undefined;
+    const describedBy = [errorId, hintId].filter(Boolean).join(" ") || undefined;
 
     return (
       <div className="flex flex-col gap-1">
         {label && (
           <label
             htmlFor={inputId}
-            className="text-sm text-[#f0ead6] font-medium tracking-wide"
+            className="text-sm text-[#EAECEF] font-medium tracking-wide"
           >
             {label}
             {props.required && (
-              <span className="text-[#ef4444] ml-1">*</span>
+              <span className="text-[#F6465D] ml-1" aria-hidden="true">*</span>
             )}
           </label>
         )}
         <div className="relative">
           {leftIcon && (
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7a7060]">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#929AA5]" aria-hidden="true">
               {leftIcon}
             </div>
           )}
@@ -56,12 +59,15 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             ref={ref}
             id={inputId}
             type={inputType}
+            aria-required={props.required}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={describedBy}
             className={cn(
-              "h-11 w-full rounded-md border bg-[rgba(201,168,76,.04)] text-[#f0ead6] placeholder:text-[#4a3d2a] text-sm transition-all duration-150",
-              "focus:outline-none focus:border-[rgba(201,168,76,.5)] focus:ring-2 focus:ring-[rgba(201,168,76,.15)]",
+              "h-11 w-full rounded-md border bg-[rgba(240,185,11,.04)] text-[#EAECEF] placeholder:text-[#707A8A] text-sm transition-all duration-150",
+              "focus:outline-none focus:border-[rgba(240,185,11,.5)] focus:ring-2 focus:ring-[rgba(240,185,11,.15)]",
               error
-                ? "border-[#ef4444] focus:border-[#ef4444] focus:ring-[rgba(239,68,68,.15)]"
-                : "border-[rgba(201,168,76,.18)]",
+                ? "border-[#F6465D] focus:border-[#F6465D] focus:ring-[rgba(239,68,68,.15)]"
+                : "border-[rgba(240,185,11,.18)]",
               leftIcon ? "pl-10" : "pl-3",
               showPasswordToggle ? "pr-11" : "pr-3",
               className
@@ -71,26 +77,25 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
           {showPasswordToggle && (
             <button
               type="button"
-              tabIndex={-1}
               onClick={() => setShowPassword((v) => !v)}
               aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#7a7060] hover:text-[#f0ead6] transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#929AA5] hover:text-[#EAECEF] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded"
             >
               {showPassword ? (
-                <EyeOff className="h-4 w-4" />
+                <EyeOff className="h-4 w-4" aria-hidden="true" />
               ) : (
-                <Eye className="h-4 w-4" />
+                <Eye className="h-4 w-4" aria-hidden="true" />
               )}
             </button>
           )}
         </div>
         {error && (
-          <p className="text-sm text-[#ef4444] flex items-center gap-1">
-            <span aria-hidden>⚠</span> {error}
+          <p id={errorId} role="alert" className="text-sm text-[#F6465D] flex items-center gap-1">
+            <span aria-hidden="true">⚠</span> {error}
           </p>
         )}
         {hint && !error && (
-          <p className="text-xs text-[#4a3d2a]">{hint}</p>
+          <p id={hintId} className="text-xs text-[#707A8A]">{hint}</p>
         )}
       </div>
     );

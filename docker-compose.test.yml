@@ -1,0 +1,31 @@
+# docker-compose.test.yml — Banco de dados ISOLADO para testes de integração
+# Porta 5433 (separado do dev na 5432) para evitar conflitos.
+# Uso:
+#   docker compose -f docker-compose.test.yml up -d
+#   DATABASE_URL=$TEST_DATABASE_URL npx prisma migrate deploy
+#   npm run test:integration
+
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: foot-stock-postgres-test
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: foot_stock_test
+    ports:
+      - '5433:5432'
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    # Sem volume persistente para testes — dados efêmeros
+    tmpfs:
+      - /var/lib/postgresql/data
+
+volumes:
+  postgres_test_data:

@@ -28,15 +28,15 @@ function PriceDisplay({
 
   return (
     <div className={cn("flex items-baseline gap-2 font-mono", className)}>
-      <span className={cn("font-bold text-[#f0ead6]", sizeClasses[size])}>
+      <span className={cn("font-bold text-[#EAECEF]", sizeClasses[size])}>
         {showFS ? formatFS(price) : price.toFixed(2)}
       </span>
       {change !== undefined && (
         <span
           className={cn(
             "text-sm font-medium",
-            isPositive && "text-[#22c55e]",
-            isNegative && "text-[#ef4444]",
+            isPositive && "text-[#2EBD85]",
+            isNegative && "text-[#F6465D]",
             !isPositive && !isNegative && "text-[#94a3b8]"
           )}
         >

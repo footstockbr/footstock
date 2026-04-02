@@ -34,8 +34,8 @@ const SENTIMENT_LABELS: Record<SentimentKey, string> = {
 export default function NoticiasPage() {
   return (
     <div data-testid="noticias-page" className="px-4 pt-4">
-      <h1 className="text-lg font-bold text-[#f0ead6] mb-4 flex items-center gap-2">
-        <Newspaper className="h-5 w-5 text-[#c9a84c]" />
+      <h1 className="text-lg font-bold text-[#EAECEF] mb-4 flex items-center gap-2">
+        <Newspaper className="h-5 w-5 text-[#F0B90B]" />
         Feed de Notícias
       </h1>
 
@@ -44,24 +44,24 @@ export default function NoticiasPage() {
           <div
             key={news.id}
             data-testid={`noticias-item-${news.id}`}
-            className="bg-[#141210] rounded-lg border border-[rgba(201,168,76,.18)] p-4 transition-all hover:border-[rgba(201,168,76,.35)] hover:bg-[rgba(201,168,76,.04)] cursor-pointer"
+            className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.18)] p-4 transition-all hover:border-[rgba(240,185,11,.35)] hover:bg-[rgba(240,185,11,.04)] cursor-pointer"
           >
             <div className="flex items-start justify-between gap-2 mb-2">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-bold text-[#c9a84c]">{news.ticker}</span>
+                <span className="text-xs font-mono font-bold text-[#F0B90B]">{news.ticker}</span>
                 <Badge variant={SENTIMENT_VARIANTS[news.sentiment]} size="xs">
                   {SENTIMENT_LABELS[news.sentiment]}
                 </Badge>
               </div>
-              <span className="text-[10px] text-[#4a3d2a] shrink-0">{news.time}</span>
+              <span className="text-[10px] text-[#707A8A] shrink-0">{news.time}</span>
             </div>
-            <p className="text-sm font-medium text-[#f0ead6] leading-snug">{news.title}</p>
-            <p className="text-xs text-[#7a7060] mt-1">Fonte: {news.source}</p>
+            <p className="text-sm font-medium text-[#EAECEF] leading-snug">{news.title}</p>
+            <p className="text-xs text-[#929AA5] mt-1">Fonte: {news.source}</p>
           </div>
         ))}
       </div>
 
-      <p className="text-center text-xs text-[#4a3d2a] mt-6 mb-4">
+      <p className="text-center text-xs text-[#707A8A] mt-6 mb-4">
         Notícias em tempo real disponíveis com backend ativo
       </p>
     </div>

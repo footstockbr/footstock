@@ -1,36 +1,32 @@
-import { getAuthUser } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { ok, errors } from '@/lib/api'
-import type { LeagueType, LeagueStatus, LeagueDivision } from '@/types'
+// module-20: GET /api/v1/leagues/:id
 
-// GET /api/v1/leagues/:id
+import { NextRequest } from 'next/server'
+import { getAuthUser } from '@/lib/auth'
+import { ok, error as apiError, errors } from '@/lib/api'
+import { leagueRepository } from '@/lib/repositories/LeagueRepository'
+import { LeagueError, LEAGUE_ERRORS } from '@/lib/errors/leagueErrors'
+
 export async function GET(
-  _req: Request,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()
 
-  const { id } = await params
-
   try {
-    const league = await prisma.league.findUnique({ where: { id } })
+    const { id } = await params
+    const league = await leagueRepository.findById(id, auth.user.id)
 
-    if (!league) return errors.notFound('Liga não encontrada.')
+    if (!league) {
+      return apiError(LEAGUE_ERRORS.NOT_FOUND.code, LEAGUE_ERRORS.NOT_FOUND.message, 404)
+    }
 
-    return ok({
-      id: league.id,
-      name: league.name,
-      type: league.type as LeagueType,
-      division: league.division as LeagueDivision,
-      duration: league.duration,
-      sponsorId: league.sponsorId ?? null,
-      startsAt: league.startsAt.toISOString(),
-      endsAt: league.endsAt?.toISOString() ?? null,
-      status: league.status as LeagueStatus,
-      createdAt: league.createdAt.toISOString(),
-    })
-  } catch {
+    return ok(league)
+  } catch (err) {
+    if (err instanceof LeagueError) {
+      return apiError(err.code, err.message, err.status)
+    }
+    console.error('[leagues/:id GET] Erro:', err)
     return errors.server()
   }
 }

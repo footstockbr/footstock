@@ -1,3 +1,5 @@
+import 'server-only'
+
 import { createSupabaseServerClient } from '@/lib/supabase'
 import { prisma } from '@/lib/prisma'
 import type { User, AdminRole } from '@/types'

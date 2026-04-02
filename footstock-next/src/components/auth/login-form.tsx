@@ -2,21 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ROUTES } from "@/lib/constants/routes";
-
-const loginSchema = z.object({
-  email: z.string().email("Informe um email válido"),
-  password: z.string().min(8, "Senha deve ter no mínimo 8 caracteres"),
-});
-
-type LoginFormData = z.infer<typeof loginSchema>;
+import { loginSchema, type LoginFormData } from "@/lib/schemas/auth.schema";
 
 function LoginForm() {
   const router = useRouter();
@@ -67,21 +61,22 @@ description: Logo Foot Stock mini para o formulário de login. Versão compacta 
 context: Cabeçalho do formulário de login
 style: Premium, ouro
 mood: Confiante
-colors: #C9A84C
+colors: #F0B90B
 elements: Bola de futebol estilizada
 avoid: Texto no logo
         */}
-        <img
+        <Image
           src="/logo-foot.png"
           alt="Foot Stock"
           width={56}
           height={56}
           className="w-14 h-14 object-contain mb-1"
+          priority
         />
-        <h1 className="text-xl font-bold text-[#f0ead6]">
+        <h1 className="text-xl font-bold text-[#EAECEF]">
           Entrar no Foot Stock
         </h1>
-        <p className="text-sm text-[#4a3d2a]">O mercado do futebol brasileiro</p>
+        <p className="text-sm text-[#707A8A]">O mercado do futebol brasileiro</p>
       </div>
 
       <form data-testid="form-login" onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
@@ -112,7 +107,7 @@ avoid: Texto no logo
             <Link
               data-testid="login-forgot-password-link"
               href={ROUTES.FORGOT_PASSWORD}
-              className="text-xs text-[#c9a84c] hover:text-[#d4b466] transition-colors"
+              className="text-xs text-[#F0B90B] hover:text-[#FCD535] transition-colors"
             >
               Esqueci minha senha →
             </Link>
@@ -132,12 +127,12 @@ avoid: Texto no logo
         </Button>
       </form>
 
-      <p className="text-center text-sm text-[#7a7060] mt-6">
+      <p className="text-center text-sm text-[#929AA5] mt-6">
         Não tem conta?{" "}
         <Link
           data-testid="login-register-link"
           href={ROUTES.CADASTRO}
-          className="text-[#c9a84c] hover:text-[#d4b466] font-medium transition-colors"
+          className="text-[#F0B90B] hover:text-[#FCD535] font-medium transition-colors"
         >
           Criar conta
         </Link>

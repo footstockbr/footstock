@@ -16,7 +16,8 @@ import {
 import {
   ROUTES,
   API_ROUTES,
-  FEE_BY_PLAN,
+  OPERATIONAL_FEES,
+  calculateFee,
   SESSION_COLORS,
   ERROR_CODES,
   ERROR_MESSAGES,
@@ -35,7 +36,6 @@ import {
   PLAN_LABELS,
   ORDER_TYPE_LABELS,
   ORDER_SIDE_LABELS,
-  ORDER_STATUS_LABELS,
   SESSION_TYPE_LABELS,
   INVESTOR_PROFILE_LABELS,
   NAV_LABELS,
@@ -56,12 +56,12 @@ describe('Enums', () => {
     expect(Object.keys(ORDER_SIDE)).toHaveLength(2);
   });
 
-  test('ORDER_STATUS tem 4 valores', () => {
-    expect(Object.keys(ORDER_STATUS)).toHaveLength(4);
+  test('ORDER_STATUS tem 5 valores', () => {
+    expect(Object.keys(ORDER_STATUS)).toHaveLength(5);
   });
 
-  test('ADMIN_ROLE tem 5 valores', () => {
-    expect(Object.keys(ADMIN_ROLE)).toHaveLength(5);
+  test('ADMIN_ROLE tem 6 valores', () => {
+    expect(Object.keys(ADMIN_ROLE)).toHaveLength(6);
   });
 
   test('SESSION_TYPE tem 5 valores', () => {
@@ -76,8 +76,14 @@ describe('Enums', () => {
     expect(Object.keys(LEAGUE_TYPE)).toHaveLength(3);
   });
 
-  test('NOTIFICATION_TYPE tem 10 valores', () => {
-    expect(Object.keys(NOTIFICATION_TYPE)).toHaveLength(10);
+  // NOTIFICATION_TYPE v2 — 16 valores:
+  // ORDER_EXECUTED, ORDER_CANCELLED, MARGIN_CALL_ALERT, CIRCUIT_BREAKER,
+  // PAYMENT_CONFIRMED, PAYMENT_FAILED, PLAN_CANCEL_ALERT, DIVIDEND_CREDITED,
+  // BONUS_CREDITED, LEAGUE_RESULT, NEWS_FAVORITE_CLUB, ADMIN_BROADCAST,
+  // AFFILIATE_COMMISSION_EARNED, AFFILIATE_INVITE_JOINED,
+  // CANCELLATION_LOCK_ACTIVE, CANCELLATION_LOCK_LIQUIDATED
+  test('NOTIFICATION_TYPE tem 16 valores', () => {
+    expect(Object.keys(NOTIFICATION_TYPE)).toHaveLength(16);
   });
 
   test('IMPACT_CATEGORY tem 15 valores', () => {
@@ -100,24 +106,27 @@ describe('Enums', () => {
 // ---- Constants ----
 
 describe('Constants', () => {
-  test('FEE_BY_PLAN LENDA é 0.0025', () => {
-    expect(FEE_BY_PLAN.LENDA).toBe(0.0025);
+  test('OPERATIONAL_FEES tem 3 faixas (INTAKE canônico)', () => {
+    expect(OPERATIONAL_FEES).toHaveLength(3);
+    expect(calculateFee(400)).toBe(0.25);   // ≤ FS$ 500
+    expect(calculateFee(800)).toBe(0.35);   // FS$ 500-1000
+    expect(calculateFee(1500)).toBe(0.45);  // > FS$ 1000
   });
 
-  test('SESSION_COLORS NEGOCIACAO é violeta', () => {
-    expect(SESSION_COLORS.NEGOCIACAO).toBe('#8b5cf6');
+  test('SESSION_COLORS NEGOCIACAO é roxo primário', () => {
+    expect(SESSION_COLORS.NEGOCIACAO).toBe('#F0B90B');
   });
 
   test('PAGE_SIZE é 20', () => {
     expect(PAGE_SIZE).toBe(20);
   });
 
-  test('INITIAL_FS_BALANCE é 100.000', () => {
-    expect(INITIAL_FS_BALANCE).toBe(100_000);
+  test('INITIAL_FS_BALANCE é 2.000', () => {
+    expect(INITIAL_FS_BALANCE).toBe(2_000);
   });
 
-  test('CIRCUIT_BREAKER_THRESHOLD é 0.15', () => {
-    expect(CIRCUIT_BREAKER_THRESHOLD).toBe(0.15);
+  test('CIRCUIT_BREAKER_THRESHOLD é 0.08 (INTAKE canônico)', () => {
+    expect(CIRCUIT_BREAKER_THRESHOLD).toBe(0.08);
   });
 
   test('DEBOUNCE_MS é 300', () => {
@@ -172,8 +181,8 @@ describe('Routes', () => {
 // ---- Errors ----
 
 describe('Error Codes', () => {
-  test('ERROR_CODES tem 38 códigos (10+10+8+4+6)', () => {
-    expect(Object.keys(ERROR_CODES)).toHaveLength(38);
+  test('ERROR_CODES tem 53 códigos', () => {
+    expect(Object.keys(ERROR_CODES)).toHaveLength(53);
   });
 
   test('ERROR_MESSAGES cobre todos os códigos', () => {
@@ -233,6 +242,6 @@ describe('Labels', () => {
 
   test('SESSION_HOURS cobre todas as sessões', () => {
     expect(Object.keys(SESSION_HOURS)).toHaveLength(5);
-    expect(SESSION_HOURS.NEGOCIACAO.start).toBe('10:00');
+    expect(SESSION_HOURS.NEGOCIACAO.start).toBe('11:00');
   });
 });

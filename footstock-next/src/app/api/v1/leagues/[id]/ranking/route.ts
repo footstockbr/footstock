@@ -1,53 +1,46 @@
-import { NextRequest } from 'next/server'
-import { getAuthUser } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { list, errors, parsePagination, buildPagination } from '@/lib/api'
+// module-20: GET /api/v1/leagues/:id/ranking
 
-// GET /api/v1/leagues/:id/ranking
+import { NextRequest, NextResponse } from 'next/server'
+import { getAuthUser } from '@/lib/auth'
+import { error as apiError, errors } from '@/lib/api'
+import { leagueRepository } from '@/lib/repositories/LeagueRepository'
+import { LeagueError, LEAGUE_ERRORS } from '@/lib/errors/leagueErrors'
+import { prisma } from '@/lib/prisma'
+
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()
 
-  const { id } = await params
-  const { page, limit, skip } = parsePagination(request.nextUrl.searchParams)
-
   try {
-    const league = await prisma.league.findUnique({ where: { id } })
-    if (!league) return errors.notFound('Liga não encontrada.')
+    const { id } = await params
+    const league = await prisma.league.findUnique({
+      where: { id },
+      select: { id: true },
+    })
 
-    const where = { leagueId: id }
+    if (!league) {
+      return apiError(LEAGUE_ERRORS.NOT_FOUND.code, LEAGUE_ERRORS.NOT_FOUND.message, 404)
+    }
 
-    const [members, total] = await Promise.all([
-      prisma.leagueMember.findMany({
-        where,
-        orderBy: { score: 'desc' },
-        skip,
-        take: limit,
-      }),
-      prisma.leagueMember.count({ where }),
-    ])
+    const ranking = await leagueRepository.getRanking(id, auth.user.id)
 
-    const serialized = members.map((m) => ({
-      id: m.id,
-      leagueId: m.leagueId,
-      userId: m.userId,
-      score: m.score.toNumber(),
-      rank: m.rank,
-      scoreBreakdown: m.scoreBreakdown as {
-        rentabilidade?: number
-        sofisticacao?: number
-        diversificacao?: number
-        consistencia?: number
-        educativo?: number
-      } | null,
-      updatedAt: m.updatedAt.toISOString(),
-    }))
-
-    return list(serialized, buildPagination(page, limit, total))
-  } catch {
+    return NextResponse.json(
+      { data: ranking },
+      {
+        status: 200,
+        headers: {
+          'Cache-Control': 'public, s-maxage=60',
+        },
+      }
+    )
+  } catch (err) {
+    if (err instanceof LeagueError) {
+      return apiError(err.code, err.message, err.status)
+    }
+    console.error('[leagues/:id/ranking GET] Erro:', err)
     return errors.server()
   }
 }

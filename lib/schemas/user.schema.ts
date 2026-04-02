@@ -40,6 +40,11 @@ export const updateProfileSchema = z.object({
       },
     )
     .optional(),
+  bio: z
+    .string()
+    .max(300, 'Bio deve ter no máximo 300 caracteres.')
+    .nullable()
+    .optional(),
 });
 
 // ---------------------------------------------------------------------------

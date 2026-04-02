@@ -41,15 +41,15 @@ export default function RecuperarSenhaPage() {
   if (sent) {
     return (
       <div className="w-full max-w-sm flex flex-col items-center gap-4 text-center py-8">
-        <CheckCircle className="h-12 w-12 text-[#22c55e]" />
-        <h1 className="text-xl font-bold text-[#f0ead6]">Email enviado!</h1>
-        <p className="text-sm text-[#7a7060]">
+        <CheckCircle className="h-12 w-12 text-[#2EBD85]" />
+        <h1 className="text-xl font-bold text-[#EAECEF]">Email enviado!</h1>
+        <p className="text-sm text-[#929AA5]">
           Enviamos as instruções de recuperação para{" "}
-          <span className="text-[#c9a84c]">{getValues("email")}</span>. Verifique sua caixa de entrada.
+          <span className="text-[#F0B90B]">{getValues("email")}</span>. Verifique sua caixa de entrada.
         </p>
         <Link
           href={ROUTES.LOGIN}
-          className="text-sm text-[#c9a84c] hover:text-[#d4b466] transition-colors mt-2"
+          className="text-sm text-[#F0B90B] hover:text-[#FCD535] transition-colors mt-2"
         >
           ← Voltar ao login
         </Link>
@@ -61,14 +61,14 @@ export default function RecuperarSenhaPage() {
     <div className="w-full max-w-sm">
       <Link
         href={ROUTES.HOME}
-        className="flex items-center gap-1 text-sm text-[#7a7060] hover:text-[#f0ead6] transition-colors mb-6"
+        className="flex items-center gap-1 text-sm text-[#929AA5] hover:text-[#EAECEF] transition-colors mb-6"
       >
         <ChevronLeft className="h-4 w-4" />
         Login
       </Link>
 
-      <h1 className="text-xl font-bold text-[#f0ead6] mb-1">Recuperar senha</h1>
-      <p className="text-sm text-[#7a7060] mb-6">
+      <h1 className="text-xl font-bold text-[#EAECEF] mb-1">Recuperar senha</h1>
+      <p className="text-sm text-[#929AA5] mb-6">
         Informe seu email e enviaremos as instruções para redefinir sua senha.
       </p>
 

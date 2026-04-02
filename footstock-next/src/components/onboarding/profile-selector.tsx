@@ -52,10 +52,10 @@ export function ProfileSelector({ onSelect, isLoading }: ProfileSelectorProps) {
   return (
     <div className="flex flex-col gap-4">
       <div className="text-center mb-2">
-        <h1 className="text-xl font-bold text-[#f0ead6]">
+        <h1 className="text-xl font-bold text-[#EAECEF]">
           Bem-vindo ao Foot Stock!
         </h1>
-        <p className="text-sm text-[#7a7060] mt-1">
+        <p className="text-sm text-[#929AA5] mt-1">
           Como você se descreveria?
         </p>
       </div>
@@ -74,10 +74,10 @@ export function ProfileSelector({ onSelect, isLoading }: ProfileSelectorProps) {
             onClick={() => setSelected(profile.value)}
             className={cn(
               "flex items-start gap-3 p-4 rounded-lg border text-left min-h-[56px]",
-              "transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a84c]",
+              "transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0B90B]",
               selected === profile.value
-                ? "border-[#c9a84c] bg-[rgba(201,168,76,.08)]"
-                : "border-[rgba(201,168,76,.18)] bg-[#141210] hover:border-[rgba(201,168,76,.4)]"
+                ? "border-[#F0B90B] bg-[rgba(240,185,11,.08)]"
+                : "border-[rgba(240,185,11,.18)] bg-[#1E2329] hover:border-[rgba(240,185,11,.4)]"
             )}
           >
             <span className="text-2xl flex-shrink-0 mt-0.5" aria-hidden="true">
@@ -88,19 +88,19 @@ export function ProfileSelector({ onSelect, isLoading }: ProfileSelectorProps) {
                 className={cn(
                   "text-sm font-semibold",
                   selected === profile.value
-                    ? "text-[#c9a84c]"
-                    : "text-[#f0ead6]"
+                    ? "text-[#F0B90B]"
+                    : "text-[#EAECEF]"
                 )}
               >
                 {profile.title}
               </p>
-              <p className="text-xs text-[#7a7060] mt-0.5">
+              <p className="text-xs text-[#929AA5] mt-0.5">
                 {profile.description}
               </p>
             </div>
             {selected === profile.value && (
               <svg
-                className="w-4 h-4 text-[#c9a84c] ml-auto flex-shrink-0 mt-0.5"
+                className="w-4 h-4 text-[#F0B90B] ml-auto flex-shrink-0 mt-0.5"
                 fill="currentColor"
                 viewBox="0 0 20 20"
                 aria-hidden="true"

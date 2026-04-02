@@ -165,13 +165,13 @@ export function TourGuide({
     <div className="flex flex-col gap-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <span className="text-xs text-[#7a7060]">
+        <span className="text-xs text-[#929AA5]">
           {currentStep + 1} de {steps.length}
         </span>
         <button
           type="button"
           onClick={onSkip}
-          className="text-xs text-[#7a7060] hover:text-[#f0ead6] transition-colors min-h-[44px] px-2"
+          className="text-xs text-[#929AA5] hover:text-[#EAECEF] transition-colors min-h-[44px] px-2"
           aria-label="Pular tour de boas-vindas"
           data-testid="tour-skip"
         >
@@ -193,7 +193,7 @@ export function TourGuide({
             key={i}
             className={cn(
               "h-1 flex-1 rounded-full transition-all duration-150",
-              i <= currentStep ? "bg-[#c9a84c]" : "bg-[rgba(201,168,76,.18)]"
+              i <= currentStep ? "bg-[#F0B90B]" : "bg-[rgba(240,185,11,.18)]"
             )}
           />
         ))}
@@ -209,8 +209,8 @@ export function TourGuide({
           {step.icon}
         </span>
         <div>
-          <h2 className="text-lg font-bold text-[#f0ead6]">{step.title}</h2>
-          <p className="text-sm text-[#7a7060] mt-2 leading-relaxed">
+          <h2 className="text-lg font-bold text-[#EAECEF]">{step.title}</h2>
+          <p className="text-sm text-[#929AA5] mt-2 leading-relaxed">
             {step.description}
           </p>
         </div>

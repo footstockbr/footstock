@@ -5,7 +5,7 @@
 // Orquestra filtros, busca, lista de ativos e delay badge.
 // ============================================================================
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import MarketFilters from './MarketFilters'
@@ -13,7 +13,9 @@ import MarketSearch from './MarketSearch'
 import MarketList from './MarketList'
 import DelayBadge from './DelayBadge'
 import { useInfiniteMarketData, flattenAssets } from '@/hooks/useMarketData'
+import { useMarketTick } from '@/hooks/useMarketTick'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
+import { ROUTES } from '@/lib/constants/routes'
 import type { AssetFilters } from '@/types/market'
 
 // TickerNewsTape é lazy — SSE client-only
@@ -26,16 +28,16 @@ export default function MarketPage() {
 
   const { data: user, isLoading: isUserLoading } = useCurrentUser()
 
-  const activeFilters: AssetFilters = {
-    ...filters,
-    ...(searchValue ? { search: searchValue } : {}),
-  }
+  // RESOLVED: T004 – activeFilters recriado a cada render → useMemo
+  const activeFilters = useMemo<AssetFilters>(
+    () => ({ ...filters, ...(searchValue ? { search: searchValue } : {}) }),
+    [filters, searchValue]
+  )
 
   const {
     data,
     isLoading,
     isError,
-    error,
     refetch,
     fetchNextPage,
     hasNextPage,
@@ -45,17 +47,23 @@ export default function MarketPage() {
   // Redirecionar se usuário não autenticado
   useEffect(() => {
     if (!isUserLoading && user === null) {
-      router.push('/login')
+      router.push(ROUTES.LOGIN)
     }
   }, [user, isUserLoading, router])
 
   const assets = flattenAssets(data)
   const delaySeconds = data?.pages[0]?._delaySeconds ?? 0
+  const { ticks, isConnected: isStreamConnected } = useMarketTick()
 
-  function clearFilters() {
+  // RESOLVED: T004 – clearFilters e handlers inline → useCallback
+  const clearFilters = useCallback(() => {
     setFilters({})
     setSearchValue('')
-  }
+  }, [])
+
+  const handleLoadMore = useCallback(() => fetchNextPage(), [fetchNextPage])
+  const handleClearSearch = useCallback(() => setSearchValue(''), [])
+  const handleRetry = useCallback(() => refetch(), [refetch])
 
   return (
     <div
@@ -69,7 +77,7 @@ export default function MarketPage() {
       <MarketSearch
         value={searchValue}
         onChange={setSearchValue}
-        onClear={() => setSearchValue('')}
+        onClear={handleClearSearch}
       />
 
       {/* Filtros de divisão */}
@@ -93,7 +101,7 @@ export default function MarketPage() {
           <button
             type="button"
             data-testid="market-error-retry"
-            onClick={() => refetch()}
+            onClick={handleRetry}
             className="px-4 py-2 text-sm font-medium rounded-md bg-red-600 hover:bg-red-500 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-red-400"
           >
             Tentar novamente
@@ -104,10 +112,12 @@ export default function MarketPage() {
       {/* Lista de ativos */}
       <MarketList
         assets={assets}
+        ticks={ticks}
+        isStreamConnected={isStreamConnected}
         favoriteClub={user?.favoriteClub ?? null}
         isLoading={isLoading}
         isFetchingNextPage={isFetchingNextPage}
-        onLoadMore={() => fetchNextPage()}
+        onLoadMore={handleLoadMore}
         hasMore={hasNextPage ?? false}
         onClearFilters={clearFilters}
       />

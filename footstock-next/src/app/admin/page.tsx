@@ -1,82 +1,119 @@
-import type { Metadata } from "next";
-import { Users, TrendingUp, CreditCard, AlertCircle, Activity } from "lucide-react";
-import { StatCard } from "@/components/ui/stat-card";
+'use client'
 
-export const metadata: Metadata = {
-  title: "Admin Dashboard — Foot Stock",
-};
+import { useQuery } from '@tanstack/react-query'
+import { RefreshCw } from 'lucide-react'
+import { AdminBreadcrumb } from '@/components/admin/AdminBreadcrumb'
+import { KPICards } from '@/components/admin/KPICards'
+import { NSMProgressBar } from '@/components/admin/NSMProgressBar'
+import { RevenueChart } from '@/components/admin/RevenueChart'
+import type { AdminDashboardDTO, RevenueDayPoint } from '@/lib/types/admin'
 
-const RECENT_ALERTS = [
-  { id: 1, level: "warn", message: "Circuit breaker ativado — CORI4 (−12%)", time: "há 5 min" },
-  { id: 2, level: "info", message: "3.241 usuários ativos agora", time: "há 10 min" },
-  { id: 3, level: "error", message: "Erro na integração de dados esportivos", time: "há 32 min" },
-];
+async function fetchDashboard(): Promise<AdminDashboardDTO> {
+  const res = await fetch('/api/v1/admin/dashboard')
+  if (!res.ok) throw new Error('Failed')
+  const { data } = await res.json()
+  return data
+}
+
+async function fetchRevenue(): Promise<RevenueDayPoint[]> {
+  const res = await fetch('/api/v1/admin/revenue-history?days=30')
+  if (!res.ok) throw new Error('Failed')
+  const { data } = await res.json()
+  return data
+}
 
 export default function AdminDashboardPage() {
+  const {
+    data: dashboard,
+    isLoading: loadingDash,
+    dataUpdatedAt,
+    refetch,
+  } = useQuery({
+    queryKey: ['admin-dashboard'],
+    queryFn: fetchDashboard,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  })
+
+  const { data: revenue = [], isLoading: loadingRevenue } = useQuery({
+    queryKey: ['revenue-history'],
+    queryFn: fetchRevenue,
+    staleTime: 300_000,
+  })
+
+  const lastUpdated = dataUpdatedAt
+    ? new Date(dataUpdatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    : null
+
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 md:p-6 space-y-5">
+      <AdminBreadcrumb />
+
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-[#f0ead6]">Dashboard</h1>
-          <p className="text-sm text-[#7a7060]">Visão geral do sistema em tempo real</p>
+          <h1 className="text-xl font-bold text-[#EAECEF]">Dashboard</h1>
+          <p className="text-xs text-[#929AA5] mt-0.5">Visão geral do sistema em tempo real</p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-[#4ade80] animate-pulse" />
-          <span className="text-xs text-[#4ade80]">Sistema operacional</span>
+        <div className="flex items-center gap-3">
+          {lastUpdated && (
+            <span className="text-xs text-[#929AA5]">Atualizado às {lastUpdated}</span>
+          )}
+          <button
+            onClick={() => refetch()}
+            className="h-8 w-8 flex items-center justify-center rounded-lg text-[#929AA5] hover:text-[#F0B90B] hover:bg-[rgba(240,185,11,.08)] transition-colors"
+            title="Atualizar"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        <StatCard label="Usuários Totais" value="15.320" subValue="+127 hoje" />
-        <StatCard label="Volume (24h)" value="FS$ 4,2M" subValue="+18% vs ontem" />
-        <StatCard label="Receita MRR" value="R$ 28.450" subValue="234 assinantes" />
-        <StatCard label="Ordens Abertas" value="1.847" subValue="tempo real" />
-      </div>
+      <KPICards data={dashboard ?? null} isLoading={loadingDash} />
 
-      {/* Charts placeholder */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <div className="bg-[#141210] rounded-xl border border-[rgba(201,168,76,.1)] p-4">
-          <h3 className="text-sm font-semibold text-[#f0ead6] mb-4 flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-[#c9a84c]" />
-            Volume de Negociações
-          </h3>
-          <div className="h-32 flex items-center justify-center">
-            <p className="text-xs text-[#4a3d2a]">Gráfico — integração com backend pendente</p>
-          </div>
+      {/* NSM + Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+        <div className="lg:col-span-3">
+          <RevenueChart data={revenue} isLoading={loadingRevenue} />
         </div>
-        <div className="bg-[#141210] rounded-xl border border-[rgba(201,168,76,.1)] p-4">
-          <h3 className="text-sm font-semibold text-[#f0ead6] mb-4 flex items-center gap-2">
-            <Users className="h-4 w-4 text-[#c9a84c]" />
-            Novos Usuários (30 dias)
-          </h3>
-          <div className="h-32 flex items-center justify-center">
-            <p className="text-xs text-[#4a3d2a]">Gráfico — integração com backend pendente</p>
-          </div>
-        </div>
-      </div>
+        <div className="lg:col-span-2 space-y-4">
+          <NSMProgressBar
+            ordersToday={dashboard?.ordersVsTarget.today ?? 0}
+            target={dashboard?.ordersVsTarget.target ?? 500}
+          />
 
-      {/* Alerts */}
-      <div className="bg-[#141210] rounded-xl border border-[rgba(201,168,76,.1)] p-4">
-        <h3 className="text-sm font-semibold text-[#f0ead6] mb-3 flex items-center gap-2">
-          <Activity className="h-4 w-4 text-[#c9a84c]" />
-          Alertas Recentes
-        </h3>
-        <div className="flex flex-col gap-2">
-          {RECENT_ALERTS.map((alert) => (
-            <div key={alert.id} className="flex items-start gap-3 py-2 border-b border-[rgba(201,168,76,.06)] last:border-0">
-              <AlertCircle className={`h-4 w-4 flex-shrink-0 mt-0.5 ${
-                alert.level === "error" ? "text-[#ef4444]" :
-                alert.level === "warn" ? "text-[#f59e0b]" : "text-[#60a5fa]"
-              }`} />
-              <div className="flex-1">
-                <p className="text-sm text-[#c5b99a]">{alert.message}</p>
-                <p className="text-xs text-[#4a3d2a] mt-0.5">{alert.time}</p>
+          {/* Top Assets */}
+          {dashboard?.topAssets && dashboard.topAssets.length > 0 && (
+            <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
+              <h3 className="text-xs font-semibold text-[#929AA5] uppercase tracking-wider mb-3">
+                Top Ativos (24h)
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs min-w-[240px]">
+                  <thead>
+                    <tr className="text-[#929AA5] border-b border-[rgba(240,185,11,.08)]">
+                      <th className="text-left py-1.5 font-medium">Ticker</th>
+                      <th className="text-right py-1.5 font-medium">Volume</th>
+                      <th className="text-right py-1.5 font-medium">Var%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dashboard.topAssets.map((a) => (
+                      <tr key={a.ticker} className="border-b border-[rgba(240,185,11,.06)] last:border-0">
+                        <td className="py-1.5 font-mono text-[#c5b99a]">{a.ticker}</td>
+                        <td className="py-1.5 text-right text-[#929AA5]">{a.volume}</td>
+                        <td className={`py-1.5 text-right font-medium ${a.priceChange >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {a.priceChange > 0 ? '+' : ''}{a.priceChange.toFixed(2)}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
-          ))}
+          )}
         </div>
       </div>
     </div>
-  );
+  )
 }

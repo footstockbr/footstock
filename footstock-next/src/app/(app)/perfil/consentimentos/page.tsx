@@ -89,7 +89,7 @@ export default function ConsentimentosPage() {
       <div className="flex items-center gap-3 mb-6">
         <Link
           href={ROUTES.PERFIL}
-          className="text-[#7a7060] hover:text-[#f0ead6] transition-colors"
+          className="text-[#929AA5] hover:text-[#EAECEF] transition-colors"
           aria-label="Voltar ao perfil"
         >
           <svg
@@ -107,17 +107,17 @@ export default function ConsentimentosPage() {
             />
           </svg>
         </Link>
-        <h1 className="text-lg font-bold text-[#f0ead6]">Consentimentos</h1>
+        <h1 className="text-lg font-bold text-[#EAECEF]">Consentimentos</h1>
       </div>
 
-      <p className="text-sm text-[#7a7060] mb-6">
+      <p className="text-sm text-[#929AA5] mb-6">
         Gerencie suas preferências de privacidade e consentimentos de dados conforme a LGPD.
       </p>
 
       {error && (
         <div
           role="alert"
-          className="mb-4 p-3 rounded-lg bg-[rgba(239,68,68,.1)] border border-[rgba(239,68,68,.3)] text-sm text-[#ef4444]"
+          className="mb-4 p-3 rounded-lg bg-[rgba(239,68,68,.1)] border border-[rgba(239,68,68,.3)] text-sm text-[#F6465D]"
         >
           {error}
           <button
@@ -145,7 +145,7 @@ export default function ConsentimentosPage() {
           ))}
         </div>
       ) : consents.length === 0 ? (
-        <p className="text-sm text-[#7a7060] text-center py-8">
+        <p className="text-sm text-[#929AA5] text-center py-8">
           Nenhum consentimento registrado.
         </p>
       ) : (
@@ -160,21 +160,21 @@ export default function ConsentimentosPage() {
               <div
                 key={consent.id}
                 data-testid={`consent-item-${consent.purpose}`}
-                className="bg-[#141210] border border-[rgba(201,168,76,.18)] rounded-lg p-4"
+                className="bg-[#1E2329] border border-[rgba(240,185,11,.18)] rounded-lg p-4"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <p className="text-sm font-medium text-[#f0ead6]">
+                      <p className="text-sm font-medium text-[#EAECEF]">
                         {meta.label}
                       </p>
                       {meta.required && (
-                        <span className="text-[10px] text-[#7a7060] bg-[rgba(201,168,76,.08)] border border-[rgba(201,168,76,.18)] px-1.5 py-0.5 rounded-sm">
+                        <span className="text-[10px] text-[#929AA5] bg-[rgba(240,185,11,.08)] border border-[rgba(240,185,11,.18)] px-1.5 py-0.5 rounded-sm">
                           Obrigatório
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-[#7a7060]">{meta.description}</p>
+                    <p className="text-xs text-[#929AA5]">{meta.description}</p>
                     <p className="text-[11px] text-[#5a5040] mt-1">
                       {consent.revoked && consent.revokedAt
                         ? `Revogado em ${formatDate(consent.revokedAt)}`
@@ -185,14 +185,14 @@ export default function ConsentimentosPage() {
                   <div className="flex-shrink-0">
                     {consent.revoked ? (
                       <span
-                        className="text-xs text-[#ef4444] font-medium"
+                        className="text-xs text-[#F6465D] font-medium"
                         aria-label={`${meta.label} revogado`}
                       >
                         Revogado
                       </span>
                     ) : meta.required ? (
                       <span
-                        className="text-xs text-[#22c55e] font-medium"
+                        className="text-xs text-[#2EBD85] font-medium"
                         aria-label={`${meta.label} ativo — obrigatório`}
                       >
                         Ativo
@@ -204,7 +204,7 @@ export default function ConsentimentosPage() {
                         isLoading={revoking === consent.purpose}
                         disabled={!!revoking}
                         onClick={() => handleRevoke(consent.purpose)}
-                        className="text-[#ef4444] hover:text-[#ef4444] text-xs"
+                        className="text-[#F6465D] hover:text-[#F6465D] text-xs"
                         data-testid={`revoke-btn-${consent.purpose}`}
                       >
                         Revogar

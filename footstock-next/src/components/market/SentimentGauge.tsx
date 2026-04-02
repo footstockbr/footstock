@@ -1,11 +1,11 @@
 'use client'
 
 function getSentimentLabel(v: number): { label: string; color: string } {
-  if (v <= -0.6) return { label: 'Muito Negativo', color: '#ef4444' }
+  if (v <= -0.6) return { label: 'Muito Negativo', color: '#F6465D' }
   if (v <= -0.2) return { label: 'Negativo', color: '#f97316' }
-  if (v <= 0.2) return { label: 'Neutro', color: '#7a7060' }
+  if (v <= 0.2) return { label: 'Neutro', color: '#929AA5' }
   if (v <= 0.6) return { label: 'Positivo', color: '#4ade80' }
-  return { label: 'Muito Positivo', color: '#22c55e' }
+  return { label: 'Muito Positivo', color: '#2EBD85' }
 }
 
 interface SentimentGaugeProps {
@@ -38,11 +38,11 @@ export function SentimentGauge({ sentiment }: SentimentGaugeProps) {
       >
         <defs>
           <linearGradient id="sentimentGradient" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#ef4444" />
+            <stop offset="0%" stopColor="#F6465D" />
             <stop offset="25%" stopColor="#f97316" />
-            <stop offset="50%" stopColor="#7a7060" />
+            <stop offset="50%" stopColor="#929AA5" />
             <stop offset="75%" stopColor="#4ade80" />
-            <stop offset="100%" stopColor="#22c55e" />
+            <stop offset="100%" stopColor="#2EBD85" />
           </linearGradient>
         </defs>
 
@@ -71,10 +71,10 @@ export function SentimentGauge({ sentiment }: SentimentGaugeProps) {
         <circle cx="100" cy="100" r="4" fill={color} />
 
         {/* Labels de extremos */}
-        <text x="10" y="115" textAnchor="start" fontSize="8" fill="#7a7060">
+        <text x="10" y="115" textAnchor="start" fontSize="8" fill="#929AA5">
           Muito Negativo
         </text>
-        <text x="190" y="115" textAnchor="end" fontSize="8" fill="#7a7060">
+        <text x="190" y="115" textAnchor="end" fontSize="8" fill="#929AA5">
           Muito Positivo
         </text>
       </svg>

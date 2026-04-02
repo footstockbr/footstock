@@ -16,6 +16,13 @@ import { REDIS_CHANNELS } from '../types/events.types'
 import type { AssetState, MotorTick, SessionType } from '../types/motor.types'
 import { logger } from '../utils/logger'
 import { MotorHealthService } from '../services/MotorHealthService'
+import { OrderExecutor } from './OrderExecutor'
+import { OrderMatcher } from './OrderMatcher'
+import { ScheduledOrderRunner } from './ScheduledOrderRunner'
+import { MarginCallChecker } from './MarginCallChecker'
+import { LeverageInterestRunner } from './LeverageInterestRunner'
+import { CLUB_STATE_BY_TICKER } from '../microstructure/clubStates'
+import type { PreviousTickDelta } from '../types/motor.types'
 
 const TICK_INTERVAL_MS = parseInt(process.env.MOTOR_TICK_INTERVAL_MS ?? '2000', 10)
 const PERSIST_HISTORY_EVERY = 5  // Persistir PriceHistory a cada N ticks (A_TOP persiste sempre)
@@ -29,11 +36,23 @@ export class MarketEngine {
   private tickTimer: ReturnType<typeof setInterval> | null = null
   private tickCount = 0
   private healthService: MotorHealthService
+  private orderExecutor: OrderExecutor
+  private orderMatcher: OrderMatcher
+  private scheduledOrderRunner: ScheduledOrderRunner
+  private marginCallChecker: MarginCallChecker
+  private leverageInterestRunner: LeverageInterestRunner
+  /** Deltas percentuais do tick anterior — alimenta L10_Correlation. */
+  private previousTickDeltas = new Map<string, PreviousTickDelta>()
 
   constructor(redis: Redis) {
     this.redis = redis
     this.prisma = new PrismaClient()
     this.healthService = MotorHealthService.getInstance(redis)
+    this.orderExecutor = new OrderExecutor(this.prisma, redis)
+    this.orderMatcher = new OrderMatcher(this.prisma, redis)
+    this.scheduledOrderRunner = new ScheduledOrderRunner(this.prisma, redis, sessionManager)
+    this.marginCallChecker = new MarginCallChecker(this.prisma, redis)
+    this.leverageInterestRunner = new LeverageInterestRunner(this.prisma, redis)
   }
 
   async start(): Promise<void> {
@@ -63,11 +82,13 @@ export class MarketEngine {
         id: asset.id,
         ticker: asset.ticker,
         cluster: asset.cluster as AssetState['cluster'],
+        state: CLUB_STATE_BY_TICKER[asset.ticker] ?? '',
         currentPrice: Number(asset.currentPrice),
         openPrice: Number(asset.openPrice),
         highPrice: Number(asset.currentPrice),
         lowPrice: Number(asset.currentPrice),
         closePrice: Number(asset.closePrice),
+        fairValue: Number((asset as any).fairValue ?? asset.closePrice),
         volume: 0,
         variance: 0.0001,  // Variância GARCH inicial
         pendingBuyVolume: 0,
@@ -108,8 +129,8 @@ export class MarketEngine {
         // Gerar ruído gaussiano (Box-Muller)
         const noise = this.gaussianNoise()
 
-        // Calcular novo preço via 9 camadas
-        const { newPrice, halted } = this.calculator.calculate(state, params, noise)
+        // Calcular novo preço via 9 camadas + L10 correlação
+        const { newPrice, halted } = this.calculator.calculate(state, params, noise, this.previousTickDeltas)
 
         if (halted) {
           // Circuit breaker: notificar e pausar por 150 ticks
@@ -170,6 +191,57 @@ export class MarketEngine {
       await this.redis.publish(REDIS_CHANNELS.MARKET_TICK, serializeTick(ticks))
       // Publicar heartbeat de saúde do motor
       await this.healthService.publishTick()
+    }
+
+    // Atualizar mapa de deltas para L10_Correlation no próximo tick
+    this.previousTickDeltas.clear()
+    for (const [assetId, state] of this.assetStates) {
+      if (state.isPaused) continue
+      const tick = ticks.find(t => t.assetId === assetId)
+      if (tick && state.currentPrice > 0) {
+        const prevClose = tick.close > 0 ? tick.close : state.currentPrice
+        this.previousTickDeltas.set(assetId, {
+          deltaPercent: prevClose > 0 ? (state.currentPrice - prevClose) / prevClose : 0,
+          cluster: state.cluster,
+          state: state.state,
+        })
+      }
+    }
+
+    // Construir mapa de preços atuais para os engines de ordem
+    const currentPrices: Record<string, number> = {}
+    for (const state of this.assetStates.values()) {
+      currentPrices[state.ticker] = state.currentPrice
+    }
+
+    // Processar ordens MARKET pendentes
+    this.orderExecutor.processPendingMarketOrders(currentPrices).catch(err =>
+      logger.error('[engine] OrderExecutor erro:', err)
+    )
+
+    // Verificar e executar ordens LIMIT/OCO
+    this.orderMatcher.checkLimitOrders(currentPrices).catch(err =>
+      logger.error('[engine] OrderMatcher erro:', err)
+    )
+
+    // Verificar ordens SCHEDULED no horário programado
+    this.scheduledOrderRunner.checkScheduledOrders(currentPrices).catch(err =>
+      logger.error('[engine] ScheduledOrderRunner erro:', err)
+    )
+
+    // Verificar margin calls de posições SHORT (a cada 5 ticks para não sobrecarregar)
+    if (this.tickCount % 5 === 0) {
+      this.marginCallChecker.checkMarginCalls(currentPrices).catch(err =>
+        logger.error('[engine] MarginCallChecker erro:', err)
+      )
+    }
+
+    // Cobrar juros diários de posições LONG alavancadas (sessão FECHADO = fim do dia)
+    if (sessionType === 'FECHADO' && this.tickCount % 300 === 1) {
+      // 300 ticks × 2s = 10 min — trigger no início do período FECHADO, não a cada tick
+      this.leverageInterestRunner.chargeDaily().catch(err =>
+        logger.error('[engine] LeverageInterestRunner erro:', err)
+      )
     }
 
     // Sincronizar preços no banco a cada 10 ticks

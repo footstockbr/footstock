@@ -1,54 +1,58 @@
+@config "../tailwind.config.ts";
 @import "tailwindcss";
 
 :root {
-  --bg-primary: #080808;
-  --bg-surface: #0f0e0b;
-  --bg-card: #141210;
-  --bg-elevated: #161d28;
-  --bg-overlay: rgba(8, 11, 18, 0.85);
+  --bg-primary: #0B0E11;
+  --bg-surface: #181A20;
+  --bg-card: #1E2329;
+  --bg-elevated: #202630;
+  --bg-overlay: rgba(11, 14, 17, 0.85);
+  --bg-input: #2B3139;
 
-  --accent-primary: #C9A84C;
-  --accent-primary-hover: #D4B466;
-  --accent-primary-muted: rgba(108, 99, 255, 0.15);
-  --accent-secondary: #38bdf8;
-  --accent-secondary-hover: #56c9f8;
-  --accent-gold: #C9A84C;
-  --accent-gold-hover: #f6ab22;
-  --accent-gold-muted: rgba(245, 158, 11, 0.15);
+  --accent-primary: #F0B90B;
+  --accent-primary-hover: #FCD535;
+  --accent-primary-muted: rgba(240, 185, 11, 0.1);
+  --accent-secondary: #F0B90B;
+  --accent-secondary-hover: #FCD535;
+  --accent-gold: #F0B90B;
+  --accent-gold-hover: #FCD535;
+  --accent-gold-muted: rgba(240, 185, 11, 0.1);
 
-  --color-success: #22c55e;
-  --color-success-muted: rgba(34, 197, 94, 0.15);
-  --color-error: #ef4444;
-  --color-error-muted: rgba(239, 68, 68, 0.15);
-  --color-warning: #C9A84C;
-  --color-warning-muted: rgba(245, 158, 11, 0.15);
-  --color-info: #38bdf8;
-  --color-info-muted: rgba(56, 189, 248, 0.15);
+  --color-success: #2EBD85;
+  --color-success-muted: rgba(46, 189, 133, 0.1);
+  --color-success-flash: rgba(46, 189, 133, 0.2);
+  --color-error: #F6465D;
+  --color-error-muted: rgba(246, 70, 93, 0.1);
+  --color-error-flash: rgba(246, 70, 93, 0.2);
+  --color-warning: #F0B90B;
+  --color-warning-muted: rgba(240, 185, 11, 0.1);
+  --color-info: #F0B90B;
+  --color-info-muted: rgba(240, 185, 11, 0.1);
 
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-muted: #475569;
-  --text-disabled: #334155;
-  --text-inverse: #080808;
+  --text-primary: #EAECEF;
+  --text-secondary: #929AA5;
+  --text-muted: #707A8A;
+  --text-disabled: #4F5867;
+  --text-inverse: #0B0E11;
 
-  --border-default: #1e293b;
-  --border-muted: #0f172a;
-  --border-focus: #C9A84C;
-  --border-error: #ef4444;
+  --border-default: #2B3139;
+  --border-muted: #333B47;
+  --border-focus: #F0B90B;
+  --border-error: #F6465D;
 
-  --session-pre-abertura: #C9A84C;
-  --session-negociacao: #8b5cf6;
-  --session-call: #06b6d4;
-  --session-after-market: #7c3aed;
-  --session-fechado: #ef4444;
+  --session-pre-abertura: #F0B90B;
+  --session-negociacao: #2EBD85;
+  --session-call: #929AA5;
+  --session-after-market: #707A8A;
+  --session-fechado: #F6465D;
 
-  --plan-jogador: #64748b;
-  --plan-craque: #38bdf8;
-  --plan-lenda: #C9A84C;
+  --plan-jogador: #707A8A;
+  --plan-craque: #F0B90B;
+  --plan-lenda: #FCD535;
 
-  --price-up: #22c55e;
-  --price-down: #ef4444;
-  --price-neutral: #94a3b8;
+  --price-up: #2EBD85;
+  --price-down: #F6465D;
+  --price-neutral: #929AA5;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.5);
@@ -88,10 +92,9 @@ html {
 
 body {
   min-height: 100dvh;
-  min-width: 360px;
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  font-family: var(--font-inter), system-ui, sans-serif;
+  font-family: var(--font-ibm-plex-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -102,6 +105,16 @@ body {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
+}
+
+/* ── Scrollbar Hide Utility (GAP-013) ────────────── */
+
+@utility scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /* ── Scrollbar ────────────────────────────────────── */
@@ -135,6 +148,7 @@ h6 {
   color: var(--text-primary);
   font-weight: 600;
   line-height: 1.2;
+  font-family: var(--font-ibm-plex-sans), system-ui, sans-serif;
 }
 
 code,
@@ -252,12 +266,12 @@ pre {
 /* ── Market tick animations ────────────────────────── */
 
 @keyframes tick-up {
-  0% { background-color: rgba(34, 197, 94, 0.25); }
+  0% { background-color: var(--color-success-flash); }
   100% { background-color: transparent; }
 }
 
 @keyframes tick-down {
-  0% { background-color: rgba(239, 68, 68, 0.25); }
+  0% { background-color: var(--color-error-flash); }
   100% { background-color: transparent; }
 }
 
@@ -269,3 +283,23 @@ pre {
 .animate-tick-up { animation: tick-up 500ms ease-out; }
 .animate-tick-down { animation: tick-down 500ms ease-out; }
 .animate-marquee { animation: marquee 30s linear infinite; }
+
+/* ── Splash screen ───────────────────────────────── */
+
+@keyframes splashIn {
+  0% { opacity: 0; transform: scale(0.8); }
+  30% { opacity: 1; transform: scale(1.05); }
+  50% { opacity: 1; transform: scale(1); }
+  80% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.95); }
+}
+
+@keyframes splashBgFade {
+  0%, 80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}

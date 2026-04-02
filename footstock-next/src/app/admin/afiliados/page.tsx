@@ -19,11 +19,11 @@ export default function AdminAfiliadosPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-[#f0ead6] flex items-center gap-2">
-            <Network className="h-5 w-5 text-[#c9a84c]" />
+          <h1 className="text-xl font-bold text-[#EAECEF] flex items-center gap-2">
+            <Network className="h-5 w-5 text-[#F0B90B]" />
             Afiliados
           </h1>
-          <p className="text-sm text-[#7a7060]">Programa de indicação e comissões</p>
+          <p className="text-sm text-[#929AA5]">Programa de indicação e comissões</p>
         </div>
         <Button variant="primary" size="sm">
           <Plus className="h-4 w-4 mr-1" />
@@ -37,32 +37,32 @@ export default function AdminAfiliadosPage() {
         <StatCard label="Comissões Pagas" value="R$ 3.640" subValue="este mês" />
       </div>
 
-      <div className="bg-[#141210] rounded-xl border border-[rgba(201,168,76,.1)] p-4">
+      <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-[rgba(201,168,76,.08)]">
-              <th className="text-left py-2 text-xs text-[#7a7060] font-medium">Afiliado</th>
-              <th className="text-left py-2 text-xs text-[#7a7060] font-medium">Código</th>
-              <th className="text-right py-2 text-xs text-[#7a7060] font-medium">Conversões</th>
-              <th className="text-right py-2 text-xs text-[#7a7060] font-medium">Receita</th>
-              <th className="text-right py-2 text-xs text-[#7a7060] font-medium">Status</th>
+            <tr className="border-b border-[rgba(240,185,11,.08)]">
+              <th className="text-left py-2 text-xs text-[#929AA5] font-medium">Afiliado</th>
+              <th className="text-left py-2 text-xs text-[#929AA5] font-medium">Código</th>
+              <th className="text-right py-2 text-xs text-[#929AA5] font-medium">Conversões</th>
+              <th className="text-right py-2 text-xs text-[#929AA5] font-medium">Receita</th>
+              <th className="text-right py-2 text-xs text-[#929AA5] font-medium">Status</th>
             </tr>
           </thead>
           <tbody>
             {AFFILIATES.map((affiliate) => (
-              <tr key={affiliate.id} className="border-b border-[rgba(201,168,76,.04)]">
+              <tr key={affiliate.id} className="border-b border-[rgba(240,185,11,.04)]">
                 <td className="py-2.5 text-sm text-[#c5b99a]">{affiliate.name}</td>
                 <td className="py-2.5">
                   <div className="flex items-center gap-1.5">
-                    <code className="text-xs font-mono text-[#c9a84c] bg-[rgba(201,168,76,.08)] px-1.5 py-0.5 rounded">
+                    <code className="text-xs font-mono text-[#F0B90B] bg-[rgba(240,185,11,.08)] px-1.5 py-0.5 rounded">
                       {affiliate.code}
                     </code>
-                    <button className="text-[#4a3d2a] hover:text-[#7a7060] transition-colors">
+                    <button className="text-[#707A8A] hover:text-[#929AA5] transition-colors">
                       <Copy className="h-3 w-3" />
                     </button>
                   </div>
                 </td>
-                <td className="py-2.5 text-right font-mono text-sm text-[#f0ead6]">{affiliate.conversions}</td>
+                <td className="py-2.5 text-right font-mono text-sm text-[#EAECEF]">{affiliate.conversions}</td>
                 <td className="py-2.5 text-right font-mono text-sm text-[#4ade80]">{affiliate.revenue}</td>
                 <td className="py-2.5 text-right">
                   <Badge variant={affiliate.status === "ativo" ? "default" : "warning"} size="xs">

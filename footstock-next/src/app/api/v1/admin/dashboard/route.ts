@@ -1,39 +1,129 @@
+import { NextResponse } from 'next/server'
+import { Redis } from '@upstash/redis'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
+import type { AdminDashboardDTO } from '@/lib/types/admin'
 
-// GET /api/v1/admin/dashboard — todos os roles admin
+const CACHE_KEY = 'admin:dashboard:cache'
+const CACHE_TTL = 60
+const NSM_TARGET = 500
+const PLAN_MRR: Record<string, number> = { CRAQUE: 19.9, LENDA: 39.9, JOGADOR: 0 }
+
+function getRedis(): Redis | null {
+  const url = process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+  if (!url || !token) return null
+  return new Redis({ url, token })
+}
+
+// GET /api/v1/admin/dashboard — Monitor+
 export async function GET() {
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()
-
   if (!hasAdminRole(auth.user.adminRole, 'MONITOR')) {
-    return errors.forbidden('Acesso restrito ao painel administrativo.')
+    return NextResponse.json(
+      { error: { code: 'ADMIN-050', message: 'Permissão insuficiente para esta ação administrativa.' } },
+      { status: 403 }
+    )
+  }
+
+  const redis = getRedis()
+
+  // Tentar cache
+  if (redis) {
+    try {
+      const cached = await redis.get<AdminDashboardDTO>(CACHE_KEY)
+      if (cached) {
+        const res = NextResponse.json({ data: { ...cached, _cacheHit: true } })
+        res.headers.set('X-Cache', 'HIT')
+        return res
+      }
+    } catch { /* ignora falha de cache */ }
+  }
+
+  const now = new Date()
+  const sub24h = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+
+  // Motor status via Redis
+  let motorStatus: 'ONLINE' | 'OFFLINE' | 'DEGRADED' = 'DEGRADED'
+  if (redis) {
+    try {
+      const ms = await redis.get<string>('motor:status')
+      if (ms === 'ONLINE' || ms === 'OFFLINE' || ms === 'DEGRADED') motorStatus = ms
+    } catch { motorStatus = 'DEGRADED' }
   }
 
   try {
-    const now = new Date()
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const startOfWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-
-    // TODO: Implementar via /auto-flow execute
-    // Incluir: MRR real via subscriptions, motorStatus via Redis ping
-    const [dau, wau, mau, ordersToday] = await Promise.all([
-      prisma.user.count({ where: { updatedAt: { gte: startOfDay } } }),
-      prisma.user.count({ where: { updatedAt: { gte: startOfWeek } } }),
-      prisma.user.count({ where: { updatedAt: { gte: startOfMonth } } }),
-      prisma.order.count({ where: { createdAt: { gte: startOfDay } } }),
+    const [
+      totalUsers,
+      newUsers24h,
+      activeSubscriptions,
+      totalOrders24h,
+      topAssetsRaw,
+      planCounts,
+    ] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { createdAt: { gte: sub24h } } }),
+      prisma.subscription.count({ where: { status: 'ACTIVE' } }),
+      prisma.order.count({ where: { createdAt: { gte: sub24h }, status: 'EXECUTED' } }),
+      prisma.order.groupBy({
+        by: ['ticker'],
+        where: { createdAt: { gte: sub24h }, status: 'EXECUTED' },
+        _count: { id: true },
+        orderBy: { _count: { id: 'desc' } },
+        take: 5,
+      }),
+      prisma.subscription.groupBy({
+        by: ['planType'],
+        where: { status: 'ACTIVE' },
+        _count: { id: true },
+      }),
     ])
 
-    return ok({
-      dau,
-      wau,
-      mau,
-      ordersToday,
-      mrr: 0, // TODO: calcular via subscriptions ACTIVE
-      motorStatus: 'OFFLINE' as 'ONLINE' | 'OFFLINE' | 'READONLY',
+    // MRR baseado em planos ativos
+    const MRR = planCounts.reduce(
+      (sum, row) => sum + (PLAN_MRR[row.planType] ?? 0) * row._count.id,
+      0
+    )
+
+    // Top assets com variação de preço
+    const topTickers = topAssetsRaw.map((r) => r.ticker)
+    const assetPrices = await prisma.asset.findMany({
+      where: { ticker: { in: topTickers } },
+      select: { ticker: true, currentPrice: true, fairValue: true },
     })
+    const priceMap = new Map(assetPrices.map((a) => [a.ticker, a]))
+    const topAssets = topAssetsRaw.map((r) => {
+      const asset = priceMap.get(r.ticker)
+      const price = asset?.currentPrice.toNumber() ?? 0
+      const fair = asset?.fairValue.toNumber() ?? price
+      const priceChange = fair > 0 ? Math.round(((price - fair) / fair) * 10000) / 100 : 0
+      return { ticker: r.ticker, volume: r._count.id, priceChange }
+    })
+
+    const dto: AdminDashboardDTO = {
+      totalUsers,
+      newUsers24h,
+      activeSubscriptions,
+      MRR: Math.round(MRR * 100) / 100,
+      totalOrders24h,
+      ordersVsTarget: {
+        today: totalOrders24h,
+        target: NSM_TARGET,
+        percentAchieved: Math.round(Math.min((totalOrders24h / NSM_TARGET) * 100, 100) * 10) / 10,
+      },
+      motorStatus,
+      topAssets,
+    }
+
+    if (redis) {
+      try { await redis.set(CACHE_KEY, dto, { ex: CACHE_TTL }) } catch { /* ignora */ }
+    }
+
+    const res = ok(dto)
+    res.headers.set('X-Cache', 'MISS')
+    return res
   } catch {
     return errors.server()
   }

@@ -52,7 +52,7 @@ export function PlanCard({ user }: PlanCardProps) {
     <Card data-testid="profile-plan-card">
       <div className="p-4 flex items-center justify-between">
         <div>
-          <p className="text-xs text-[#7a7060] mb-1">Plano atual</p>
+          <p className="text-xs text-[#929AA5] mb-1">Plano atual</p>
           <PlanBadge plan={user.planType as PlanType} size="md" />
         </div>
         {isFreePlan && (
@@ -65,19 +65,19 @@ export function PlanCard({ user }: PlanCardProps) {
       </div>
 
       {!isFreePlan && (
-        <div className="px-4 pb-4 flex items-center justify-between border-t border-[rgba(201,168,76,.1)] pt-3">
+        <div className="px-4 pb-4 flex items-center justify-between border-t border-[rgba(240,185,11,.1)] pt-3">
           <div>
             {isCancelled ? (
               <>
-                <p className="text-xs text-[#7a7060]">Cancelamento</p>
+                <p className="text-xs text-[#929AA5]">Cancelamento</p>
                 <Badge variant="warning" size="sm" className="mt-1">
                   Cancelamento solicitado
                 </Badge>
               </>
             ) : (
               <>
-                <p className="text-xs text-[#7a7060]">Próxima renovação</p>
-                <p className="text-sm text-[#f0ead6] font-medium">
+                <p className="text-xs text-[#929AA5]">Próxima renovação</p>
+                <p className="text-sm text-[#EAECEF] font-medium">
                   {sub?.expiresAt ? formatDate(sub.expiresAt) : "Automática"}
                 </p>
               </>

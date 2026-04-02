@@ -1,75 +1,112 @@
-import type { Metadata } from "next";
-import { Gauge, Play, Pause, RotateCcw } from "lucide-react";
-import { StatCard } from "@/components/ui/stat-card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+'use client'
 
-export const metadata: Metadata = {
-  title: "Motor de Mercado — Admin · Foot Stock",
-};
+import { useQuery } from '@tanstack/react-query'
+import { AdminBreadcrumb } from '@/components/admin/AdminBreadcrumb'
+import { MotorStateCard } from '@/components/admin/MotorStateCard'
+import { ClubEditor } from '@/components/admin/ClubEditor'
+import { NewsInjector } from '@/components/admin/NewsInjector'
+import { ImpactMatrix } from '@/components/admin/ImpactMatrix'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
+import type { AdminMarketActionLog } from '@/lib/types/admin'
 
-const SESSIONS = [
-  { name: "PRÉ_ABERTURA", status: "concluído", time: "08:00–10:00" },
-  { name: "NEGOCIAÇÃO", status: "ativo", time: "10:00–17:00" },
-  { name: "CALL", status: "pendente", time: "17:00–17:15" },
-  { name: "AFTER_MARKET", status: "pendente", time: "17:15–18:00" },
-  { name: "FECHADO", status: "pendente", time: "18:00–08:00" },
-];
+async function fetchAuditLog(): Promise<AdminMarketActionLog[]> {
+  const res = await fetch('/api/v1/admin/audit?limit=20')
+  if (!res.ok) throw new Error('Failed')
+  const { data } = await res.json()
+  return data
+}
+
+const ACTION_BADGE: Record<string, string> = {
+  HALT_ASSET: 'bg-red-500/20 text-red-400',
+  RELEASE_HALT: 'bg-emerald-500/20 text-emerald-400',
+  NEWS_INJECT: 'bg-blue-500/20 text-blue-400',
+  UNAUTHORIZED_ATTEMPT: 'bg-yellow-500/20 text-yellow-400',
+  ADMIN_BROADCAST: 'bg-purple-500/20 text-purple-400',
+}
+
+function AuditLog() {
+  const { data: actions, isLoading } = useQuery({
+    queryKey: ['audit-log'],
+    queryFn: fetchAuditLog,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  })
+
+  return (
+    <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
+      <h2 className="text-sm font-semibold text-[#EAECEF] mb-3">Ações Recentes</h2>
+      {isLoading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}
+        </div>
+      ) : !actions?.length ? (
+        <p className="text-xs text-[#929AA5] py-4 text-center">Nenhuma ação registrada ainda</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[480px] text-xs">
+            <thead>
+              <tr className="text-[#929AA5] border-b border-[rgba(240,185,11,.08)]">
+                <th className="text-left py-1.5 px-2 font-medium">Data/Hora</th>
+                <th className="text-left py-1.5 px-2 font-medium">Admin</th>
+                <th className="text-left py-1.5 px-2 font-medium">Ação</th>
+                <th className="text-left py-1.5 px-2 font-medium">Ticker</th>
+              </tr>
+            </thead>
+            <tbody>
+              {actions.map((a) => (
+                <tr key={a.id} className="border-b border-[rgba(240,185,11,.06)] last:border-0">
+                  <td className="py-2 px-2 text-[#929AA5]">
+                    {new Date(a.timestamp).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                  </td>
+                  <td className="py-2 px-2 text-[#c5b99a]">{a.adminName ?? a.adminId.slice(0, 8)}</td>
+                  <td className="py-2 px-2">
+                    <span className={cn(
+                      'text-[11px] font-medium px-1.5 py-0.5 rounded',
+                      ACTION_BADGE[a.action] ?? 'bg-zinc-700/40 text-zinc-400'
+                    )}>
+                      {a.action}
+                    </span>
+                  </td>
+                  <td className="py-2 px-2 font-mono text-[#929AA5]">{a.targetTicker ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function AdminMotorPage() {
+  // O role virá do contexto/session — assumindo ADMIN para habilitar halt por padrão
+  // Em produção, buscar do contexto de sessão
+  const canHalt = true
+
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-[#f0ead6] flex items-center gap-2">
-            <Gauge className="h-5 w-5 text-[#c9a84c]" />
-            Motor de Mercado
-          </h1>
-          <p className="text-sm text-[#7a7060]">Controle das sessões e parâmetros de precificação</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="ghost" size="sm">
-            <RotateCcw className="h-4 w-4 mr-1" /> Resetar
-          </Button>
-          <Button variant="destructive" size="sm">
-            <Pause className="h-4 w-4 mr-1" /> Pausar mercado
-          </Button>
-        </div>
+    <div className="p-4 md:p-6 space-y-5">
+      <AdminBreadcrumb />
+
+      <div>
+        <h1 className="text-xl font-bold text-[#EAECEF]">Motor de Mercado</h1>
+        <p className="text-xs text-[#929AA5] mt-0.5">Estado, clubes, injeção de notícias e audit trail</p>
       </div>
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <StatCard label="Sessão Atual" value="NEGOCIAÇÃO" subValue="desde 10:00" />
-        <StatCard label="Ordens/min" value="847" subValue="pico hoje: 2.341" />
-        <StatCard label="Circuit Breakers" value="2" subValue="ativos agora" />
-      </div>
-
-      <div className="bg-[#141210] rounded-xl border border-[rgba(201,168,76,.1)] p-4 mb-4">
-        <h2 className="text-sm font-semibold text-[#f0ead6] mb-3">Sessões do Dia</h2>
-        <div className="flex flex-col gap-2">
-          {SESSIONS.map((session) => (
-            <div key={session.name} className="flex items-center justify-between py-2 border-b border-[rgba(201,168,76,.06)] last:border-0">
-              <div className="flex items-center gap-3">
-                <div className={`w-2 h-2 rounded-full ${
-                  session.status === "ativo" ? "bg-[#4ade80] animate-pulse" :
-                  session.status === "concluído" ? "bg-[#7a7060]" : "bg-[#4a3d2a]"
-                }`} />
-                <span className="text-sm font-mono text-[#c5b99a]">{session.name}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-[#7a7060]">{session.time}</span>
-                <Badge variant={session.status === "ativo" ? "default" : "warning"} size="xs">
-                  {session.status}
-                </Badge>
-              </div>
-            </div>
-          ))}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Coluna esquerda */}
+        <div className="space-y-4">
+          <MotorStateCard />
+          <ClubEditor canHalt={canHalt} />
         </div>
-      </div>
 
-      <div className="bg-[#141210] rounded-xl border border-[rgba(201,168,76,.1)] p-4">
-        <h2 className="text-sm font-semibold text-[#f0ead6] mb-3">Parâmetros GARCH/Kyle</h2>
-        <p className="text-xs text-[#4a3d2a]">Configuração de parâmetros — integração com backend pendente</p>
+        {/* Coluna direita */}
+        <div className="space-y-4">
+          <NewsInjector />
+          <ImpactMatrix />
+          <AuditLog />
+        </div>
       </div>
     </div>
-  );
+  )
 }

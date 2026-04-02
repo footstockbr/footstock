@@ -2,6 +2,9 @@
 -- Funções helper RLS + políticas para Supabase
 -- NOTA: O trigger on_auth_user_created deve ser criado MANUALMENTE via Supabase SQL Editor (ver PENDING-ACTIONS.md)
 
+-- Garante schema auth local (Supabase tem nativamente; Postgres local precisa criar)
+CREATE SCHEMA IF NOT EXISTS auth;
+
 -- Função helper: retorna o user_id do JWT atual (Supabase RLS)
 CREATE OR REPLACE FUNCTION auth.uid() RETURNS text
   LANGUAGE sql STABLE

@@ -4,7 +4,6 @@
 
 import axios, { type AxiosInstance, type AxiosError } from 'axios'
 import { createClient } from '@supabase/supabase-js'
-import { env } from '@/lib/env'
 import { API_TIMEOUT_MS } from '@/lib/constants/timing'
 import type { ApiResponse, ApiErrorResponse } from '@/types/api'
 
@@ -13,12 +12,28 @@ import type { ApiResponse, ApiErrorResponse } from '@/types/api'
 // ---------------------------------------------------------------------------
 
 let supabaseClient: ReturnType<typeof createClient> | null = null
+let missingPublicEnvWarned = false
+
+const publicEnv = {
+  supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  appUrl: process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
+}
 
 function getSupabaseClient() {
   if (!supabaseClient && typeof window !== 'undefined') {
+    if (!publicEnv.supabaseUrl || !publicEnv.supabaseAnonKey) {
+      if (!missingPublicEnvWarned) {
+        console.error(
+          'NEXT_PUBLIC_SUPABASE_URL/NEXT_PUBLIC_SUPABASE_ANON_KEY ausentes no client.'
+        )
+        missingPublicEnvWarned = true
+      }
+      return null
+    }
     supabaseClient = createClient(
-      env.NEXT_PUBLIC_SUPABASE_URL,
-      env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      publicEnv.supabaseUrl,
+      publicEnv.supabaseAnonKey
     )
   }
   return supabaseClient
@@ -29,8 +44,11 @@ function getSupabaseClient() {
 // ---------------------------------------------------------------------------
 
 export const apiClient: AxiosInstance = axios.create({
-  baseURL: env.NEXT_PUBLIC_APP_URL,
+  // Browser: usa origem atual para evitar cross-origin em portas diferentes (3000/3007 etc.)
+  // Server/runtime fora do browser: mantém URL absoluta configurável.
+  baseURL: typeof window === 'undefined' ? publicEnv.appUrl : '',
   timeout: API_TIMEOUT_MS,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -74,6 +92,14 @@ apiClient.interceptors.response.use(
   async (error: AxiosError<ApiErrorResponse>) => {
     const originalRequest = error.config
     const status = error.response?.status
+    const requestUrl = originalRequest?.url ?? ''
+    const isAuthEndpoint = requestUrl.startsWith('/api/v1/auth/')
+
+    // Endpoints de auth retornam 401 "esperado" (credenciais inválidas, etc.).
+    // Nesses casos não devemos tentar refresh nem redirecionar para login.
+    if (isAuthEndpoint) {
+      return Promise.reject(error)
+    }
 
     // Token expirado — tentar refresh uma vez
     if (

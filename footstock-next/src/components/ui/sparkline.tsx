@@ -24,7 +24,7 @@ function Sparkline({ data, width = 60, height = 28, className }: SparklineProps)
 
   const polyline = points.join(" ");
   const isPositive = data[data.length - 1] >= data[0];
-  const color = isPositive ? "#22c55e" : "#ef4444";
+  const color = isPositive ? "#2EBD85" : "#F6465D";
 
   return (
     <svg

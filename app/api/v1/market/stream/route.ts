@@ -4,7 +4,7 @@
 // Plano JOGADOR recebe preços com delay de 1h.
 // ============================================================================
 
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createSubscriber, REDIS_CHANNELS } from '@/lib/redis'
 import { withAuth, type AuthContext } from '@/app/api/middleware'
 import { DELAY_BY_PLAN } from '@/lib/constants/limits'
@@ -12,7 +12,7 @@ import { DELAY_BY_PLAN } from '@/lib/constants/limits'
 // Timeout de inatividade (Vercel tem limite de 60s para streaming)
 const SSE_KEEPALIVE_MS = 25_000
 
-async function streamHandler(req: NextRequest, { user }: AuthContext): Promise<Response> {
+async function streamHandler(req: NextRequest, { user }: AuthContext): Promise<NextResponse> {
   const planType = user.planType as keyof typeof DELAY_BY_PLAN
   const delayMs = DELAY_BY_PLAN[planType] ?? 0
   const isDelayed = delayMs > 0
@@ -21,6 +21,7 @@ async function streamHandler(req: NextRequest, { user }: AuthContext): Promise<R
   const tickBuffer: { data: string; scheduledAt: number }[] = []
 
   let subscriber: ReturnType<typeof createSubscriber> | null = null
+  let keepalive: ReturnType<typeof setInterval> | null = null
   let closed = false
 
   const stream = new ReadableStream({
@@ -28,13 +29,13 @@ async function streamHandler(req: NextRequest, { user }: AuthContext): Promise<R
       subscriber = createSubscriber()
 
       // Heartbeat SSE para manter conexão viva
-      const keepalive = setInterval(() => {
+      keepalive = setInterval(() => {
         if (closed) return
         try {
           controller.enqueue(encoder.encode(': keepalive\n\n'))
         } catch {
           closed = true
-          clearInterval(keepalive)
+          if (keepalive) { clearInterval(keepalive); keepalive = null }
         }
       }, SSE_KEEPALIVE_MS)
 
@@ -82,7 +83,7 @@ async function streamHandler(req: NextRequest, { user }: AuthContext): Promise<R
       // Cleanup ao fechar conexão
       req.signal.addEventListener('abort', () => {
         closed = true
-        clearInterval(keepalive)
+        if (keepalive) { clearInterval(keepalive); keepalive = null }
         subscriber?.unsubscribe(REDIS_CHANNELS.MARKET_TICK).catch(() => null)
         subscriber?.quit().catch(() => null)
         controller.close()
@@ -91,12 +92,13 @@ async function streamHandler(req: NextRequest, { user }: AuthContext): Promise<R
 
     cancel() {
       closed = true
+      if (keepalive) { clearInterval(keepalive); keepalive = null }
       subscriber?.unsubscribe(REDIS_CHANNELS.MARKET_TICK).catch(() => null)
       subscriber?.quit().catch(() => null)
     },
   })
 
-  return new Response(stream, {
+  return new NextResponse(stream, {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-store, must-revalidate',

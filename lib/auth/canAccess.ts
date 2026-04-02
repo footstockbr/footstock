@@ -25,8 +25,12 @@ export type AdminResource =
   | 'forum:moderate'
   | 'financial:read'
   | 'financial:write'
+  | 'engagement:read'
   | 'admin:dashboard'
   | 'admin:audit'
+  | 'admin:manage'
+  | 'gateway:config'
+  | 'club:metrics'
 
 /** Matriz de permissoes: role -> lista de recursos permitidos */
 const PERMISSIONS: Record<AdminRole, AdminResource[]> = {
@@ -50,8 +54,11 @@ const PERMISSIONS: Record<AdminRole, AdminResource[]> = {
     'forum:moderate',
     'financial:read',
     'financial:write',
+    'engagement:read',
     'admin:dashboard',
     'admin:audit',
+    'admin:manage',
+    'gateway:config',
   ],
   ADMINISTRADOR: [
     'users:read',
@@ -71,32 +78,30 @@ const PERMISSIONS: Record<AdminRole, AdminResource[]> = {
     'forum:read',
     'forum:moderate',
     'financial:read',
+    'financial:write',
+    'engagement:read',
     'admin:dashboard',
+    'admin:audit',
   ],
   MONITOR: [
-    'users:read',
-    'assets:read',
-    'motor:read',
-    'news:read',
-    'leagues:read',
-    'forum:read',
-    'financial:read',
     'admin:dashboard',
+    'motor:read',
   ],
   EDITOR: [
     'news:read',
     'news:write',
     'news:delete',
-    'assets:read',
     'admin:dashboard',
   ],
   MODERADOR: [
-    'leagues:read',
-    'leagues:moderate',
     'forum:read',
     'forum:moderate',
-    'users:read',
+    'users:suspend',
+    'engagement:read',
     'admin:dashboard',
+  ],
+  CLUB_PARTNER: [
+    'club:metrics',
   ],
 }
 

@@ -80,7 +80,7 @@ export function RegisterWizard() {
         data-testid="register-wizard-back-button"
         type="button"
         onClick={goPrev}
-        className="flex items-center gap-1 text-sm text-[#7a7060] hover:text-[#f0ead6] transition-colors mb-4"
+        className="flex items-center gap-1 text-sm text-[#929AA5] hover:text-[#EAECEF] transition-colors mb-4"
         aria-label={currentStep === 1 ? 'Voltar ao login' : 'Etapa anterior'}
       >
         <ChevronLeft className="h-4 w-4" />
@@ -103,10 +103,10 @@ export function RegisterWizard() {
               className={cn(
                 'h-1 flex-1 rounded-full transition-all',
                 i + 1 < currentStep
-                  ? 'bg-[#c9a84c]'
+                  ? 'bg-[#F0B90B]'
                   : i + 1 === currentStep
-                  ? 'bg-[rgba(201,168,76,.6)]'
-                  : 'bg-[#2a2010]'
+                  ? 'bg-[rgba(240,185,11,.6)]'
+                  : 'bg-[#2B3139]'
               )}
             />
           ))}
@@ -117,7 +117,7 @@ export function RegisterWizard() {
               key={i}
               className={cn(
                 'flex-1 text-[10px] text-center',
-                i + 1 <= currentStep ? 'text-[#c9a84c]' : 'text-[#4a3d2a]'
+                i + 1 <= currentStep ? 'text-[#F0B90B]' : 'text-[#707A8A]'
               )}
             >
               {label}
@@ -129,11 +129,11 @@ export function RegisterWizard() {
       {/* Heading */}
       <h1
         id="wizard-heading"
-        className="text-xl font-bold text-[#f0ead6] mb-0.5"
+        className="text-xl font-bold text-[#EAECEF] mb-0.5"
       >
         {STEP_TITLES[currentStep - 1]}
       </h1>
-      <p className="text-xs text-[#4a3d2a] mb-6" aria-live="polite">
+      <p className="text-xs text-[#707A8A] mb-6" aria-live="polite">
         Etapa {currentStep} de 4
       </p>
 
@@ -152,11 +152,11 @@ export function RegisterWizard() {
       )}
 
       {currentStep === 1 && (
-        <p className="text-center text-sm text-[#7a7060] mt-6">
+        <p className="text-center text-sm text-[#929AA5] mt-6">
           Já tem conta?{' '}
           <a
             href={ROUTES.LOGIN}
-            className="text-[#c9a84c] hover:text-[#d4b466] font-medium transition-colors"
+            className="text-[#F0B90B] hover:text-[#FCD535] font-medium transition-colors"
           >
             Entrar
           </a>

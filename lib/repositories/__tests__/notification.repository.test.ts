@@ -15,18 +15,16 @@ describe('NotificationType enum', () => {
     'BONUS_CREDITED',
     'LEAGUE_RESULT',
     'ADMIN_BROADCAST',
-    'AFFILIATE_COMMISSION_EARNED',
-    'AFFILIATE_INVITE_JOINED',
     'CANCELLATION_LOCK_ACTIVE',
     'CANCELLATION_LOCK_LIQUIDATED',
   ]
 
-  test('todos os 16 tipos de NOTIFICATION-SPEC estão presentes', () => {
-    expect(REQUIRED_TYPES).toHaveLength(16)
+  test('todos os 14 tipos de NOTIFICATION-SPEC estão presentes', () => {
+    expect(REQUIRED_TYPES).toHaveLength(14)
   })
 
   test('enum não tem valores duplicados', () => {
-    expect(new Set(REQUIRED_TYPES).size).toBe(16)
+    expect(new Set(REQUIRED_TYPES).size).toBe(14)
   })
 
   test('todos os tipos são strings não-vazias', () => {

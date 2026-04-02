@@ -3,20 +3,30 @@
 // Subscreve o canal Redis news:inject e faz stream para o cliente.
 // ============================================================================
 
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createSubscriber } from '@/lib/redis'
 import { withAuth, type AuthContext } from '@/app/api/middleware'
 
 const KEEPALIVE_MS = 25_000
 const REDIS_CHANNEL = 'news:inject'
 
-async function newsStreamHandler(req: NextRequest, _ctx: AuthContext): Promise<Response> {
+async function newsStreamHandler(req: NextRequest, _ctx: AuthContext): Promise<NextResponse> {
   const encoder = new TextEncoder()
+
+  let subscriber: ReturnType<typeof createSubscriber> | null = null
+  let keepalive: ReturnType<typeof setInterval> | null = null
+
+  function cleanup() {
+    if (keepalive) { clearInterval(keepalive); keepalive = null }
+    if (subscriber) {
+      try { subscriber.unsubscribe(REDIS_CHANNEL) } catch { /* ignore */ }
+      try { subscriber.disconnect() } catch { /* ignore */ }
+      subscriber = null
+    }
+  }
 
   const stream = new ReadableStream({
     async start(controller) {
-      let subscriber: ReturnType<typeof createSubscriber> | null = null
-
       try {
         subscriber = createSubscriber()
         await subscriber.subscribe(REDIS_CHANNEL)
@@ -35,30 +45,26 @@ async function newsStreamHandler(req: NextRequest, _ctx: AuthContext): Promise<R
       }
 
       // Heartbeat a cada 25s para manter conexão viva em proxies
-      const keepalive = setInterval(() => {
+      keepalive = setInterval(() => {
         try {
           controller.enqueue(encoder.encode(': heartbeat\n\n'))
         } catch {
-          clearInterval(keepalive)
+          cleanup()
         }
       }, KEEPALIVE_MS)
 
       req.signal.addEventListener('abort', () => {
-        clearInterval(keepalive)
-        if (subscriber) {
-          try { subscriber.unsubscribe(REDIS_CHANNEL) } catch { /* ignore */ }
-          try { subscriber.disconnect() } catch { /* ignore */ }
-        }
-        try {
-          controller.close()
-        } catch {
-          // já fechado
-        }
+        cleanup()
+        try { controller.close() } catch { /* já fechado */ }
       })
+    },
+
+    cancel() {
+      cleanup()
     },
   })
 
-  return new Response(stream, {
+  return new NextResponse(stream, {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
@@ -68,4 +74,4 @@ async function newsStreamHandler(req: NextRequest, _ctx: AuthContext): Promise<R
   })
 }
 
-export const GET = withAuth(newsStreamHandler as never)
+export const GET = withAuth(newsStreamHandler)

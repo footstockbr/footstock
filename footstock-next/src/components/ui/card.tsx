@@ -13,10 +13,10 @@ const Card = forwardRef<
     className={cn(
       "rounded-lg border p-4 transition-all duration-150",
       elevated
-        ? "bg-[#161d28] border-[rgba(201,168,76,.25)] shadow-lg"
-        : "bg-[#141210] border-[rgba(201,168,76,.18)] shadow-sm",
+        ? "bg-[#202630] border-[rgba(240,185,11,.25)] shadow-lg"
+        : "bg-[#1E2329] border-[rgba(240,185,11,.18)] shadow-sm",
       clickable &&
-        "cursor-pointer hover:border-[rgba(201,168,76,.35)] hover:bg-[rgba(201,168,76,.04)]",
+        "cursor-pointer hover:border-[rgba(240,185,11,.35)] hover:bg-[rgba(240,185,11,.04)]",
       className
     )}
     {...props}
@@ -42,7 +42,7 @@ const CardTitle = forwardRef<
 >(({ className, ...props }, ref) => (
   <h3
     ref={ref}
-    className={cn("text-base font-semibold text-[#f0ead6]", className)}
+    className={cn("text-base font-semibold text-[#EAECEF]", className)}
     {...props}
   />
 ));
@@ -62,7 +62,7 @@ const CardFooter = forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("flex items-center mt-3 pt-3 border-t border-[rgba(201,168,76,.1)]", className)}
+    className={cn("flex items-center mt-3 pt-3 border-t border-[rgba(240,185,11,.1)]", className)}
     {...props}
   />
 ));

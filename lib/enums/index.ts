@@ -68,6 +68,8 @@ export const ADMIN_ROLE = {
   EDITOR: 'EDITOR',
   /** Moderação do fórum */
   MODERADOR: 'MODERADOR',
+  /** Portal exclusivo do clube parceiro — somente leitura de métricas do próprio clube */
+  CLUB_PARTNER: 'CLUB_PARTNER',
 } as const;
 export type AdminRole = (typeof ADMIN_ROLE)[keyof typeof ADMIN_ROLE];
 
@@ -136,9 +138,9 @@ export const NOTIFICATION_TYPE = {
   NEWS_FAVORITE_CLUB: 'NEWS_FAVORITE_CLUB',
   /** Comunicado do administrador do sistema */
   ADMIN_BROADCAST: 'ADMIN_BROADCAST',
-  /** Comissão de afiliado processada */
+  /** Comissão de afiliado recebida */
   AFFILIATE_COMMISSION_EARNED: 'AFFILIATE_COMMISSION_EARNED',
-  /** Convidado de afiliado se cadastrou */
+  /** Usuário cadastrado via link de afiliado */
   AFFILIATE_INVITE_JOINED: 'AFFILIATE_INVITE_JOINED',
   /** Trava de cancelamento ativada (48h para liquidação) */
   CANCELLATION_LOCK_ACTIVE: 'CANCELLATION_LOCK_ACTIVE',
@@ -206,6 +208,37 @@ export const DIVISION = {
 } as const;
 export type Division = (typeof DIVISION)[keyof typeof DIVISION];
 
+/** Status do ciclo de vida de uma assinatura */
+export const SUBSCRIPTION_STATUS = {
+  /** Aguardando confirmação de pagamento */
+  PENDING: 'PENDING',
+  /** Assinatura ativa */
+  ACTIVE: 'ACTIVE',
+  /**
+   * @deprecated TRIAL — dead code. Não há rota POST /api/v1/subscriptions/trial
+   * nem lógica de expiração implementada. Decisão pendente: implementar ou remover
+   * (requer migration Prisma + remoção em types/models.ts, SubscriptionService.ts,
+   * components/plans/SubscriptionStatus.tsx e revenue-history/route.ts).
+   */
+  TRIAL: 'TRIAL',
+  /** Assinatura expirada */
+  EXPIRED: 'EXPIRED',
+  /** Assinatura suspensa (período de graça) */
+  SUSPENDED: 'SUSPENDED',
+  /** Trava de cancelamento 48h */
+  CANCELLATION_LOCK: 'CANCELLATION_LOCK',
+  /** Assinatura cancelada */
+  CANCELLED: 'CANCELLED',
+} as const;
+export type SubscriptionStatusType = (typeof SUBSCRIPTION_STATUS)[keyof typeof SUBSCRIPTION_STATUS];
+
+/** Hierarquia numérica dos planos para comparações de upgrade/downgrade */
+export const PLAN_HIERARCHY: Record<PlanType, number> = {
+  JOGADOR: 0,
+  CRAQUE: 1,
+  LENDA: 2,
+} as const;
+
 /** Status de pagamento */
 export const PAYMENT_STATUS = {
   /** Pagamento pendente */
@@ -218,3 +251,142 @@ export const PAYMENT_STATUS = {
   REFUNDED: 'REFUNDED',
 } as const;
 export type PaymentStatus = (typeof PAYMENT_STATUS)[keyof typeof PAYMENT_STATUS];
+
+// ---------------------------------------------------------------------------
+// Module-15: Portfolio Dashboard
+// ---------------------------------------------------------------------------
+
+/** Períodos de visualização do histórico do portfólio */
+export const PORTFOLIO_PERIOD = {
+  H1: '1H',
+  H12: '12H',
+  H24: '24H',
+  WEEK: '7D',
+  MONTH: '30D',
+  YEAR: '1Y',
+  ALL: 'ALL',
+} as const;
+export type PortfolioPeriod = (typeof PORTFOLIO_PERIOD)[keyof typeof PORTFOLIO_PERIOD];
+
+/** Variante de posição — regular (long) ou short */
+export const POSITION_VARIANT = {
+  REGULAR: 'REGULAR',
+  SHORT: 'SHORT',
+} as const;
+export type PositionVariant = (typeof POSITION_VARIANT)[keyof typeof POSITION_VARIANT];
+
+// ---------------------------------------------------------------------------
+// Module-16: Dividendos
+// ---------------------------------------------------------------------------
+
+/** Tipo de dividendo distribuído */
+export const DIVIDEND_TYPE = {
+  ESPORTIVO: 'ESPORTIVO',
+  FINANCEIRO: 'FINANCEIRO',
+} as const;
+export type DividendType = (typeof DIVIDEND_TYPE)[keyof typeof DIVIDEND_TYPE];
+
+/** Status do ciclo de vida de um dividendo */
+export const DIVIDEND_STATUS = {
+  CREDITED: 'CREDITED',
+  PENDING: 'PENDING',
+  EXPIRADO: 'EXPIRADO',
+} as const;
+export type DividendStatus = (typeof DIVIDEND_STATUS)[keyof typeof DIVIDEND_STATUS];
+
+// ---------------------------------------------------------------------------
+// module-18: Forum Global & Glossário
+// ---------------------------------------------------------------------------
+
+/** Ordem de exibição dos posts do fórum */
+export const FORUM_SORT_ORDER = {
+  RECENT: 'recent',
+  POPULAR: 'popular',
+} as const;
+export type ForumSortOrder = (typeof FORUM_SORT_ORDER)[keyof typeof FORUM_SORT_ORDER];
+
+/** Categorias do glossário financeiro-esportivo (INTAKE canônico: 8 categorias) */
+export const GLOSSARY_CATEGORY = {
+  INDICADORES_TECNICOS: 'indicadores-tecnicos',
+  VALUATION_FUNDAMENTOS: 'valuation-e-fundamentos',
+  TIPOS_DE_ORDEM: 'tipos-de-ordem',
+  CARTEIRA_RENTABILIDADE: 'carteira-e-rentabilidade',
+  SENTIMENTO_ANALISE: 'sentimento-e-analise',
+  MERCADO_PREGAO: 'mercado-e-pregao',
+  DIVISOES_CLUBES: 'divisoes-e-clubes',
+  PLANOS_FUNCIONALIDADES: 'planos-e-funcionalidades',
+} as const;
+export type GlossaryCategory = (typeof GLOSSARY_CATEGORY)[keyof typeof GLOSSARY_CATEGORY];
+
+// ---------------------------------------------------------------------------
+// Status de usuário (conta)
+// ---------------------------------------------------------------------------
+
+/** Status da conta de um usuário */
+export const USER_STATUS = {
+  /** Conta ativa */
+  ACTIVE: 'ACTIVE',
+  /** Conta suspensa temporariamente */
+  SUSPENDED: 'SUSPENDED',
+  /** Conta banida permanentemente */
+  BANNED: 'BANNED',
+  /** Sem plano pago (plano gratuito) */
+  FREE: 'FREE',
+} as const;
+export type UserStatusType = (typeof USER_STATUS)[keyof typeof USER_STATUS];
+
+// ---------------------------------------------------------------------------
+// Status de notícia editorial
+// ---------------------------------------------------------------------------
+
+/** Status do ciclo de vida de uma notícia editorial */
+export const NEWS_STATUS = {
+  /** Rascunho (não publicado) */
+  DRAFT: 'DRAFT',
+  /** Publicado e visível */
+  PUBLISHED: 'PUBLISHED',
+  /** Arquivado (não visível) */
+  ARCHIVED: 'ARCHIVED',
+} as const;
+export type NewsStatus = (typeof NEWS_STATUS)[keyof typeof NEWS_STATUS];
+
+// ---------------------------------------------------------------------------
+// Status de liga
+// ---------------------------------------------------------------------------
+
+/** Status do ciclo de vida de uma liga */
+export const LEAGUE_STATUS = {
+  /** Liga ativa aceitando participantes */
+  ACTIVE: 'ACTIVE',
+  /** Liga encerrada */
+  FINISHED: 'FINISHED',
+  /** Liga cancelada */
+  CANCELLED: 'CANCELLED',
+} as const;
+export type LeagueStatus = (typeof LEAGUE_STATUS)[keyof typeof LEAGUE_STATUS];
+
+// ---------------------------------------------------------------------------
+// Status de saúde do sistema
+// ---------------------------------------------------------------------------
+
+/** Status de saúde de um componente de sistema */
+export const HEALTH_STATUS = {
+  /** Componente operacional */
+  OK: 'ok',
+  /** Componente com erro */
+  ERROR: 'error',
+  /** Componente com degradação parcial */
+  DEGRADED: 'degraded',
+} as const;
+export type HealthStatus = (typeof HEALTH_STATUS)[keyof typeof HEALTH_STATUS];
+
+/** Status do motor de cotações */
+export const MOTOR_STATUS = {
+  /** Motor online */
+  ONLINE: 'ONLINE',
+  /** Motor offline */
+  OFFLINE: 'OFFLINE',
+  /** Motor em estado degradado */
+  DEGRADED: 'DEGRADED',
+} as const;
+export type MotorStatus = (typeof MOTOR_STATUS)[keyof typeof MOTOR_STATUS];

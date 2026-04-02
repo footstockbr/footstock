@@ -1,11 +1,13 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter, JetBrains_Mono } from 'next/font/google'
+import { IBM_Plex_Sans, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { QueryProvider } from '@/components/providers/QueryProvider'
+import { WebVitalsReporter } from '@/components/providers/WebVitalsReporter'
 
-const inter = Inter({
+const ibmPlexSans = IBM_Plex_Sans({
   subsets: ['latin'],
-  variable: '--font-inter',
+  weight: ['200', '300', '400', '500', '600', '700'],
+  variable: '--font-ibm-plex-sans',
   display: 'swap',
 })
 
@@ -41,7 +43,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#080808',
+  themeColor: '#0B0E11',
   width: 'device-width',
   initialScale: 1,
 }
@@ -50,9 +52,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="pt-BR" className="dark" suppressHydrationWarning>
       <body
-        className={`${inter.variable} ${jetbrainsMono.variable} font-sans bg-bg-primary text-text-primary antialiased min-h-dvh`}
+        className={`${ibmPlexSans.variable} ${jetbrainsMono.variable} font-sans bg-bg-primary text-text-primary antialiased min-h-dvh`}
       >
-        <QueryProvider>{children}</QueryProvider>
+        <QueryProvider>
+          <WebVitalsReporter />
+          {children}
+        </QueryProvider>
       </body>
     </html>
   )

@@ -23,6 +23,28 @@ const eslintConfig = [
       'import/no-anonymous-default-export': 'off',
     },
   },
+  // ST004 — proibir Math.random() em cálculos financeiros de portfólio
+  {
+    files: [
+      '**/portfolio/**',
+      '**/repositories/position*',
+      '**/repositories/Position*',
+      '**/services/*Portfolio*',
+      '**/services/*Position*',
+    ],
+    ignores: ['**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/*.spec.tsx'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'CallExpression[callee.object.name="Math"][callee.property.name="random"]',
+          message:
+            'Math.random() is forbidden in financial calculations. Use real price_history data.',
+        },
+      ],
+    },
+  },
   {
     ignores: [
       'node_modules/',

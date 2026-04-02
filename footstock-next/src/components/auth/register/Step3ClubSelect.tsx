@@ -35,7 +35,7 @@ export function Step3ClubSelect({ data, onNext }: Step3Props) {
 
   return (
     <div data-testid="form-register-step3" className="flex flex-col gap-4" aria-labelledby="wizard-heading">
-      <p className="text-sm text-[#7a7060]">
+      <p className="text-sm text-[#929AA5]">
         Escolha seu clube do coração para personalizar sua experiência.
       </p>
 
@@ -48,7 +48,7 @@ export function Step3ClubSelect({ data, onNext }: Step3Props) {
       />
 
       {error && (
-        <p role="alert" className="text-xs text-[#ef4444]">
+        <p role="alert" className="text-xs text-[#F6465D]">
           {error}
         </p>
       )}
@@ -74,15 +74,15 @@ export function Step3ClubSelect({ data, onNext }: Step3Props) {
               'flex items-center gap-2 p-2.5 rounded-lg border text-left',
               'transition-all duration-150 min-h-[44px]',
               selectedClub === club.ticker
-                ? 'border-[#c9a84c] bg-[rgba(201,168,76,.12)] text-[#c9a84c]'
-                : 'border-[rgba(201,168,76,.18)] bg-[#141210] text-[#7a7060] hover:border-[rgba(201,168,76,.35)]'
+                ? 'border-[#F0B90B] bg-[rgba(240,185,11,.12)] text-[#F0B90B]'
+                : 'border-[rgba(240,185,11,.18)] bg-[#1E2329] text-[#929AA5] hover:border-[rgba(240,185,11,.35)]'
             )}
           >
             {/* @ASSET_PLACEHOLDER: logo do clube {club.ticker} — PNG 32×32px, circular */}
             <div
               className={cn(
                 'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0',
-                selectedClub === club.ticker ? 'bg-[rgba(201,168,76,.2)]' : 'bg-[#1e1a12]'
+                selectedClub === club.ticker ? 'bg-[rgba(240,185,11,.2)]' : 'bg-[#1e1a12]'
               )}
             >
               <span className="text-[10px] font-bold" aria-hidden="true">
@@ -91,7 +91,7 @@ export function Step3ClubSelect({ data, onNext }: Step3Props) {
             </div>
             <div className="min-w-0">
               <p className="text-xs font-medium truncate">{club.name}</p>
-              <p className="text-[10px] text-[#4a3d2a]">
+              <p className="text-[10px] text-[#707A8A]">
                 {club.division === 'SERIE_A' ? 'Série A' : 'Série B'}
               </p>
             </div>
@@ -100,7 +100,7 @@ export function Step3ClubSelect({ data, onNext }: Step3Props) {
       </div>
 
       {filteredClubs.length === 0 && (
-        <p className="text-sm text-[#7a7060] text-center py-4" role="status">
+        <p className="text-sm text-[#929AA5] text-center py-4" role="status">
           Nenhum clube encontrado
         </p>
       )}

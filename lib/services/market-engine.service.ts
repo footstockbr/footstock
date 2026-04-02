@@ -109,9 +109,16 @@ export class MarketEngineService {
     const now = new Date()
     const hour = ((now.getUTCHours() - 3) % 24 + 24) % 24
 
-    if (hour >= 9 && hour < 10) return 'PRE_MARKET'
-    if (hour >= 10 && hour < 17) return 'REGULAR'
-    if (hour >= 17 && hour < 18) return 'AFTER_MARKET'
+    const minute = ((now.getUTCMinutes()))
+    const totalMin = hour * 60 + minute
+    // PRE_ABERTURA: 10:45 – 11:00
+    if (totalMin >= 10 * 60 + 45 && totalMin < 11 * 60) return 'PRE_MARKET'
+    // NEGOCIACAO: 11:00 – 17:30
+    if (totalMin >= 11 * 60 && totalMin < 17 * 60 + 30) return 'REGULAR'
+    // CALL: 17:30 – 17:45
+    if (totalMin >= 17 * 60 + 30 && totalMin < 17 * 60 + 45) return 'AFTER_MARKET'
+    // AFTER_MARKET: 17:45 – 01:30 (cruza meia-noite)
+    if (totalMin >= 17 * 60 + 45 || totalMin < 1 * 60 + 30) return 'AFTER_MARKET'
     return 'CLOSED'
   }
 }

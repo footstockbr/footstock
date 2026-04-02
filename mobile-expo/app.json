@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "Foot Stock",
+    "slug": "foot-stock-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "footstockmobile",
+    "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#080808"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.footstock.mobile",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Use sua biometria para desbloquear o app Foot Stock."
+      }
+    },
+    "android": {
+      "package": "com.footstock.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#080808"
+      },
+      "permissions": [
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT"
+      ]
+    },
+    "extra": {
+      "webUrl": "https://footstock.com.br",
+      "eas": {
+        "projectId": "84d3ed49-7490-4a6a-abca-45613d996503"
+      }
+    }
+  }
+}

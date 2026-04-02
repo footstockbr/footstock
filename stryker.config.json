@@ -1,0 +1,58 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "packageManager": "npm",
+  "reporters": ["html", "clear-text"],
+  "testRunner": "jest",
+  "coverageAnalysis": "off",
+  "checkers": [],
+  "mutate": [
+    "lib/services/OrderService.ts",
+    "lib/services/ShortService.ts",
+    "lib/services/TransactionService.ts",
+    "lib/services/ScoringEngine.ts",
+    "lib/services/DividendService.ts",
+    "lib/services/SubscriptionService.ts",
+    "lib/services/PlanService.ts",
+    "lib/services/DunningService.ts",
+    "lib/services/ConsentService.ts",
+    "lib/services/plan-order-limits.ts",
+    "lib/services/plan-logic.ts",
+    "lib/services/ValuationService.ts",
+    "lib/services/WalletService.ts",
+    "lib/services/ForumService.ts",
+    "!**/*.test.ts",
+    "!**/*.spec.ts",
+    "!**/*.d.ts",
+    "!**/__tests__/**"
+  ],
+  "thresholds": {
+    "high": 80,
+    "low": 60,
+    "break": 40
+  },
+  "timeoutMS": 180000,
+  "concurrency": 2,
+  "incremental": true,
+  "incrementalFile": ".stryker-incremental.json",
+  "ignoreStatic": false,
+  "jest": {
+    "config": {
+      "testEnvironment": "node",
+      "moduleNameMapper": {
+        "^@/(.*)$": "<rootDir>/$1"
+      },
+      "setupFilesAfterEnv": ["<rootDir>/jest.setup.ts"],
+      "testPathIgnorePatterns": [
+        "/node_modules/",
+        "/.next/",
+        "\\.spec\\.ts$",
+        "/footstock-next/",
+        "/motor/dist/",
+        "tests/a11y/",
+        "tests/contracts/",
+        "tests/integration/",
+        "tests/load/"
+      ]
+    }
+  }
+}

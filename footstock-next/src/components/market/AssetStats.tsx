@@ -49,16 +49,16 @@ interface StatCardProps {
 
 function StatCard({ label, value, tooltip, valueColor }: StatCardProps) {
   return (
-    <div className="bg-[#141210] rounded-lg p-3 border border-[#2a2010]">
+    <div className="bg-[#1E2329] rounded-lg p-3 border border-[#2B3139]">
       <div className="flex items-center gap-1 mb-1">
-        <span className="text-xs text-[#7a7060]">{label}</span>
+        <span className="text-xs text-[#929AA5]">{label}</span>
         <span title={tooltip} aria-label={tooltip} className="cursor-help">
-          <Info className="w-3 h-3 text-[#4a3d2a]" />
+          <Info className="w-3 h-3 text-[#707A8A]" />
         </span>
       </div>
       <span
         className="text-sm font-mono font-semibold"
-        style={{ color: valueColor ?? '#F0EAD6' }}
+        style={{ color: valueColor ?? '#EAECEF' }}
       >
         {value}
       </span>
@@ -71,7 +71,7 @@ export function AssetStats({ asset, fairValuePremium }: AssetStatsProps) {
     return (
       <div
         data-testid="asset-stats"
-        className="flex items-center justify-center p-8 text-sm text-[#7a7060]"
+        className="flex items-center justify-center p-8 text-sm text-[#929AA5]"
       >
         Dados financeiros não disponíveis para este ativo.
       </div>
@@ -84,12 +84,12 @@ export function AssetStats({ asset, fairValuePremium }: AssetStatsProps) {
 
   const premiumColor =
     fairValuePremium == null
-      ? '#F0EAD6'
+      ? '#EAECEF'
       : fairValuePremium < 0
-      ? '#22c55e'
+      ? '#2EBD85'
       : fairValuePremium > 0
-      ? '#ef4444'
-      : '#7a7060'
+      ? '#F6465D'
+      : '#929AA5'
 
   return (
     <div

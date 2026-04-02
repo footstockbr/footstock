@@ -8,7 +8,6 @@ export {
   getPlanFeatures,
   hasPlanAccess,
   PLAN_FEATURES,
-  PLAN_HIERARCHY,
   type PlanFeature,
 } from './planAccess'
 export {

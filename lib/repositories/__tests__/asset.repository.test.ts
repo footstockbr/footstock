@@ -19,10 +19,14 @@ describe('AssetRepository', () => {
     clubSlug: 'flamengo',
     division: 'SERIE_A' as const,
     cluster: 'A_TOP',
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     currentPrice: 28.5 as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     openPrice: 28.0 as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     closePrice: 28.0 as any,
     volume: BigInt(0),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     marketCap: 28500000 as any,
     isActive: true,
     colorPrimary: '#e21d1d',
@@ -64,6 +68,7 @@ describe('AssetRepository', () => {
   })
 
   test('updatePrice atualiza currentPrice', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updated = { ...mockAsset, currentPrice: 29.0 as any }
     ;(prisma.asset.update as jest.Mock).mockResolvedValue(updated)
     const result = await assetRepository.updatePrice('asset_001', { currentPrice: 29.0 })

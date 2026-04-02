@@ -10,11 +10,14 @@ export interface ClusterParams {
   cluster: AssetCluster
   baseVolume: number          // Volume base para simulação
   drift: number               // Tendência diária (ex: -0.0002)
+  theta: number               // OU: velocidade de reversão (ex: 0.12)
+  sigma: number               // OU: volatilidade do processo estocástico
   garchAlpha: number          // Peso do choque recente (α)
   garchBeta: number           // Persistência da volatilidade (β)
   lambdaKyle: number          // Impacto de preço por unidade de volume (λ)
   spread: number              // Spread bid-ask base
-  maxTickChange: number       // Variação máxima por tick (ex: 0.03 = 3%)
+  maxTickChange: number       // Variação máxima por tick (ex: 0.0035 = 0.35%)
+  ofiDecay: number            // OFI: decay por cluster (ex: A_TOP=0.91, B_ILLIQ=0.97)
 }
 
 // ─── Motor Tick ───────────────────────────────────────────────────────────
@@ -53,11 +56,13 @@ export interface AssetState {
   id: string
   ticker: string
   cluster: AssetCluster
+  state: string              // UF do clube — usado para correlação regional
   currentPrice: number
   openPrice: number
   highPrice: number
   lowPrice: number
   closePrice: number         // Close do dia anterior (âncora GARCH)
+  fairValue: number          // Valor justo estático (float/totalShares) — âncora OU
   volume: number
   variance: number           // Variância GARCH atual (σ²)
   pendingBuyVolume: number   // OFI: volume comprador pendente
@@ -65,6 +70,15 @@ export interface AssetState {
   isPaused: boolean          // Circuit breaker ou ação admin
   newsImpact: number         // Magnitude de notícia ativa (0.0 a 1.0)
   newsImpactTicks: number    // Ticks restantes do efeito da notícia
+}
+
+// ─── Correlação Inter-Ativos ─────────────────────────────────────────────────
+
+/** Delta percentual do tick anterior — usado para calcular correlação entre ativos. */
+export interface PreviousTickDelta {
+  deltaPercent: number   // (finalPrice - prevPrice) / prevPrice
+  cluster: AssetCluster
+  state: string          // UF do clube (para rho regional)
 }
 
 // ─── Layer Result ─────────────────────────────────────────────────────────

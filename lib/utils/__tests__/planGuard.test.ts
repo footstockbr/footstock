@@ -75,27 +75,27 @@ describe('checkDailyOrderLimit', () => {
     expect(checkDailyOrderLimit('JOGADOR', 0)).toBe(true)
   })
 
-  test('JOGADOR com 4 ordens pode criar mais (limite 5)', () => {
-    expect(checkDailyOrderLimit('JOGADOR', 4)).toBe(true)
+  test('JOGADOR com 1 ordem pode criar mais (limite 2)', () => {
+    expect(checkDailyOrderLimit('JOGADOR', 1)).toBe(true)
   })
 
-  test('JOGADOR com 5 ordens NAO pode criar mais', () => {
-    expect(checkDailyOrderLimit('JOGADOR', 5)).toBe(false)
+  test('JOGADOR com 2 ordens NAO pode criar mais', () => {
+    expect(checkDailyOrderLimit('JOGADOR', 2)).toBe(false)
   })
 
-  test('CRAQUE com 19 ordens pode criar mais (limite 20)', () => {
-    expect(checkDailyOrderLimit('CRAQUE', 19)).toBe(true)
+  test('CRAQUE com 4 ordens pode criar mais (limite 5)', () => {
+    expect(checkDailyOrderLimit('CRAQUE', 4)).toBe(true)
   })
 
-  test('CRAQUE com 20 ordens NAO pode criar mais', () => {
-    expect(checkDailyOrderLimit('CRAQUE', 20)).toBe(false)
+  test('CRAQUE com 5 ordens NAO pode criar mais', () => {
+    expect(checkDailyOrderLimit('CRAQUE', 5)).toBe(false)
   })
 
-  test('LENDA com 49 ordens pode criar mais (limite 50)', () => {
+  test('LENDA com 49 ordens pode criar mais (sem limite)', () => {
     expect(checkDailyOrderLimit('LENDA', 49)).toBe(true)
   })
 
-  test('LENDA com 50 ordens NAO pode criar mais', () => {
-    expect(checkDailyOrderLimit('LENDA', 50)).toBe(false)
+  test('LENDA com 500 ordens ainda pode criar mais', () => {
+    expect(checkDailyOrderLimit('LENDA', 500)).toBe(true)
   })
 })

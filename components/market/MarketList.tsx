@@ -10,8 +10,8 @@ import { useMemo, useRef, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { Star } from 'lucide-react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { cn } from '@/lib/utils/cn'
 import AssetCardSkeleton from './AssetCardSkeleton'
+import type { TickData } from '@/hooks/useMarketTick'
 import type { AssetListItem } from '@/types/market'
 
 // Lazy loading do AssetCard — SSE é client-only
@@ -22,6 +22,8 @@ const AssetCard = dynamic(() => import('./AssetCard'), {
 
 interface MarketListProps {
   assets: AssetListItem[]
+  ticks: Map<string, TickData>
+  isStreamConnected: boolean
   favoriteClub?: string | null
   isLoading: boolean
   isFetchingNextPage: boolean
@@ -32,6 +34,8 @@ interface MarketListProps {
 
 export default function MarketList({
   assets,
+  ticks,
+  isStreamConnected,
   favoriteClub,
   isLoading,
   isFetchingNextPage,
@@ -150,6 +154,8 @@ export default function MarketList({
               <AssetCard
                 asset={asset}
                 isFavorite={isFavorite}
+                tick={ticks.get(asset.ticker)}
+                isStreamConnected={isStreamConnected}
                 className="mb-2"
               />
               {virtualItem.index === sortedAssets.length - 1 && (

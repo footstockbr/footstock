@@ -1,16 +1,19 @@
 "use client";
 
-import { Briefcase, TrendingUp, TrendingDown } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Briefcase, TrendingDown } from "lucide-react";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { OrderHistory } from "@/components/orders/OrderHistory";
 import { ROUTES } from "@/lib/constants/routes";
 
 export function PortfolioClient() {
+  const router = useRouter();
   return (
     <div data-testid="portfolio-page" className="flex flex-col gap-0">
       <div className="px-4 pt-4 pb-3">
-        <h1 className="text-lg font-bold text-[#f0ead6] mb-4">Minha Carteira</h1>
+        <h1 className="text-lg font-bold text-[#EAECEF] mb-4">Minha Carteira</h1>
 
         <div data-testid="portfolio-stats-grid" className="grid grid-cols-2 gap-2 mb-4">
           <StatCard
@@ -43,21 +46,13 @@ export function PortfolioClient() {
               description="Explore o mercado e faça sua primeira operação"
               action={{
                 label: "Ir ao Mercado",
-                onClick: () => { window.location.href = ROUTES.MERCADO; },
+                onClick: () => { router.push(ROUTES.MERCADO); },
               }}
             />
           </TabsContent>
 
           <TabsContent value="ordens" className="mt-4">
-            <EmptyState
-              icon={<TrendingUp />}
-              title="Nenhuma ordem ainda"
-              description="Suas ordens abertas e executadas aparecerão aqui"
-              action={{
-                label: "Ir ao Mercado",
-                onClick: () => { window.location.href = ROUTES.MERCADO; },
-              }}
-            />
+            <OrderHistory />
           </TabsContent>
 
           <TabsContent value="extrato" className="mt-4">

@@ -7,6 +7,14 @@ jest.mock('@/lib/utils/validators', () => ({
 const mockFetch = jest.fn()
 global.fetch = mockFetch
 
+if (!AbortSignal.timeout) {
+  ;(AbortSignal as any).timeout = (ms: number) => {
+    const controller = new AbortController()
+    setTimeout(() => controller.abort(), ms)
+    return controller.signal
+  }
+}
+
 describe('verifyAge', () => {
   const OLD_ENV = process.env
 
@@ -53,7 +61,7 @@ describe('verifyAge', () => {
     const { verifyAge } = require('../age-verification')
     const result = await verifyAge('52998224725', '2000-01-01')
     expect(result.method).toBe('self_declaration')
-    expect(result.isAdult).toBe(true)
+    expect(result.isAdult).toBe(false)
     expect(result.verified).toBe(false)
   })
 
@@ -64,6 +72,7 @@ describe('verifyAge', () => {
     const result = await verifyAge('52998224725', '2000-01-01')
     expect(result.method).toBe('self_declaration')
     expect(result.verified).toBe(false)
+    expect(result.isAdult).toBe(false)
     expect(mockFetch).not.toHaveBeenCalled()
   })
 })

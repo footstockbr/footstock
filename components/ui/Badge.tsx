@@ -14,6 +14,7 @@ export interface BadgeProps {
   /** Para variant="session" */
   session?: SessionType
   className?: string
+  'data-testid'?: string
 }
 
 const planStyles: Record<PlanType, string> = {
@@ -46,6 +47,7 @@ export function Badge({
   session,
   children,
   className,
+  'data-testid': dataTestId,
 }: BadgeProps) {
   const dynamicStyle =
     variant === 'plan' && plan
@@ -58,6 +60,7 @@ export function Badge({
 
   return (
     <span
+      data-testid={dataTestId}
       className={cn(
         'inline-flex items-center gap-1 px-2 py-0.5',
         'text-xs font-medium rounded-full border',

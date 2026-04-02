@@ -2,7 +2,7 @@
 // Foot Stock — BaseService com error handling padronizado
 // ============================================================================
 
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client'
 import { handleApiError } from '@/lib/api/errors'
 import { ERROR_CODES, ERROR_MESSAGES } from '@/lib/constants/errors'
 import type { ErrorCode } from '@/lib/constants/errors'

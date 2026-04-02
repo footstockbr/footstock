@@ -25,50 +25,50 @@ export const TEST_USERS: TestUser[] = [
     password: 'Test@1234!SuperAdmin',
     name: 'Super Admin',
     cpf: '529.982.247-25',
-    planType: 'LENDA',
+    planType: 'JOGADOR',
     adminRole: 'SUPER_ADMIN',
-    fsBalance: 999999,
-    favoriteClub: 'flamengo',
+    fsBalance: 2000,
+    favoriteClub: 'URU3',
   },
   {
     email: 'admin@foot-stock.test',
     password: 'Test@1234!Admin',
     name: 'Administrador Teste',
     cpf: '111.444.777-35',
-    planType: 'LENDA',
+    planType: 'JOGADOR',
     adminRole: 'ADMINISTRADOR',
-    fsBalance: 100000,
-    favoriteClub: 'palmeiras',
+    fsBalance: 2000,
+    favoriteClub: 'POR4',
   },
   {
     email: 'monitor@foot-stock.test',
     password: 'Test@1234!Monitor',
     name: 'Monitor Teste',
     cpf: '333.444.555-67',
-    planType: 'CRAQUE',
+    planType: 'JOGADOR',
     adminRole: 'MONITOR',
-    fsBalance: 50000,
-    favoriteClub: 'corinthians',
+    fsBalance: 2000,
+    favoriteClub: 'TIM3',
   },
   {
     email: 'editor@foot-stock.test',
     password: 'Test@1234!Editor',
     name: 'Editor Teste',
     cpf: '444.555.666-78',
-    planType: 'CRAQUE',
+    planType: 'JOGADOR',
     adminRole: 'EDITOR',
-    fsBalance: 50000,
-    favoriteClub: 'sao-paulo',
+    fsBalance: 2000,
+    favoriteClub: 'TRI4',
   },
   {
     email: 'moderador@foot-stock.test',
     password: 'Test@1234!Mod',
     name: 'Moderador Teste',
     cpf: '555.666.777-89',
-    planType: 'CRAQUE',
+    planType: 'JOGADOR',
     adminRole: 'MODERADOR',
-    fsBalance: 50000,
-    favoriteClub: 'atletico-mg',
+    fsBalance: 2000,
+    favoriteClub: 'GAL3',
   },
   {
     email: 'craque@foot-stock.test',
@@ -77,8 +77,18 @@ export const TEST_USERS: TestUser[] = [
     cpf: '666.777.888-90',
     planType: 'CRAQUE',
     adminRole: undefined,
+    fsBalance: 5000,
+    favoriteClub: 'GUE4',
+  },
+  {
+    email: 'lenda@foot-stock.test',
+    password: 'Test@1234!Lenda',
+    name: 'Usuário Lenda',
+    cpf: '888.999.000-12',
+    planType: 'LENDA',
+    adminRole: undefined,
     fsBalance: 25000,
-    favoriteClub: 'fluminense',
+    favoriteClub: 'VOL4',
   },
   {
     email: 'jogador@foot-stock.test',
@@ -87,8 +97,18 @@ export const TEST_USERS: TestUser[] = [
     cpf: '777.888.999-01',
     planType: 'JOGADOR',
     adminRole: undefined,
-    fsBalance: 10000,
-    favoriteClub: 'gremio',
+    fsBalance: 2000,
+    favoriteClub: 'IMO3',
+  },
+  {
+    email: 'clube-parceiro@foot-stock.test',
+    password: 'Test@1234!Clube',
+    name: 'Clube Parceiro FC',
+    cpf: '600.700.800-91',
+    planType: 'JOGADOR',
+    adminRole: 'CLUB_PARTNER',
+    fsBalance: 0,
+    favoriteClub: 'FLA3',
   },
 ]
 
@@ -110,7 +130,11 @@ export async function seedUsers() {
       email: user.email,
       password: user.password,
       email_confirm: true,
-      user_metadata: { name: user.name, cpfHash },
+      user_metadata: {
+        name: user.name,
+        cpfHash,
+        ...(user.adminRole ? { adminRole: user.adminRole } : {}),
+      },
     })
 
     if (authError && !authError.message.includes('already been registered')) {
@@ -145,7 +169,7 @@ export async function seedUsers() {
         fsBalance: user.fsBalance,
         favoriteClub: user.favoriteClub,
         tourCompleted: true,
-        investorProfile: 'MODERADO',
+        investorProfile: 'INTERMEDIARIO',
       },
       update: {
         planType: user.planType,
@@ -155,7 +179,7 @@ export async function seedUsers() {
     })
 
     // 3. Consentimentos LGPD (todos os 4 purposes aceitos para usuários de teste)
-    const purposes = ['TERMS', 'MARKETING', 'ANALYTICS', 'THIRD_PARTY'] as const
+    const purposes = ['ESSENTIAL', 'MARKETING', 'ANALYTICS', 'DATA_TERCEIROS'] as const
     for (const purpose of purposes) {
       await prisma.consent.upsert({
         where: { userId_purpose: { userId, purpose } },

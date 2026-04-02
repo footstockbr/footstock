@@ -1,33 +1,34 @@
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+// ============================================================================
+// Foot Stock — GET /api/v1/health — Health Check Básico (público)
+// Sem autenticação. Usado por Uptime Robot / BetterStack a cada 30s.
+// NUNCA expõe detalhes de erro (stack traces, connection strings, IPs internos).
+// Rastreabilidade: INT-110, module-27/TASK-2
+// ============================================================================
 
-const startTime = Date.now()
+import { NextResponse } from 'next/server'
+import { runAllChecks } from '@/lib/monitoring/health'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const checks = {
-    database: 'ok' as 'ok' | 'error',
-    redis: 'ok' as 'ok' | 'error',
+  const { db, redis, motor } = await runAllChecks()
+
+  const allOk = db.status === 'ok' && redis.status === 'ok' && motor.status === 'ok'
+
+  const body = {
+    api: 'ok',
+    db: db.status,
+    redis: redis.status,
+    motor: motor.status === 'ok' ? 'online' : 'error',
+    version: process.env.NEXT_PUBLIC_APP_VERSION ?? '1.0.0',
+    timestamp: new Date().toISOString(),
   }
 
-  try {
-    await prisma.$queryRaw`SELECT 1`
-  } catch {
-    checks.database = 'error'
-  }
-
-  // Redis check will be implemented when Redis is connected
-  // For now, mark as ok (motor handles Redis directly)
-
-  const allOk = Object.values(checks).every(v => v === 'ok')
-
-  return NextResponse.json(
-    {
-      status: allOk ? 'ok' : 'degraded',
-      version: process.env.npm_package_version ?? '1.0.0',
-      uptime: (Date.now() - startTime) / 1000,
-      services: checks,
-      timestamp: new Date().toISOString(),
+  return NextResponse.json(body, {
+    status: allOk ? 200 : 503,
+    headers: {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      Pragma: 'no-cache',
     },
-    { status: allOk ? 200 : 503 }
-  )
+  })
 }

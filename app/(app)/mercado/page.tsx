@@ -7,6 +7,11 @@ import type { Metadata } from 'next'
 import { dehydrate, HydrationBoundary, QueryClient } from '@tanstack/react-query'
 import { AppLayout } from '@/components/layout'
 import MarketPage from '@/components/market/MarketPage'
+import { SponsorBanner } from '@/components/banners/SponsorBanner'
+import { prefetchMarketData } from '@/hooks/useMarketData'
+
+// Dados de mercado near-real-time — sempre SSR dinâmico
+export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
   title: 'Mercado',
@@ -20,24 +25,12 @@ export const metadata: Metadata = {
 
 export default async function MercadoPage() {
   const queryClient = new QueryClient()
-
-  // SSR prefetch dos ativos (sem delay — usuário não autenticado ainda)
-  // O componente cliente re-busca com autenticação e delay correto
-  try {
-    await queryClient.prefetchInfiniteQuery({
-      queryKey: ['assets', {}] as const,
-      queryFn: async () => {
-        // No server não há acesso ao token de usuário — retorna vazio para SSR
-        return { data: [], total: 0, page: 1, limit: 20, _delaySeconds: 0, _cacheHint: '' }
-      },
-      initialPageParam: 1,
-    })
-  } catch {
-    // SSR prefetch é best-effort — não bloquear a página
-  }
+  // RESOLVED: T002 – SSR Prefetch quebrado — prefetchMarketData não era chamado
+  await prefetchMarketData(queryClient)
 
   return (
     <AppLayout>
+      <SponsorBanner position="market_top" className="mb-2" />
       <HydrationBoundary state={dehydrate(queryClient)}>
         <MarketPage />
       </HydrationBoundary>

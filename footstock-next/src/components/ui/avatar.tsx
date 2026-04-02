@@ -9,10 +9,10 @@ interface AvatarProps {
 }
 
 const AVATAR_COLORS = [
-  "bg-[#c9a84c]",
-  "bg-[#38bdf8]",
-  "bg-[#8b5cf6]",
-  "bg-[#22c55e]",
+  "bg-[#F0B90B]",
+  "bg-[#F0B90B]",
+  "bg-[#2EBD85]",
+  "bg-[#2EBD85]",
   "bg-[#f97316]",
   "bg-[#e05555]",
 ];
@@ -55,7 +55,7 @@ function Avatar({ name, src, color, size = "md", className }: AvatarProps) {
         src={src}
         alt={name || "Avatar"}
         className={cn(
-          "rounded-full object-cover border border-[rgba(201,168,76,.18)]",
+          "rounded-full object-cover border border-[rgba(240,185,11,.18)]",
           sizeClasses[size],
           className
         )}
@@ -66,7 +66,7 @@ function Avatar({ name, src, color, size = "md", className }: AvatarProps) {
   return (
     <div
       className={cn(
-        "rounded-full flex items-center justify-center font-black text-[#080808] border border-[rgba(201,168,76,.18)] shrink-0",
+        "rounded-full flex items-center justify-center font-black text-[#0B0E11] border border-[rgba(240,185,11,.18)] shrink-0",
         sizeClasses[size],
         colorClass,
         className
