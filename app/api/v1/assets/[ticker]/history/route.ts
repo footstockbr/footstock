@@ -124,7 +124,18 @@ async function historyHandler(
   const from = new Date(effectiveNow - periodMs)
   const to = new Date(effectiveNow)
 
-  const history = await priceHistoryRepository.findByAssetInRange(asset.id, from, to)
+  const rawHistory = await priceHistoryRepository.findByAssetInRange(asset.id, from, to)
+
+  const history = rawHistory.map((h) => ({
+    id: h.id,
+    assetId: h.assetId,
+    timestamp: h.timestamp,
+    open: Number(h.open),
+    high: Number(h.high),
+    low: Number(h.low),
+    close: Number(h.close),
+    volume: Number(h.volume),
+  }))
 
   return NextResponse.json({
     success: true,

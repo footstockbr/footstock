@@ -11,12 +11,17 @@ import { redisPublisher as redis } from '@/lib/redis'
 
 const VITALS_TTL_SECONDS = 7 * 24 * 60 * 60 // 7 dias
 
+const TRACKED_METRICS = ['CLS', 'LCP', 'INP', 'FCP', 'TTFB'] as const
+type TrackedMetric = (typeof TRACKED_METRICS)[number]
+
 const vitalSchema = z.object({
-  name: z.enum(['CLS', 'LCP', 'INP', 'FCP', 'TTFB']),
-  value: z.number().finite(),
-  rating: z.enum(['good', 'needs-improvement', 'poor']),
+  // next/web-vitals também emite métricas internas do Next.js (ex: Next.js-hydration).
+  // Aceitamos qualquer string — filtramos apenas as métricas conhecidas antes de persistir.
+  name: z.string().max(64),
+  value: z.number(),
+  rating: z.enum(['good', 'needs-improvement', 'poor']).optional(),
   id: z.string().max(64),
-  delta: z.number().finite().optional(),
+  delta: z.number().optional(),
 })
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -43,13 +48,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const { name, value, rating } = parsed.data
 
+  // Métricas customizadas do Next.js (ex: Next.js-hydration) não são rastreadas — descartar silenciosamente.
+  if (!TRACKED_METRICS.includes(name as TrackedMetric)) {
+    return new NextResponse(null, { status: 204 })
+  }
+
+  const trackedName = name as TrackedMetric
+  const trackedRating = rating ?? 'good'
+
   try {
     // Contadores agregados por métrica+rating
     // Chave: vitals:{name}:{rating}  → INCR
     // Chave: vitals:{name}:sum       → INCRBYFLOAT (para calcular média)
-    const counterKey = `vitals:${name}:${rating}`
-    const sumKey = `vitals:${name}:sum`
-    const countKey = `vitals:${name}:count`
+    const counterKey = `vitals:${trackedName}:${trackedRating}`
+    const sumKey = `vitals:${trackedName}:sum`
+    const countKey = `vitals:${trackedName}:count`
 
     const pipeline = redis.pipeline()
     pipeline.incr(counterKey)
@@ -67,7 +80,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   if (process.env.NODE_ENV === 'development') {
-    console.log(`[vitals] ${name}=${value.toFixed(2)} rating=${rating}`)
+    console.log(`[vitals] ${trackedName}=${value.toFixed(2)} rating=${trackedRating}`)
   }
 
   // 204: sendBeacon não lê a resposta
