@@ -257,6 +257,17 @@ export class MarketEngine {
     return Math.sqrt(-2 * Math.log(Math.max(u1, 1e-10))) * Math.cos(2 * Math.PI * u2)
   }
 
+  private _mapSessionType(s: string): string {
+    const map: Record<string, string> = {
+      PRE_ABERTURA: 'PRE_MARKET',
+      NEGOCIACAO: 'REGULAR',
+      CALL: 'REGULAR',
+      AFTER_MARKET: 'AFTER_MARKET',
+      FECHADO: 'CLOSED',
+    }
+    return map[s] ?? 'CLOSED'
+  }
+
   private async persistPriceHistory(tick: MotorTick): Promise<void> {
     await this.prisma.priceHistory.create({
       data: {
@@ -267,7 +278,7 @@ export class MarketEngine {
         low: tick.low,
         close: tick.price,
         volume: BigInt(tick.volume),
-        sessionType: tick.sessionType as any,
+        sessionType: this._mapSessionType(tick.sessionType) as any,
       },
     })
   }
