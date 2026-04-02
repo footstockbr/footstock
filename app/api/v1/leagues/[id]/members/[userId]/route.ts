@@ -43,7 +43,7 @@ export async function DELETE(
     }).catch(() => null)
 
     return NextResponse.json({ success: true, message: 'Participante removido' })
-  } catch {
+  } catch (error) {
     console.error('[League Remove Member]', error)
     return NextResponse.json({ error: 'Erro ao remover participante' }, { status: 500 })
   }

@@ -51,7 +51,7 @@ export async function POST(request: Request) {
       },
       warning: isUrgent ? 'URGENTE: Prazo ANPD em menos de 24h' : undefined,
     })
-  } catch {
+  } catch (error) {
     console.error('[Incidents] Erro ao registrar:', error)
     return NextResponse.json({ error: 'Erro ao registrar incidente' }, { status: 500 })
   }
@@ -73,7 +73,7 @@ export async function GET() {
     }).catch(() => [])
 
     return NextResponse.json({ incidents: incidents ?? [] })
-  } catch {
+  } catch (error) {
     return NextResponse.json({ error: 'Erro ao buscar incidentes' }, { status: 500 })
   }
 }

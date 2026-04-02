@@ -52,7 +52,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({ success: true, notified, atRisk, checked: subscriptions.length })
-  } catch {
+  } catch (error) {
     console.error('[CardUpdater Cron]', error)
     return NextResponse.json({ error: 'Erro no card updater' }, { status: 500 })
   }

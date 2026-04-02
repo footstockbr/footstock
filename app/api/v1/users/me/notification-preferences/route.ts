@@ -57,7 +57,7 @@ export async function PATCH(request: Request) {
     )
 
     return NextResponse.json({ success: true })
-  } catch {
+  } catch (error) {
     console.error('[NotificationPreferences PATCH]', error)
     return NextResponse.json({ error: 'Erro ao salvar preferências' }, { status: 500 })
   }

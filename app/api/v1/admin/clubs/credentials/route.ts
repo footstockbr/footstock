@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     })
 
     return NextResponse.json({ success: true, id: credential?.id ?? 'created' }, { status: 201 })
-  } catch {
+  } catch (error) {
     console.error('[ClubCredentials POST]', error)
     return NextResponse.json({ error: 'Erro ao criar credencial' }, { status: 500 })
   }
@@ -49,7 +49,7 @@ export async function GET() {
     }) ?? []
 
     return NextResponse.json({ credentials })
-  } catch {
+  } catch (error) {
     return NextResponse.json({ error: 'Erro ao buscar credenciais' }, { status: 500 })
   }
 }

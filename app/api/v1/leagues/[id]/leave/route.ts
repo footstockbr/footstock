@@ -34,7 +34,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     })
 
     return NextResponse.json({ success: true, message: 'Você saiu da liga com sucesso' })
-  } catch {
+  } catch (error) {
     console.error('[League Leave]', error)
     return NextResponse.json({ error: 'Erro ao sair da liga' }, { status: 500 })
   }

@@ -45,7 +45,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }).catch(() => null)
 
     return NextResponse.json({ success: true, user: { id: updated.id, planType: newPlan } })
-  } catch {
+  } catch (error) {
     console.error('[PromotePlan]', error)
     return NextResponse.json({ error: 'Erro ao promover plano' }, { status: 500 })
   }

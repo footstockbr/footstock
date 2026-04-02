@@ -47,6 +47,8 @@ const envSchema = z.object({
   // Gateways de pagamento (server-only — sem NEXT_PUBLIC_)
   MP_ACCESS_TOKEN: z.string().min(1).optional(),
   MP_WEBHOOK_SECRET: z.string().min(1).optional(),
+  MERCADO_PAGO_ACCESS_TOKEN: z.string().min(1).optional(),
+  MERCADO_PAGO_WEBHOOK_SECRET: z.string().min(1).optional(),
   ACTIVE_GATEWAY: z.enum(['MERCADO_PAGO', 'PAGSEGURO', 'PAYPAL']).optional(),
   PAGSEGURO_EMAIL: z.string().email().optional(),
   PAGSEGURO_TOKEN: z.string().min(1).optional(),
@@ -76,8 +78,6 @@ const envSchema = z.object({
   REVALIDATE_SECRET: z.string().min(1).optional(),
   INVITE_TOKEN_SECRET: z.string().min(32).optional(),
 
-  // Motor (Railway)
-  RAILWAY_URL: z.string().url().optional(),
 })
 
 const _env = envSchema.safeParse(rawEnv)
