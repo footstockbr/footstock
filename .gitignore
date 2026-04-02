@@ -73,3 +73,4 @@ firebase-adminsdk-*.json
 # Load test results (gerados em runtime — não versionar)
 tests/load/results/*.json
 tests/load/results/*.html
+.vercel
