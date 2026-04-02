@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { apiClient } from '@/lib/api/client'
 import { canAccess } from '@/lib/auth/canAccess'
 import type { AdminRole as CanonicalAdminRole } from '@/lib/enums'
 import { JogadoresTab } from '@/components/admin/usuarios/JogadoresTab'
@@ -19,12 +20,8 @@ export default function AdminUsuariosPage() {
   useEffect(() => {
     async function boot() {
       try {
-        const res = await fetch('/api/v1/admin/session/verify')
-        if (!res.ok) {
-          router.replace('/admin/login')
-          return
-        }
-        const json = (await res.json()) as { adminRole?: CanonicalAdminRole }
+        const res = await apiClient.get('/api/v1/admin/session/verify')
+        const json = res.data as { adminRole?: CanonicalAdminRole }
         if (!json.adminRole || !canAccess(json.adminRole, 'users:read')) {
           router.replace('/admin')
           return

@@ -8,6 +8,7 @@
 // ============================================================================
 
 import { useEffect, useState } from 'react'
+import { apiClient } from '@/lib/api/client'
 import { AdminBreadcrumb } from '@/components/admin/AdminBreadcrumb'
 import { canAccess } from '@/lib/auth/canAccess'
 import type { AdminRole } from '@/lib/enums'
@@ -59,9 +60,8 @@ export default function LGPDDashboardPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const res = await fetch('/api/v1/admin/lgpd/dashboard')
-        if (!res.ok) throw new Error('Falha ao carregar dados LGPD')
-        const data = await res.json()
+        const res = await apiClient.get('/api/v1/admin/lgpd/dashboard')
+        const data = res.data
 
         setAdminRole(data.adminRole ?? null)
         setConsentStats(data.consents ?? { active: 0, revoked: 0 })
@@ -108,16 +108,14 @@ export default function LGPDDashboardPage() {
   async function handleExportReport() {
     setExporting(true)
     try {
-      const res = await fetch('/api/v1/admin/lgpd/export-report', { method: 'POST' })
-      if (res.ok) {
-        const blob = await res.blob()
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `lgpd-report-${new Date().toISOString().slice(0, 10)}.json`
-        a.click()
-        URL.revokeObjectURL(url)
-      }
+      const res = await apiClient.post('/api/v1/admin/lgpd/export-report', null, { responseType: 'blob' })
+      const blob = res.data as Blob
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `lgpd-report-${new Date().toISOString().slice(0, 10)}.json`
+      a.click()
+      URL.revokeObjectURL(url)
     } catch (err) {
       console.error('[LGPD] Erro ao exportar:', err)
     } finally {

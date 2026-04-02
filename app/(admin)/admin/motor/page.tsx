@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { apiClient } from '@/lib/api/client'
 import { AdminBreadcrumb } from '@/components/admin/AdminBreadcrumb'
 import { MotorStateCard } from '@/components/admin/MotorStateCard'
 import { ClubEditor } from '@/components/admin/ClubEditor'
@@ -34,16 +35,15 @@ function AuditLog() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch('/api/v1/admin/audit?limit=20')
-        if (res.status === 403) {
+        const res = await apiClient.get('/api/v1/admin/audit?limit=20')
+        setIsForbidden(false)
+        setActions(res.data.data)
+      } catch (err: unknown) {
+        const axiosErr = err as { response?: { status?: number } }
+        if (axiosErr.response?.status === 403) {
           setIsForbidden(true)
           setActions([])
-          return
         }
-        if (!res.ok) return
-        setIsForbidden(false)
-        const json = await res.json()
-        setActions(json.data)
       } finally {
         setIsLoading(false)
       }
@@ -121,12 +121,8 @@ export default function AdminMotorPage() {
   useEffect(() => {
     async function loadRole() {
       try {
-        const res = await fetch('/api/v1/admin/session/verify')
-        if (!res.ok) {
-          router.replace('/admin/login')
-          return
-        }
-        const json = (await res.json()) as { adminRole?: AdminRole }
+        const res = await apiClient.get('/api/v1/admin/session/verify')
+        const json = res.data as { adminRole?: AdminRole }
         if (!json.adminRole || !canAccess(json.adminRole, 'motor:read')) {
           router.replace('/admin')
           return

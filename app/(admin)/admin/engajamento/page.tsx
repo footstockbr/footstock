@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { apiClient } from '@/lib/api/client'
 import { AdminBreadcrumb } from '@/components/admin/AdminBreadcrumb'
 import { EngagementMetrics } from '@/components/admin/EngagementMetrics'
 import { RetentionTable } from '@/components/admin/RetentionTable'
@@ -27,12 +28,8 @@ export default function AdminEngagementPage() {
   useEffect(() => {
     async function verifyRole() {
       try {
-        const res = await fetch('/api/v1/admin/session/verify')
-        if (!res.ok) {
-          router.replace('/admin/login')
-          return false
-        }
-        const json = (await res.json()) as { adminRole?: AdminRole }
+        const res = await apiClient.get('/api/v1/admin/session/verify')
+        const json = res.data as { adminRole?: AdminRole }
         if (!json.adminRole || !canAccess(json.adminRole, 'forum:moderate')) {
           router.replace('/admin')
           return false
@@ -51,24 +48,14 @@ export default function AdminEngagementPage() {
       setError(null)
       try {
         const [mRes, hRes, cRes] = await Promise.all([
-          fetch('/api/v1/admin/engagement'),
-          fetch('/api/v1/admin/engagement/history?days=30'),
-          fetch('/api/v1/admin/engagement/cohort'),
+          apiClient.get('/api/v1/admin/engagement'),
+          apiClient.get('/api/v1/admin/engagement/history?days=30'),
+          apiClient.get('/api/v1/admin/engagement/cohort'),
         ])
 
-        if (!mRes.ok || !hRes.ok || !cRes.ok) {
-          throw new Error('Falha ao carregar métricas.')
-        }
-
-        const [mJson, hJson, cJson] = await Promise.all([
-          mRes.json(),
-          hRes.json(),
-          cRes.json(),
-        ])
-
-        setMetrics(mJson.data)
-        setHistory(hJson.data)
-        setCohort(cJson.data)
+        setMetrics(mRes.data.data)
+        setHistory(hRes.data.data)
+        setCohort(cRes.data.data)
       } catch {
         setError('Não foi possível carregar as métricas de engajamento.')
       } finally {

@@ -10,7 +10,12 @@ WORKDIR /app
 COPY motor/ ./
 COPY prisma/ ./prisma/
 COPY --from=deps /app/node_modules ./node_modules
-RUN npx --yes prisma@^6 generate
+# Prisma 6 exige 'url' no schema; Prisma 7 (Next.js) removeu esse campo.
+# Patch temporário: adiciona url antes do generate e restaura em seguida.
+RUN cp prisma/schema.prisma prisma/schema.prisma.bak && \
+    sed -i 's/provider = "postgresql"/provider = "postgresql"\n  url       = env("DATABASE_URL")\n  directUrl = env("DIRECT_URL")/' prisma/schema.prisma && \
+    DATABASE_URL="postgresql://prisma:prisma@localhost/prisma" DIRECT_URL="postgresql://prisma:prisma@localhost/prisma" npx --yes prisma@^6 generate && \
+    mv prisma/schema.prisma.bak prisma/schema.prisma
 RUN npm run build
 
 # Stage 3: Runtime (imagem final mínima)

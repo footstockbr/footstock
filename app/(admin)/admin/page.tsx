@@ -6,6 +6,7 @@
 // ============================================================================
 
 import { useEffect, useState } from 'react'
+import { apiClient } from '@/lib/api/client'
 import { AdminBreadcrumb } from '@/components/admin/AdminBreadcrumb'
 import { KPICards } from '@/components/admin/KPICards'
 import { NSMProgressBar } from '@/components/admin/NSMProgressBar'
@@ -33,25 +34,19 @@ export default function AdminDashboardPage() {
       setError(null)
       try {
         const [sessionRes, dashRes] = await Promise.all([
-          fetch('/api/v1/admin/session/verify'),
-          fetch('/api/v1/admin/dashboard'),
+          apiClient.get('/api/v1/admin/session/verify'),
+          apiClient.get('/api/v1/admin/dashboard'),
         ])
 
-        if (!sessionRes.ok || !dashRes.ok) {
-          throw new Error('Falha ao carregar dados do dashboard.')
-        }
-
-        const sessionJson = (await sessionRes.json()) as { adminRole?: AdminRole }
+        const sessionJson = sessionRes.data as { adminRole?: AdminRole }
         setAdminRole(sessionJson.adminRole ?? null)
-        const dashJson = await dashRes.json()
-        setDashboard(dashJson.data)
+        setDashboard(dashRes.data.data)
 
         if (sessionJson.adminRole && canAccess(sessionJson.adminRole, 'financial:read')) {
-          const revRes = await fetch('/api/v1/admin/revenue-history?days=30')
-          if (revRes.ok) {
-            const revJson = await revRes.json()
-            setRevenue(revJson.data)
-          } else {
+          try {
+            const revRes = await apiClient.get('/api/v1/admin/revenue-history?days=30')
+            setRevenue(revRes.data.data)
+          } catch {
             setRevenue([])
           }
         } else {

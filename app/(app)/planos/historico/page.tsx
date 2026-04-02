@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { apiClient } from '@/lib/api/client'
 import { ROUTES } from '@/lib/constants/routes'
 import { PLAN_LABELS } from '@/lib/constants/labels'
 
@@ -54,9 +55,9 @@ export default function HistoricoPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/v1/subscriptions/history')
-      .then((r) => r.json())
-      .then((data: { success: boolean; data?: Subscription[] }) => {
+    apiClient.get('/api/v1/subscriptions/history')
+      .then((r) => {
+        const data = r.data as { success: boolean; data?: Subscription[] }
         if (data.success) setSubscriptions(data.data ?? [])
         else setError('Erro ao carregar histórico.')
       })

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { apiClient } from '@/lib/api/client'
 import { canAccess } from '@/lib/auth/canAccess'
 import { FinancialDashboard } from '@/components/admin/FinancialDashboard'
 import type { AdminRole as CanonicalAdminRole } from '@/lib/enums'
@@ -46,12 +47,8 @@ export default function AdminFinanceiroPage() {
   useEffect(() => {
     async function load() {
       try {
-        const verifyRes = await fetch('/api/v1/admin/session/verify')
-        if (!verifyRes.ok) {
-          router.replace(ROUTES.ADMIN_LOGIN)
-          return
-        }
-        const verifyJson = (await verifyRes.json()) as { adminRole?: CanonicalAdminRole }
+        const verifyRes = await apiClient.get('/api/v1/admin/session/verify')
+        const verifyJson = verifyRes.data as { adminRole?: CanonicalAdminRole }
         if (!verifyJson.adminRole || !canAccess(verifyJson.adminRole, 'financial:read')) {
           router.replace(ROUTES.ADMIN)
           return
@@ -69,24 +66,14 @@ export default function AdminFinanceiroPage() {
 
       try {
         const [sessionRes, configRes] = await Promise.all([
-          fetch('/api/v1/admin/session/verify'),
-          fetch('/api/v1/admin/gateways/config'),
+          apiClient.get('/api/v1/admin/session/verify'),
+          apiClient.get('/api/v1/admin/gateways/config'),
         ])
 
-        if (!sessionRes.ok) {
-          setError('Nao foi possivel validar sessao admin.')
-          return
-        }
-
-        const sessionJson = (await sessionRes.json()) as { adminRole?: AdminRole }
+        const sessionJson = sessionRes.data as { adminRole?: AdminRole }
         setRole(sessionJson.adminRole ?? null)
 
-        if (!configRes.ok) {
-          setError('Nao foi possivel carregar configuracao de gateways.')
-          return
-        }
-
-        const configJson = (await configRes.json()) as { data?: { gateways?: GatewayConfig[] } }
+        const configJson = configRes.data as { data?: { gateways?: GatewayConfig[] } }
         setGateways(configJson.data?.gateways ?? [])
       } catch {
         setError('Erro de conexao ao carregar dados financeiros.')
@@ -117,23 +104,13 @@ export default function AdminFinanceiroPage() {
     setSuccess(null)
 
     try {
-      const res = await fetch('/api/v1/admin/gateways/config', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gateways }),
-      })
-
-      if (!res.ok) {
-        const data = (await res.json()) as { error?: { message?: string } }
-        setError(data.error?.message ?? 'Falha ao salvar configuracoes de gateway.')
-        return
-      }
-
-      const data = (await res.json()) as { data?: { gateways?: GatewayConfig[] } }
+      const res = await apiClient.patch('/api/v1/admin/gateways/config', { gateways })
+      const data = res.data as { data?: { gateways?: GatewayConfig[] } }
       setGateways(data.data?.gateways ?? gateways)
       setSuccess('Configuracoes de gateways atualizadas com sucesso.')
-    } catch {
-      setError('Erro de conexao ao salvar configuracoes.')
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: { message?: string } } } }
+      setError(axiosErr.response?.data?.error?.message ?? 'Falha ao salvar configuracoes de gateway.')
     } finally {
       setIsSaving(false)
     }

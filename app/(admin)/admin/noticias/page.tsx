@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { apiClient } from '@/lib/api/client'
 import { canAccess } from '@/lib/auth/canAccess'
 import type { AdminRole } from '@/lib/enums'
 import { NewsEditorPanel } from '@/components/admin/news/NewsEditorPanel'
@@ -33,9 +34,8 @@ export default function AdminNoticiasPage() {
       if (tickerFilter.trim()) params.set('ticker', tickerFilter.trim().toUpperCase())
       if (fromFilter) params.set('from', fromFilter)
       if (toFilter) params.set('to', toFilter)
-      const res = await fetch(`/api/v1/admin/news/editorial?${params.toString()}`)
-      if (!res.ok) throw new Error('load-failed')
-      const json = (await res.json()) as { data?: EditorialNews[] }
+      const res = await apiClient.get(`/api/v1/admin/news/editorial?${params.toString()}`)
+      const json = res.data as { data?: EditorialNews[] }
       setItems(json.data ?? [])
     } catch {
       setError('Não foi possível carregar notícias editoriais.')
@@ -47,9 +47,8 @@ export default function AdminNoticiasPage() {
   useEffect(() => {
     async function verifyRole() {
       try {
-        const res = await fetch('/api/v1/admin/session/verify')
-        if (!res.ok) { router.replace('/admin/login'); return false }
-        const json = (await res.json()) as { adminRole?: AdminRole }
+        const res = await apiClient.get('/api/v1/admin/session/verify')
+        const json = res.data as { adminRole?: AdminRole }
         if (!json.adminRole || !canAccess(json.adminRole, 'news:read')) {
           router.replace('/admin'); return false
         }
@@ -87,48 +86,43 @@ export default function AdminNoticiasPage() {
       source: form.source.trim() || undefined, status: form.status,
     }
     try {
-      const res = await fetch(
-        editingId ? `/api/v1/admin/news/editorial/${editingId}` : '/api/v1/admin/news/editorial',
-        { method: editingId ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }
-      )
-      if (!res.ok) {
-        const json = (await res.json()) as { error?: string }
-        setError(json.error ?? 'Não foi possível salvar a notícia.'); return
+      if (editingId) {
+        await apiClient.patch(`/api/v1/admin/news/editorial/${editingId}`, payload)
+      } else {
+        await apiClient.post('/api/v1/admin/news/editorial', payload)
       }
       setSuccess(editingId ? 'Notícia atualizada com sucesso.' : 'Notícia criada com sucesso.')
       clearForm(); await loadItems()
-    } catch { setError('Erro de conexão ao salvar notícia.')
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } }
+      setError(axiosErr.response?.data?.error ?? 'Não foi possível salvar a notícia.')
     } finally { setIsSaving(false) }
   }
 
   async function updateStatus(item: EditorialNews, status: EditorialStatus) {
     setError(null); setSuccess(null)
     try {
-      const res = await fetch(`/api/v1/admin/news/editorial/${item.id}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }),
-      })
-      if (!res.ok) {
-        const json = (await res.json()) as { error?: string }
-        setError(json.error ?? 'Falha ao alterar status.'); return
-      }
+      await apiClient.patch(`/api/v1/admin/news/editorial/${item.id}`, { status })
       setSuccess(`Notícia marcada como ${STATUS_LABEL[status].toLowerCase()}.`)
       await loadItems()
-    } catch { setError('Erro de conexão ao alterar status.') }
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } }
+      setError(axiosErr.response?.data?.error ?? 'Falha ao alterar status.')
+    }
   }
 
   async function deleteItem(item: EditorialNews) {
     if (!confirm(`Excluir a notícia "${item.title}"?`)) return
     setError(null); setSuccess(null)
     try {
-      const res = await fetch(`/api/v1/admin/news/editorial/${item.id}`, { method: 'DELETE' })
-      if (!res.ok) {
-        const json = (await res.json()) as { error?: string }
-        setError(json.error ?? 'Falha ao excluir notícia.'); return
-      }
+      await apiClient.delete(`/api/v1/admin/news/editorial/${item.id}`)
       setSuccess('Notícia excluída com sucesso.')
       if (editingId === item.id) clearForm()
       await loadItems()
-    } catch { setError('Erro de conexão ao excluir notícia.') }
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } }
+      setError(axiosErr.response?.data?.error ?? 'Falha ao excluir notícia.')
+    }
   }
 
   if (isAuthorizing) {

@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { apiClient } from '@/lib/api/client'
 import { ROUTES } from '@/lib/constants'
 
 interface AdminLayoutClientProps {
@@ -34,11 +35,7 @@ export function AdminLayoutClient({ userId, children }: AdminLayoutClientProps) 
     lastRenewRef.current = now
 
     try {
-      await fetch('/api/v1/admin/session/activity', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId }),
-      })
+      await apiClient.post('/api/v1/admin/session/activity', { userId })
     } catch {
       // Falha silenciosa — o Redis irá expirar naturalmente
     }
