@@ -48,6 +48,15 @@ function deriveClubIdFromEmail(email?: string): string | null {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+
+  // /admin/login deve ser acessível sem autenticação (evita redirect loop no AdminLayout).
+  // Early return injeta x-pathname para que o Server Component saiba onde está.
+  if (pathname === '/admin/login') {
+    const requestHeaders = new Headers(request.headers)
+    requestHeaders.set('x-pathname', pathname)
+    return NextResponse.next({ request: { headers: requestHeaders } })
+  }
+
   const devAuthEmail = request.cookies.get('fs_dev_auth')?.value
   const devAuthIsAdmin = request.cookies.get('fs_dev_admin')?.value === '1'
   const devClubId = request.cookies.get('fs_dev_club_id')?.value

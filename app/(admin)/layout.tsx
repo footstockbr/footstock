@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { redirect } from 'next/navigation'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 import { prisma } from '@/lib/prisma'
 import { AdminSidebar } from '@/components/admin/AdminSidebar'
@@ -20,6 +20,13 @@ export const metadata: Metadata = {
 }
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  // Página de login admin está dentro deste grupo — pular auth guard para evitar redirect loop.
+  // O middleware injeta x-pathname para que possamos detectar isso aqui.
+  const headersList = await headers()
+  if (headersList.get('x-pathname') === '/admin/login') {
+    return <>{children}</>
+  }
+
   // ---------- Verificar sessão via Supabase (Server Component) ----------
   const cookieStore = await cookies()
 
