@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from 'react'
 import * as Sentry from '@sentry/nextjs'
+import { authedFetch } from '@/lib/api/authed-fetch'
 import { Gauge, AlertTriangle, Clock, Cpu } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { MOTOR_STATUS } from '@/lib/enums'
@@ -50,7 +51,7 @@ export function MotorStateCard() {
   useEffect(() => {
     async function fetchStatus() {
       try {
-        const res = await fetch('/api/v1/admin/motor/status')
+        const res = await authedFetch('/api/v1/admin/motor/status')
         if (!res.ok) throw new Error('Failed')
         const json = await res.json()
         setData(json.data)

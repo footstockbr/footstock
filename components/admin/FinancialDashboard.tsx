@@ -7,6 +7,7 @@
 // ============================================================================
 
 import { useEffect, useState } from 'react'
+import { authedFetch } from '@/lib/api/authed-fetch'
 import {
   TrendingUp,
   TrendingDown,
@@ -206,8 +207,8 @@ export function FinancialDashboard() {
       setError(null)
       try {
         const [metricsRes, historyRes] = await Promise.all([
-          fetch('/api/v1/admin/financial'),
-          fetch('/api/v1/admin/revenue-history?days=30'),
+          authedFetch('/api/v1/admin/financial'),
+          authedFetch('/api/v1/admin/revenue-history?days=30'),
         ])
 
         if (!metricsRes.ok) {

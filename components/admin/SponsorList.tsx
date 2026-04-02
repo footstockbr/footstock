@@ -7,6 +7,7 @@
 // ============================================================================
 
 import { useCallback, useEffect, useState } from 'react'
+import { authedFetch } from '@/lib/api/authed-fetch'
 import type { AdSponsorDto } from '@/lib/types/sponsors'
 
 interface SponsorListProps {
@@ -24,7 +25,7 @@ export function SponsorList({ onEdit, onDelete, refresh }: SponsorListProps) {
     setIsLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/v1/admin/sponsors')
+      const res = await authedFetch('/api/v1/admin/sponsors')
       if (!res.ok) throw new Error('fetch-failed')
       const json = (await res.json()) as { data: AdSponsorDto[] }
       setSponsors(json.data ?? [])

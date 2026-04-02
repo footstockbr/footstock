@@ -6,6 +6,7 @@
 // ============================================================================
 
 import { useEffect, useState, useCallback } from 'react'
+import { authedFetch } from '@/lib/api/authed-fetch'
 import { ShieldBan, ShieldCheck, Filter, X } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 
@@ -45,7 +46,7 @@ export function ClubEditor({ canHalt }: ClubEditorProps) {
 
   const loadAssets = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/admin/assets')
+      const res = await authedFetch('/api/v1/admin/assets')
       if (!res.ok) throw new Error('Failed')
       const json = await res.json()
       setAssets(json.data)
@@ -62,7 +63,7 @@ export function ClubEditor({ canHalt }: ClubEditorProps) {
     setPendingTicker(ticker)
     try {
       const reason = haltReasonInput.trim() || 'Halt manual via painel admin'
-      const res = await fetch(`/api/v1/admin/motor/halt/${ticker}`, {
+      const res = await authedFetch(`/api/v1/admin/motor/halt/${ticker}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason }),
@@ -82,7 +83,7 @@ export function ClubEditor({ canHalt }: ClubEditorProps) {
   const releaseAsset = async (ticker: string) => {
     setPendingTicker(ticker)
     try {
-      const res = await fetch(`/api/v1/admin/motor/halt/${ticker}`, { method: 'DELETE' })
+      const res = await authedFetch(`/api/v1/admin/motor/halt/${ticker}`, { method: 'DELETE' })
       if (!res.ok) throw new Error()
       showToast(`${ticker} liberado`)
       await loadAssets()

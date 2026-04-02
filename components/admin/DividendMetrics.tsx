@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { authedFetch } from '@/lib/api/authed-fetch'
 
 interface DividendStats {
   totalDistributed: number
@@ -13,7 +14,7 @@ export function DividendMetrics() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/v1/admin/engagement?section=dividends')
+    authedFetch('/api/v1/admin/engagement?section=dividends')
       .then((r) => r.json())
       .then((data) => setStats(data.dividends ?? null))
       .catch(() => null)

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { authedFetch } from '@/lib/api/authed-fetch'
 import { USER_STATUS } from '@/lib/enums'
 
 interface FlaggedPostItem {
@@ -54,9 +55,9 @@ export function ModerationPageClient() {
     setError(null)
     try {
       const [flaggedRes, rulesRes, wordsRes] = await Promise.all([
-        fetch('/api/v1/admin/moderation/flagged?limit=50'),
-        fetch('/api/v1/admin/moderation/rules'),
-        fetch('/api/v1/admin/moderation/blocked-words'),
+        authedFetch('/api/v1/admin/moderation/flagged?limit=50'),
+        authedFetch('/api/v1/admin/moderation/rules'),
+        authedFetch('/api/v1/admin/moderation/blocked-words'),
       ])
 
       if (!flaggedRes.ok || !rulesRes.ok || !wordsRes.ok) {
@@ -88,7 +89,7 @@ export function ModerationPageClient() {
     setSuccess(null)
     setActionLoading(`${action}-${postId}`)
     try {
-      const res = await fetch(`/api/v1/admin/moderation/flagged/${postId}`, {
+      const res = await authedFetch(`/api/v1/admin/moderation/flagged/${postId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action }),
@@ -131,7 +132,7 @@ export function ModerationPageClient() {
     setSuccess(null)
     setActionLoading(`reactivate-${userId}`)
     try {
-      const res = await fetch(`/api/v1/admin/moderation/users/${userId}/suspend`, {
+      const res = await authedFetch(`/api/v1/admin/moderation/users/${userId}/suspend`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -158,7 +159,7 @@ export function ModerationPageClient() {
     setSuccess(null)
     setActionLoading(`rule-${rule.id}`)
     try {
-      const res = await fetch('/api/v1/admin/moderation/rules', {
+      const res = await authedFetch('/api/v1/admin/moderation/rules', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ruleId: rule.id, enabled: !rule.enabled }),
@@ -183,7 +184,7 @@ export function ModerationPageClient() {
     setSuccess(null)
     setActionLoading('add-word')
     try {
-      const res = await fetch('/api/v1/admin/moderation/blocked-words', {
+      const res = await authedFetch('/api/v1/admin/moderation/blocked-words', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ word }),
@@ -208,7 +209,7 @@ export function ModerationPageClient() {
     setSuccess(null)
     setActionLoading(`remove-${id}`)
     try {
-      const res = await fetch(`/api/v1/admin/moderation/blocked-words/${id}`, { method: 'DELETE' })
+      const res = await authedFetch(`/api/v1/admin/moderation/blocked-words/${id}`, { method: 'DELETE' })
       if (!res.ok) {
         const json = (await res.json()) as { error?: string }
         setError(json.error ?? 'Falha ao remover palavra bloqueada.')

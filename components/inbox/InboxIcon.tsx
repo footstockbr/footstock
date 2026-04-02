@@ -1,6 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { authedFetch } from '@/lib/api/authed-fetch'
 import { ROUTES } from '@/lib/constants/routes'
 import { NOTIFICATION_POLL_MS } from '@/lib/constants/timing'
 
@@ -9,7 +10,7 @@ export function InboxIcon() {
 
   const fetchUnreadCount = async () => {
     try {
-      const res = await fetch('/api/v1/me/notifications?unread=true&count=true')
+      const res = await authedFetch('/api/v1/me/notifications?unread=true&count=true')
       if (res.ok) {
         const data = await res.json()
         setUnreadCount(data.count ?? 0)

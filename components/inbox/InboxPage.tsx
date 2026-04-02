@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { authedFetch } from '@/lib/api/authed-fetch'
 import { InboxMessageCard } from './InboxMessageCard'
 
 interface Notification {
@@ -19,7 +20,7 @@ export function InboxPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch('/api/v1/me/notifications')
+        const res = await authedFetch('/api/v1/me/notifications')
         if (res.ok) {
           const data = await res.json()
           setNotifications(data.notifications ?? data ?? [])
@@ -42,7 +43,7 @@ export function InboxPage() {
   const handleMarkAllRead = async () => {
     setMarkingAll(true)
     try {
-      const res = await fetch('/api/v1/me/notifications/read-all', { method: 'POST' })
+      const res = await authedFetch('/api/v1/me/notifications/read-all', { method: 'POST' })
       if (res.ok) {
         setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
       }

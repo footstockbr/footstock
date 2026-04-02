@@ -7,6 +7,7 @@
 // ============================================================================
 
 import { useState } from 'react'
+import { authedFetch } from '@/lib/api/authed-fetch'
 import { SponsorList } from '@/components/admin/SponsorList'
 import { BannerManager } from '@/components/admin/BannerManager'
 import type { AdSponsorDto } from '@/lib/types/sponsors'
@@ -37,7 +38,7 @@ export function SponsorsPageClient() {
     setSuccessMsg(null)
     setErrorMsg(null)
     try {
-      const res = await fetch(`/api/v1/admin/sponsors/${id}`, { method: 'DELETE' })
+      const res = await authedFetch(`/api/v1/admin/sponsors/${id}`, { method: 'DELETE' })
       if (!res.ok) {
         const json = (await res.json()) as { error?: string }
         setErrorMsg(json.error ?? 'Falha ao remover patrocinador.')

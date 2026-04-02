@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { authedFetch } from '@/lib/api/authed-fetch'
 import { ROLES } from './types'
 import type { AdminRole, AdminUser } from './types'
 import { USER_STATUS } from '@/lib/enums'
@@ -25,7 +26,7 @@ export function AdminsTab({ sessionRole: _sessionRole, isSuperAdmin }: AdminsTab
     setSuccess(null)
     setIsLoading(true)
     try {
-      const res = await fetch('/api/v1/admin/admins')
+      const res = await authedFetch('/api/v1/admin/admins')
       if (!res.ok) {
         setError('Nao foi possivel carregar a lista de administradores.')
         return
@@ -61,7 +62,7 @@ export function AdminsTab({ sessionRole: _sessionRole, isSuperAdmin }: AdminsTab
     setError(null)
     setSuccess(null)
     try {
-      const res = await fetch('/api/v1/admin/admins', {
+      const res = await authedFetch('/api/v1/admin/admins', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim(), role: newRole }),
@@ -88,7 +89,7 @@ export function AdminsTab({ sessionRole: _sessionRole, isSuperAdmin }: AdminsTab
     setError(null)
     setSuccess(null)
     try {
-      const res = await fetch(`/api/v1/admin/admins/${userId}`, {
+      const res = await authedFetch(`/api/v1/admin/admins/${userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role }),
@@ -113,7 +114,7 @@ export function AdminsTab({ sessionRole: _sessionRole, isSuperAdmin }: AdminsTab
     setError(null)
     setSuccess(null)
     try {
-      const res = await fetch(`/api/v1/admin/admins/${userId}`, { method: 'DELETE' })
+      const res = await authedFetch(`/api/v1/admin/admins/${userId}`, { method: 'DELETE' })
       if (!res.ok) {
         const data = (await res.json()) as { error?: { message?: string } }
         setError(data.error?.message ?? 'Falha ao remover acesso admin.')
@@ -136,7 +137,7 @@ export function AdminsTab({ sessionRole: _sessionRole, isSuperAdmin }: AdminsTab
       setError(null)
       setSuccess(null)
       try {
-        const res = await fetch(`/api/v1/admin/users/${userId}/ban`, { method: 'DELETE' })
+        const res = await authedFetch(`/api/v1/admin/users/${userId}/ban`, { method: 'DELETE' })
         if (!res.ok) {
           const data = (await res.json()) as { error?: { message?: string } }
           setError(data.error?.message ?? 'Falha ao remover banimento.')
@@ -157,7 +158,7 @@ export function AdminsTab({ sessionRole: _sessionRole, isSuperAdmin }: AdminsTab
     setError(null)
     setSuccess(null)
     try {
-      const res = await fetch(`/api/v1/admin/users/${userId}/ban`, {
+      const res = await authedFetch(`/api/v1/admin/users/${userId}/ban`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason }),
@@ -182,7 +183,7 @@ export function AdminsTab({ sessionRole: _sessionRole, isSuperAdmin }: AdminsTab
     setError(null)
     setSuccess(null)
     try {
-      const res = await fetch(`/api/v1/admin/users/${userId}`, { method: 'DELETE' })
+      const res = await authedFetch(`/api/v1/admin/users/${userId}`, { method: 'DELETE' })
       if (!res.ok) {
         const data = (await res.json()) as { error?: { message?: string } }
         setError(data.error?.message ?? 'Falha ao excluir conta do usuario.')

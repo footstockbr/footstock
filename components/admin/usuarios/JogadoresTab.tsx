@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { authedFetch } from '@/lib/api/authed-fetch'
 import { canAccess } from '@/lib/auth/canAccess'
 import type { AdminRole as CanonicalAdminRole } from '@/lib/enums'
 import { USER_STATUS } from '@/lib/enums'
@@ -49,7 +50,7 @@ export function JogadoresTab({ sessionRole }: JogadoresTabProps) {
         if (plan) params.set('planType', plan)
         if (status) params.set('status', status)
 
-        const res = await fetch(`/api/v1/admin/users?${params.toString()}`)
+        const res = await authedFetch(`/api/v1/admin/users?${params.toString()}`)
         if (!res.ok) {
           setError('Erro ao carregar jogadores.')
           return
@@ -89,7 +90,7 @@ export function JogadoresTab({ sessionRole }: JogadoresTabProps) {
     setError(null)
     setSuccess(null)
     try {
-      const res = await fetch(`/api/v1/admin/moderation/users/${userId}/suspend`, {
+      const res = await authedFetch(`/api/v1/admin/moderation/users/${userId}/suspend`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ suspend, reason: reason || undefined }),
@@ -115,7 +116,7 @@ export function JogadoresTab({ sessionRole }: JogadoresTabProps) {
     setError(null)
     setSuccess(null)
     try {
-      const res = await fetch(`/api/v1/admin/users/${userId}/reset-balance`, { method: 'POST' })
+      const res = await authedFetch(`/api/v1/admin/users/${userId}/reset-balance`, { method: 'POST' })
       if (!res.ok) {
         const data = (await res.json()) as { error?: { message?: string } }
         setError(data.error?.message ?? 'Erro ao resetar saldo.')
