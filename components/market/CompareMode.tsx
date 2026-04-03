@@ -3,11 +3,12 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, X } from 'lucide-react'
+import { resolveCompareColors } from './CompareChart'
 
 interface AssetOption {
   ticker: string
   displayName: string
-  colors: { primary: string }
+  colors: { primary: string; secondary?: string }
 }
 
 interface CompareModeProps {
@@ -55,6 +56,15 @@ export function CompareMode({
         a.ticker.toLowerCase().includes(search.toLowerCase()))
   )
 
+  // Resolve cores sem colisão: [base, 1º, 2º, 3º]
+  const allSelectedTickers = [baseTicker, ...selected]
+  const assetColorMap = Object.fromEntries(
+    allAssets.map((a) => [a.ticker, { primary: a.colors.primary, secondary: a.colors.secondary }])
+  )
+  const resolvedChipColors = resolveCompareColors(allSelectedTickers, assetColorMap)
+  // Índice 0 = baseTicker (não editável), 1+ = selected
+  const selectedColors = resolvedChipColors.slice(1)
+
   function toggle(ticker: string) {
     setSelected((prev) =>
       prev.includes(ticker)
@@ -75,6 +85,15 @@ export function CompareMode({
   return (
     <div data-testid="compare-mode" className="flex flex-col gap-3 p-4">
       <h2 className="text-base font-bold text-[#EAECEF]">Comparar com outros clubes</h2>
+      <p className="text-xs text-[#929AA5]">
+        Selecione até 3 clubes para comparar com{' '}
+        <span
+          className="font-mono font-bold"
+          style={{ color: resolvedChipColors[0] ?? '#F0B90B' }}
+        >
+          {baseTicker}
+        </span>
+      </p>
 
       {/* Search */}
       <div className="relative">
@@ -90,27 +109,24 @@ export function CompareMode({
         />
       </div>
 
-      {/* Selected chips */}
+      {/* Selected chips com cores resolvidas */}
       {selected.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          {selected.map((t) => {
-            const asset = allAssets.find((a) => a.ticker === t)
-            return (
+          {selected.map((t, i) => (
+            <span
+              key={t}
+              className="flex items-center gap-1 bg-[#2B3139] text-[#EAECEF] text-xs px-2 py-1 rounded-full"
+            >
               <span
-                key={t}
-                className="flex items-center gap-1 bg-[#2B3139] text-[#EAECEF] text-xs px-2 py-1 rounded-full"
-              >
-                <span
-                  className="w-2 h-2 rounded-full"
-                  style={{ background: asset?.colors.primary ?? '#F0B90B' }}
-                />
-                {t}
-                <button onClick={() => toggle(t)} className="text-[#929AA5] hover:text-[#F6465D]">
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )
-          })}
+                className="w-2 h-2 rounded-full"
+                style={{ background: selectedColors[i] ?? '#F0B90B' }}
+              />
+              {t}
+              <button onClick={() => toggle(t)} className="text-[#929AA5] hover:text-[#F6465D]">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
         </div>
       )}
 
@@ -122,6 +138,10 @@ export function CompareMode({
         {filtered.map((a) => {
           const isSelected = selected.includes(a.ticker)
           const isDisabled = !isSelected && selected.length >= 3
+          // Cor que seria atribuída se selecionado (posição = selected.length + 1 do total)
+          const previewColor = isSelected
+            ? selectedColors[selected.indexOf(a.ticker)] ?? a.colors.primary
+            : a.colors.primary
           return (
             <label
               key={a.ticker}
@@ -140,7 +160,7 @@ export function CompareMode({
               />
               <span
                 className="w-3 h-3 rounded-full shrink-0"
-                style={{ background: a.colors.primary }}
+                style={{ background: previewColor }}
               />
               <span className="text-sm text-[#EAECEF] truncate">{a.displayName}</span>
               <span className="text-xs text-[#929AA5] ml-auto font-mono">{a.ticker}</span>

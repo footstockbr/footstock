@@ -2,12 +2,13 @@
 
 // ============================================================================
 // Foot Stock — AssetDetailPage
-// Orquestra chart, orderbook, stats e comparação do detalhe de ativo.
+// Orquestra chart, OFI, orderbook, stats, comparação e gráfico comparativo.
 // ============================================================================
 
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowUp, ArrowDown, Minus, TrendingUp } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils/cn'
 import { formatFS } from '@/lib/utils/formatCurrency'
 import { useMarketTick } from '@/hooks/useMarketTick'
@@ -15,10 +16,12 @@ import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { getClubDisplayName } from '@/lib/constants/clubs'
 import { PLAN_TYPE } from '@/lib/enums'
 import { DynamicPriceChart } from './PriceChart'
+import { OFIPanel } from './OFIPanel'
 import { OrderBookPanel } from './OrderBookPanel'
 import { AssetStats } from './AssetStats'
 import { SentimentGauge } from './SentimentGauge'
 import { CompareMode } from './CompareMode'
+import { DynamicCompareChart, resolveCompareColors } from './CompareChart'
 import type { Division } from '@/lib/enums'
 
 // ---------------------------------------------------------------------------
@@ -47,6 +50,15 @@ export interface AssetDetailPageProps {
   assetData: SerializedAsset
 }
 
+/** Forma da listagem de ativos da API */
+interface AssetListItem {
+  ticker: string
+  name: string
+  colors?: { primary: string; secondary?: string }
+  colorPrimary?: string
+  colorSecondary?: string
+}
+
 // ---------------------------------------------------------------------------
 // Tabs
 // ---------------------------------------------------------------------------
@@ -61,6 +73,23 @@ const TABS: { id: Tab; label: string }[] = [
 ]
 
 // ---------------------------------------------------------------------------
+// Hook para buscar lista completa de ativos (para CompareMode)
+// ---------------------------------------------------------------------------
+
+function useAllAssets() {
+  return useQuery<AssetListItem[]>({
+    queryKey: ['market-assets-compare-list'],
+    queryFn: async () => {
+      const res = await fetch('/api/v1/assets?limit=40', { credentials: 'include' })
+      if (!res.ok) return []
+      const json: { data?: AssetListItem[] } = await res.json()
+      return json.data ?? []
+    },
+    staleTime: 5 * 60_000, // 5 min — lista de ativos raramente muda
+  })
+}
+
+// ---------------------------------------------------------------------------
 // Componente principal
 // ---------------------------------------------------------------------------
 
@@ -72,8 +101,17 @@ export function AssetDetailPage({ ticker, assetData }: AssetDetailPageProps) {
     ? (rawTab as Tab)
     : 'grafico'
 
+  // Tickers de comparação lidos da URL (?compare=URU3,POR4,TIM3)
+  const compareParam = searchParams?.get('compare') ?? ''
+  const compareTickers = compareParam
+    ? compareParam.split(',').filter((t) => t && t !== ticker).slice(0, 3)
+    : []
+  const isComparing = compareTickers.length > 0
+  const allCompareTickers = isComparing ? [ticker, ...compareTickers] : []
+
   const { ticks } = useMarketTick({ tickers: [ticker] })
   const { data: user } = useCurrentUser()
+  const { data: allAssetsRaw = [] } = useAllAssets()
 
   const tick = ticks.get(ticker)
   const planType = user?.planType ?? PLAN_TYPE.JOGADOR
@@ -101,9 +139,51 @@ export function AssetDetailPage({ ticker, assetData }: AssetDetailPageProps) {
   const bid = livePrice
   const ask = livePrice + spread
 
+  // Formata allAssets para o CompareMode
+  const allAssets = allAssetsRaw.map((a) => ({
+    ticker: a.ticker,
+    displayName: a.name,
+    colors: {
+      primary: a.colors?.primary ?? a.colorPrimary ?? '#F0B90B',
+      secondary: a.colors?.secondary ?? a.colorSecondary,
+    },
+  }))
+
+  // displayNames e cores resolvidas para o CompareChart
+  const displayNamesMap: Record<string, string> = Object.fromEntries(
+    allAssets.map((a) => [a.ticker, a.displayName])
+  )
+  const assetColorMap: Record<string, { primary: string; secondary?: string }> =
+    Object.fromEntries(allAssets.map((a) => [a.ticker, a.colors]))
+  // Adiciona o ativo atual ao mapa de cores se não estiver
+  if (!assetColorMap[ticker]) {
+    assetColorMap[ticker] = {
+      primary: assetData.colorPrimary,
+      secondary: assetData.colorSecondary,
+    }
+  }
+  const compareColors = isComparing
+    ? resolveCompareColors(allCompareTickers, assetColorMap)
+    : []
+
   function handleTabChange(tab: Tab) {
     const params = new URLSearchParams(searchParams?.toString() ?? '')
     params.set('tab', tab)
+    // Limpa compare ao sair da aba comparar
+    if (tab !== 'comparar') params.delete('compare')
+    router.replace(`?${params.toString()}`, { scroll: false })
+  }
+
+  function handleCompareConfirm(tickers: string[]) {
+    const params = new URLSearchParams(searchParams?.toString() ?? '')
+    // Remove o ticker base e salva apenas os adicionais
+    const others = tickers.filter((t) => t !== ticker)
+    if (others.length > 0) {
+      params.set('compare', others.join(','))
+    } else {
+      params.delete('compare')
+    }
+    params.set('tab', 'comparar')
     router.replace(`?${params.toString()}`, { scroll: false })
   }
 
@@ -186,6 +266,11 @@ export function AssetDetailPage({ ticker, assetData }: AssetDetailPageProps) {
             )}
           >
             {tab.label}
+            {tab.id === 'comparar' && isComparing && (
+              <span className="ml-1 text-[10px] bg-[#F0B90B] text-[#0B0E11] rounded-full px-1.5 py-0.5 font-bold">
+                {compareTickers.length}
+              </span>
+            )}
           </button>
         ))}
       </nav>
@@ -201,6 +286,9 @@ export function AssetDetailPage({ ticker, assetData }: AssetDetailPageProps) {
             className="flex flex-col gap-4"
           >
             <DynamicPriceChart ticker={ticker} planType={planType} />
+
+            {/* OFI — Pressão de Fluxo de Ordens (todos os planos) */}
+            <OFIPanel ticker={ticker} />
 
             {/* Gauge de sentimento */}
             <div className="flex justify-center pt-2">
@@ -251,6 +339,9 @@ export function AssetDetailPage({ ticker, assetData }: AssetDetailPageProps) {
               }}
             />
 
+            {/* OFI no painel de stats também */}
+            <OFIPanel ticker={ticker} />
+
             {/* Gauge no painel de stats */}
             <div className="flex justify-center pt-2">
               <div className="flex flex-col items-center gap-1">
@@ -267,21 +358,45 @@ export function AssetDetailPage({ ticker, assetData }: AssetDetailPageProps) {
             id="panel-comparar"
             role="tabpanel"
             aria-labelledby="tab-comparar"
-            className="rounded-xl border border-[#2B3139] bg-[#181A20]"
+            className="flex flex-col gap-4"
           >
-            <CompareMode
-              baseTicker={ticker}
-              allAssets={[]}
-              canCompare={
-                planType === PLAN_TYPE.CRAQUE || planType === PLAN_TYPE.LENDA
-              }
-              onCompare={(tickers) => {
-                const params = new URLSearchParams(searchParams?.toString() ?? '')
-                params.set('compare', tickers.join(','))
-                router.replace(`?${params.toString()}`, { scroll: false })
-              }}
-              onClose={() => handleTabChange('grafico')}
-            />
+            {/* Seletor de clubes */}
+            <div className="rounded-xl border border-[#2B3139] bg-[#181A20]">
+              <CompareMode
+                baseTicker={ticker}
+                allAssets={allAssets}
+                canCompare={
+                  planType === PLAN_TYPE.CRAQUE || planType === PLAN_TYPE.LENDA
+                }
+                onCompare={handleCompareConfirm}
+                onClose={() => handleTabChange('grafico')}
+              />
+            </div>
+
+            {/* Gráfico comparativo — exibido quando há tickers selecionados */}
+            {isComparing && (
+              <div className="flex flex-col gap-2">
+                <h3 className="text-sm font-semibold text-[#EAECEF]">
+                  Comparação: {allCompareTickers.join(' vs ')}
+                </h3>
+                <DynamicCompareChart
+                  tickers={allCompareTickers}
+                  period="1D"
+                  displayNames={displayNamesMap}
+                  colors={compareColors}
+                />
+                <button
+                  onClick={() => {
+                    const params = new URLSearchParams(searchParams?.toString() ?? '')
+                    params.delete('compare')
+                    router.replace(`?${params.toString()}`, { scroll: false })
+                  }}
+                  className="text-xs text-[#929AA5] underline hover:text-[#F6465D] self-start"
+                >
+                  Limpar comparação
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

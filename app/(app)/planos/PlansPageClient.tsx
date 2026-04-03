@@ -68,6 +68,7 @@ export default function PlansPageClient() {
   })
 
   const [welcomePlan, setWelcomePlan] = useState<PlanType | null>(null)
+  const [pollingPayment, setPollingPayment] = useState(false)
 
   // Apply pre-selected plan from query param
   useEffect(() => {
@@ -81,11 +82,65 @@ export default function PlansPageClient() {
     }
   }, [upgradedParam])
 
+  // Polling de status de pagamento após retorno do gateway
+  // O gateway retorna com ?payment=success&sub={id} ou ?payment=pending&sub={id}
+  useEffect(() => {
+    const paymentParam = searchParams?.get('payment')
+    const subId = searchParams?.get('sub')
+    if (!paymentParam || !subId || pollingPayment) return
+    if (paymentParam !== 'success' && paymentParam !== 'pending') return
+
+    setPollingPayment(true)
+
+    let attempts = 0
+    const MAX_ATTEMPTS = 15 // ~45s total
+    const INTERVAL_MS = 3_000
+
+    const interval = setInterval(async () => {
+      attempts++
+      try {
+        const res = await fetch('/api/v1/subscriptions/me', { credentials: 'include' })
+        if (res.ok) {
+          const json: { data?: { planType?: PlanType; status?: string } } = await res.json()
+          const plan = json.data?.planType
+          const status = json.data?.status
+          if (status === 'ACTIVE' && plan && plan !== 'JOGADOR') {
+            clearInterval(interval)
+            setPollingPayment(false)
+            setWelcomePlan(plan)
+            // Remove query params de pagamento da URL
+            router.replace('/planos?upgraded=' + plan)
+            return
+          }
+        }
+      } catch {
+        // Ignora erros de rede e tenta novamente
+      }
+
+      if (attempts >= MAX_ATTEMPTS) {
+        clearInterval(interval)
+        setPollingPayment(false)
+        // Força recarregar dados da assinatura manualmente
+        fetchSubscription()
+      }
+    }, INTERVAL_MS)
+
+    return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+
   return (
     <div className="min-h-screen bg-gray-950 text-white">
       <div className="max-w-5xl mx-auto px-4 py-8 sm:px-6">
         <h1 className="text-2xl sm:text-3xl font-bold mb-2">Escolha seu Plano</h1>
         <p className="text-gray-400 mb-6">Invista com mais liberdade. Comece gratuito, evolua quando quiser.</p>
+
+        {pollingPayment && (
+          <div role="status" aria-live="polite" className="mb-4 p-3 bg-blue-900/40 border border-blue-700 rounded-lg text-sm text-blue-200 flex items-center gap-3">
+            <span className="animate-spin text-blue-300 shrink-0" aria-hidden="true">⟳</span>
+            <span>Aguardando confirmação do pagamento… Isso pode levar alguns segundos.</span>
+          </div>
+        )}
 
         {networkError && (
           <div role="alert" className="mb-4 p-3 bg-yellow-900/40 border border-yellow-700 rounded-lg text-sm text-yellow-300 flex items-center justify-between">

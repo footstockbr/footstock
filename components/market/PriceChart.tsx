@@ -81,7 +81,7 @@ function calcBollinger(
 // Componente interno
 // ---------------------------------------------------------------------------
 
-const PERIODS: PricePeriod[] = ['1H', '1D', '1W', '1M']
+const PERIODS: PricePeriod[] = ['1H', '1D', '1W', '1M', '3M', '1Y']
 const PERIOD_LABELS: Record<PricePeriod, string> = {
   '1H': '1H',
   '1D': '1D',
@@ -188,7 +188,7 @@ function PriceChartInner({ ticker, planType, className }: PriceChartProps) {
       bblRef.current = null
       bbmRef.current = null
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, []) // somente mount/unmount
 
   // ---------------------------------------------------------------------------

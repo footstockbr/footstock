@@ -19,6 +19,8 @@ export interface TickData {
   volume: number
   change: number
   changePercent: number
+  /** OFI publicado pelo motor (buyFlow-sellFlow)/(buyFlow+sellFlow). Presente se o motor publicar o campo. */
+  ofi?: number
   sessionType: 'PRE_MARKET' | 'REGULAR' | 'AFTER_MARKET' | 'CLOSED'
   timestamp: number
 }
