@@ -83,6 +83,22 @@ export class NewsInjectionService {
     }
     await redisPublisher.publish(REDIS_CHANNELS.NEWS_INJECT, JSON.stringify(event))
 
+    // Também publicar no canal motor:control para que o motor processe o impacto de preço.
+    // O motor indexa assetStates por UUID (asset.id), não por ticker.
+    const isNegative = dto.sentiment < 0
+    const motorControlEvent = {
+      type: 'INJECT_NEWS',
+      assetId: asset.id,
+      adminId,
+      payload: {
+        impact: isNegative ? 'NEGATIVE' : 'POSITIVE',
+        magnitude: Math.abs(dto.sentiment),
+        durationTicks: sentimentToDurationTicks(dto.sentiment),
+        sentiment: dto.sentiment,
+      },
+    }
+    await redisPublisher.publish(REDIS_CHANNELS.MOTOR_CONTROL, JSON.stringify(motorControlEvent))
+
     // -----------------------------------------------------------------------
     // 3. Registrar auditoria
     // -----------------------------------------------------------------------
