@@ -38,6 +38,8 @@ async function main() {
   const healthService = MotorHealthService.getInstance(redis)
 
   let adminChannel: AdminChannel | null = null
+  // Guardado no escopo externo para poder chamar .quit() no graceful shutdown
+  let adminSubscriber: ReturnType<typeof RedisClientService.createSubscriber> | null = null
 
   /**
    * Inicializa tudo que precisa rodar quando esta instância se torna líder.
@@ -51,7 +53,7 @@ async function main() {
 
     // Canal de controle admin — garante que funciona mesmo após blue-green deploy
     if (!adminChannel) {
-      const adminSubscriber = RedisClientService.createSubscriber()
+      adminSubscriber = RedisClientService.createSubscriber()
       adminChannel = new AdminChannel(adminSubscriber, engine)
       await adminChannel.start()
       logger.info('[motor] AdminChannel iniciado')
@@ -59,10 +61,11 @@ async function main() {
 
     await engine.start()
 
-    // Callback ao perder liderança: parar engine e reiniciar polling para recuperação
+    // Callback ao perder liderança: parar ticks (sem desconectar Prisma) e reiniciar
+    // polling — engine.start() pode ser chamado novamente sem recriar o PrismaClient.
     leader.onLeadershipLost = () => {
       logger.warn('[motor] Liderança perdida — parando engine e aguardando re-aquisição...')
-      engine.stop().catch(err => logger.error('[motor] Erro ao parar engine:', err))
+      engine.stop(false).catch(err => logger.error('[motor] Erro ao parar engine:', err))
       startPolling()
     }
   }
@@ -94,7 +97,12 @@ async function main() {
     if (adminChannel) {
       await adminChannel.stop()
     }
-    await engine.stop()
+    // Fechar conexão do subscriber antes de sair (evita leak de conexão Redis)
+    if (adminSubscriber) {
+      await adminSubscriber.quit().catch(() => null)
+    }
+    // Shutdown definitivo: desconectar Prisma (disconnectPrisma=true)
+    await engine.stop(true)
     await leader.release()
     await redis.quit()
     process.exit(0)

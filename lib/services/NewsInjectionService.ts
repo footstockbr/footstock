@@ -85,19 +85,26 @@ export class NewsInjectionService {
 
     // Também publicar no canal motor:control para que o motor processe o impacto de preço.
     // O motor indexa assetStates por UUID (asset.id), não por ticker.
-    const isNegative = dto.sentiment < 0
-    const motorControlEvent = {
-      type: 'INJECT_NEWS',
-      assetId: asset.id,
-      adminId,
-      payload: {
-        impact: isNegative ? 'NEGATIVE' : 'POSITIVE',
-        magnitude: Math.abs(dto.sentiment),
-        durationTicks: sentimentToDurationTicks(dto.sentiment),
-        sentiment: dto.sentiment,
-      },
+    // Isolado em try/catch: falha aqui não deve impedir o registro de auditoria abaixo.
+    try {
+      const isNegative = dto.sentiment < 0
+      const motorControlEvent = {
+        type: 'INJECT_NEWS',
+        assetId: asset.id,
+        adminId,
+        payload: {
+          impact: isNegative ? 'NEGATIVE' : 'POSITIVE',
+          magnitude: Math.abs(dto.sentiment),
+          durationTicks: sentimentToDurationTicks(dto.sentiment),
+          sentiment: dto.sentiment,
+        },
+      }
+      await redisPublisher.publish(REDIS_CHANNELS.MOTOR_CONTROL, JSON.stringify(motorControlEvent))
+    } catch (err) {
+      // Motor:control indisponível: notícia salva no DB e news:inject publicado.
+      // Impacto de preço não será aplicado, mas auditoria prossegue normalmente.
+      console.error('[NewsInjectionService] Falha ao publicar INJECT_NEWS no motor:control:', err)
     }
-    await redisPublisher.publish(REDIS_CHANNELS.MOTOR_CONTROL, JSON.stringify(motorControlEvent))
 
     // -----------------------------------------------------------------------
     // 3. Registrar auditoria

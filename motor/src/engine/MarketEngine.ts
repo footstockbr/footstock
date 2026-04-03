@@ -66,13 +66,21 @@ export class MarketEngine {
     }, TICK_INTERVAL_MS)
   }
 
-  async stop(): Promise<void> {
+  /**
+   * Para o loop de ticks e libera agentes.
+   * @param disconnectPrisma Desconectar o Prisma ao final (default: false).
+   *   Usar false em failover (engine pode ser reiniciado via start()).
+   *   Usar true apenas no shutdown definitivo do processo.
+   */
+  async stop(disconnectPrisma = false): Promise<void> {
     if (this.tickTimer) {
       clearInterval(this.tickTimer)
       this.tickTimer = null
     }
     agentOrchestrator.dispose()
-    await this.prisma.$disconnect()
+    if (disconnectPrisma) {
+      await this.prisma.$disconnect()
+    }
     logger.info('[engine] Engine encerrado.')
   }
 
