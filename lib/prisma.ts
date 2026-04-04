@@ -9,10 +9,10 @@ const globalForPrisma = globalThis as unknown as {
 function createPrismaClient() {
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    // Serverless: 1 conexão por instância de função (evita esgotamento de pool no PgBouncer)
-    max: process.env.NODE_ENV === 'production' ? 1 : 10,
-    // Timeout de conexão: impede 504 indefinido quando a URL está errada/inacessível
-    connectionTimeoutMillis: 5_000,
+    // Serverless: até 2 conexões por instância para Promise.all não serializar em pool max:1
+    max: process.env.NODE_ENV === 'production' ? 2 : 10,
+    // Cold start + 2 queries paralelas: aumentar para não timeout no enqueue
+    connectionTimeoutMillis: 20_000,
     idleTimeoutMillis: 10_000,
   })
   pool.on('error', err => {
