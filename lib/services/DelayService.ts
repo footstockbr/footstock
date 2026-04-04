@@ -8,6 +8,8 @@ import { DELAY_BY_PLAN } from '@/lib/constants/limits'
 import type { PlanType } from '@/lib/enums'
 import type { AssetListItem } from '@/types/market'
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
+type Decimal = Prisma.Decimal
 
 /**
  * Retorna o delay em SEGUNDOS para exibição no frontend (campo _delaySeconds).
@@ -59,14 +61,16 @@ export async function applyPriceDelay(
 
   const targetDate = new Date(Date.now() - delayMs)
 
-  const historicalRecord = await prisma.priceHistory.findFirst({
-    where: {
-      asset: { ticker: asset.ticker },
-      timestamp: { lte: targetDate },
-    },
-    orderBy: { timestamp: 'desc' },
-    select: { close: true },
-  })
+  const rows = await prisma.$queryRaw<Array<{ close: Decimal }>>`
+    SELECT ph.close
+    FROM price_history ph
+    JOIN assets a ON ph.asset_id = a.id
+    WHERE a.ticker = ${asset.ticker}
+      AND ph.timestamp <= ${targetDate}
+    ORDER BY ph.timestamp DESC
+    LIMIT 1
+  `
+  const historicalRecord = rows[0] ?? null
 
   if (!historicalRecord) {
     console.warn(
@@ -100,18 +104,19 @@ export async function applyDelayBatch(
   const targetDate = new Date(Date.now() - delayMs)
   const tickers = assets.map(a => a.ticker)
 
-  const records = await prisma.priceHistory.findMany({
-    where: {
-      asset: { ticker: { in: tickers } },
-      timestamp: { lte: targetDate },
-    },
-    orderBy: [{ assetId: 'asc' }, { timestamp: 'desc' }],
-    distinct: ['assetId'],
-    select: { close: true, asset: { select: { ticker: true } } },
-  })
+  // Raw SQL: DISTINCT ON para pegar o registro mais recente por ativo antes do targetDate.
+  // Prisma 7.x tem limitações com distinct+where-relation — raw evita o problema.
+  const records = await prisma.$queryRaw<Array<{ close: Decimal; ticker: string }>>`
+    SELECT DISTINCT ON (ph.asset_id) ph.close, a.ticker
+    FROM price_history ph
+    JOIN assets a ON ph.asset_id = a.id
+    WHERE a.ticker = ANY(${tickers}::text[])
+      AND ph.timestamp <= ${targetDate}
+    ORDER BY ph.asset_id, ph.timestamp DESC
+  `
 
   const priceByTicker = new Map<string, number>(
-    records.map(r => [r.asset.ticker, Number(r.close)])
+    records.map(r => [r.ticker, Number(r.close)])
   )
 
   return assets.map(asset => {
