@@ -17,7 +17,9 @@ export async function prefetchMarketData(queryClient: QueryClient) {
         `${baseUrl}/api/v1/assets?limit=20&page=${pageParam ?? 1}`,
         { cache: 'no-store' }
       )
-      if (!res.ok) return { data: [], total: 0, page: 1, limit: 20, _delaySeconds: 0, _cacheHint: '' }
+      // Throw so React Query does NOT dehydrate empty data to the client.
+      // The client will fetch on mount with proper auth token instead.
+      if (!res.ok) throw new Error(`prefetch_failed:${res.status}`)
       return res.json() as Promise<AssetApiResponse>
     },
     initialPageParam: 1,
