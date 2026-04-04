@@ -8,8 +8,6 @@ import { DELAY_BY_PLAN } from '@/lib/constants/limits'
 import type { PlanType } from '@/lib/enums'
 import type { AssetListItem } from '@/types/market'
 import { prisma } from '@/lib/prisma'
-import { Prisma } from '@prisma/client'
-type Decimal = Prisma.Decimal
 
 /**
  * Retorna o delay em SEGUNDOS para exibição no frontend (campo _delaySeconds).
@@ -61,18 +59,18 @@ export async function applyPriceDelay(
 
   const targetDate = new Date(Date.now() - delayMs)
 
-  const rows = await prisma.$queryRaw<Array<{ close: Decimal }>>`
-    SELECT ph.close
-    FROM price_history ph
-    JOIN assets a ON ph.asset_id = a.id
-    WHERE a.ticker = ${asset.ticker}
-      AND ph.timestamp <= ${targetDate}
-    ORDER BY ph.timestamp DESC
-    LIMIT 1
-  `
-  const historicalRecord = rows[0] ?? null
+  // Usa assetId (scalar) diretamente — sem filtro por relação para evitar
+  // limitação do Prisma 7 com distinct+relation.
+  const record = await prisma.priceHistory.findFirst({
+    where: {
+      assetId: asset.id,
+      timestamp: { lte: targetDate },
+    },
+    orderBy: { timestamp: 'desc' },
+    select: { close: true },
+  })
 
-  if (!historicalRecord) {
+  if (!record) {
     console.warn(
       '[DelayService] Sem histórico para ticker=%s em %s',
       asset.ticker,
@@ -81,7 +79,7 @@ export async function applyPriceDelay(
     return asset
   }
 
-  const historicalPrice = Number(historicalRecord.close)
+  const historicalPrice = Number(record.close)
   const change24h =
     historicalPrice > 0
       ? ((historicalPrice - asset.currentPrice) / asset.currentPrice) * 100
@@ -91,8 +89,11 @@ export async function applyPriceDelay(
 }
 
 /**
- * Aplica delay em lote (1 query para todos os tickers).
+ * Aplica delay em lote (1 query para todos os ativos).
  * Se LENDA: retorna sem modificação.
+ *
+ * Usa assetId (scalar) no where — evita distinct+relation que Prisma 7 não suporta.
+ * AssetListItem.id é o DB id do ativo.
  */
 export async function applyDelayBatch(
   assets: AssetListItem[],
@@ -102,21 +103,21 @@ export async function applyDelayBatch(
   if (delayMs === 0 || assets.length === 0) return assets
 
   const targetDate = new Date(Date.now() - delayMs)
-  const tickers = assets.map(a => a.ticker)
+  const assetIds = assets.map(a => a.id)
+  const idToTicker = new Map(assets.map(a => [a.id, a.ticker]))
 
-  // Raw SQL: DISTINCT ON para pegar o registro mais recente por ativo antes do targetDate.
-  // Prisma 7.x tem limitações com distinct+where-relation — raw evita o problema.
-  const records = await prisma.$queryRaw<Array<{ close: Decimal; ticker: string }>>`
-    SELECT DISTINCT ON (ph.asset_id) ph.close, a.ticker
-    FROM price_history ph
-    JOIN assets a ON ph.asset_id = a.id
-    WHERE a.ticker = ANY(${tickers}::text[])
-      AND ph.timestamp <= ${targetDate}
-    ORDER BY ph.asset_id, ph.timestamp DESC
-  `
+  const records = await prisma.priceHistory.findMany({
+    where: {
+      assetId: { in: assetIds },
+      timestamp: { lte: targetDate },
+    },
+    orderBy: [{ assetId: 'asc' }, { timestamp: 'desc' }],
+    distinct: ['assetId'],
+    select: { close: true, assetId: true },
+  })
 
   const priceByTicker = new Map<string, number>(
-    records.map(r => [r.ticker, Number(r.close)])
+    records.map(r => [idToTicker.get(r.assetId) ?? '', Number(r.close)])
   )
 
   return assets.map(asset => {
