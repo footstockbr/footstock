@@ -30,6 +30,9 @@ export class MarketAssetRepository {
   /**
    * Listagem de ativos com filtros, paginação e priceHistory (sparkline).
    * Cap absoluto de 40 ativos por requisição.
+   *
+   * Evita $transaction (timeout 5s) e N+1 de priceHistory.
+   * Busca assets + count em paralelo, depois priceHistory com window function.
    */
   async findAll(
     filters: AssetFilters,
@@ -58,30 +61,53 @@ export class MarketAssetRepository {
     const orderBy: Prisma.AssetOrderByWithRelationInput =
       sort === 'volume'
         ? { volume: 'desc' }
-        : sort === 'change'
-          ? { currentPrice: 'desc' } // aproximação: sem change24h no DB
-          : { currentPrice: 'desc' } // default
+        : { currentPrice: 'desc' } // default + change fallback
 
-    const [rawAssets, total] = await prisma.$transaction([
+    // --- Busca assets + count em paralelo (sem $transaction para evitar timeout) ---
+    const [rawAssets, total] = await Promise.all([
       prisma.asset.findMany({
         where,
         orderBy,
         skip,
         take: limit,
-        include: {
-          priceHistory: {
-            orderBy: { timestamp: 'desc' },
-            take: 60,
-            select: { close: true, timestamp: true },
-          },
-        },
       }),
       prisma.asset.count({ where }),
     ])
 
+    if (rawAssets.length === 0) {
+      return { data: [], total, page, limit }
+    }
+
+    // --- Busca priceHistory com window function: 1 query para todos os ativos ---
+    // ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY timestamp DESC) evita N+1.
+    const assetIds = rawAssets.map(a => a.id)
+
+    // LATERAL join: usa o índice (asset_id, timestamp) por asset — O(log n + 60) por ativo.
+    // Alternativa ao ROW_NUMBER() que faz full-scan e ao N+1 de include.
+    type PhRow = { asset_id: string; close: string; timestamp: Date }
+    const phRows = await prisma.$queryRaw<PhRow[]>`
+      SELECT ph.asset_id, ph.close::text, ph.timestamp
+      FROM unnest(${assetIds}::text[]) AS u(aid)
+      JOIN LATERAL (
+        SELECT asset_id, close, timestamp
+        FROM price_history
+        WHERE asset_id = u.aid
+        ORDER BY timestamp DESC
+        LIMIT 60
+      ) ph ON true
+      ORDER BY ph.asset_id, ph.timestamp ASC
+    `
+
+    // Agrupa por asset_id em ordem cronológica (ASC já garantido acima)
+    const historyByAsset = new Map<string, number[]>()
+    for (const row of phRows) {
+      const prices = historyByAsset.get(row.asset_id) ?? []
+      prices.push(Number(row.close))
+      historyByAsset.set(row.asset_id, prices)
+    }
+
     const data: AssetListItem[] = rawAssets.map(asset => {
-      const history = [...asset.priceHistory].reverse()
-      const priceHistoryValues = history.map(h => Number(h.close))
+      const priceHistoryValues = historyByAsset.get(asset.id) ?? []
 
       const currentPrice = Number(asset.currentPrice)
       const firstPrice = priceHistoryValues[0] ?? currentPrice
