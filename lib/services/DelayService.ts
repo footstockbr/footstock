@@ -104,24 +104,29 @@ export async function applyDelayBatch(
 
   const targetDate = new Date(Date.now() - delayMs)
   const assetIds = assets.map(a => a.id)
-  const idToTicker = new Map(assets.map(a => [a.id, a.ticker]))
 
-  const records = await prisma.priceHistory.findMany({
-    where: {
-      assetId: { in: assetIds },
-      timestamp: { lte: targetDate },
-    },
-    orderBy: [{ assetId: 'asc' }, { timestamp: 'desc' }],
-    distinct: ['assetId'],
-    select: { close: true, assetId: true },
-  })
+  // LATERAL JOIN per asset: uses (asset_id, timestamp) index — O(log n + 1) per asset.
+  // Replaces distinct+orderBy Prisma query that caused full-scan on 1.2M rows (60s timeout).
+  type Row = { asset_id: string; close: string }
+  const records = await prisma.$queryRaw<Row[]>`
+    SELECT ph.asset_id, ph.close::text
+    FROM unnest(${assetIds}::text[]) AS u(aid)
+    JOIN LATERAL (
+      SELECT asset_id, close
+      FROM price_history
+      WHERE asset_id = u.aid
+        AND timestamp <= ${targetDate}
+      ORDER BY timestamp DESC
+      LIMIT 1
+    ) ph ON true
+  `
 
-  const priceByTicker = new Map<string, number>(
-    records.map(r => [idToTicker.get(r.assetId) ?? '', Number(r.close)])
+  const priceByAssetId = new Map<string, number>(
+    records.map(r => [r.asset_id, Number(r.close)])
   )
 
   return assets.map(asset => {
-    const historicalPrice = priceByTicker.get(asset.ticker)
+    const historicalPrice = priceByAssetId.get(asset.id)
     if (!historicalPrice) return asset
     const change24h =
       asset.currentPrice > 0
