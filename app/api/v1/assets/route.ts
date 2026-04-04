@@ -66,7 +66,19 @@ async function handler(req: NextRequest, { user }: AuthContext) {
       { page, limit }
     )
 
-    const delayedAssets = await applyDelayBatch(result.data, planType)
+    // Safety net: delay falha silenciosamente — retorna preço atual sem delay
+    let delayedAssets = result.data
+    try {
+      delayedAssets = await applyDelayBatch(result.data, planType)
+    } catch (delayErr) {
+      console.error(
+        '[assets] applyDelayBatch falhou (fallback sem delay):',
+        delayErr instanceof Error
+          ? `${delayErr.constructor.name}: ${delayErr.message}`
+          : String(delayErr)
+      )
+    }
+
     const delaySeconds = getDelaySeconds(planType)
     const cacheHint = getCacheHint(planType)
 
@@ -87,16 +99,17 @@ async function handler(req: NextRequest, { user }: AuthContext) {
     })
   } catch (err) {
     // Prisma connection errors
+    const errName = err instanceof Error ? err.constructor.name : ''
+    const errMsg = err instanceof Error ? err.message : String(err)
+    console.error(`[assets] Erro na query principal: ${errName}: ${errMsg}`)
+
     if (
       err instanceof Error &&
-      (err.constructor.name === 'PrismaClientInitializationError' ||
-        err.constructor.name === 'PrismaClientKnownRequestError' ||
-        err.constructor.name === 'PrismaClientRustPanicError' ||
-        err.constructor.name === 'PrismaClientValidationError')
+      (errName === 'PrismaClientInitializationError' ||
+        errName === 'PrismaClientKnownRequestError' ||
+        errName === 'PrismaClientRustPanicError' ||
+        errName === 'PrismaClientValidationError')
     ) {
-      if (err.constructor.name === 'PrismaClientRustPanicError') {
-        console.error('[assets] Prisma engine panic:', err)
-      }
       return Response.json(
         {
           success: false,
@@ -109,7 +122,7 @@ async function handler(req: NextRequest, { user }: AuthContext) {
       )
     }
 
-    console.error('[assets] Unexpected error:', err instanceof Error ? err.message : err)
+    console.error('[assets] Unexpected error type:', errName, errMsg)
     return Response.json(
       {
         success: false,
