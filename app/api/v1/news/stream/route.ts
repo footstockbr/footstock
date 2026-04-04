@@ -7,6 +7,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSubscriber } from '@/lib/redis'
 import { withAuth, type AuthContext } from '@/app/api/middleware'
 
+export const maxDuration = 60
+
 const KEEPALIVE_MS = 25_000
 const REDIS_CHANNEL = 'news:inject'
 
@@ -29,6 +31,14 @@ async function newsStreamHandler(req: NextRequest, _ctx: AuthContext): Promise<N
     async start(controller) {
       try {
         subscriber = createSubscriber()
+
+        subscriber.on('error', (err: Error) => {
+          console.error('[news:stream] Erro Redis:', err)
+          try { controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify({ message: 'Redis connection error' })}\n\n`)) } catch { /* ignore */ }
+          cleanup()
+          try { controller.close() } catch { /* já fechado */ }
+        })
+
         await subscriber.subscribe(REDIS_CHANNEL)
 
         subscriber.on('message', (_channel: string, message: string) => {
@@ -40,6 +50,8 @@ async function newsStreamHandler(req: NextRequest, _ctx: AuthContext): Promise<N
         })
       } catch (err) {
         console.error('[news:stream] Erro ao conectar Redis:', err)
+        try { controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify({ message: 'Stream unavailable' })}\n\n`)) } catch { /* ignore */ }
+        cleanup()
         controller.close()
         return
       }

@@ -17,9 +17,11 @@ const globalForRedis = globalThis as unknown as {
 
 function createPublisher(): Redis {
   const client = new Redis(REDIS_URL, {
-    maxRetriesPerRequest: 3,
-    enableReadyCheck: true,
+    maxRetriesPerRequest: 1,
+    connectTimeout: 3_000,
+    enableReadyCheck: false,
     lazyConnect: false,
+    retryStrategy: (times) => (times > 2 ? null : Math.min(times * 300, 1_000)),
   })
   client.on('error', err => {
     console.error('[redis:publisher] Erro:', err.message)
@@ -50,9 +52,11 @@ if (process.env.NODE_ENV !== 'production') {
  */
 export function createSubscriber(): Redis {
   return new Redis(REDIS_URL, {
-    maxRetriesPerRequest: 3,
+    maxRetriesPerRequest: 1,
+    connectTimeout: 3_000,
     enableReadyCheck: false,
     lazyConnect: false,
+    retryStrategy: (times) => (times > 2 ? null : Math.min(times * 300, 1_000)),
   })
 }
 
