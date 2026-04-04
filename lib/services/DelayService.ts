@@ -105,7 +105,7 @@ export async function applyDelayBatch(
       asset: { ticker: { in: tickers } },
       timestamp: { lte: targetDate },
     },
-    orderBy: { timestamp: 'desc' },
+    orderBy: [{ assetId: 'asc' }, { timestamp: 'desc' }],
     distinct: ['assetId'],
     select: { close: true, asset: { select: { ticker: true } } },
   })

@@ -91,7 +91,8 @@ async function handler(req: NextRequest, { user }: AuthContext) {
       err instanceof Error &&
       (err.constructor.name === 'PrismaClientInitializationError' ||
         err.constructor.name === 'PrismaClientKnownRequestError' ||
-        err.constructor.name === 'PrismaClientRustPanicError')
+        err.constructor.name === 'PrismaClientRustPanicError' ||
+        err.constructor.name === 'PrismaClientValidationError')
     ) {
       if (err.constructor.name === 'PrismaClientRustPanicError') {
         console.error('[assets] Prisma engine panic:', err)
