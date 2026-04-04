@@ -18,8 +18,8 @@ export interface MotorHealthStatus {
   isRedisConnected: boolean
 }
 
-// TTL das chaves de heartbeat: 30s (15× o intervalo de 2s — margem ampla)
-const HEARTBEAT_TTL_S = 30
+// TTL das chaves de heartbeat: 60s (motor publica a cada ~10s via HEARTBEAT_EVERY=5 — margem ampla)
+const HEARTBEAT_TTL_S = 60
 const HEALTH_KEY_LEGACY = 'market:tick:latest'  // compat. legado
 const HEARTBEAT_KEY = 'motor:heartbeat'          // consumido por health.ts
 const STATUS_KEY = 'motor:status'                // consumido por admin status

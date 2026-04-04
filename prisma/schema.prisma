@@ -239,9 +239,16 @@ model Asset {
   currentPrice   Decimal  @map("current_price") @db.Decimal(18, 8)
   openPrice      Decimal  @map("open_price") @db.Decimal(18, 8)
   closePrice     Decimal  @map("close_price") @db.Decimal(18, 8)
+  fairValue      Decimal  @default(0) @map("fair_value") @db.Decimal(18, 8)
   volume         BigInt   @default(0)
   marketCap      Decimal  @map("market_cap") @db.Decimal(18, 2)
+  currentSupply  BigInt   @default(1000000) @map("current_supply")
+  totalShares    BigInt   @default(1000000) @map("total_shares")
   isActive       Boolean  @default(true) @map("is_active")
+  isHalted       Boolean  @default(false) @map("is_halted")
+  haltReason     String?  @map("halt_reason")
+  sentiment      String   @default("NEUTRAL") // BULLISH | BEARISH | NEUTRAL
+  financials     Json?    @db.JsonB
   colorPrimary   String   @map("color_primary")
   colorSecondary String   @map("color_secondary")
   logoUrl        String?  @map("logo_url")

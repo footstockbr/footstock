@@ -2,8 +2,7 @@
 // Foot Stock — AssetCard Tests
 // ============================================================================
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { render, screen } = require('@testing-library/react')
+import { render, screen } from '@testing-library/react'
 import AssetCard from '../AssetCard'
 import type { AssetListItem } from '@/types/market'
 
@@ -25,6 +24,7 @@ jest.mock('next/navigation', () => ({
 
 jest.mock('next/image', () => ({
   __esModule: true,
+  // eslint-disable-next-line @next/next/no-img-element
   default: ({ src, alt }: { src: string; alt: string }) => <img src={src} alt={alt} />,
 }))
 

@@ -119,6 +119,7 @@ export async function seedAssets() {
         currentPrice: price,
         openPrice: price,
         closePrice: price,
+        fairValue: price,
         marketCap: price * 1_000_000,
         volume: BigInt(0),
         isActive: true,

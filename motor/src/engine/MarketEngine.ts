@@ -26,6 +26,8 @@ import type { PreviousTickDelta } from '../types/motor.types'
 
 const TICK_INTERVAL_MS = parseInt(process.env.MOTOR_TICK_INTERVAL_MS ?? '2000', 10)
 const PERSIST_HISTORY_EVERY = 5  // Persistir PriceHistory a cada N ticks (A_TOP persiste sempre)
+// Heartbeat a cada N ticks (reduz comandos Redis — TTL do MotorHealthService: 60s)
+const HEARTBEAT_EVERY = parseInt(process.env.MOTOR_HEARTBEAT_EVERY ?? '5', 10)
 
 export class MarketEngine {
   private redis: Redis
@@ -105,7 +107,7 @@ export class MarketEngine {
         highPrice: currentPriceNum,
         lowPrice: currentPriceNum,
         closePrice: currentPriceNum,   // warm start: âncora do CB = preço atual
-        fairValue: Number((asset as any).fairValue ?? asset.currentPrice),
+        fairValue: Number(asset.fairValue ?? asset.currentPrice),
         volume: 0,
         variance: 0.0001,  // Variância GARCH inicial
         pendingBuyVolume: 0,
@@ -173,7 +175,7 @@ export class MarketEngine {
         const agentCtx: MarketContext = {
           ticker: state.ticker,
           currentPrice: newPrice,
-          fairValue: state.openPrice, // Fair value baseado no preço de abertura
+          fairValue: state.fairValue, // Fair value da coluna fair_value (âncora OU)
           priceChange24h: state.openPrice > 0 ? (newPrice - state.openPrice) / state.openPrice : 0,
           volume24h: state.volume,
           bid: newPrice * 0.999,
@@ -213,8 +215,10 @@ export class MarketEngine {
       }
     }
 
-    // Heartbeat SEMPRE publicado (mesmo sessão FECHADO ou halt global — motor está vivo)
-    await this.healthService.publishTick()
+    // Heartbeat publicado a cada HEARTBEAT_EVERY ticks (motor está vivo)
+    if (this.tickCount % HEARTBEAT_EVERY === 0) {
+      await this.healthService.publishTick()
+    }
 
     if (ticks.length > 0) {
       await this.redis.publish(REDIS_CHANNELS.MARKET_TICK, serializeTick(ticks))

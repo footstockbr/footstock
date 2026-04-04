@@ -110,7 +110,7 @@ async function checkRedis(): Promise<HealthCheckResult> {
 
 /**
  * Verifica disponibilidade do motor via heartbeat Redis.
- * Chave 'motor:heartbeat' com TTL 30s — ausência indica motor offline.
+ * Chave 'motor:heartbeat' com TTL 60s — ausência indica motor offline.
  */
 async function checkMotor(): Promise<HealthCheckResult> {
   const start = performance.now()

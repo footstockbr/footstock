@@ -9,6 +9,9 @@ import { createSubscriber, REDIS_CHANNELS } from '@/lib/redis'
 import { withAuth, type AuthContext } from '@/app/api/middleware'
 import { DELAY_BY_PLAN } from '@/lib/constants/limits'
 
+// RESOLVED: T001 — maxDuration sobrepõe vercel.json (15s → 60s) para SSE streaming
+export const maxDuration = 60
+
 // Timeout de inatividade (Vercel tem limite de 60s para streaming)
 const SSE_KEEPALIVE_MS = 25_000
 
@@ -27,6 +30,19 @@ async function streamHandler(req: NextRequest, { user }: AuthContext): Promise<N
   const stream = new ReadableStream({
     async start(controller) {
       subscriber = createSubscriber()
+
+      // Propaga erros de conexão Redis como evento SSE de erro (evita 500 silencioso)
+      subscriber.on('error', err => {
+        console.error('[stream] Redis subscriber error:', err.message)
+        if (!closed) {
+          closed = true
+          if (keepalive) { clearInterval(keepalive); keepalive = null }
+          try {
+            controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify({ code: 'STREAM_UNAVAILABLE', message: 'Serviço de streaming temporariamente indisponível.' })}\n\n`))
+          } catch { /* stream já fechado */ }
+          try { controller.close() } catch { /* já fechado */ }
+        }
+      })
 
       // Heartbeat SSE para manter conexão viva
       keepalive = setInterval(() => {
@@ -78,7 +94,18 @@ async function streamHandler(req: NextRequest, { user }: AuthContext): Promise<N
         }
       })
 
-      await subscriber.subscribe(REDIS_CHANNELS.MARKET_TICK)
+      try {
+        await subscriber.subscribe(REDIS_CHANNELS.MARKET_TICK)
+      } catch (err) {
+        console.error('[stream] Falha ao subscrever no Redis:', err instanceof Error ? err.message : err)
+        closed = true
+        if (keepalive) { clearInterval(keepalive); keepalive = null }
+        try {
+          controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify({ code: 'STREAM_UNAVAILABLE', message: 'Serviço de streaming indisponível.' })}\n\n`))
+        } catch { /* noop */ }
+        controller.close()
+        return
+      }
 
       // Cleanup ao fechar conexão
       req.signal.addEventListener('abort', () => {

@@ -18,8 +18,8 @@ export const ALERT_RULES = {
   P95_LATENCY_MS: parseInt(process.env.HEALTH_CHECK_P95_MS ?? '500', 10),
   /** Latência p99 API Next.js (ms) */
   P99_LATENCY_MS: 2000,
-  /** Segundos sem heartbeat motor antes de alertar */
-  MOTOR_OFFLINE_SECONDS: 30,
+  /** Segundos sem heartbeat motor antes de alertar (heartbeat publicado a cada ~10s, TTL=60s) */
+  MOTOR_OFFLINE_SECONDS: 60,
   /** Latência Redis acima deste valor → 'degraded' (ms) */
   REDIS_LATENCY_WARN_MS: 5,
   /** Latência Prisma query acima deste valor → 'degraded' (ms) */

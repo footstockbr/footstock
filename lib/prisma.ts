@@ -7,7 +7,17 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 function createPrismaClient() {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 10 })
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    // Serverless: 1 conexão por instância de função (evita esgotamento de pool no PgBouncer)
+    max: process.env.NODE_ENV === 'production' ? 1 : 10,
+    // Timeout de conexão: impede 504 indefinido quando a URL está errada/inacessível
+    connectionTimeoutMillis: 5_000,
+    idleTimeoutMillis: 10_000,
+  })
+  pool.on('error', err => {
+    console.error('[prisma:pool] Erro de conexão:', err.message)
+  })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const adapter = new PrismaPg(pool as any)
   return new PrismaClient({

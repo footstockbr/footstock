@@ -83,11 +83,12 @@ const envSchema = z.object({
 const _env = envSchema.safeParse(rawEnv)
 
 if (!_env.success) {
-  console.error('Variáveis de ambiente inválidas:')
-  console.error(JSON.stringify(_env.error.format(), null, 2))
-  if (process.env.NODE_ENV === 'production') {
-    process.exit(1)
-  }
+  const missing = _env.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(' | ')
+  console.error('[env] Variáveis de ambiente inválidas:', missing)
+  // Em serverless (Vercel), process.exit(1) mata o worker silenciosamente e o Sentry
+  // nunca captura o erro. Lançamos um Error para que a stack trace apareça nos logs
+  // e o handler withAuth retorne 500 com detalhes para diagnóstico.
+  throw new Error(`[env] Configuração inválida — variáveis faltando ou inválidas: ${missing}`)
 }
 
 export const env = _env.success ? _env.data : ({} as z.infer<typeof envSchema>)
