@@ -33,7 +33,7 @@ export async function generateStaticParams() {
 
 const getCachedAsset = unstable_cache(
   async (ticker: string) => {
-    return prisma.asset.findFirst({
+    const asset = await prisma.asset.findFirst({
       where: { ticker, isActive: true },
       select: {
         id: true,
@@ -51,6 +51,16 @@ const getCachedAsset = unstable_cache(
         logoUrl: true,
       },
     })
+    if (!asset) return null
+    // Convert BigInt/Decimal before unstable_cache serializes with JSON.stringify
+    return {
+      ...asset,
+      volume: Number(asset.volume),
+      currentPrice: Number(asset.currentPrice),
+      openPrice: Number(asset.openPrice),
+      closePrice: Number(asset.closePrice),
+      marketCap: Number(asset.marketCap),
+    }
   },
   ['asset'],
   { tags: ['asset'], revalidate: 3600 }
