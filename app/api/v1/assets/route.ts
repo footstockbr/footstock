@@ -6,7 +6,7 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 
-export const maxDuration = 30
+export const maxDuration = 60
 import { withAuth, type AuthContext } from '@/app/api/middleware'
 import { marketAssetRepository } from '@/lib/repositories/MarketAssetRepository'
 import { applyDelayBatch, getCacheHint, getDelaySeconds } from '@/lib/services/DelayService'
