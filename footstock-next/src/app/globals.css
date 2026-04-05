@@ -1,113 +1,174 @@
+@config "../../tailwind.config.ts";
 @import "tailwindcss";
 
-/* ─── CSS Variables — Foot Stock Design System v2.0 (Ouro Premium) ─── */
-/* Paleta definida pelo cliente — Esquema Ouro + Preto Quente */
-/* Ver: DESIGN.md para documentação completa */
 :root {
-  /* Backgrounds — Preto Quente */
-  --bg-primary: #080808;
-  --bg-surface: #0f0e0b;
-  --bg-card: #141210;
-  --bg-elevated: #1a1815;
-  --bg-overlay: rgba(8, 8, 8, 0.85);
-  --bg-input: rgba(201, 168, 76, 0.04);
+  --bg-primary: #0B0E11;
+  --bg-surface: #181A20;
+  --bg-card: #1E2329;
+  --bg-elevated: #202630;
+  --bg-overlay: rgba(11, 14, 17, 0.85);
+  --bg-input: #2B3139;
 
-  /* Text — Tons Quentes */
-  --text-primary: #F0EAD6;
-  --text-secondary: #7a7060;
-  --text-muted: #4a3d2a;
-  --text-disabled: #2a2010;
+  --accent-primary: #F0B90B;
+  --accent-primary-hover: #FCD535;
+  --accent-primary-muted: rgba(240, 185, 11, 0.1);
+  --accent-secondary: #F0B90B;
+  --accent-secondary-hover: #FCD535;
+  --accent-gold: #F0B90B;
+  --accent-gold-hover: #FCD535;
+  --accent-gold-muted: rgba(240, 185, 11, 0.1);
+  --accent: #F0B90B;
+  --accent-hover: #FCD535;
+  --accent-muted: rgba(240, 185, 11, 0.1);
 
-  /* Accent / Ouro (Primary) */
-  --accent: #C9A84C;
-  --accent-hover: #D4B466;
-  --accent-light: #D4B466;
-  --accent-extra: #E8C96A;
-  --accent-gold: #C9A84C;
-  --accent-muted: rgba(201, 168, 76, 0.10);
-  --accent-dim: rgba(201, 168, 76, 0.07);
-  --accent-secondary: #D4B466;
+  --color-success: #2EBD85;
+  --color-success-muted: rgba(46, 189, 133, 0.1);
+  --color-success-flash: rgba(46, 189, 133, 0.2);
+  --color-error: #F6465D;
+  --color-error-muted: rgba(246, 70, 93, 0.1);
+  --color-error-flash: rgba(246, 70, 93, 0.2);
+  --color-warning: #F0B90B;
+  --color-warning-muted: rgba(240, 185, 11, 0.1);
+  --color-info: #F0B90B;
+  --color-info-muted: rgba(240, 185, 11, 0.1);
 
-  /* Semantic Colors */
-  --color-success: #22c55e;
-  --color-success-muted: rgba(34, 197, 94, 0.1);
-  --color-error: #e05555;
-  --color-error-muted: rgba(224, 85, 85, 0.1);
-  --color-warning: #f97316;
-  --color-warning-muted: rgba(249, 115, 22, 0.1);
-  --color-info: #38bdf8;
-  --color-info-muted: rgba(56, 189, 248, 0.1);
+  --text-primary: #EAECEF;
+  --text-secondary: #929AA5;
+  --text-muted: #707A8A;
+  --text-disabled: #4F5867;
+  --text-inverse: #0B0E11;
 
-  /* Price / Trading */
-  --price-up: #22c55e;
-  --price-down: #e05555;
-  --price-neutral: #7a7060;
-  --depth-buy-bg: rgba(34, 197, 94, 0.1);
-  --depth-sell-bg: rgba(224, 85, 85, 0.1);
+  --border-default: #2B3139;
+  --border-muted: #333B47;
+  --border-focus: #F0B90B;
+  --border-error: #F6465D;
+  --border-line: #2B3139;
 
-  /* Border */
-  --border-default: #2a2010;
-  --border-focus: #C9A84C;
-  --border-error: #e05555;
-  --border-line: #1a1815;
+  --session-pre-abertura: #F0B90B;
+  --session-negociacao: #2EBD85;
+  --session-call: #929AA5;
+  --session-after-market: #707A8A;
+  --session-fechado: #F6465D;
 
-  /* Plans */
-  --plan-jogador: #7a7060;
-  --plan-craque: #C9A84C;
-  --plan-lenda: linear-gradient(135deg, #C9A84C, #8a6820);
+  --plan-jogador: #707A8A;
+  --plan-craque: #F0B90B;
+  --plan-lenda: #FCD535;
 
-  /* Session Colors */
-  --session-pre-abertura: #f97316;
-  --session-negociacao: #C9A84C;
-  --session-call: #38bdf8;
-  --session-after-market: #8b5cf6;
-  --session-fechado: #e05555;
+  --price-up: #2EBD85;
+  --price-down: #F6465D;
+  --price-neutral: #929AA5;
+
+  --depth-buy-bg: rgba(46, 189, 133, 0.1);
+  --depth-sell-bg: rgba(246, 70, 93, 0.1);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.6);
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-modal: 300;
+  --z-toast: 400;
+  --z-tooltip: 500;
 }
 
-/* ─── Base Styles ─── */
-* {
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
-}
+/* ── Base ─────────────────────────────────────────── */
 
 html {
+  background-color: var(--bg-primary);
   color-scheme: dark;
 }
 
-html,
 body {
-  max-width: 100vw;
+  min-height: 100dvh;
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  font-family: var(--font-inter), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ─── Custom Scrollbar ─── */
+/* ── Focus ────────────────────────────────────────── */
+
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ── Scrollbar Hide Utility ──────────────────────── */
+
+@utility scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ── Scrollbar ────────────────────────────────────── */
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: var(--bg-primary);
 }
+
 ::-webkit-scrollbar-thumb {
   background: var(--border-default);
-  border-radius: 3px;
+  border-radius: var(--radius-full);
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
 }
 
-/* ─── Focus Visible ─── */
-*:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+/* ── Typography ───────────────────────────────────── */
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: var(--text-primary);
+  font-weight: 600;
+  line-height: 1.2;
+  font-family: var(--font-inter), system-ui, sans-serif;
 }
 
-/* ─── Accessibility: reduced motion ─── */
+code,
+pre {
+  font-family: var(--font-jetbrains), monospace;
+}
+
+.font-mono-nums {
+  font-family: var(--font-jetbrains), monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Accessibility: reduced motion ─── */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -117,125 +178,120 @@ body {
   }
 }
 
-/* ─── Skeleton Shimmer ─── */
+/* ── Keyframes ────────────────────────────────────── */
+
+@keyframes priceUp {
+  0% { background-color: var(--color-success-muted); }
+  100% { background-color: transparent; }
+}
+
+@keyframes priceDown {
+  0% { background-color: var(--color-error-muted); }
+  100% { background-color: transparent; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes tick-up {
+  0% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+
+@keyframes tick-down {
+  0% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@keyframes splash-in {
+  0% { opacity: 0; transform: scale(0.8); }
+  30% { opacity: 1; transform: scale(1.05); }
+  50% { opacity: 1; transform: scale(1); }
+  80% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.95); }
+}
+
+@keyframes splash-bg-fade {
+  0%, 80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+@keyframes slide-up {
+  0% { transform: translateY(100%); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes fade-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes slide-in-right {
+  0% { transform: translateX(100%); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+
+/* ── Animation utilities ──────────────────────────── */
+
+.price-flash-up { animation: priceUp 1s ease-out; }
+.price-flash-down { animation: priceDown 1s ease-out; }
+.animate-fade-in { animation: fadeIn var(--transition-base) ease forwards; }
+.animate-fade-out { animation: fadeOut var(--transition-base) ease forwards; }
+.animate-slide-up { animation: slideUp var(--transition-slow) ease forwards; }
+.animate-tick-up { animation: tick-up 300ms ease-out; }
+.animate-tick-down { animation: tick-down 300ms ease-out; }
+.animate-marquee { animation: marquee 30s linear infinite; }
+
 .skeleton {
   background: linear-gradient(
     90deg,
-    var(--bg-card) 0%,
+    var(--bg-card) 25%,
     var(--bg-elevated) 50%,
-    var(--bg-card) 100%
+    var(--bg-card) 75%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.5s linear infinite;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-md);
 }
 
-/* ─── Gradient Utilities ─── */
+/* ── Gradient Utilities ─── */
 .gradient-accent {
-  background: linear-gradient(135deg, #C9A84C, #8a6820);
+  background: linear-gradient(135deg, #F0B90B, #FCD535);
 }
 
 .gradient-section {
   background: linear-gradient(160deg, var(--bg-surface), var(--bg-primary));
 }
 
-/* ─── Safe area for iOS ─── */
-.pb-safe {
-  padding-bottom: env(safe-area-inset-bottom);
-}
+/* ── Safe areas ───────────────────────────────────── */
 
-.pb-nav {
-  padding-bottom: calc(56px + env(safe-area-inset-bottom));
-}
-
-/* ─── Animations ─── */
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
-@keyframes tick-up {
-  0%,
-  100% {
-    background-color: transparent;
-  }
-  20% {
-    background-color: rgba(46, 189, 133, 0.15);
-  }
-}
-
-@keyframes tick-down {
-  0%,
-  100% {
-    background-color: transparent;
-  }
-  20% {
-    background-color: rgba(246, 70, 93, 0.15);
-  }
-}
-
-@keyframes slide-up {
-  0% {
-    transform: translateY(100%);
-    opacity: 0;
-  }
-  100% {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-@keyframes fade-in {
-  0% {
-    opacity: 0;
-  }
-  100% {
-    opacity: 1;
-  }
-}
-
-@keyframes splash-in {
-  0% {
-    opacity: 0;
-    transform: scale(0.8);
-  }
-  30% {
-    opacity: 1;
-    transform: scale(1.05);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  80% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-}
-
-@keyframes splash-bg-fade {
-  0%,
-  80% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-  }
-}
-
-@keyframes pulse-dot {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.3;
-  }
-}
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+.pb-nav { padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
