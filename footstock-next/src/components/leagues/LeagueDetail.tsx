@@ -54,7 +54,7 @@ function ScoreCell({ member }: ScoreButtonProps) {
           score={member.score}
           userName={member.isCurrentUser ? undefined : member.userName}
           onClose={() => setOpen(false)}
-          triggerRef={triggerRef as React.RefObject<HTMLElement>}
+          triggerRef={btnRef as React.RefObject<HTMLElement>}
         />
       )}
     </td>
