@@ -21,7 +21,7 @@ export function useCountdown(initialSeconds: number): number {
   const ref = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
-    setRemaining(initialSeconds) // eslint-disable-line react-hooks/setState
+    setRemaining(initialSeconds)
     if (ref.current) clearInterval(ref.current)
 
     ref.current = setInterval(() => {

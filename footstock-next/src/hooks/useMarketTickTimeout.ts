@@ -15,7 +15,7 @@ export function useMarketTickTimeout(
   useEffect(() => {
     if (tick) {
       lastTickTime.current = Date.now()
-      setIsTimedOut(false) // eslint-disable-line react-hooks/setState
+      setIsTimedOut(false)
       return
     }
 

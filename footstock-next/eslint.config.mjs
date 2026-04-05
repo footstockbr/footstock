@@ -14,10 +14,12 @@ const eslintConfig = defineConfig([
   {
     files: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
     rules: {
-      // React 19 strict rules added in eslint-plugin-react-hooks v5.
-      // Downgrade new rules to warn for pre-existing patterns that are safe
+      // React Compiler rules from eslint-plugin-react-hooks v7 (shipped with Next.js 16).
+      // Downgrade strict rules to warn for pre-existing patterns that are safe
       // without the React Compiler. Will address incrementally.
-      "react-hooks/rules-of-hooks": "warn",
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/refs": "warn",
+      "react-hooks/purity": "warn",
     },
   },
   {
