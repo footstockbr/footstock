@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 // module-20: ScoringJobService unit tests — cron auth, LEAGUE_RESULT, degraded mode
 import { ScoringJobService } from '../ScoringJobService'
 

@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useActionState } from 'react'
 import { useRouter } from 'next/navigation'
-import type { Metadata } from 'next'
 import { Shield } from 'lucide-react'
 import Link from 'next/link'
 import { ROUTES } from '@/lib/constants/routes'

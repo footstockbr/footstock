@@ -10,7 +10,7 @@ const createAdminSchema = z.object({
   role: z.enum(['SUPER_ADMIN', 'ADMINISTRADOR', 'MONITOR', 'EDITOR', 'MODERADOR']),
 })
 
-async function getHandler(_req: NextRequest, _ctx: AuthContext): Promise<NextResponse> {
+async function getHandler(): Promise<NextResponse> {
   const admins = await prisma.user.findMany({
     where: { adminRole: { not: null } },
     select: {

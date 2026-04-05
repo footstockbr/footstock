@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Trophy, TrendingUp, TrendingDown } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 
 export const metadata: Metadata = {
   title: "Clubes — Admin · Foot Stock",

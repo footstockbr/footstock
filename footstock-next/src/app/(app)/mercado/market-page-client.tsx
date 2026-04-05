@@ -1,12 +1,10 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Search, X, Clock } from "lucide-react";
-import Link from "next/link";
+import { Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AssetCard, AssetCardSkeleton, type AssetData } from "@/components/market/asset-card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { ROUTES } from "@/lib/constants/routes";
 
 // Dados mock temporários para build
 const MOCK_ASSETS: AssetData[] = [

@@ -49,6 +49,25 @@ export function PriceChart({
   const { hasAccess: hasPlanAccess } = usePlanGuard()
   const canUseBollinger = hasPlanAccess('LENDA')
 
+  // Rate limit countdown timer (must be before early returns per Rules of Hooks)
+  const [rateLimitCountdown, setRateLimitCountdown] = useState(0)
+  useEffect(() => {
+    if (isRateLimited && rateError) {
+      setRateLimitCountdown(rateError.retryAfterSeconds)
+      const interval = setInterval(() => {
+        setRateLimitCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval)
+            refetch()
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+      return () => clearInterval(interval)
+    }
+  }, [isRateLimited, rateError, refetch])
+
   const handlePeriodChange = (p: ChartPeriod) => {
     setInternalPeriod(p)
     onPeriodChange?.(p)
@@ -260,25 +279,6 @@ export function PriceChart({
       </div>
     )
   }
-
-  // Rate limit countdown timer
-  const [rateLimitCountdown, setRateLimitCountdown] = useState(0)
-  useEffect(() => {
-    if (isRateLimited && rateError) {
-      setRateLimitCountdown(rateError.retryAfterSeconds)
-      const interval = setInterval(() => {
-        setRateLimitCountdown((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval)
-            refetch()
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-      return () => clearInterval(interval)
-    }
-  }, [isRateLimited, rateError, refetch])
 
   if (isRateLimited && rateError) {
     return (

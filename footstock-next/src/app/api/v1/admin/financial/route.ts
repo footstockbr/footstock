@@ -1,4 +1,3 @@
-import { NextRequest } from 'next/server'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
@@ -12,7 +11,7 @@ const PLAN_PRICES: Record<string, number> = {
 
 // GET /api/v1/admin/financial — ADMIN+
 // Retorna: MRR, ARR, churn, novas assinaturas 24h, receita por gateway, histórico MRR 30d, distribuição por plano
-export async function GET(_req: NextRequest) {
+export async function GET() {
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()
 

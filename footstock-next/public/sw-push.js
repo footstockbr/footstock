@@ -5,7 +5,7 @@ self.addEventListener('push', function (event) {
   var data = {}
   try {
     data = event.data ? event.data.json() : {}
-  } catch (e) {
+  } catch {
     data = { title: 'Foot Stock', body: 'Nova notificação' }
   }
 

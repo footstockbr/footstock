@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { User, Settings, LogOut, Shield, CreditCard, Bell } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PlanBadge } from "@/components/shared/plan-badge";
 import { PlanType } from "@/lib/constants/plans";
