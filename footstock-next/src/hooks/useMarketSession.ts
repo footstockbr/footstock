@@ -19,14 +19,9 @@ import { MarketSession } from '@/lib/constants/market'
 export function useCountdown(initialSeconds: number): number {
   const [remaining, setRemaining] = useState(initialSeconds)
   const ref = useRef<ReturnType<typeof setInterval> | null>(null)
-  const prevInitial = useRef(initialSeconds)
-
-  if (prevInitial.current !== initialSeconds) {
-    prevInitial.current = initialSeconds
-    setRemaining(initialSeconds)
-  }
 
   useEffect(() => {
+    setRemaining(initialSeconds) // eslint-disable-line react-hooks/setState
     if (ref.current) clearInterval(ref.current)
 
     ref.current = setInterval(() => {

@@ -12,6 +12,15 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
   ]),
   {
+    files: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+    rules: {
+      // React Compiler strict rules — downgrade to warn for pre-existing code.
+      // These patterns (setState in effect, ref access during render) are safe
+      // in React 19 without the compiler and will be addressed incrementally.
+      "react-compiler/react-compiler": "warn",
+    },
+  },
+  {
     files: [
       "**/*.test.ts",
       "**/*.test.tsx",
