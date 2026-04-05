@@ -36,10 +36,6 @@ interface ScoreButtonProps {
 function ScoreCell({ member }: ScoreButtonProps) {
   const [open, setOpen] = useState(false)
   const btnRef = useRef<HTMLButtonElement>(null)
-  const triggerRef = useRef<HTMLElement>(null)
-
-  // Sync triggerRef to btnRef
-  ;(triggerRef as React.MutableRefObject<HTMLElement | null>).current = btnRef.current
 
   return (
     <td className="py-3 px-4 text-right relative">

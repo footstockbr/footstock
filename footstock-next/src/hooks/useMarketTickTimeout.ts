@@ -11,13 +11,16 @@ export function useMarketTickTimeout(
   const tick = useMarketTick(ticker)
   const [isTimedOut, setIsTimedOut] = useState(false)
   const lastTickTime = useRef<number | null>(null)
+  const prevTick = useRef(tick)
+
+  if (prevTick.current !== tick && tick) {
+    prevTick.current = tick
+    lastTickTime.current = Date.now()
+    if (isTimedOut) setIsTimedOut(false)
+  }
 
   useEffect(() => {
-    if (tick) {
-      lastTickTime.current = Date.now()
-      setIsTimedOut(false)
-      return
-    }
+    if (tick) return
 
     const timer = setTimeout(() => {
       if (!lastTickTime.current || Date.now() - lastTickTime.current > timeoutMs) {

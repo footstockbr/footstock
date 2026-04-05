@@ -232,7 +232,7 @@ export interface Subscription {
   updatedAt: string
 }
 
-export interface Notification extends NotificationDTO {}
+export type Notification = NotificationDTO
 
 export interface NewsItem {
   id: string
