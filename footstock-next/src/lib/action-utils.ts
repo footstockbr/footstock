@@ -1,5 +1,3 @@
-import 'server-only'
-
 /**
  * Tipo de retorno padronizado para Server Actions — compatível com useActionState.
  * Usar em todos os arquivos com "use server" do projeto.
