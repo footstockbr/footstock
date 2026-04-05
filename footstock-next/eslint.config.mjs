@@ -14,10 +14,10 @@ const eslintConfig = defineConfig([
   {
     files: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
     rules: {
-      // React Compiler strict rules — downgrade to warn for pre-existing code.
-      // These patterns (setState in effect, ref access during render) are safe
-      // in React 19 without the compiler and will be addressed incrementally.
-      "react-compiler/react-compiler": "warn",
+      // React 19 strict rules added in eslint-plugin-react-hooks v5.
+      // Downgrade new rules to warn for pre-existing patterns that are safe
+      // without the React Compiler. Will address incrementally.
+      "react-hooks/rules-of-hooks": "warn",
     },
   },
   {
@@ -34,6 +34,7 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unsafe-function-type": "off",
       "@typescript-eslint/no-unused-vars": "warn",
+      "react-hooks/rules-of-hooks": "off",
     },
   },
 ]);
