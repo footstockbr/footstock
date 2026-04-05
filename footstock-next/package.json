@@ -2,11 +2,18 @@
   "name": "footstock-next",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=18.17.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "validate": "npm run lint && npm run typecheck",
+    "prebuild": "npm run validate",
+    "postinstall": "prisma generate",
     "test": "jest",
     "test:integration": "jest tests/integration",
     "test:unit": "jest tests/unit",

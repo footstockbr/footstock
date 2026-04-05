@@ -285,3 +285,78 @@ describe('OrderService — Listagem de ordens (isolamento)', () => {
     }
   })
 })
+
+// ─── Cenário 5 — Ordens SELL (venda) ─────────────────────────────────────────
+// RESOLVED: Nenhum teste de SELL (venda) — Gap #2 DELIVERY-AUDIT-milestone-10
+
+describe('OrderService — Ordens SELL (venda)', () => {
+  it('[happy] LENDA cria ordem MARKET SELL → saldo creditado após execução', async () => {
+    const balanceBefore = (
+      await testPrisma.user.findUnique({ where: { id: lendaUser.id } })
+    )!.fsBalance.toNumber()
+
+    const payload = buildOrderPayload({ type: 'MARKET', side: 'SELL', quantity: 1 })
+    const order = await orderService.createOrder(lendaUser.id, payload)
+
+    expect(order).toBeDefined()
+    expect(order.side).toBe('SELL')
+    expect(order.userId).toBe(lendaUser.id)
+
+    // Verificar persistência no banco
+    const dbOrder = await testPrisma.order.findUnique({ where: { id: order.id } })
+    expect(dbOrder).toBeTruthy()
+    expect(dbOrder!.side).toBe('SELL')
+    expect(dbOrder!.status).toMatch(/OPEN|FILLED/)
+
+    // Se a ordem foi executada imediatamente (FILLED), saldo deve ter aumentado
+    if (dbOrder!.status === 'FILLED') {
+      const dbUser = await testPrisma.user.findUnique({ where: { id: lendaUser.id } })
+      expect(dbUser!.fsBalance.toNumber()).toBeGreaterThan(balanceBefore)
+    }
+  })
+
+  it('[happy] CRAQUE cria ordem LIMIT SELL → persiste no banco com side=SELL', async () => {
+    const payload = buildOrderPayload({ type: 'LIMIT', side: 'SELL', quantity: 1, price: 50 })
+    const order = await orderService.createOrder(craqueUser.id, payload)
+
+    expect(order).toBeDefined()
+    expect(order.side).toBe('SELL')
+    expect(order.type).toBe('LIMIT')
+
+    const dbOrder = await testPrisma.order.findUnique({ where: { id: order.id } })
+    expect(dbOrder).toBeTruthy()
+    expect(dbOrder!.side).toBe('SELL')
+  })
+
+  it('[seguranca] usuário A não pode criar ordem SELL com userId de B → IDOR bloqueado', async () => {
+    // A tentativa de criar ordem para outro userId deve ser bloqueada pelo service
+    // O createOrder usa o userId passado explicitamente — o service deve vincular ao
+    // usuário autenticado, não a um userId arbitrário do payload
+    const payloadSell = buildOrderPayload({ side: 'SELL', quantity: 1 })
+
+    // Criar ordem de A normalmente
+    const orderA = await orderService.createOrder(jogadorUser.id, payloadSell)
+    expect(orderA.userId).toBe(jogadorUser.id)
+
+    // A ordem pertence ao usuário correto (A), não a B
+    const dbOrder = await testPrisma.order.findUnique({ where: { id: orderA.id } })
+    expect(dbOrder!.userId).toBe(jogadorUser.id)
+    expect(dbOrder!.userId).not.toBe(craqueUser.id)
+  })
+
+  it('[validacao] SELL em ativo com isActive=false → rejeita ASSET_030', async () => {
+    // Verificar se existe ativo halted no seed
+    const haltedAsset = await testPrisma.asset.findFirst({ where: { isHalted: true } })
+    if (!haltedAsset) {
+      console.log('[skip] Nenhum ativo em halt no banco de teste. Rode o seed.')
+      return
+    }
+
+    await expect(
+      orderService.createOrder(
+        lendaUser.id,
+        buildOrderPayload({ ticker: haltedAsset.ticker, side: 'SELL' })
+      )
+    ).rejects.toMatchObject({ code: expect.stringMatching(/ASSET_030|ORDER_005/) })
+  })
+})

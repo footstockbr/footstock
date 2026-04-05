@@ -11,6 +11,7 @@ const config = {
   testPathIgnorePatterns: [
     '/node_modules/',
     '/.next/',
+    '/.stryker-tmp/',
     // Playwright specs — executados separadamente com playwright
     '\\.spec\\.ts$',
     // Tests na pasta footstock-next têm seu próprio jest.config
