@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
-import type { AuthenticatorDevice } from '@simplewebauthn/types'
+import type { WebAuthnCredential } from '@simplewebauthn/server'
 import { createAuthenticationOptions, verifyAuthentication } from '@/lib/auth/webauthn'
 import { supabaseAdmin } from '@/lib/supabase'
 import { ok, errors, error as apiError } from '@/lib/api'
@@ -81,19 +81,19 @@ export async function POST(request: NextRequest) {
         return errors.validation('Challenge expirado. Reinicie a autenticação biométrica.')
       }
 
-      // TODO: buscar credencial do banco e montar AuthenticatorDevice real (module-6)
+      // TODO: buscar credencial do banco e montar WebAuthnCredential real (module-6)
       // const dbCredential = await prisma.webauthnCredential.findFirst({
       //   where: { user: { email } },
       // })
-      // const authenticator: AuthenticatorDevice = {
-      //   credentialID: Buffer.from(dbCredential.credentialId, 'base64url'),
-      //   credentialPublicKey: dbCredential.publicKey,
+      // const credential: WebAuthnCredential = {
+      //   id: dbCredential.credentialId, // Base64URLString
+      //   publicKey: dbCredential.publicKey,
       //   counter: dbCredential.counter,
       //   transports: dbCredential.transports?.split(',') as AuthenticatorTransportFuture[],
       // }
-      const authenticator: AuthenticatorDevice = {
-        credentialID: new Uint8Array(0),
-        credentialPublicKey: new Uint8Array(0),
+      const credential: WebAuthnCredential = {
+        id: '',
+        publicKey: new Uint8Array(0),
         counter: 0,
       }
 
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         verifyParsed.data.response as any,
         expectedChallenge,
-        authenticator
+        credential
       )
 
       if (!verification.verified) {

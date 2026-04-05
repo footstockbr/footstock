@@ -1,3 +1,4 @@
+import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "./skeleton";
 
@@ -7,6 +8,7 @@ interface StatCardProps {
   subValue?: string;
   subValueColor?: "positive" | "negative" | "neutral";
   icon?: React.ReactNode;
+  tooltip?: string;
   isLoading?: boolean;
   className?: string;
 }
@@ -17,6 +19,7 @@ function StatCard({
   subValue,
   subValueColor = "neutral",
   icon,
+  tooltip,
   isLoading,
   className,
 }: StatCardProps) {
@@ -44,8 +47,13 @@ function StatCard({
       )}
     >
       <div className="flex items-start justify-between mb-1">
-        <span className="text-xs uppercase tracking-widest text-[#929AA5] font-medium">
+        <span className="text-xs uppercase tracking-widest text-[#929AA5] font-medium flex items-center gap-1">
           {label}
+          {tooltip && (
+            <span title={tooltip} aria-label={tooltip} className="cursor-help">
+              <Info className="w-3 h-3 text-[#707A8A]" />
+            </span>
+          )}
         </span>
         {icon && <span className="text-[#929AA5]">{icon}</span>}
       </div>

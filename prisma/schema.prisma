@@ -225,6 +225,7 @@ model User {
   affiliateCode          AffiliateCode?
   affiliateReferrals     AffiliateTransaction[] @relation("AffiliateReferredUser")
   pushSubscriptions      PushSubscription[]
+  leagueScoreEvents LeagueScoreEvent[] // RESOLVED: relação para eventos de pontuação de ligas
 
   @@map("users")
 }
@@ -480,6 +481,15 @@ model News {
   @@map("news")
 }
 
+model NewsSourceWhitelist {
+  id        String   @id @default(cuid())
+  domain    String   @unique
+  addedBy   String   @map("added_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("news_source_whitelist")
+}
+
 model League {
   id         String     @id @default(cuid())
   name       String
@@ -499,10 +509,11 @@ model League {
   createdAt  DateTime   @default(now()) @map("created_at")
   updatedAt  DateTime   @updatedAt @map("updated_at")
 
-  creator    User           @relation("LeagueCreator", fields: [createdBy], references: [id])
-  sponsor    Sponsor?       @relation(fields: [sponsorId], references: [id])
-  members    LeagueMember[]
-  forumPosts ForumPost[]
+  creator     User               @relation("LeagueCreator", fields: [createdBy], references: [id])
+  sponsor     Sponsor?           @relation(fields: [sponsorId], references: [id])
+  members     LeagueMember[]
+  forumPosts  ForumPost[]
+  scoreEvents LeagueScoreEvent[] // RESOLVED: relação inversa para eventos de pontuação
 
   @@index([createdBy])
   @@index([type, status])
@@ -527,6 +538,27 @@ model LeagueMember {
   @@index([leagueId, score(sort: Desc)])
   @@index([userId])
   @@map("league_members")
+}
+
+// RESOLVED: modelo criado para rastrear eventos de pontuação do Pilar 2 (Sofisticação Operacional)
+// Registra AI_CONSULTED, LIMIT_ORDER_EXECUTED, OCO_EXECUTED, SHORT_PROFITABLE, etc.
+model LeagueScoreEvent {
+  id          String   @id @default(cuid())
+  leagueId    String   @map("league_id")
+  userId      String   @map("user_id")
+  eventType   String   @map("event_type") // AI_CONSULTED | LIMIT_ORDER_EXECUTED | OCO_EXECUTED | SHORT_PROFITABLE | SCHEDULED_ORDER_EXECUTED | GLOSSARY_5_CARDS | FORUM_POST_LIKED | GLOSSARY_3_CATEGORIES | PLAN_UPGRADED
+  points      Int      @default(0)
+  metadata    Json?    // ticker, orderId, etc.
+  period      String   @map("period")    // "YYYY-MM-DD" — para deduplicação diária
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, userId, eventType, period]) // deduplicação: 1 evento por dia por liga por usuário
+  @@index([leagueId, userId])
+  @@index([leagueId, period])
+  @@map("league_score_events")
 }
 
 model ForumPost {

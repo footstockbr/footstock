@@ -243,10 +243,10 @@ describe('ST002: Autenticação — Endpoints protegidos retornam 401 sem sessã
     expect(body.error.code).toBe('AUTH_001')
   })
 
-  test('POST /api/v1/ai/analyze retorna 401 sem auth', async () => {
-    const { POST } = await import('@/app/api/v1/ai/analyze/route')
-    const req = createRequest('POST', '/api/v1/ai/analyze', { assetId: 'FLA' })
-    const res = await POST(req)
+  test('GET /api/v1/ai/analyze retorna 401 sem auth', async () => {
+    const { GET } = await import('@/app/api/v1/ai/analyze/route')
+    const req = createRequest('GET', '/api/v1/ai/analyze?ticker=FLA')
+    const res = await GET(req)
     const body = await res.json()
 
     expect(res.status).toBe(401)
@@ -263,12 +263,12 @@ describe('ST003: Autenticação por plano — JOGADOR bloqueado em recursos Craq
     mockHasPlan(false) // JOGADOR não tem acesso a Craque+
   })
 
-  test('POST /api/v1/ai/analyze como JOGADOR retorna 403 (AI_050)', async () => {
-    const { POST } = await import('@/app/api/v1/ai/analyze/route')
-    const req = createRequest('POST', '/api/v1/ai/analyze', { assetId: 'FLA' }, {
+  test('GET /api/v1/ai/analyze como JOGADOR retorna 403 (AI_050)', async () => {
+    const { GET } = await import('@/app/api/v1/ai/analyze/route')
+    const req = createRequest('GET', '/api/v1/ai/analyze?ticker=FLA', undefined, {
       'x-user-id': 'user-test-001',
     })
-    const res = await POST(req)
+    const res = await GET(req)
     const body = await res.json()
 
     expect(res.status).toBe(403)
@@ -461,7 +461,7 @@ describe('ST007: Endpoints de Notificação', () => {
     const req = createRequest('GET', '/api/v1/notifications/unread-count', undefined, {
       'x-user-id': 'user-test-001',
     })
-    const res = await GET(req)
+    const res = await GET()
     expect(res.status).toBeLessThan(500)
   })
 })

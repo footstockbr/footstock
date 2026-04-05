@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { Redis } from '@upstash/redis'
+import { getRedisClient, redisGetJSON, redisSetJSON } from '@/lib/redis'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
@@ -9,13 +9,6 @@ const CACHE_KEY = 'admin:dashboard:cache'
 const CACHE_TTL = 60
 const NSM_TARGET = 500
 const PLAN_MRR: Record<string, number> = { CRAQUE: 19.9, LENDA: 39.9, JOGADOR: 0 }
-
-function getRedis(): Redis | null {
-  const url = process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN
-  if (!url || !token) return null
-  return new Redis({ url, token })
-}
 
 // GET /api/v1/admin/dashboard — Monitor+
 export async function GET() {
@@ -28,12 +21,12 @@ export async function GET() {
     )
   }
 
-  const redis = getRedis()
+  const redis = getRedisClient()
 
   // Tentar cache
   if (redis) {
     try {
-      const cached = await redis.get<AdminDashboardDTO>(CACHE_KEY)
+      const cached = await redisGetJSON<AdminDashboardDTO>(CACHE_KEY)
       if (cached) {
         const res = NextResponse.json({ data: { ...cached, _cacheHit: true } })
         res.headers.set('X-Cache', 'HIT')
@@ -49,7 +42,7 @@ export async function GET() {
   let motorStatus: 'ONLINE' | 'OFFLINE' | 'DEGRADED' = 'DEGRADED'
   if (redis) {
     try {
-      const ms = await redis.get<string>('motor:status')
+      const ms = await redis.get('motor:status')
       if (ms === 'ONLINE' || ms === 'OFFLINE' || ms === 'DEGRADED') motorStatus = ms
     } catch { motorStatus = 'DEGRADED' }
   }
@@ -117,9 +110,7 @@ export async function GET() {
       topAssets,
     }
 
-    if (redis) {
-      try { await redis.set(CACHE_KEY, dto, { ex: CACHE_TTL }) } catch { /* ignora */ }
-    }
+    await redisSetJSON(CACHE_KEY, dto, CACHE_TTL)
 
     const res = ok(dto)
     res.headers.set('X-Cache', 'MISS')

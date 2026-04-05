@@ -20,7 +20,7 @@ export default createJestConfig({
     'src/app/api/**/*.ts',
     'src/lib/services/**/*.ts',
   ],
-  coverageThresholds: {
+  coverageThreshold: {
     global: {
       lines: 60,
       functions: 60,
@@ -32,4 +32,5 @@ export default createJestConfig({
     '/tests/e2e/',
   ],
   setupFilesAfterFramework: [],
-})
+// coverageThreshold is valid Jest config but not in next/jest's InitialProjectOptions type
+} as never)

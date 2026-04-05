@@ -21,15 +21,25 @@ export function PortfolioClient() {
             value="FS$ 12.456,78"
             subValue="+3,45% hoje ▲"
             subValueColor="positive"
+            tooltip="Soma do saldo disponivel + valor atual de todas as posicoes abertas"
           />
           <StatCard
             label="P&L Hoje"
             value="+FS$ 384,20"
             subValue="3 operações"
             subValueColor="positive"
+            tooltip="Lucro ou prejuizo acumulado nas operacoes do dia (Profit & Loss)"
           />
-          <StatCard label="Saldo Disponível" value="FS$ 8.543,22" />
-          <StatCard label="Em Posições" value="FS$ 3.913,56" />
+          <StatCard
+            label="Saldo Disponível"
+            value="FS$ 8.543,22"
+            tooltip="Valor em FS$ livre para novas operacoes de compra"
+          />
+          <StatCard
+            label="Em Posições"
+            value="FS$ 3.913,56"
+            tooltip="Valor total alocado em acoes de clubes que voce possui atualmente"
+          />
         </div>
 
         <Tabs defaultValue="posicoes">

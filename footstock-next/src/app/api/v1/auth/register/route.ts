@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { ConsentPurpose } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { registerSchema } from '@/lib/schemas/auth.schema'
 import { hashCPF } from '@/lib/utils/crypto'
@@ -145,12 +146,12 @@ export async function POST(req: NextRequest) {
     // ── 6. Salvar consentimentos LGPD (US-026) ────────────────────────────────
     // Cria registros apenas para consentimentos concedidos.
     // TERMS sempre verdadeiro (validado pelo schema). Opcionais só se marcados.
-    const consentRecords: { userId: string; purpose: string }[] = [
-      { userId: user.id, purpose: 'TERMS' },
+    const consentRecords: { userId: string; purpose: ConsentPurpose }[] = [
+      { userId: user.id, purpose: 'ESSENTIAL' as ConsentPurpose },
     ]
-    if (consents.marketing) consentRecords.push({ userId: user.id, purpose: 'MARKETING' })
-    if (consents.analytics) consentRecords.push({ userId: user.id, purpose: 'ANALYTICS' })
-    if (consents.thirdParty) consentRecords.push({ userId: user.id, purpose: 'THIRD_PARTY' })
+    if (consents.marketing) consentRecords.push({ userId: user.id, purpose: 'MARKETING' as ConsentPurpose })
+    if (consents.analytics) consentRecords.push({ userId: user.id, purpose: 'ANALYTICS' as ConsentPurpose })
+    if (consents.thirdParty) consentRecords.push({ userId: user.id, purpose: 'DATA_TERCEIROS' as ConsentPurpose })
 
     await prisma.consent.createMany({ data: consentRecords })
 

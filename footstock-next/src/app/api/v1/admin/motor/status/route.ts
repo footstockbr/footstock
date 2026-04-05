@@ -1,14 +1,7 @@
 import { NextResponse } from 'next/server'
-import { Redis } from '@upstash/redis'
+import { getRedisClient } from '@/lib/redis'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { ok, errors } from '@/lib/api'
-
-function getRedis(): Redis | null {
-  const url = process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN
-  if (!url || !token) return null
-  return new Redis({ url, token })
-}
 
 function calcUptime(startedAt: string | null): string | null {
   if (!startedAt) return null
@@ -30,7 +23,7 @@ export async function GET() {
     )
   }
 
-  const redis = getRedis()
+  const redis = getRedisClient()
   if (!redis) {
     return ok({
       status: 'DEGRADED',
@@ -42,20 +35,28 @@ export async function GET() {
   }
 
   try {
-    const [statusRaw, leader, lastTick, startedAt, haltKeys] = await Promise.all([
-      redis.get<string>('motor:status'),
-      redis.get<string>('motor:leader'),
-      redis.get<string>('motor:last_tick'),
-      redis.get<string>('motor:started_at'),
-      redis.keys('motor:halt:*'),
+    const [statusRaw, leader, lastTick, startedAt] = await Promise.all([
+      redis.get('motor:status'),
+      redis.get('motor:leader'),
+      redis.get('motor:last_tick'),
+      redis.get('motor:started_at'),
     ])
+
+    // SCAN iterativo em vez de KEYS (não bloqueia Redis em produção)
+    const haltKeys: string[] = []
+    let cursor = '0'
+    do {
+      const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', 'motor:halt:*', 'COUNT', 100)
+      haltKeys.push(...keys)
+      cursor = nextCursor
+    } while (cursor !== '0')
 
     const status: 'ONLINE' | 'OFFLINE' | 'DEGRADED' =
       statusRaw === 'ONLINE' || statusRaw === 'OFFLINE' || statusRaw === 'DEGRADED'
         ? statusRaw
         : 'DEGRADED'
 
-    const haltedTickers = (haltKeys ?? []).map((k) => k.replace('motor:halt:', ''))
+    const haltedTickers = haltKeys.map((k) => k.replace('motor:halt:', ''))
 
     return ok({
       status,

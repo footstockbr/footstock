@@ -85,6 +85,7 @@ function makeSubscription(overrides?: {
   planType?: string
   status?: string
   createdAt?: Date
+  expiresAt?: Date
   cancelledAt?: Date | null
   cancellationLockExpiresAt?: Date | null
 }) {
@@ -97,7 +98,7 @@ function makeSubscription(overrides?: {
     period: 'MONTHLY',
     status: overrides?.status ?? 'ACTIVE',
     startsAt: now,
-    expiresAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+    expiresAt: overrides?.expiresAt ?? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
     trialEndsAt: null,
     cancelledAt: overrides?.cancelledAt ?? null,
     cancellationLockExpiresAt: overrides?.cancellationLockExpiresAt ?? null,
@@ -440,13 +441,13 @@ describe('ST006: Restrições de Features — Códigos corretos por feature (US-
     expect(hasPlan('CRAQUE', 'CRAQUE')).toBe(true)
   })
 
-  test('POST /api/v1/ai/analyze como JOGADOR deve retornar 403 (AI_050)', async () => {
+  test('GET /api/v1/ai/analyze como JOGADOR deve retornar 403 (AI_050)', async () => {
     const { hasPlan } = require('@/lib/auth')
     hasPlan.mockReturnValue(false)
 
-    const { POST } = await import('@/app/api/v1/ai/analyze/route')
-    const req = createRequest('POST', '/api/v1/ai/analyze', { assetId: 'FLA' })
-    const res = await POST(req)
+    const { GET } = await import('@/app/api/v1/ai/analyze/route')
+    const req = createRequest('GET', '/api/v1/ai/analyze?ticker=FLA')
+    const res = await GET(req)
     const body = await res.json()
 
     expect(res.status).toBe(403)
@@ -547,11 +548,11 @@ describe('ST008: Expiração de Plano — Grace Period, Downgrade e Liquidação
     const sub = makeSubscription({
       planType: 'CRAQUE',
       status: 'ACTIVE',
-      currentPeriodEnd: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // expirou 3 dias atrás
+      expiresAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // expirou 3 dias atrás
     })
 
     const now = new Date()
-    const daysSinceExpiry = (now.getTime() - sub.currentPeriodEnd.getTime()) / (1000 * 60 * 60 * 24)
+    const daysSinceExpiry = (now.getTime() - sub.expiresAt.getTime()) / (1000 * 60 * 60 * 24)
     const GRACE_PERIOD_DAYS = 7
 
     expect(daysSinceExpiry).toBeLessThan(GRACE_PERIOD_DAYS)
@@ -562,11 +563,11 @@ describe('ST008: Expiração de Plano — Grace Period, Downgrade e Liquidação
     const sub = makeSubscription({
       planType: 'LENDA',
       status: 'ACTIVE',
-      currentPeriodEnd: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000), // expirou 8 dias atrás
+      expiresAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000), // expirou 8 dias atrás
     })
 
     const now = new Date()
-    const daysSinceExpiry = (now.getTime() - sub.currentPeriodEnd.getTime()) / (1000 * 60 * 60 * 24)
+    const daysSinceExpiry = (now.getTime() - sub.expiresAt.getTime()) / (1000 * 60 * 60 * 24)
     const GRACE_PERIOD_DAYS = 7
 
     expect(daysSinceExpiry).toBeGreaterThan(GRACE_PERIOD_DAYS)

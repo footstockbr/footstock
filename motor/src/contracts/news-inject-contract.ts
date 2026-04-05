@@ -53,13 +53,6 @@ export function validateNewsInjectPayload(payload: unknown): payload is NewsInje
 // Evento Redis formatado para module-14 (NewsInjectEvent)
 // ---------------------------------------------------------------------------
 
-/** @deprecated Impact agora vem do ImpactCategory classificado, não do sentimento */
-export function sentimentToImpact(sentiment: number): 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL' {
-  if (sentiment > 0.1) return 'POSITIVE'
-  if (sentiment < -0.1) return 'NEGATIVE'
-  return 'NEUTRAL'
-}
-
 /** Duração padrão do impacto em ticks (sentiment * 5, mínimo 1, máximo 10) */
 export function sentimentToDurationTicks(sentiment: number): number {
   return Math.max(1, Math.min(10, Math.round(Math.abs(sentiment) * 5)))

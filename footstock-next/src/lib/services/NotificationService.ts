@@ -62,3 +62,18 @@ class NotificationService {
 }
 
 export const notificationService = new NotificationService()
+
+/** Atalho para compatibilidade com código legado que importa a função diretamente. */
+export async function sendNotification(
+  userId: string,
+  type: NotificationType,
+  opts: { title: string; body: string; metadata?: Record<string, unknown> }
+): Promise<void> {
+  return notificationService.sendNotification({
+    userId,
+    type,
+    title: opts.title,
+    body: opts.body,
+    metadata: opts.metadata,
+  })
+}

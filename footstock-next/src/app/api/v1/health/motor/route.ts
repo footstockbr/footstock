@@ -3,21 +3,14 @@
 // HTTP 200 = online, HTTP 503 = offline (compatível com load balancers).
 
 import { NextResponse } from 'next/server'
-import { Redis } from '@upstash/redis'
+import { getRedisClient } from '@/lib/redis'
 
 const HEALTH_KEY = 'market:tick:latest'
 const STALE_THRESHOLD_SECONDS = 10
 const NEXT_CHECK_SECONDS = 30
 
-function getRedis(): Redis | null {
-  const url = process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN
-  if (!url || !token) return null
-  return new Redis({ url, token })
-}
-
 export async function GET() {
-  const redis = getRedis()
+  const redis = getRedisClient()
 
   if (!redis) {
     return NextResponse.json(
@@ -27,7 +20,7 @@ export async function GET() {
   }
 
   try {
-    const raw = await redis.get<string>(HEALTH_KEY)
+    const raw = await redis.get(HEALTH_KEY)
 
     if (!raw) {
       return NextResponse.json(
@@ -37,6 +30,12 @@ export async function GET() {
     }
 
     const lastTickMs = parseInt(raw, 10)
+    if (isNaN(lastTickMs)) {
+      return NextResponse.json(
+        { status: 'offline', lastTick: null, timeSinceLastTick: null, nextCheck: NEXT_CHECK_SECONDS, error: 'invalid_timestamp' },
+        { status: 503, headers: { 'Cache-Control': 'no-store' } }
+      )
+    }
     const nowMs = Date.now()
     const timeSinceLastTick = (nowMs - lastTickMs) / 1_000
 

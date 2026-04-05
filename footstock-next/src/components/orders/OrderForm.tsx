@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import { toast } from 'sonner'
 import { AlertCircle, Clock } from 'lucide-react'
+import { InfoTip } from '@/components/ui/info-tip'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useMotorStatusContext } from '@/contexts/motor-status-context'
@@ -216,6 +217,7 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
       {/* Quantity */}
       <Input
         label="Quantidade"
+        labelExtra={<InfoTip text="Numero inteiro de acoes que deseja negociar nesta ordem" />}
         type="number"
         min={1}
         step={1}
@@ -229,6 +231,7 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
       {(orderType === 'LIMIT' || orderType === 'OCO') && (
         <Input
           label="Preco (FS$)"
+          labelExtra={<InfoTip text="Preco maximo (compra) ou minimo (venda) que voce aceita para esta ordem" />}
           type="number"
           min={0.01}
           step={0.01}
@@ -244,6 +247,7 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
         <>
           <Input
             label="Stop Loss (FS$)"
+            labelExtra={<InfoTip text="Preco que limita sua perda — a ordem e cancelada automaticamente se o ativo atingir este valor" />}
             type="number"
             min={0.01}
             step={0.01}
@@ -254,6 +258,7 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
           />
           <Input
             label="Take Profit (FS$)"
+            labelExtra={<InfoTip text="Preco que garante seu lucro — a ordem e executada automaticamente ao atingir este valor" />}
             type="number"
             min={0.01}
             step={0.01}
@@ -293,15 +298,15 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
       {estimatedCost && (
         <div className="bg-[#1E2329] rounded-lg p-3 space-y-1 text-sm">
           <div className="flex justify-between text-[#929AA5]">
-            <span>Valor da operacao</span>
+            <span className="flex items-center gap-1">Valor da operacao <InfoTip text="Quantidade x preco unitario (sem taxas)" /></span>
             <span className="font-mono text-[#EAECEF]">FS$ {estimatedCost.operationValue.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-[#929AA5]">
-            <span>Taxa operacional</span>
+            <span className="flex items-center gap-1">Taxa operacional <InfoTip text="Taxa cobrada pela plataforma sobre o valor da operacao" /></span>
             <span className="font-mono text-[#EAECEF]">FS$ {estimatedCost.fee.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-[#EAECEF] font-medium border-t border-[#2B3139] pt-1">
-            <span>Total estimado</span>
+            <span className="flex items-center gap-1">Total estimado <InfoTip text="Valor da operacao + taxa operacional" /></span>
             <span className="font-mono">FS$ {estimatedCost.total.toFixed(2)}</span>
           </div>
         </div>

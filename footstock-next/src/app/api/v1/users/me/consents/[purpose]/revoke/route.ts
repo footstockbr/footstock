@@ -38,7 +38,7 @@ export async function POST(
 
   try {
     await prisma.consent.updateMany({
-      where: { userId: auth.user.id, purpose },
+      where: { userId: auth.user.id, purpose: purpose as import("@prisma/client").ConsentPurpose },
       data: { revoked: true, revokedAt: new Date() },
     })
 

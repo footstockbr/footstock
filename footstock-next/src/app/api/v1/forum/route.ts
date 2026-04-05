@@ -9,7 +9,7 @@ import type { PostStatus } from '@/types'
 // são validados explicitamente abaixo para garantir os códigos FORUM_021 e
 // FORUM_050 — sem que o VAL_001 genérico os torne inalcançáveis.
 const CreateForumPostSchema = z.object({
-  content: z.string({ required_error: 'Conteúdo é obrigatório.' }),
+  content: z.string({ message: 'Conteúdo é obrigatório.' }),
   ticker: z.string().max(10).optional(),
 })
 

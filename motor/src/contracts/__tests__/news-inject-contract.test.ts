@@ -9,7 +9,6 @@
 import {
   NEWS_INJECT_CHANNEL,
   validateNewsInjectPayload,
-  sentimentToImpact,
   sentimentToDurationTicks,
 } from '../news-inject-contract'
 
@@ -59,14 +58,6 @@ describe('news-inject-contract', () => {
   test('[INFRA] validateNewsInjectPayload({}) retorna false sem exceção', () => {
     expect(() => validateNewsInjectPayload({})).not.toThrow()
     expect(validateNewsInjectPayload({})).toBe(false)
-  })
-
-  test('[INFRA] sentimentToImpact mapeamentos corretos', () => {
-    expect(sentimentToImpact(0.5)).toBe('POSITIVE')
-    expect(sentimentToImpact(-0.5)).toBe('NEGATIVE')
-    expect(sentimentToImpact(0.0)).toBe('NEUTRAL')
-    expect(sentimentToImpact(0.1)).toBe('NEUTRAL')
-    expect(sentimentToImpact(-0.1)).toBe('NEUTRAL')
   })
 
   test('[INFRA] sentimentToDurationTicks dentro de [1, 10]', () => {

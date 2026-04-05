@@ -74,3 +74,6 @@ firebase-adminsdk-*.json
 tests/load/results/*.json
 tests/load/results/*.html
 .vercel
+
+# Legacy backup (consolidated into footstock-next)
+_*_legacy_backup/

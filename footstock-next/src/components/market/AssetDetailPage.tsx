@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { useState, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { IChartApi, type Range, type Time } from 'lightweight-charts'
-import { Lock } from 'lucide-react'
+import { Lock, Info } from 'lucide-react'
 import { useMarketTick } from '@/hooks/useMarketTick'
 import { useCircuitBreakerAlert } from '@/hooks/useCircuitBreakerAlert'
 import { usePlanGuard } from '@/hooks/usePlanGuard'
@@ -124,15 +124,21 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
           <span className="text-xs text-[#929AA5] font-mono">{asset.ticker}</span>
         </div>
         <div className="ml-auto text-right">
-          <p className="text-xl font-mono font-bold text-[#EAECEF]">
+          <p className="text-xl font-mono font-bold text-[#EAECEF] inline-flex items-center gap-1">
             FS${currentPrice.toFixed(2)}
+            <span title="Ultimo preco negociado do ativo em tempo real" aria-label="Ultimo preco negociado" className="cursor-help">
+              <Info className="w-3 h-3 text-[#707A8A]" />
+            </span>
           </p>
           <p
-            className={`text-xs font-mono ${
+            className={`text-xs font-mono flex items-center gap-1 justify-end ${
               change24h >= 0 ? 'text-[#2EBD85]' : 'text-[#F6465D]'
             }`}
           >
             {change24h >= 0 ? '+' : ''}{change24h.toFixed(2)}%
+            <span title="Variacao percentual do preco nas ultimas 24 horas" aria-label="Variacao 24h" className="cursor-help">
+              <Info className="w-3 h-3 text-[#707A8A]" />
+            </span>
           </p>
         </div>
       </header>

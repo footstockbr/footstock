@@ -1,5 +1,7 @@
 'use client'
 
+import { Info } from 'lucide-react'
+
 function getSentimentLabel(v: number): { label: string; color: string } {
   if (v <= -0.6) return { label: 'Muito Negativo', color: '#F6465D' }
   if (v <= -0.2) return { label: 'Negativo', color: '#f97316' }
@@ -82,8 +84,11 @@ export function SentimentGauge({ sentiment }: SentimentGaugeProps) {
       <p className="text-center font-mono text-lg mt-1" style={{ color }}>
         {clamped.toFixed(2)}
       </p>
-      <p className="text-center text-sm font-semibold mt-1" style={{ color }}>
+      <p className="text-center text-sm font-semibold mt-1 inline-flex items-center gap-1" style={{ color }}>
         {label}
+        <span title="Indicador agregado de sentimento da torcida e do mercado — varia de -1 (muito negativo) a +1 (muito positivo)" aria-label="Explicacao do sentimento" className="cursor-help">
+          <Info className="w-3 h-3 text-[#707A8A]" />
+        </span>
       </p>
     </div>
   )

@@ -1,20 +1,7 @@
-import { Redis } from '@upstash/redis'
+import { getRedisClient } from '@/lib/redis'
 import { getAuthUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
-
-// ─── Redis client (lazy) ───────────────────────────────────────────────────────
-// Instanciado apenas em runtime — evita erro de build quando env vars ausentes.
-let _redis: Redis | null = null
-
-function getRedis(): Redis | null {
-  if (_redis) return _redis
-  const url = process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN
-  if (!url || !token) return null
-  _redis = new Redis({ url, token })
-  return _redis
-}
 
 const CACHE_TTL_SECONDS = 30
 
@@ -25,14 +12,16 @@ export async function GET() {
 
   const userId = auth.user.id
   const cacheKey = `notifications:unread:${userId}`
-  const redis = getRedis()
+  const redis = getRedisClient()
 
   // ── Cache read ──────────────────────────────────────────────────────────────
   if (redis) {
     try {
-      const cached = await redis.get<number>(cacheKey)
+      const cached = await redis.get(cacheKey)
       if (cached !== null) {
-        return ok({ count: cached })
+        const count = parseInt(cached, 10)
+        if (!isNaN(count)) return ok({ count })
+        await redis.del(cacheKey) // valor corrompido — remove
       }
     } catch {
       // Redis indisponível — prosseguir com DB (fail-open)
@@ -48,7 +37,7 @@ export async function GET() {
     // ── Cache write ───────────────────────────────────────────────────────────
     if (redis) {
       try {
-        await redis.set(cacheKey, count, { ex: CACHE_TTL_SECONDS })
+        await redis.set(cacheKey, String(count), 'EX', CACHE_TTL_SECONDS)
       } catch {
         // Falha ao gravar cache — responder normalmente
       }

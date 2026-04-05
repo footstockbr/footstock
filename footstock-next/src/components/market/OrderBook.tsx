@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+import { Info } from 'lucide-react'
 import { useMarketTickTimeout } from '@/hooks/useMarketTickTimeout'
 
 interface BookRow {
@@ -88,8 +89,22 @@ export function OrderBook({ ticker }: OrderBookProps) {
         </caption>
         <thead>
           <tr className="text-[#929AA5]">
-            <th scope="col" className="text-left py-1 px-2">Preço (Ask)</th>
-            <th scope="col" className="text-right py-1 px-2">Volume</th>
+            <th scope="col" className="text-left py-1 px-2">
+              <span className="inline-flex items-center gap-1">
+                Preço (Ask)
+                <span title="Precos de venda oferecidos — ask em vermelho (acima) e bid em verde (abaixo)" aria-label="Precos de venda oferecidos" className="cursor-help">
+                  <Info className="w-3 h-3 text-[#707A8A]" />
+                </span>
+              </span>
+            </th>
+            <th scope="col" className="text-right py-1 px-2">
+              <span className="inline-flex items-center gap-1 justify-end">
+                Volume
+                <span title="Quantidade de acoes disponivel em cada nivel de preco" aria-label="Quantidade de acoes disponivel em cada nivel de preco" className="cursor-help">
+                  <Info className="w-3 h-3 text-[#707A8A]" />
+                </span>
+              </span>
+            </th>
             <th scope="col" aria-label="Profundidade" className="w-16" />
           </tr>
         </thead>
@@ -122,7 +137,12 @@ export function OrderBook({ ticker }: OrderBookProps) {
           {/* Spread row */}
           <tr className="border-y border-[#2B3139]">
             <td colSpan={3} className="text-center text-[#929AA5] text-xs py-1">
-              Spread: FS${spread.toFixed(2)} ({spreadPct}%)
+              <span className="inline-flex items-center gap-1 justify-center">
+                Spread: FS${spread.toFixed(2)} ({spreadPct}%)
+                <span title="Diferenca entre o menor preco de venda (ask) e o maior preco de compra (bid) — quanto menor, mais liquido o ativo" aria-label="Diferenca entre ask e bid" className="cursor-help">
+                  <Info className="w-3 h-3 text-[#707A8A]" />
+                </span>
+              </span>
             </td>
           </tr>
 

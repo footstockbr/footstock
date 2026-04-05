@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { Redis } from '@upstash/redis'
+import { getRedisClient, redisGetJSON, redisSetJSON } from '@/lib/redis'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
@@ -7,13 +7,6 @@ import type { EngagementMetricsDTO } from '@/lib/types/admin'
 
 const CACHE_KEY = 'admin:engagement:cache'
 const CACHE_TTL = 300
-
-function getRedis(): Redis | null {
-  const url = process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN
-  if (!url || !token) return null
-  return new Redis({ url, token })
-}
 
 // GET /api/v1/admin/engagement — Monitor+
 export async function GET() {
@@ -26,10 +19,10 @@ export async function GET() {
     )
   }
 
-  const redis = getRedis()
+  const redis = getRedisClient()
   if (redis) {
     try {
-      const cached = await redis.get<EngagementMetricsDTO>(CACHE_KEY)
+      const cached = await redisGetJSON<EngagementMetricsDTO>(CACHE_KEY)
       if (cached) return ok(cached)
     } catch { /* ignora */ }
   }
@@ -42,31 +35,26 @@ export async function GET() {
 
   try {
     const [dauOrders, wauOrders, mauOrders, prevWauOrders, fsMovimentados] = await Promise.all([
-      // DAU: usuários únicos com ordens em 24h (proxy)
       prisma.order.findMany({
         where: { createdAt: { gte: sub24h } },
         select: { userId: true },
         distinct: ['userId'],
       }),
-      // WAU: usuários únicos com ordens em 7d
       prisma.order.findMany({
         where: { createdAt: { gte: sub7d } },
         select: { userId: true },
         distinct: ['userId'],
       }),
-      // MAU: usuários únicos com ordens em 30d
       prisma.order.findMany({
         where: { createdAt: { gte: sub30d } },
         select: { userId: true },
         distinct: ['userId'],
       }),
-      // Semana anterior (para retentionRate)
       prisma.order.findMany({
         where: { createdAt: { gte: sub14d, lt: sub7d } },
         select: { userId: true },
         distinct: ['userId'],
       }),
-      // FS$ movimentados em 24h
       prisma.transaction.aggregate({
         where: { createdAt: { gte: sub24h } },
         _sum: { amount: true },
@@ -85,8 +73,8 @@ export async function GET() {
     let peakConcurrentUsers = 0
     if (redis) {
       try {
-        const peak = await redis.get<number>('concurrent:sessions:peak')
-        peakConcurrentUsers = peak ?? Math.round(MAU / 30)
+        const peak = await redis.get('concurrent:sessions:peak')
+        peakConcurrentUsers = peak ? parseInt(peak, 10) : Math.round(MAU / 30)
       } catch {
         peakConcurrentUsers = Math.round(MAU / 30)
       }
@@ -103,14 +91,12 @@ export async function GET() {
       retentionRate,
       peakConcurrentUsers,
       totalFsMovimentados24h: Math.round(totalFsMovimentados24h * 100) / 100,
-      avgSessionDuration: null, // sem tabela de sessões ainda
+      avgSessionDuration: null,
       topFeatures: ['trading', 'mercado', 'ligas'],
-      _approximated: true, // baseado em ordens, não em sessões reais
+      _approximated: true,
     }
 
-    if (redis) {
-      try { await redis.set(CACHE_KEY, dto, { ex: CACHE_TTL }) } catch { /* ignora */ }
-    }
+    await redisSetJSON(CACHE_KEY, dto, CACHE_TTL)
 
     return ok(dto)
   } catch {

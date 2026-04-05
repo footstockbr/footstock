@@ -76,3 +76,28 @@ export const resetPasswordSchema = z
     path: ['confirmPassword'],
   })
 export type ResetPasswordFormData = z.infer<typeof resetPasswordSchema>
+
+// ─── Change password (usuário autenticado) ───────────────────────────────────
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z
+      .string({ message: 'Senha atual é obrigatória.' })
+      .min(1, 'Senha atual é obrigatória.'),
+    newPassword: z
+      .string({ message: 'Nova senha é obrigatória.' })
+      .min(8, 'Senha deve ter no mínimo 8 caracteres.')
+      .max(128, 'Senha deve ter no máximo 128 caracteres.'),
+    confirmPassword: z.string({
+      message: 'Confirmação de senha é obrigatória.',
+    }),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: 'As senhas não coincidem',
+    path: ['confirmPassword'],
+  })
+  .refine((data) => data.currentPassword !== data.newPassword, {
+    message: 'A nova senha deve ser diferente da senha atual.',
+    path: ['newPassword'],
+  })
+export type ChangePasswordFormData = z.infer<typeof changePasswordSchema>

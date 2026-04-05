@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { Redis } from '@upstash/redis'
+import { getRedisClient } from '@/lib/redis'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { adminAuditService } from '@/lib/services/shared'
@@ -14,13 +14,6 @@ const BroadcastSchema = z.object({
 })
 
 const MAX_BROADCASTS_PER_HOUR = 5
-
-function getRedis(): Redis | null {
-  const url = process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN
-  if (!url || !token) return null
-  return new Redis({ url, token })
-}
 
 // POST /api/v1/admin/broadcast — ADMIN+
 export async function POST(request: NextRequest) {
@@ -42,7 +35,7 @@ export async function POST(request: NextRequest) {
   const { title, message, type, targetAudience } = parsed.data
 
   // Rate limit: 5 broadcasts/hora por adminId
-  const redis = getRedis()
+  const redis = getRedisClient()
   if (redis) {
     try {
       const rateKey = `admin:broadcast:${auth.user.id}`

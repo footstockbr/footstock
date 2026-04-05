@@ -1,0 +1,122 @@
+// ============================================================================
+// Foot Stock — /api/v1/admin/news/editorial/[id]
+// Atualização e exclusão de notícia editorial no painel admin.
+// ============================================================================
+
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { withAdmin } from '@/app/api/middleware'
+import { prisma } from '@/lib/prisma'
+import { type Sentiment } from '@/lib/enums'
+import { NEWS_STATUS } from '@/lib/enums'
+
+const patchSchema = z
+  .object({
+    title: z.string().min(5).max(255).optional(),
+    content: z.string().min(10).max(4000).optional(),
+    impact: z.enum(['FINANCEIRA_CRITICA', 'ESPORTIVA_MAJORITARIA', 'MERCADO_ATIVOS', 'INTEGRIDADE_SAUDE', 'INSTITUCIONAL', 'ESPORTIVA_MENOR']).optional(),
+    sentiment: z.enum(['BULLISH', 'BEARISH', 'NEUTRAL']).optional(),
+    ticker: z.string().min(2).max(5).optional(),
+    source: z.string().max(255).nullable().optional(),
+    status: z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']).optional(),
+  })
+  .refine(
+    data =>
+      Boolean(
+        data.title ??
+          data.content ??
+          data.impact ??
+          data.sentiment ??
+          data.ticker ??
+          data.source ??
+          data.status
+      ),
+    { message: 'Nenhum campo para atualizar.' }
+  )
+
+function statusToPersist(status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED') {
+  if (status === NEWS_STATUS.PUBLISHED) {
+    return { isPublished: true, publishedAt: new Date() }
+  }
+  if (status === NEWS_STATUS.ARCHIVED) {
+    return { isPublished: false, publishedAt: new Date() }
+  }
+  return { isPublished: false, publishedAt: null }
+}
+
+function extractNewsId(req: NextRequest): string {
+  const segments = req.nextUrl.pathname.split('/')
+  return segments[segments.length - 1] ?? ''
+}
+
+async function patchHandler(req: NextRequest) {
+  const id = extractNewsId(req)
+
+  let body: unknown
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ success: false, error: 'JSON inválido.' }, { status: 400 })
+  }
+
+  const parsed = patchSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json({ success: false, error: 'Dados inválidos.' }, { status: 422 })
+  }
+
+  const payload = parsed.data
+  const data: Record<string, unknown> = {}
+
+  if (payload.title !== undefined) data.title = payload.title
+  if (payload.content !== undefined) data.content = payload.content
+  if (payload.impact !== undefined) data.impactCategory = payload.impact as import('@prisma/client').ImpactCategory
+  if (payload.sentiment !== undefined) data.sentiment = payload.sentiment === 'BULLISH' ? 0.8 : payload.sentiment === 'BEARISH' ? -0.8 : 0
+  if (payload.source !== undefined) data.source = payload.source
+
+  if (payload.ticker) {
+    const asset = await prisma.asset.findUnique({
+      where: { ticker: payload.ticker.toUpperCase() },
+      select: { id: true },
+    })
+    if (!asset) {
+      return NextResponse.json({ success: false, error: 'Ticker inválido.' }, { status: 422 })
+    }
+    data.tickers = [asset.id]
+  }
+
+  if (payload.status) {
+    Object.assign(data, statusToPersist(payload.status))
+  }
+
+  try {
+    const updated = await prisma.news.update({
+      where: { id },
+      data,
+      select: { id: true },
+    })
+    return NextResponse.json({ success: true, data: updated })
+  } catch {
+    return NextResponse.json({ success: false, error: 'Notícia não encontrada.' }, { status: 404 })
+  }
+}
+
+async function deleteHandler(req: NextRequest) {
+  const id = extractNewsId(req)
+  try {
+    // Soft delete: arquiva a notícia em vez de remover fisicamente do banco.
+    // O campo isPublished=false sinaliza status ARCHIVED para a camada de leitura.
+    const archived = await prisma.news.update({
+      where: { id },
+      data: { isPublished: false },
+      select: { id: true },
+    })
+    return NextResponse.json({ success: true, data: archived })
+  } catch {
+    return NextResponse.json({ success: false, error: 'Notícia não encontrada.' }, { status: 404 })
+  }
+}
+
+// RESOLVED: EDITOR pode arquivar via PATCH (news:write) mas não pode DELETE (news:delete).
+// Arquivamento = PATCH { status: 'ARCHIVED' }. Exclusão permanente = DELETE, apenas SUPER_ADMIN/ADMIN.
+export const PATCH = withAdmin('news:write')(patchHandler)
+export const DELETE = withAdmin('news:delete')(deleteHandler)

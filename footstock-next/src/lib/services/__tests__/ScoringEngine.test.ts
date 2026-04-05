@@ -25,7 +25,8 @@ import { prisma } from '@/lib/prisma'
 const mockPrisma = prisma as jest.Mocked<typeof prisma>
 
 // ─── Helper builders ──────────────────────────────────────────────────────────
-function makeTrading(overrides: Partial<TradingDataForScoring> = {}): TradingDataForScoring {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function makeTrading(overrides: any = {}): TradingDataForScoring {
   return {
     pnLPercent: 0,
     totalOrders: 0,

@@ -1,16 +1,9 @@
-import { Redis } from '@upstash/redis'
+import { getRedisClient } from '@/lib/redis'
 import { createSupabaseServerClient } from '@/lib/supabase'
 import { prisma } from '@/lib/prisma'
 import type { AdminRole } from '@/types'
 
 const SESSION_TTL = 1800 // 30 minutos
-
-function getRedis(): Redis | null {
-  const url = process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN
-  if (!url || !token) return null
-  return new Redis({ url, token })
-}
 
 class AdminSessionService {
   /**
@@ -45,10 +38,10 @@ class AdminSessionService {
    * Renova timestamp de atividade no Redis (TTL 30min).
    */
   async storeActivityTimestamp(userId: string): Promise<void> {
-    const redis = getRedis()
+    const redis = getRedisClient()
     if (!redis) return
     try {
-      await redis.set(`admin:activity:${userId}`, Date.now(), { ex: SESSION_TTL })
+      await redis.set(`admin:activity:${userId}`, String(Date.now()), 'EX', SESSION_TTL)
     } catch {
       // Redis offline — degradado mas não crítico aqui
     }
@@ -59,7 +52,7 @@ class AdminSessionService {
    * Fail-safe: se Redis offline → assume expirado (segurança > disponibilidade).
    */
   async checkTimeout(userId: string): Promise<boolean> {
-    const redis = getRedis()
+    const redis = getRedisClient()
     if (!redis) return true // fail-safe
     try {
       const key = await redis.exists(`admin:activity:${userId}`)
@@ -73,7 +66,7 @@ class AdminSessionService {
    * Revoga sessão admin deletando chave Redis e invalidando Supabase.
    */
   async revokeAdminSession(userId: string): Promise<void> {
-    const redis = getRedis()
+    const redis = getRedisClient()
     if (redis) {
       try {
         await redis.del(`admin:activity:${userId}`)

@@ -7,8 +7,8 @@ import {
 import type {
   RegistrationResponseJSON,
   AuthenticationResponseJSON,
-  AuthenticatorDevice,
-} from '@simplewebauthn/types'
+  WebAuthnCredential,
+} from '@simplewebauthn/server'
 
 // ─── Configuração do Relying Party ────────────────────────────────────────────
 
@@ -34,7 +34,7 @@ export async function createRegistrationOptions(userId: string, userEmail: strin
   return generateRegistrationOptions({
     rpName: RP_NAME,
     rpID: RP_ID,
-    userID: userId, // v9: string (não Uint8Array)
+    userID: new TextEncoder().encode(userId), // v13: Uint8Array
     userName: userEmail,
     userDisplayName: userEmail,
     attestationType: 'none',
@@ -76,7 +76,7 @@ export async function createAuthenticationOptions(credentialIds: string[]) {
     rpID: RP_ID,
     userVerification: 'required',
     allowCredentials: credentialIds.map((id) => ({
-      id: Buffer.from(id, 'base64url'), // v9: BufferSource, não string
+      id, // v13: Base64URLString (plain string)
       type: 'public-key' as const,
     })),
   })
@@ -91,14 +91,14 @@ export async function createAuthenticationOptions(credentialIds: string[]) {
 export async function verifyAuthentication(
   response: AuthenticationResponseJSON,
   expectedChallenge: string,
-  authenticator: AuthenticatorDevice
+  credential: WebAuthnCredential
 ) {
   return verifyAuthenticationResponse({
     response,
     expectedChallenge,
     expectedOrigin: getOrigin(),
     expectedRPID: RP_ID,
-    authenticator,
+    credential, // v13: renamed from 'authenticator' to 'credential'
     requireUserVerification: true,
   })
 }
