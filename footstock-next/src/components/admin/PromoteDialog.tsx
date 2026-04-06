@@ -3,12 +3,12 @@
 import { useState } from 'react'
 import { Loader2, Shield } from 'lucide-react'
 
-type AdminRole = 'EDITOR' | 'MODERADOR' | 'ADMIN'
+type AdminRole = 'EDITOR' | 'MODERADOR' | 'ADMINISTRADOR'
 
 const ADMIN_ROLES: { value: AdminRole; label: string }[] = [
   { value: 'EDITOR', label: 'Editor' },
   { value: 'MODERADOR', label: 'Moderador' },
-  { value: 'ADMIN', label: 'Administrador' },
+  { value: 'ADMINISTRADOR', label: 'Administrador' },
 ]
 
 interface PromoteDialogProps {

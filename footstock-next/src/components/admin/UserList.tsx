@@ -107,7 +107,7 @@ export function UserList({ currentAdminRole }: { currentAdminRole?: string | nul
           <select value={filters.adminRole} onChange={(e) => handleFilterChange('adminRole', e.target.value)} aria-label="Filtrar por role admin" className={selectClass}>
             <option value="">Todos roles</option>
             <option value="SUPER_ADMIN">SuperAdmin</option>
-            <option value="ADMIN">Admin</option>
+            <option value="ADMINISTRADOR">Administrador</option>
             <option value="MONITOR">Monitor</option>
             <option value="EDITOR">Editor</option>
             <option value="MODERADOR">Moderador</option>
