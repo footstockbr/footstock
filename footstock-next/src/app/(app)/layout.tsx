@@ -21,7 +21,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
         <DesktopSidebar />
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col md:ml-64">
           <AppHeader />
           <MotorOfflineBanner />
 
