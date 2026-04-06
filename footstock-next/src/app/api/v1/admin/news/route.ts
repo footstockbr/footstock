@@ -45,6 +45,8 @@ function serializeNews(n: {
     sentiment: sentimentToLabel(n.sentiment),
     sentimentRaw: n.sentiment,
     impact: n.impact,
+    // status é o campo lido pelo NewsStatusToggle e AdminNewsItem
+    status: n.isPublished ? 'published' : 'archived',
     isPublished: n.isPublished,
     publishedAt: n.publishedAt?.toISOString() ?? null,
     createdAt: n.createdAt.toISOString(),
