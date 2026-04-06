@@ -121,7 +121,7 @@ export function ClubSidebar() {
   return (
     <>
       {/* Sidebar — desktop */}
-      <aside className="hidden md:flex w-64 border-r border-[rgba(240,185,11,.1)] flex-col bg-[#0B0E11]/70 flex-shrink-0">
+      <aside className="hidden md:flex w-64 h-dvh flex-shrink-0 border-r border-[rgba(240,185,11,.1)] flex-col bg-[#0B0E11]/70 sticky top-0">
         <SidebarNav />
       </aside>
 

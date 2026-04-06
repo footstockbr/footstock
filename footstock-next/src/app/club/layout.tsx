@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 
 export default function ClubLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-dvh bg-[#0B0E11] flex">
+    <div className="h-dvh overflow-hidden bg-[#0B0E11] flex">
       <ClubSidebar />
 
       <main className="flex-1 overflow-y-auto">
