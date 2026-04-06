@@ -111,17 +111,23 @@ export async function GET(request: NextRequest) {
 
 // POST /api/v1/admin/news — ADMIN+
 // Injeta notícia manual no motor via Redis news:inject
+// Aceita o formato enviado pelo NewsInjector (ticker, impactCategory, sentiment numérico)
 const InjectNewsSchema = z.object({
   title: z.string().min(5).max(255),
-  content: z.string().min(1),
-  assetIds: z.array(z.string()).min(1),
-  impact: z.enum([
-    'POSITIVE', 'NEGATIVE', 'NEUTRAL',
+  content: z.string().min(1).optional(),
+  ticker: z.string().min(1).max(20),
+  impactCategory: z.enum([
     'FINANCEIRA_CRITICA', 'ESPORTIVA_MAJORITARIA', 'MERCADO_ATIVOS',
     'INTEGRIDADE_SAUDE', 'INSTITUCIONAL', 'ESPORTIVA_MENOR',
   ]),
-  sentiment: z.enum(['BULLISH', 'BEARISH', 'NEUTRAL']),
+  sentiment: z.number().min(-1).max(1),
 })
+
+function numericSentimentToEnum(value: number): Sentiment {
+  if (value >= 0.3) return 'BULLISH'
+  if (value <= -0.3) return 'BEARISH'
+  return 'NEUTRAL'
+}
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthUser()
@@ -136,20 +142,22 @@ export async function POST(request: NextRequest) {
     const parsed = InjectNewsSchema.safeParse(body)
     if (!parsed.success) return errors.validation()
 
-    const { title, content, assetIds, impact, sentiment } = parsed.data
+    const { title, content, ticker, impactCategory, sentiment: sentimentNum } = parsed.data
 
-    // Validar que pelo menos o primeiro ativo existe
-    const firstAsset = await prisma.asset.findFirst({
-      where: { id: { in: assetIds } },
+    const asset = await prisma.asset.findFirst({
+      where: { ticker: ticker.toUpperCase() },
     })
-    if (!firstAsset) return errors.notFound('Ativo não encontrado.')
+    if (!asset) return errors.notFound('Ativo não encontrado.')
+
+    const sentiment = numericSentimentToEnum(sentimentNum)
+    const impact = impactCategory as ImpactCategory
 
     const news = await prisma.news.create({
       data: {
         title,
-        content,
+        content: content ?? title,
         source: 'ADMIN_MANUAL',
-        assetIds,
+        assetIds: [asset.id],
         sentiment,
         impact,
         isPublished: true,
@@ -161,8 +169,8 @@ export async function POST(request: NextRequest) {
       data: {
         adminId: auth.user.id,
         action: 'INJECT_NEWS',
-        ticker: firstAsset.ticker,
-        assetId: firstAsset.id,
+        ticker: asset.ticker,
+        assetId: asset.id,
         details: { newsId: news.id, sentiment, impact },
       },
     })
