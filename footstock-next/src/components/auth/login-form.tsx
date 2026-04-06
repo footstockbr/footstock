@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
+import { createBrowserClient } from "@supabase/ssr";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ROUTES } from "@/lib/constants/routes";
@@ -43,6 +44,16 @@ function LoginForm() {
     if (json.error) {
       throw new Error(json.error.message || "Email ou senha incorretos");
     }
+
+    // Set Supabase session cookies so middleware recognizes the user
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+    await supabase.auth.setSession({
+      access_token: json.data.session.access_token,
+      refresh_token: json.data.session.refresh_token,
+    });
 
     router.replace(ROUTES.MERCADO);
   }
