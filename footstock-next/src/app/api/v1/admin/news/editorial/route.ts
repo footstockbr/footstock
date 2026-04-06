@@ -9,7 +9,6 @@ import { z } from 'zod'
 import { withAdmin } from '@/app/api/middleware'
 import { prisma } from '@/lib/prisma'
 import type { AuthContext } from '@/app/api/middleware'
-import { type Sentiment } from '@/lib/enums'
 import { NEWS_STATUS } from '@/lib/enums'
 
 const querySchema = z.object({
@@ -102,7 +101,7 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
       id: true,
       title: true,
       content: true,
-      impactCategory: true,
+      impact: true,
       sentiment: true,
       source: true,
       isPublished: true,
@@ -166,11 +165,9 @@ async function postHandler(req: NextRequest, _ctx: AuthContext): Promise<NextRes
   const newsData = {
     title: payload.title,
     content: payload.content,
-    impactCategory: payload.impact as import("@prisma/client").ImpactCategory,
-    sentiment: payload.sentiment === "BULLISH" ? 0.8 : payload.sentiment === "BEARISH" ? -0.8 : 0,
+    impact: payload.impact as import("@prisma/client").ImpactCategory,
+    sentiment: payload.sentiment as import("@prisma/client").Sentiment,
     source: payload.source?.trim() || 'Editorial',
-    ticker: payload.ticker.toUpperCase(),
-    url: `editorial://${Date.now()}`,
     assetIds: [asset.id],
     ...statusData,
   }

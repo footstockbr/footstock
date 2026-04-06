@@ -17,7 +17,7 @@ export async function PATCH(
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()
 
-  if (!hasAdminRole(auth.user.adminRole, 'ADMIN')) {
+  if (!hasAdminRole(auth.user.adminRole, 'ADMINISTRADOR')) {
     return errors.forbidden()
   }
 

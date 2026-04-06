@@ -52,7 +52,7 @@ export async function GET(
       data: {
         id: asset.id,
         ticker: asset.ticker,
-        displayName: asset.displayName,
+        displayName: asset.name,
         division: asset.division,
         currentPrice,
         fairValue,
@@ -60,7 +60,7 @@ export async function GET(
         totalShares: Number(asset.totalShares),
         isHalted: asset.isHalted,
         haltReason: asset.haltReason ?? null,
-        colors: asset.colors as { primary: string; secondary: string },
+        colors: { primary: asset.colorPrimary, secondary: asset.colorSecondary },
         financials: {
           ...financials,
           marketCap,

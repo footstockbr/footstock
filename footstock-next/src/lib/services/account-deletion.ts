@@ -67,8 +67,9 @@ export async function deleteAccount(
       data: {
         userId,
         accessedBy: userId,
-        action: 'ACCOUNT_DELETION',
-        details: { reason, anonymizedAt: new Date().toISOString() },
+        dataType: 'ACCOUNT_DELETION',
+        endpoint: 'account-deletion.deleteAccount',
+        reason: `${reason} — anonymizedAt: ${new Date().toISOString()}`,
       },
     })
   })

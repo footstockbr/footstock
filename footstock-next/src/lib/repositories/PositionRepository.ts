@@ -25,6 +25,7 @@ function toNumber(val: unknown): number {
 /** Posição interna com assetId para uso em getSummary/getHistory */
 interface InternalPosition extends PositionWithPnL {
   ticker: string
+  assetId: string
 }
 
 function periodToDays(period: PortfolioPeriod): number | null {
@@ -73,7 +74,7 @@ export class PositionRepository extends BaseRepository<unknown> {
         asset: {
           select: {
             ticker: true,
-            displayName: true,
+            name: true,
             currentPrice: true,
           },
         },
@@ -89,7 +90,7 @@ export class PositionRepository extends BaseRepository<unknown> {
 
       // Buscar último preço real do price_history
       const lastHistory = await prisma.priceHistory.findFirst({
-        where: { ticker: pos.ticker },
+        where: { assetId: pos.assetId },
         orderBy: { timestamp: 'desc' },
         select: { close: true },
       })
@@ -109,7 +110,8 @@ export class PositionRepository extends BaseRepository<unknown> {
 
       const entry: InternalPosition = {
         ticker: pos.asset.ticker,
-        clubName: pos.asset.displayName,
+        assetId: pos.assetId,
+        clubName: pos.asset.name,
         qty: qtyNum,
         avgPrice,
         currentPrice,
@@ -175,7 +177,7 @@ export class PositionRepository extends BaseRepository<unknown> {
     for (const pos of positions) {
       const prevHistory = await prisma.priceHistory.findFirst({
         where: {
-          ticker: pos.ticker,
+          assetId: pos.assetId,
           timestamp: { lte: new Date(yesterdayStart.getTime() + 86400000 - 1) },
         },
         orderBy: { timestamp: 'desc' },
@@ -266,13 +268,13 @@ export class PositionRepository extends BaseRepository<unknown> {
     if (dates.length === 0) return []
 
     // Para cada ativo, buscar price_history no range
-    const tickers = [...new Set(positions.map(p => p.ticker))]
+    const assetIds = [...new Set(positions.map(p => p.assetId))]
     const priceMap: Map<string, Map<string, number>> = new Map()
 
-    for (const ticker of tickers) {
+    for (const assetId of assetIds) {
       const histories = await prisma.priceHistory.findMany({
         where: {
-          ticker,
+          assetId,
           timestamp: {
             gte: startDate,
             lte: new Date(now.getTime() + 86400000),
@@ -287,7 +289,7 @@ export class PositionRepository extends BaseRepository<unknown> {
         const d = toISODate(h.timestamp)
         dayMap.set(d, toNumber(h.close))
       }
-      priceMap.set(ticker, dayMap)
+      priceMap.set(assetId, dayMap)
     }
 
     // Calcular valor do portfólio por dia com LOCF
@@ -308,14 +310,14 @@ export class PositionRepository extends BaseRepository<unknown> {
           if (closedAt && startOfDay(closedAt) <= date) continue
         }
 
-        const dayMap = priceMap.get(pos.ticker)
+        const dayMap = priceMap.get(pos.assetId)
         let price: number | undefined = dayMap?.get(dateStr)
 
         if (price !== undefined) {
-          lastKnownPrice.set(pos.ticker, price)
+          lastKnownPrice.set(pos.assetId, price)
         } else {
           // LOCF: propagar último preço conhecido
-          price = lastKnownPrice.get(pos.ticker) ?? toNumber(pos.avgPrice)
+          price = lastKnownPrice.get(pos.assetId) ?? toNumber(pos.avgPrice)
         }
 
         totalValue += Number(pos.quantity) * price

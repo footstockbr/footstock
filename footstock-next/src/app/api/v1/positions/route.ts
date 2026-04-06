@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl
   const side = searchParams.get('side') as PositionSide | null
-  const ticker = searchParams.get('ticker')
+  const assetId = searchParams.get('assetId')
   const { page, limit, skip } = parsePagination(searchParams)
 
   try {
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       userId: auth.user.id,
       quantity: { gt: 0 }, // apenas posições abertas
       ...(side && { side }),
-      ...(ticker && { ticker: ticker.toUpperCase() }),
+      ...(assetId && { assetId }),
     }
 
     const [positions, total] = await Promise.all([
@@ -35,12 +35,13 @@ export async function GET(request: NextRequest) {
     const serialized = positions.map((p) => ({
       id: p.id,
       userId: p.userId,
-      ticker: p.ticker,
-      quantity: p.quantity.toNumber(),
+      assetId: p.assetId,
+      quantity: p.quantity,
       avgPrice: p.avgPrice.toNumber(),
       side: p.side as PositionSide,
+      status: p.status,
       marginBlocked: p.marginBlocked.toNumber(),
-      leverageMultiplier: p.leverageMultiplier.toNumber(),
+      leverageMultiplier: p.leverageMultiplier,
       leverageAmount: p.leverageAmount.toNumber(),
       dailyInterestRate: p.dailyInterestRate.toNumber(),
       interestAccrued: p.interestAccrued.toNumber(),

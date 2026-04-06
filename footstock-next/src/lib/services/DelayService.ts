@@ -63,7 +63,7 @@ export async function applyPriceDelay(
   // limitação do Prisma 7 com distinct+relation.
   const record = await prisma.priceHistory.findFirst({
     where: {
-      ticker: asset.ticker,
+      assetId: asset.id,
       timestamp: { lte: targetDate },
     },
     orderBy: { timestamp: 'desc' },
@@ -72,8 +72,8 @@ export async function applyPriceDelay(
 
   if (!record) {
     console.warn(
-      '[DelayService] Sem histórico para ticker=%s em %s',
-      asset.ticker,
+      '[DelayService] Sem histórico para assetId=%s em %s',
+      asset.id,
       targetDate.toISOString()
     )
     return asset

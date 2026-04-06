@@ -3,51 +3,51 @@ import { z } from 'zod'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, created, errors, parsePagination, buildPagination } from '@/lib/api'
-import type { ImpactCategory } from '@/types'
+import type { ImpactCategory, Sentiment } from '@prisma/client'
 
 const PAGE_SIZE = 20
 
-// Mapeamento de sentimento string → range decimal
-function sentimentFilter(sentiment: string | null) {
-  if (!sentiment) return undefined
-  if (sentiment === 'positive') return { gt: 0.1 }
-  if (sentiment === 'negative') return { lt: -0.1 }
-  if (sentiment === 'neutral') return { gte: -0.1, lte: 0.1 }
-  return undefined
+// Mapeamento de sentimento enum → label legível
+function sentimentToLabel(value: Sentiment): 'positive' | 'negative' | 'neutral' {
+  if (value === 'BULLISH') return 'positive'
+  if (value === 'BEARISH') return 'negative'
+  return 'neutral'
 }
 
-function sentimentToLabel(value: number): 'positive' | 'negative' | 'neutral' {
-  if (value > 0.1) return 'positive'
-  if (value < -0.1) return 'negative'
-  return 'neutral'
+function sentimentFilterEnum(sentiment: string | null): Sentiment | undefined {
+  if (!sentiment) return undefined
+  if (sentiment === 'positive') return 'BULLISH'
+  if (sentiment === 'negative') return 'BEARISH'
+  if (sentiment === 'neutral') return 'NEUTRAL'
+  return undefined
 }
 
 function serializeNews(n: {
   id: string
   title: string
-  source: string
-  url: string
-  ticker: string
-  sentiment: { toNumber: () => number }
-  impactCategory: string
-  status: string
-  publishedAt: Date
-  injectedAt: Date
+  content: string
+  source: string | null
+  assetIds: string[]
+  sentiment: Sentiment
+  impact: ImpactCategory
+  isPublished: boolean
+  publishedAt: Date | null
   createdAt: Date
+  updatedAt: Date
 }) {
   return {
     id: n.id,
     title: n.title,
+    content: n.content,
     source: n.source,
-    url: n.url,
-    ticker: n.ticker,
-    sentiment: sentimentToLabel(n.sentiment.toNumber()),
-    sentimentRaw: n.sentiment.toNumber(),
-    impactCategory: n.impactCategory,
-    status: n.status,
-    publishedAt: n.publishedAt.toISOString(),
-    injectedAt: n.injectedAt.toISOString(),
+    assetIds: n.assetIds,
+    sentiment: sentimentToLabel(n.sentiment),
+    sentimentRaw: n.sentiment,
+    impact: n.impact,
+    isPublished: n.isPublished,
+    publishedAt: n.publishedAt?.toISOString() ?? null,
     createdAt: n.createdAt.toISOString(),
+    updatedAt: n.updatedAt.toISOString(),
   }
 }
 
@@ -69,26 +69,28 @@ export async function GET(request: NextRequest) {
   const { page, limit, skip } = parsePagination(searchParams, PAGE_SIZE)
 
   try {
+    const sentimentEnum = sentimentFilterEnum(sentiment)
     const where = {
       ...(fonte && { source: { contains: fonte, mode: 'insensitive' as const } }),
-      ...(ticker && { ticker: ticker.toUpperCase() }),
-      ...(sentiment && { sentiment: sentimentFilter(sentiment) }),
-      ...(status && { status }),
+      ...(ticker && { assetIds: { has: ticker.toUpperCase() } }),
+      ...(sentimentEnum && { sentiment: sentimentEnum }),
+      ...(status === 'published' && { isPublished: true }),
+      ...(status === 'archived' && { isPublished: false }),
     }
 
     const [items, total, totalPublished, totalArchived, classifiedToday] = await Promise.all([
       prisma.news.findMany({
         where,
-        orderBy: { injectedAt: 'desc' },
+        orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
       }),
       prisma.news.count({ where }),
-      prisma.news.count({ where: { status: 'published' } }),
-      prisma.news.count({ where: { status: 'archived' } }),
+      prisma.news.count({ where: { isPublished: true } }),
+      prisma.news.count({ where: { isPublished: false } }),
       prisma.news.count({
         where: {
-          injectedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
+          createdAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
         },
       }),
     ])
@@ -111,19 +113,21 @@ export async function GET(request: NextRequest) {
 // Injeta notícia manual no motor via Redis news:inject
 const InjectNewsSchema = z.object({
   title: z.string().min(5).max(255),
-  ticker: z.string().max(10),
-  impactCategory: z.enum([
-    'RESULTADO_ESPORTIVO', 'CONTRATACAO', 'FINANCEIRO',
-    'LESAO', 'SUSPENSAO', 'INSTITUCIONAL',
+  content: z.string().min(1),
+  assetIds: z.array(z.string()).min(1),
+  impact: z.enum([
+    'POSITIVE', 'NEGATIVE', 'NEUTRAL',
+    'FINANCEIRA_CRITICA', 'ESPORTIVA_MAJORITARIA', 'MERCADO_ATIVOS',
+    'INTEGRIDADE_SAUDE', 'INSTITUCIONAL', 'ESPORTIVA_MENOR',
   ]),
-  sentiment: z.number().min(-1.0).max(1.0),
+  sentiment: z.enum(['BULLISH', 'BEARISH', 'NEUTRAL']),
 })
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()
 
-  if (!hasAdminRole(auth.user.adminRole, 'ADMIN')) {
+  if (!hasAdminRole(auth.user.adminRole, 'ADMINISTRADOR')) {
     return errors.forbidden()
   }
 
@@ -132,20 +136,23 @@ export async function POST(request: NextRequest) {
     const parsed = InjectNewsSchema.safeParse(body)
     if (!parsed.success) return errors.validation()
 
-    const { title, ticker, impactCategory, sentiment } = parsed.data
+    const { title, content, assetIds, impact, sentiment } = parsed.data
 
-    const asset = await prisma.asset.findUnique({ where: { ticker: ticker.toUpperCase() } })
-    if (!asset) return errors.notFound('Ativo não encontrado.')
+    // Validar que pelo menos o primeiro ativo existe
+    const firstAsset = await prisma.asset.findFirst({
+      where: { id: { in: assetIds } },
+    })
+    if (!firstAsset) return errors.notFound('Ativo não encontrado.')
 
     const news = await prisma.news.create({
       data: {
         title,
+        content,
         source: 'ADMIN_MANUAL',
-        url: '#',
-        ticker: ticker.toUpperCase(),
+        assetIds,
         sentiment,
-        impactCategory: impactCategory as ImpactCategory,
-        status: 'published',
+        impact,
+        isPublished: true,
         publishedAt: new Date(),
       },
     })
@@ -154,8 +161,9 @@ export async function POST(request: NextRequest) {
       data: {
         adminId: auth.user.id,
         action: 'INJECT_NEWS',
-        targetTicker: ticker.toUpperCase(),
-        details: { newsId: news.id, sentiment, impactCategory },
+        ticker: firstAsset.ticker,
+        assetId: firstAsset.id,
+        details: { newsId: news.id, sentiment, impact },
       },
     })
 

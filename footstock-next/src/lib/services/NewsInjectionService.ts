@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { z } from 'zod'
-import { ImpactCategory } from '@prisma/client'
+import { ImpactCategory, Sentiment } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { redisPublisher, REDIS_CHANNELS } from '@/lib/redis'
 import type { NewsInjectEvent } from '../types/news'
@@ -71,14 +71,19 @@ export class NewsInjectionService {
     // -----------------------------------------------------------------------
     // 1. Salvar notícia no banco
     // -----------------------------------------------------------------------
+    // Map numeric sentiment to Sentiment enum
+    const sentimentEnum: Sentiment = dto.sentiment > 0.3
+      ? Sentiment.BULLISH
+      : dto.sentiment < -0.3
+        ? Sentiment.BEARISH
+        : Sentiment.NEUTRAL
+
     const news = await prisma.news.create({
       data: {
         title: dto.title,
-        content: dto.content,
-        ticker: dto.ticker,
-        url: `admin://inject/${Date.now()}`,
-        impactCategory: dto.impactCategory,
-        sentiment: dto.sentiment,
+        content: dto.content ?? '',
+        impact: dto.impactCategory,
+        sentiment: sentimentEnum,
         assetIds: [asset.id],
         source: dto.source ?? 'Admin',
         isPublished: true,
@@ -128,7 +133,7 @@ export class NewsInjectionService {
     await prisma.adminMarketAction.create({
       data: {
         adminId,
-        targetTicker: asset.ticker,
+        ticker: asset.ticker,
         action: 'NEWS_INJECT',
         details: { reason: `[${dto.impactCategory}] ${dto.title} (sentiment: ${dto.sentiment}, source: ${dto.source ?? 'Admin'})` },
       },

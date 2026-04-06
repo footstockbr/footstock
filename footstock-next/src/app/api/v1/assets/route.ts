@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     const serialized = assets.map((a) => ({
       id: a.id,
       ticker: a.ticker,
-      displayName: a.displayName,
+      displayName: a.name,
       division: a.division,
       currentPrice: a.currentPrice.toNumber(),
       fairValue: a.fairValue.toNumber(),
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       totalShares: Number(a.totalShares),
       isHalted: a.isHalted,
       haltReason: a.haltReason ?? null,
-      colors: a.colors as { primary: string; secondary: string },
+      colors: { primary: a.colorPrimary, secondary: a.colorSecondary },
       financials: a.financials,
       sentiment: a.sentiment,
       updatedAt: a.updatedAt.toISOString(),

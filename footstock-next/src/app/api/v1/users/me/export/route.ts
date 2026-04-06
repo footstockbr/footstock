@@ -17,8 +17,9 @@ export async function GET(request: NextRequest) {
       data: {
         userId: auth.user.id,
         accessedBy: auth.user.id,
-        action: 'DATA_EXPORT_REQUEST',
-        details: { format },
+        dataType: 'full_export',
+        endpoint: '/api/v1/users/me/export',
+        reason: 'DATA_EXPORT_REQUEST',
       },
     }).catch(() => {
       // Não bloquear se dataAccessLog não existir ainda

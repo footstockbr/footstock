@@ -5,26 +5,27 @@ import { ok, errors } from '@/lib/api'
 import type { OrderStatus } from '@/types'
 
 function serializeOrder(o: {
-  id: string; userId: string; ticker: string; type: string; side: string
-  quantity: { toNumber(): number }; price: { toNumber(): number } | null
-  status: string; stopLossPrice: { toNumber(): number } | null
-  takeProfitPrice: { toNumber(): number } | null; scheduledAt: Date | null
-  feeAmount: { toNumber(): number } | null; executedAt: Date | null
+  id: string; userId: string; assetId: string; type: string; side: string
+  quantity: number; price: { toNumber(): number } | null
+  executedPrice: { toNumber(): number } | null
+  status: string; fee: { toNumber(): number }
+  scheduledAt: Date | null; groupId: string | null
+  leverageMultiplier: number; executedAt: Date | null
   expiresAt: Date | null; createdAt: Date; updatedAt: Date
 }) {
   return {
     id: o.id,
     userId: o.userId,
-    ticker: o.ticker,
+    assetId: o.assetId,
     type: o.type,
     side: o.side,
-    quantity: o.quantity.toNumber(),
+    quantity: o.quantity,
     price: o.price?.toNumber() ?? null,
+    executedPrice: o.executedPrice?.toNumber() ?? null,
     status: o.status as OrderStatus,
-    stopLossPrice: o.stopLossPrice?.toNumber() ?? null,
-    takeProfitPrice: o.takeProfitPrice?.toNumber() ?? null,
+    fee: o.fee.toNumber(),
     scheduledAt: o.scheduledAt?.toISOString() ?? null,
-    feeAmount: o.feeAmount?.toNumber() ?? null,
+    leverageMultiplier: o.leverageMultiplier,
     executedAt: o.executedAt?.toISOString() ?? null,
     expiresAt: o.expiresAt?.toISOString() ?? null,
     createdAt: o.createdAt.toISOString(),
@@ -54,7 +55,7 @@ export async function GET(
   }
 }
 
-// DELETE /api/v1/orders/:id — cancelar ordem PENDING
+// DELETE /api/v1/orders/:id — cancelar ordem OPEN
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -70,8 +71,8 @@ export async function DELETE(
     if (!order) return errors.notFound('Ordem não encontrada.')
     if (order.userId !== auth.user.id) return errors.forbidden()
 
-    if (order.status !== 'PENDING') {
-      return errors.conflict('ORDER_006', 'Apenas ordens pendentes podem ser canceladas.')
+    if (order.status !== 'OPEN') {
+      return errors.conflict('ORDER_006', 'Apenas ordens abertas podem ser canceladas.')
     }
 
     // TODO: Implementar via /auto-flow execute

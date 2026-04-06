@@ -160,10 +160,10 @@ class ConsentService {
         data: {
           userId: params.userId,
           accessedBy: params.accessedBy,
-          action: params.dataType ?? 'DATA_ACCESS',
           dataType: params.dataType,
           endpoint: params.endpoint,
-          details: { reason: params.reason, ipAddress: params.ip },
+          reason: params.reason,
+          ipAddress: params.ip,
         },
       })
       .catch(() => {

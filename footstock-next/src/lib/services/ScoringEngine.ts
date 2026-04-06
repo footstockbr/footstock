@@ -68,7 +68,7 @@ export class ScoringEngine implements ScoringContract {
       // Busca posições LONG abertas pelo userId (module-15/PositionRepository)
       const rawPositions = await prisma.position.findMany({
         where: { userId, side: 'LONG' },
-        select: { ticker: true, quantity: true, avgPrice: true },
+        select: { assetId: true, quantity: true, avgPrice: true },
       })
 
       // Soma valor de mercado por posição (quantity × avgPrice como proxy)
@@ -78,7 +78,7 @@ export class ScoringEngine implements ScoringContract {
         const value = Number(p.quantity) * Number(p.avgPrice)
         totalValue += value
         totalCost += value
-        return { ticker: p.ticker, value }
+        return { ticker: p.assetId, value }
       })
 
       // P&L% simples: (valor_atual - custo) / custo × 100
@@ -88,8 +88,7 @@ export class ScoringEngine implements ScoringContract {
       // Retornos diários: calcula a partir do histórico de snapshots (proxy simples)
       const snapshots = await prisma.priceHistory.findMany({
         where: {
-          ticker: { in: rawPositions.map((p) => p.ticker) },
-          period: '1d',
+          assetId: { in: rawPositions.map((p) => p.assetId) },
         },
         orderBy: { timestamp: 'asc' },
         take: 30,
@@ -114,7 +113,7 @@ export class ScoringEngine implements ScoringContract {
         where: {
           userId,
           createdAt: { gte: since },
-          status: { in: ['EXECUTED', 'PARTIAL'] },
+          status: { in: ['FILLED', 'PARTIAL'] },
         },
         select: { type: true, side: true },
       })

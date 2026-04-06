@@ -15,7 +15,7 @@ export async function GET() {
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()
 
-  if (!hasAdminRole(auth.user.adminRole, 'ADMIN')) {
+  if (!hasAdminRole(auth.user.adminRole, 'ADMINISTRADOR')) {
     return errors.forbidden()
   }
 
@@ -73,7 +73,7 @@ export async function GET() {
     const revenueByGateway = await prisma.payment.groupBy({
       by: ['gateway'],
       where: {
-        status: 'APPROVED',
+        status: 'PAID',
         createdAt: { gte: startOfMonth },
       },
       _sum: { amount: true },
@@ -90,7 +90,7 @@ export async function GET() {
     // Histórico MRR 30 dias (simplificado: pagamentos aprovados por dia)
     const paymentsLast30d = await prisma.payment.findMany({
       where: {
-        status: 'APPROVED',
+        status: 'PAID',
         createdAt: { gte: startOf30DaysAgo },
       },
       select: { amount: true, createdAt: true },
@@ -102,7 +102,7 @@ export async function GET() {
     const dayMap: Record<string, number> = {}
     for (const p of paymentsLast30d) {
       const dateKey = p.createdAt.toISOString().split('T')[0]
-      dayMap[dateKey] = (dayMap[dateKey] ?? 0) + p.amount.toNumber()
+      dayMap[dateKey] = (dayMap[dateKey] ?? 0) + p.amount
     }
 
     // Preencher todos os 30 dias
@@ -131,7 +131,7 @@ export async function GET() {
       planDistribution,
       revenueByGateway: revenueByGateway.map((g) => ({
         gateway: g.gateway,
-        revenue: g._sum.amount?.toNumber() ?? 0,
+        revenue: g._sum.amount ?? 0,
       })),
       gatewayStatus: gatewayActivity.map((g) => ({
         gateway: g.gateway,

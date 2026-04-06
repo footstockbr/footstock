@@ -77,7 +77,7 @@ export class MarketEngineService {
 
     const history = await prisma.priceHistory.findMany({
       where: {
-        ticker: assetId,
+        assetId,
         timestamp: { gte: since },
       },
       orderBy: { timestamp: 'asc' },

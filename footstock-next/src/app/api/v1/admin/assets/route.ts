@@ -19,7 +19,7 @@ export async function GET() {
       select: {
         id: true,
         ticker: true,
-        displayName: true,
+        name: true,
         division: true,
         currentPrice: true,
         fairValue: true,
@@ -35,7 +35,7 @@ export async function GET() {
       assets.map((a) => ({
         id: a.id,
         ticker: a.ticker,
-        displayName: a.displayName,
+        displayName: a.name,
         division: a.division,
         currentPrice: a.currentPrice.toNumber(),
         fairValue: a.fairValue.toNumber(),

@@ -4,9 +4,10 @@ import { prisma } from '@/lib/prisma'
 import { list, errors, parsePagination, buildPagination } from '@/lib/api'
 import type { ImpactCategory } from '@/types'
 
-const VALID_CATEGORIES = [
-  'RESULTADO_ESPORTIVO', 'CONTRATACAO', 'FINANCEIRO',
-  'LESAO', 'SUSPENSAO', 'INSTITUCIONAL',
+const VALID_IMPACTS = [
+  'POSITIVE', 'NEGATIVE', 'NEUTRAL',
+  'FINANCEIRA_CRITICA', 'ESPORTIVA_MAJORITARIA', 'MERCADO_ATIVOS',
+  'INTEGRIDADE_SAUDE', 'INSTITUCIONAL', 'ESPORTIVA_MENOR',
 ]
 
 // GET /api/v1/news
@@ -15,24 +16,25 @@ export async function GET(request: NextRequest) {
   if (!auth) return errors.unauthorized()
 
   const { searchParams } = request.nextUrl
-  const ticker = searchParams.get('ticker')
-  const impactCategory = searchParams.get('impactCategory')
+  const assetId = searchParams.get('assetId')
+  const impact = searchParams.get('impact')
   const { page, limit, skip } = parsePagination(searchParams, 20)
 
-  if (impactCategory && !VALID_CATEGORIES.includes(impactCategory)) {
+  if (impact && !VALID_IMPACTS.includes(impact)) {
     return errors.validation('Categoria de impacto inválida.')
   }
 
   try {
     const where = {
-      ...(ticker && { ticker: ticker.toUpperCase() }),
-      ...(impactCategory && { impactCategory: impactCategory as ImpactCategory }),
+      isPublished: true,
+      ...(assetId && { assetIds: { has: assetId } }),
+      ...(impact && { impact: impact as ImpactCategory }),
     }
 
     const [news, total] = await Promise.all([
       prisma.news.findMany({
         where,
-        orderBy: { injectedAt: 'desc' },
+        orderBy: { publishedAt: 'desc' },
         skip,
         take: Math.min(limit, 50),
       }),
@@ -42,13 +44,13 @@ export async function GET(request: NextRequest) {
     const serialized = news.map((n) => ({
       id: n.id,
       title: n.title,
+      content: n.content,
       source: n.source,
-      url: n.url,
-      ticker: n.ticker,
-      sentiment: n.sentiment.toNumber(),
-      impactCategory: n.impactCategory as ImpactCategory,
-      publishedAt: n.publishedAt.toISOString(),
-      injectedAt: n.injectedAt.toISOString(),
+      assetIds: n.assetIds,
+      sentiment: n.sentiment,
+      impact: n.impact as ImpactCategory,
+      isPublished: n.isPublished,
+      publishedAt: n.publishedAt?.toISOString() ?? null,
       createdAt: n.createdAt.toISOString(),
     }))
 

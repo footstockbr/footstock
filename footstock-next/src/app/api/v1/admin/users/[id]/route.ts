@@ -6,7 +6,7 @@ import { ok, errors } from '@/lib/api'
 
 const AdminUpdateUserSchema = z.object({
   planType: z.enum(['JOGADOR', 'CRAQUE', 'LENDA']).optional(),
-  adminRole: z.enum(['SUPER_ADMIN', 'ADMIN', 'MONITOR', 'EDITOR', 'MODERADOR']).nullable().optional(),
+  adminRole: z.enum(['SUPER_ADMIN', 'ADMINISTRADOR', 'MONITOR', 'EDITOR', 'MODERADOR', 'CLUB_PARTNER']).nullable().optional(),
 })
 
 // GET /api/v1/admin/users/:id — ADMIN+
@@ -17,7 +17,7 @@ export async function GET(
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()
 
-  if (!hasAdminRole(auth.user.adminRole, 'ADMIN')) {
+  if (!hasAdminRole(auth.user.adminRole, 'ADMINISTRADOR')) {
     return errors.forbidden()
   }
 
@@ -28,8 +28,9 @@ export async function GET(
       data: {
         userId: id,
         accessedBy: auth.user.id,
-        action: 'VIEW_SENSITIVE_FIELD',
-        details: { targetUserId: id },
+        dataType: 'admin_view',
+        endpoint: '/api/v1/admin/users/' + id,
+        reason: 'VIEW_SENSITIVE_FIELD',
       },
     })
 
@@ -50,7 +51,7 @@ export async function PATCH(
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()
 
-  if (!hasAdminRole(auth.user.adminRole, 'ADMIN')) {
+  if (!hasAdminRole(auth.user.adminRole, 'ADMINISTRADOR')) {
     return errors.forbidden()
   }
 

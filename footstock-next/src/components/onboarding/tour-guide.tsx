@@ -11,7 +11,7 @@ interface TourStep {
   icon: string;
 }
 
-const TOUR_STEPS_BY_PROFILE: Record<InvestorProfile, TourStep[]> = {
+const TOUR_STEPS_BY_PROFILE: Partial<Record<InvestorProfile, TourStep[]>> = {
   INICIANTE: [
     {
       icon: "📊",
@@ -108,7 +108,7 @@ const TOUR_STEPS_BY_PROFILE: Record<InvestorProfile, TourStep[]> = {
         "Crie ligas competitivas com FS$ real em jogo. Ranking por Sharpe Ratio.",
     },
   ],
-  FA_FUTEBOL: [
+  FA: [
     {
       icon: "⚽",
       title: "Seu Clube no Mercado",
@@ -155,7 +155,7 @@ export function TourGuide({
   onSkip,
   isLoading,
 }: TourGuideProps) {
-  const steps = TOUR_STEPS_BY_PROFILE[investorProfile];
+  const steps = TOUR_STEPS_BY_PROFILE[investorProfile] ?? TOUR_STEPS_BY_PROFILE['INICIANTE']!;
   const [currentStep, setCurrentStep] = useState(0);
 
   const isLastStep = currentStep === steps.length - 1;

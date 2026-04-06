@@ -57,7 +57,7 @@ export async function GET() {
       }),
       prisma.transaction.aggregate({
         where: { createdAt: { gte: sub24h } },
-        _sum: { amount: true },
+        _sum: { fsAmount: true },
       }),
     ])
 
@@ -82,7 +82,7 @@ export async function GET() {
       peakConcurrentUsers = Math.round(MAU / 30)
     }
 
-    const totalFsMovimentados24h = fsMovimentados._sum.amount?.toNumber() ?? 0
+    const totalFsMovimentados24h = fsMovimentados._sum.fsAmount?.toNumber() ?? 0
 
     const dto: EngagementMetricsDTO = {
       DAU,

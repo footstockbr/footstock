@@ -59,10 +59,10 @@ export async function GET() {
       prisma.user.count(),
       prisma.user.count({ where: { createdAt: { gte: sub24h } } }),
       prisma.subscription.count({ where: { status: 'ACTIVE' } }),
-      prisma.order.count({ where: { createdAt: { gte: sub24h }, status: 'EXECUTED' } }),
+      prisma.order.count({ where: { createdAt: { gte: sub24h }, status: 'FILLED' } }),
       prisma.order.groupBy({
-        by: ['ticker'],
-        where: { createdAt: { gte: sub24h }, status: 'EXECUTED' },
+        by: ['assetId'],
+        where: { createdAt: { gte: sub24h }, status: 'FILLED' },
         _count: { id: true },
         orderBy: { _count: { id: 'desc' } },
         take: 5,
@@ -81,18 +81,18 @@ export async function GET() {
     )
 
     // Top assets com variação de preço
-    const topTickers = topAssetsRaw.map((r) => r.ticker)
+    const topAssetIds = topAssetsRaw.map((r) => r.assetId)
     const assetPrices = await prisma.asset.findMany({
-      where: { ticker: { in: topTickers } },
-      select: { ticker: true, currentPrice: true, fairValue: true },
+      where: { id: { in: topAssetIds } },
+      select: { id: true, ticker: true, currentPrice: true, fairValue: true },
     })
-    const priceMap = new Map(assetPrices.map((a) => [a.ticker, a]))
+    const priceMap = new Map(assetPrices.map((a) => [a.id, a]))
     const topAssets = topAssetsRaw.map((r) => {
-      const asset = priceMap.get(r.ticker)
+      const asset = priceMap.get(r.assetId)
       const price = asset?.currentPrice.toNumber() ?? 0
       const fair = asset?.fairValue.toNumber() ?? price
       const priceChange = fair > 0 ? Math.round(((price - fair) / fair) * 10000) / 100 : 0
-      return { ticker: r.ticker, volume: r._count.id, priceChange }
+      return { ticker: asset?.ticker ?? r.assetId, volume: r._count.id, priceChange }
     })
 
     const dto: AdminDashboardDTO = {

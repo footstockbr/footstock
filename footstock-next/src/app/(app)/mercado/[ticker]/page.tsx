@@ -19,10 +19,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const asset = await prisma.asset.findUnique({ where: { ticker } })
     if (!asset) return { title: 'Ativo não encontrado | Foot Stock' }
     return {
-      title: `${asset.ticker} — ${asset.displayName} | Foot Stock`,
-      description: `Cotações, gráficos e análise de ${asset.displayName}. Preço atual: FS$${asset.currentPrice.toNumber().toFixed(2)}`,
+      title: `${asset.ticker} — ${asset.name} | Foot Stock`,
+      description: `Cotações, gráficos e análise de ${asset.name}. Preço atual: FS$${asset.currentPrice.toNumber().toFixed(2)}`,
       openGraph: {
-        title: `${asset.displayName} | Foot Stock`,
+        title: `${asset.name} | Foot Stock`,
         description: `Acompanhe ${asset.ticker} no simulador de trading de futebol.`,
       },
     }
@@ -64,7 +64,7 @@ export default async function AssetDetailServerPage({ params }: Props) {
   const serializedAsset = {
     id: asset.id,
     ticker: asset.ticker,
-    displayName: asset.displayName,
+    displayName: asset.name,
     division: asset.division as 'A' | 'B',
     currentPrice,
     fairValue,
@@ -72,7 +72,7 @@ export default async function AssetDetailServerPage({ params }: Props) {
     totalShares: Number(asset.totalShares),
     isHalted: asset.isHalted,
     haltReason: asset.haltReason ?? null,
-    colors: asset.colors as { primary: string; secondary: string },
+    colors: { primary: asset.colorPrimary, secondary: asset.colorSecondary },
     financials: {
       ...financials,
       marketCap: currentPrice * currentSupply,
@@ -89,15 +89,15 @@ export default async function AssetDetailServerPage({ params }: Props) {
 
   // Fetch all assets for CompareMode (lightweight list)
   const allAssets = await prisma.asset.findMany({
-    select: { ticker: true, displayName: true, colors: true },
+    select: { ticker: true, name: true, colorPrimary: true, colorSecondary: true },
     where: { ticker: { not: ticker } },
     orderBy: { ticker: 'asc' },
   })
 
   const allAssetsForCompare = allAssets.map((a) => ({
     ticker: a.ticker,
-    displayName: a.displayName,
-    colors: a.colors as { primary: string; secondary: string },
+    displayName: a.name,
+    colors: { primary: a.colorPrimary, secondary: a.colorSecondary },
   }))
 
   // Pre-populate React Query cache for instant client hydration

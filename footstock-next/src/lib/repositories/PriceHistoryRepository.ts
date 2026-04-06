@@ -3,9 +3,6 @@ import { prisma } from '@/lib/prisma'
 export type ChartPeriod = '1D' | '1W' | '1M' | '3M' | '1Y' | 'ALL'
 export type Granularity = 'minute' | 'hourly' | 'daily' | 'weekly'
 
-// DB period granularities stored in price_history.period
-type DBPeriod = '1m' | '5m' | '15m' | '1h' | '1d'
-
 export interface HistoryFilters {
   period?: ChartPeriod
   from?: Date
@@ -17,9 +14,8 @@ export interface OFIData {
   ofi: number
 }
 
-// Map UI chart period → DB granularity period and date range
+// Map UI chart period → date range and granularity hint
 function resolvePeriodConfig(period: ChartPeriod): {
-  dbPeriod: DBPeriod
   granularity: Granularity
   fromDate: Date | null
 } {
@@ -27,41 +23,40 @@ function resolvePeriodConfig(period: ChartPeriod): {
   switch (period) {
     case '1D':
       return {
-        dbPeriod: '1m',
         granularity: 'minute',
         fromDate: new Date(now.getTime() - 24 * 60 * 60 * 1000),
       }
     case '1W':
       return {
-        dbPeriod: '15m',
         granularity: 'hourly',
         fromDate: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
       }
     case '1M':
       return {
-        dbPeriod: '1h',
         granularity: 'daily',
         fromDate: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
       }
     case '3M':
       return {
-        dbPeriod: '1d',
         granularity: 'daily',
         fromDate: new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000),
       }
     case '1Y':
       return {
-        dbPeriod: '1d',
         granularity: 'weekly',
         fromDate: new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000),
       }
     case 'ALL':
     default:
-      return { dbPeriod: '1d', granularity: 'weekly', fromDate: null }
+      return { granularity: 'weekly', fromDate: null }
   }
 }
 
 export const PriceHistoryRepository = {
+  /**
+   * Find price history by asset ID (resolves ticker to assetId internally).
+   * @param ticker - Asset ticker (e.g. "FLA1")
+   */
   async findByTicker(
     ticker: string,
     filters: HistoryFilters = {}
@@ -74,16 +69,22 @@ export const PriceHistoryRepository = {
     volume: number
     ofi: number
   }>> {
+    // Resolve ticker to assetId
+    const asset = await prisma.asset.findUnique({
+      where: { ticker: ticker.toUpperCase() },
+      select: { id: true },
+    })
+    if (!asset) return []
+
     const period = filters.period ?? '1M'
-    const { dbPeriod, fromDate } = resolvePeriodConfig(period)
+    const { fromDate } = resolvePeriodConfig(period)
 
     const resolvedFrom = filters.from ?? fromDate
     const resolvedTo = filters.to ?? new Date()
 
     const candles = await prisma.priceHistory.findMany({
       where: {
-        ticker: ticker.toUpperCase(),
-        period: dbPeriod,
+        assetId: asset.id,
         ...(resolvedFrom && { timestamp: { gte: resolvedFrom, lte: resolvedTo } }),
       },
       orderBy: { timestamp: 'asc' },
@@ -96,7 +97,7 @@ export const PriceHistoryRepository = {
       high: c.high.toNumber(),
       low: c.low.toNumber(),
       close: c.close.toNumber(),
-      volume: c.volume.toNumber(),
+      volume: Number(c.volume),
       ofi: 0, // TECH-DEBT: ofi field not yet in PriceHistory schema — will be added by motor (module-7)
     }))
   },
@@ -108,16 +109,27 @@ export const PriceHistoryRepository = {
   async findLatestByTickers(
     tickers: string[]
   ): Promise<Record<string, { timestamp: string; close: number }>> {
+    // Resolve tickers to assetIds
+    const assets = await prisma.asset.findMany({
+      where: { ticker: { in: tickers.map((t) => t.toUpperCase()) } },
+      select: { id: true, ticker: true },
+    })
+    if (assets.length === 0) return {}
+
+    const assetIdToTicker = new Map(assets.map(a => [a.id, a.ticker]))
+    const assetIds = assets.map(a => a.id)
+
     const records = await prisma.priceHistory.findMany({
-      where: { ticker: { in: tickers.map((t) => t.toUpperCase()) }, period: '1m' },
+      where: { assetId: { in: assetIds } },
       orderBy: { timestamp: 'desc' },
-      take: tickers.length * 10,
+      take: assetIds.length * 10,
     })
 
     const result: Record<string, { timestamp: string; close: number }> = {}
     for (const r of records) {
-      if (!result[r.ticker]) {
-        result[r.ticker] = {
+      const ticker = assetIdToTicker.get(r.assetId)
+      if (ticker && !result[ticker]) {
+        result[ticker] = {
           timestamp: r.timestamp.toISOString(),
           close: r.close.toNumber(),
         }

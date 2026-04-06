@@ -104,7 +104,7 @@ async function postHandler(req: NextRequest, { user }: AuthContext): Promise<Nex
       await prisma.adminMarketAction.create({
         data: {
           adminId: user.id,
-          targetTicker: action.assetId,
+          assetId: action.assetId,
           action: action.type,
           details: { reason: action.reason },
         },
@@ -127,7 +127,7 @@ async function postHandler(req: NextRequest, { user }: AuthContext): Promise<Nex
 async function getHandler(_req: NextRequest, _ctx: AuthContext): Promise<NextResponse> {
   try {
     const actions = await prisma.adminMarketAction.findMany({
-      orderBy: { timestamp: 'desc' },
+      orderBy: { createdAt: 'desc' },
       take: 100,
       include: {
         admin: { select: { name: true, email: true, adminRole: true } },

@@ -19,7 +19,7 @@ const MAX_BROADCASTS_PER_HOUR = 5
 export async function POST(request: NextRequest) {
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()
-  if (!hasAdminRole(auth.user.adminRole, 'ADMIN')) {
+  if (!hasAdminRole(auth.user.adminRole, 'ADMINISTRADOR')) {
     return NextResponse.json(
       { error: { code: 'ADMIN-050', message: 'Permissão insuficiente para esta ação administrativa.' } },
       { status: 403 }
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
     // Buscar destinatários
     const userFilter =
       targetAudience === 'SUBSCRIBERS_ONLY'
-        ? { subscription: { status: 'ACTIVE' as const } }
+        ? { subscriptions: { some: { status: 'ACTIVE' as const } } }
         : {}
 
     const recipients = await prisma.user.findMany({

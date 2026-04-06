@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   try {
     const where = {
       userId: auth.user.id,
-      ...(readParam !== null && { read: readParam === 'true' }),
+      ...(readParam !== null && { isRead: readParam === 'true' }),
     }
 
     const [notifications, total] = await Promise.all([
@@ -34,8 +34,8 @@ export async function GET(request: NextRequest) {
       type: n.type,
       title: n.title,
       body: n.body,
-      read: n.read,
-      metadata: n.metadata as Record<string, unknown> | null,
+      isRead: n.isRead,
+      data: n.data as Record<string, unknown> | null,
       createdAt: n.createdAt.toISOString(),
     }))
 

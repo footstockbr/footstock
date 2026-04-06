@@ -8,7 +8,7 @@ import { deleteAccount } from '@/lib/services/account-deletion'
 const UpdateUserSchema = z.object({
   name: z.string().min(2).max(120).optional(),
   phone: z.string().max(20).optional(),
-  investorProfile: z.enum(['INICIANTE', 'INTERMEDIARIO', 'AVANCADO', 'FA_FUTEBOL']).optional(),
+  investorProfile: z.enum(['CONSERVADOR', 'MODERADO', 'ARROJADO', 'ESPECULADOR', 'INICIANTE', 'INTERMEDIARIO', 'AVANCADO', 'FA']).optional(),
   tourCompleted: z.boolean().optional(),
 }).strict()
 
@@ -55,8 +55,9 @@ export async function DELETE(request: NextRequest) {
 
   try {
     // Verificar assinatura ativa antes de excluir
-    const activeSub = await prisma.subscription.findUnique({
+    const activeSub = await prisma.subscription.findFirst({
       where: { userId: auth.user.id },
+      orderBy: { createdAt: 'desc' },
     })
     if (activeSub && activeSub.status !== 'CANCELLED' && activeSub.status !== 'EXPIRED') {
       return NextResponse.json(

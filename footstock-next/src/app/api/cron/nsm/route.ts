@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
 
     const filledOrders = await prisma.order.count({
       where: {
-        status: 'EXECUTED',
+        status: 'FILLED',
         updatedAt: { gte: today, lt: tomorrow },
       },
     })

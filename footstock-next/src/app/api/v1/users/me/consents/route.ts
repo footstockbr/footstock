@@ -13,8 +13,8 @@ export async function GET() {
       select: {
         id: true,
         purpose: true,
+        granted: true,
         grantedAt: true,
-        revoked: true,
         revokedAt: true,
       },
       orderBy: { grantedAt: 'asc' },
@@ -23,7 +23,7 @@ export async function GET() {
     return ok(
       consents.map((c) => ({
         ...c,
-        grantedAt: c.grantedAt.toISOString(),
+        grantedAt: c.grantedAt?.toISOString() ?? null,
         revokedAt: c.revokedAt?.toISOString() ?? null,
       }))
     )

@@ -14,7 +14,7 @@ import { AppError } from '@/lib/services/OrderService'
 import type { Position, Transaction } from '@prisma/client'
 
 type PositionWithAsset = Prisma.PositionGetPayload<{
-  include: { asset: { select: { ticker: true; currentPrice: true } } }
+  include: { asset: { select: { ticker: true; currentPrice: true; id: true } } }
 }>
 
 const SHORT_MARGIN_RATIO = 1.5       // 150% de margem
@@ -75,9 +75,10 @@ export class ShortService {
       const position = await tx.position.create({
         data: {
           userId,
-          ticker: assetId,
+          assetId,
           quantity,
           avgPrice: currentPrice,
+          totalInvested: operationValue,
           side: 'SHORT',
           marginBlocked: marginRequired,
           dailyInterestRate: SHORT_DAILY_INTEREST_RATE,
@@ -88,9 +89,14 @@ export class ShortService {
       await tx.transaction.create({
         data: {
           userId,
-          ticker: assetId,
-          type: 'SELL',
-          amount: quantity,
+          assetId,
+          type: 'MARKET',
+          financialType: 'MARGIN_BLOCKED',
+          side: 'SELL',
+          quantity,
+          price: currentPrice,
+          fee: feeAmount,
+          totalAmount: totalRequired,
           fsAmount: -totalRequired,
           balanceBefore,
           balanceAfter: newBalance,
@@ -151,9 +157,14 @@ export class ShortService {
       const transaction = await tx.transaction.create({
         data: {
           userId,
-          ticker: position.ticker,
-          type: 'BUY',
-          amount: position.quantity,
+          assetId: position.assetId,
+          type: 'MARKET',
+          financialType: 'SHORT_CLOSE',
+          side: 'BUY',
+          quantity: position.quantity,
+          price: currentPrice,
+          fee: closeFee,
+          totalAmount: closeOperationValue,
           fsAmount: returnAmount,
           balanceBefore,
           balanceAfter: newBalance,
@@ -172,7 +183,7 @@ export class ShortService {
   async accrueInterest(positionId: string): Promise<number> {
     const position = await prisma.position.findUnique({
       where: { id: positionId },
-      include: { asset: { select: { ticker: true, currentPrice: true } } },
+      include: { asset: { select: { id: true, ticker: true, currentPrice: true } } },
     }) as PositionWithAsset | null
     if (!position || position.side !== 'SHORT' || position.status !== 'OPEN') return 0
 
@@ -202,9 +213,14 @@ export class ShortService {
       await tx.transaction.create({
         data: {
           userId: position.userId,
-          ticker: position.ticker,
-          type: 'FEE',
-          amount: position.quantity,
+          assetId: position.assetId,
+          type: 'MARKET',
+          financialType: 'SHORT_INTEREST',
+          side: 'SELL',
+          quantity: position.quantity,
+          price: currentPrice,
+          fee: 0,
+          totalAmount: dailyInterest,
           fsAmount: -dailyInterest,
           balanceBefore,
           balanceAfter: newBalance,

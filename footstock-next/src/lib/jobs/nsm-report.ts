@@ -57,7 +57,7 @@ export async function runNSMReport(): Promise<NSMReportResult> {
   // 1. Fonte da verdade: Prisma (não Redis, para garantir precisão no relatório)
   const count = await prisma.order.count({
     where: {
-      status: 'EXECUTED',
+      status: 'FILLED',
       executedAt: { gte: startBRT },
     },
   })

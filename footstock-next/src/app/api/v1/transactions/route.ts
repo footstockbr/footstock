@@ -2,9 +2,10 @@ import { NextRequest } from 'next/server'
 import { getAuthUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { list, errors, parsePagination, buildPagination } from '@/lib/api'
-import type { TransactionType } from '@/types'
 
-const VALID_TYPES = ['BUY', 'SELL', 'FEE', 'DIVIDEND', 'MARGIN_CALL']
+// Transaction.type uses OrderType enum; Transaction.financialType uses FinancialType enum
+const VALID_TYPES = ['MARKET', 'LIMIT', 'STOP_LOSS', 'TAKE_PROFIT', 'OCO', 'SCHEDULED']
+const VALID_FINANCIAL_TYPES = ['TRADE', 'BONUS', 'DEPOSIT', 'WITHDRAWAL', 'SHORT_INTEREST', 'MARGIN_BLOCKED', 'SHORT_CLOSE', 'LEVERAGE_INTEREST']
 
 // GET /api/v1/transactions
 export async function GET(request: NextRequest) {
@@ -13,18 +14,24 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl
   const type = searchParams.get('type')
-  const ticker = searchParams.get('ticker')
+  const financialType = searchParams.get('financialType')
+  const assetId = searchParams.get('assetId')
   const { page, limit, skip } = parsePagination(searchParams)
 
   if (type && !VALID_TYPES.includes(type)) {
     return errors.validation('Tipo de transação inválido.')
   }
 
+  if (financialType && !VALID_FINANCIAL_TYPES.includes(financialType)) {
+    return errors.validation('Tipo financeiro inválido.')
+  }
+
   try {
     const where = {
       userId: auth.user.id,
-      ...(type && { type: type as TransactionType }),
-      ...(ticker && { ticker: ticker.toUpperCase() }),
+      ...(type && { type: type as never }),
+      ...(financialType && { financialType: financialType as never }),
+      ...(assetId && { assetId }),
     }
 
     const [txns, total] = await Promise.all([
@@ -41,12 +48,17 @@ export async function GET(request: NextRequest) {
       id: t.id,
       userId: t.userId,
       orderId: t.orderId ?? null,
-      ticker: t.ticker,
-      type: t.type as TransactionType,
-      amount: t.amount.toNumber(),
-      fsAmount: t.fsAmount.toNumber(),
-      balanceBefore: t.balanceBefore.toNumber(),
-      balanceAfter: t.balanceAfter.toNumber(),
+      assetId: t.assetId,
+      type: t.type,
+      financialType: t.financialType,
+      side: t.side,
+      quantity: t.quantity,
+      price: t.price.toNumber(),
+      fee: t.fee.toNumber(),
+      totalAmount: t.totalAmount.toNumber(),
+      fsAmount: t.fsAmount?.toNumber() ?? null,
+      balanceBefore: t.balanceBefore?.toNumber() ?? null,
+      balanceAfter: t.balanceAfter?.toNumber() ?? null,
       createdAt: t.createdAt.toISOString(),
     }))
 

@@ -31,7 +31,7 @@ export async function GET() {
   // ── DB query ────────────────────────────────────────────────────────────────
   try {
     const count = await prisma.notification.count({
-      where: { userId, read: false },
+      where: { userId, isRead: false },
     })
 
     // ── Cache write ───────────────────────────────────────────────────────────

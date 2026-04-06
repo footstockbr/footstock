@@ -25,7 +25,7 @@ class AdminAuditService {
         data: {
           adminId,
           action,
-          targetTicker: ticker ?? null,
+          ticker: ticker ?? null,
           details: { ...details, ipAddress: ipAddress ?? null },
         },
       })
@@ -43,10 +43,10 @@ class AdminAuditService {
   ): Promise<AdminMarketActionLog[]> {
     const rows = await prisma.adminMarketAction.findMany({
       where: {
-        ...(filters.ticker ? { targetTicker: filters.ticker.toUpperCase() } : {}),
+        ...(filters.ticker ? { ticker: filters.ticker.toUpperCase() } : {}),
         ...(filters.action ? { action: filters.action } : {}),
       },
-      orderBy: { timestamp: 'desc' },
+      orderBy: { createdAt: 'desc' },
       take: Math.min(limit, 100),
       include: { admin: { select: { name: true } } },
     })
@@ -55,9 +55,9 @@ class AdminAuditService {
       id: r.id,
       adminId: r.adminId,
       action: r.action,
-      targetTicker: r.targetTicker,
+      targetTicker: r.ticker,
       details: r.details,
-      timestamp: r.timestamp.toISOString(),
+      timestamp: r.createdAt.toISOString(),
       adminName: r.admin.name,
     }))
   }

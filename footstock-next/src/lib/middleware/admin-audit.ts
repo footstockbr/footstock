@@ -14,7 +14,7 @@ import { prisma } from '@/lib/prisma'
 export interface AdminAuditPayload {
   adminId: string
   action: string
-  targetTicker?: string | null
+  ticker?: string | null
   details?: Record<string, unknown>
 }
 
@@ -28,7 +28,7 @@ export async function logAdminAction(payload: AdminAuditPayload): Promise<void> 
       data: {
         adminId: payload.adminId,
         action: payload.action,
-        targetTicker: payload.targetTicker ?? null,
+        ticker: payload.ticker ?? null,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         details: (payload.details ?? {}) as any,
       },
@@ -46,7 +46,7 @@ export type AdminRouteHandler = (
 
 export type AuditConfig = {
   action: string
-  targetTicker?: (req: NextRequest, ctx: { params: Promise<Record<string, string>> }) => Promise<string | null> | string | null
+  ticker?: (req: NextRequest, ctx: { params: Promise<Record<string, string>> }) => Promise<string | null> | string | null
   details?: (req: NextRequest, ctx: { params: Promise<Record<string, string>> }) => Promise<Record<string, unknown>> | Record<string, unknown>
 }
 
@@ -70,8 +70,8 @@ export function withAdminAudit(handler: AdminRouteHandler, config: AuditConfig):
     if (response.status >= 200 && response.status < 300) {
       const adminId = req.headers.get('x-admin-id')
       if (adminId) {
-        const targetTicker = config.targetTicker
-          ? await Promise.resolve(config.targetTicker(req, ctx))
+        const ticker = config.ticker
+          ? await Promise.resolve(config.ticker(req, ctx))
           : null
         const details = config.details
           ? await Promise.resolve(config.details(req, ctx))
@@ -80,7 +80,7 @@ export function withAdminAudit(handler: AdminRouteHandler, config: AuditConfig):
         await logAdminAction({
           adminId,
           action: config.action,
-          targetTicker,
+          ticker,
           details,
         })
       }

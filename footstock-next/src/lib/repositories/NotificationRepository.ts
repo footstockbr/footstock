@@ -15,7 +15,7 @@ export class NotificationRepository {
 
     const where = {
       userId,
-      ...(unreadOnly ? { read: false } : {}),
+      ...(unreadOnly ? { isRead: false } : {}),
     }
 
     const [rows, total] = await Promise.all([
@@ -35,7 +35,7 @@ export class NotificationRepository {
   }
 
   async getUnreadCount(userId: string): Promise<number> {
-    return prisma.notification.count({ where: { userId, read: false } })
+    return prisma.notification.count({ where: { userId, isRead: false } })
   }
 
   async markAsRead(id: string, userId: string): Promise<NotificationDTO> {
@@ -50,7 +50,7 @@ export class NotificationRepository {
 
     const updated = await prisma.notification.update({
       where: { id },
-      data: { read: true },
+      data: { isRead: true },
     })
 
     return this._serialize(updated)
@@ -58,8 +58,8 @@ export class NotificationRepository {
 
   async markAllAsRead(userId: string): Promise<void> {
     await prisma.notification.updateMany({
-      where: { userId, read: false },
-      data: { read: true },
+      where: { userId, isRead: false },
+      data: { isRead: true },
     })
   }
 
@@ -70,7 +70,7 @@ export class NotificationRepository {
         type: options.type,
         title: options.title,
         body: options.body,
-        metadata: options.metadata !== undefined ? (options.metadata as object) : undefined,
+        data: options.metadata !== undefined ? (options.metadata as object) : undefined,
       },
     })
     return this._serialize(notification)
@@ -82,8 +82,8 @@ export class NotificationRepository {
     type: string
     title: string
     body: string
-    read: boolean
-    metadata: unknown
+    isRead: boolean
+    data: unknown
     createdAt: Date
   }): NotificationDTO {
     return {
@@ -92,8 +92,8 @@ export class NotificationRepository {
       type: n.type,
       title: n.title,
       body: n.body,
-      read: n.read,
-      metadata: n.metadata as Record<string, unknown> | null,
+      read: n.isRead,
+      metadata: n.data as Record<string, unknown> | null,
       createdAt: n.createdAt.toISOString(),
     }
   }

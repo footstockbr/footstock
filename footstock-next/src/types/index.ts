@@ -45,12 +45,12 @@ export interface PaginationParams {
 // ─── Enums ─────────────────────────────────────────────────────────────────────
 
 export type UserType = 'NORMAL' | 'TIME_PARCEIRO' | 'INFLUENCIADOR'
-export type InvestorProfile = 'INICIANTE' | 'INTERMEDIARIO' | 'AVANCADO' | 'FA_FUTEBOL'
+export type InvestorProfile = 'CONSERVADOR' | 'MODERADO' | 'ARROJADO' | 'ESPECULADOR' | 'INICIANTE' | 'INTERMEDIARIO' | 'AVANCADO' | 'FA'
 export type PlanType = 'JOGADOR' | 'CRAQUE' | 'LENDA'
-export type AdminRole = 'SUPER_ADMIN' | 'ADMIN' | 'MONITOR' | 'EDITOR' | 'MODERADOR'
+export type AdminRole = 'SUPER_ADMIN' | 'ADMINISTRADOR' | 'MONITOR' | 'EDITOR' | 'MODERADOR' | 'CLUB_PARTNER'
 export type OrderType = 'MARKET' | 'LIMIT' | 'OCO' | 'SHORT' | 'SCHEDULED'
 export type OrderSide = 'BUY' | 'SELL'
-export type OrderStatus = 'PENDING' | 'EXECUTED' | 'CANCELLED' | 'EXPIRED' | 'PARTIAL'
+export type OrderStatus = 'OPEN' | 'FILLED' | 'CANCELLED' | 'EXPIRED' | 'PARTIAL'
 export type PositionSide = 'LONG' | 'SHORT'
 export type AssetDivision = 'A' | 'B'
 export type AssetSentiment = 'BULLISH' | 'NEUTRO' | 'BEARISH'
@@ -58,7 +58,7 @@ export type TransactionType = 'BUY' | 'SELL' | 'FEE' | 'DIVIDEND' | 'MARGIN_CALL
 export type SubscriptionStatus = 'TRIAL' | 'ACTIVE' | 'CANCELLED' | 'EXPIRED' | 'PENDING_PAYMENT'
 export type PaymentGateway = 'MERCADO_PAGO' | 'PAGSEGURO' | 'PAYPAL'
 export type PaymentPeriod = 'MONTHLY' | 'ANNUAL'
-export type ImpactCategory = 'RESULTADO_ESPORTIVO' | 'CONTRATACAO' | 'FINANCEIRO' | 'LESAO' | 'SUSPENSAO' | 'INSTITUCIONAL'
+export type ImpactCategory = 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL' | 'FINANCEIRA_CRITICA' | 'ESPORTIVA_MAJORITARIA' | 'MERCADO_ATIVOS' | 'INTEGRIDADE_SAUDE' | 'INSTITUCIONAL' | 'ESPORTIVA_MENOR'
 export type LeagueType = 'PUBLICA' | 'AMIGOS' | 'PRO'
 export type LeagueDivision = 'BRONZE' | 'PRATA' | 'OURO' | 'ABERTA'
 /** Alias semântico para LeagueDivision — usado nos contratos de scoring */

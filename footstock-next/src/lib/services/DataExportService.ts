@@ -75,11 +75,11 @@ async function collectUserData(userId: string) {
     }),
     prisma.position.findMany({
       where: { userId },
-      select: { id: true, ticker: true, quantity: true, avgPrice: true },
+      select: { id: true, assetId: true, quantity: true, avgPrice: true },
     }),
     prisma.transaction.findMany({
       where: { userId },
-      select: { id: true, type: true, amount: true, fsAmount: true, createdAt: true },
+      select: { id: true, type: true, financialType: true, side: true, quantity: true, price: true, fee: true, totalAmount: true, fsAmount: true, createdAt: true },
     }),
     prisma.subscription.findMany({
       where: { userId },

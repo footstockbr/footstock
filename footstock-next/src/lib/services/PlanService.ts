@@ -104,7 +104,7 @@ export class PlanService extends BaseService {
         userId,
         planType: dto.planType as never,
         period: dto.period.toUpperCase() as never,
-        status: 'PENDING_PAYMENT',
+        status: 'PENDING',
         createdAt: { gte: fiveMinutesAgo },
       },
     })

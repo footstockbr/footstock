@@ -14,20 +14,33 @@ export async function POST(
   const { id } = await params
 
   try {
-    const post = await prisma.forumPost.findUnique({ where: { id } })
+    const post = await prisma.globalForumPost.findUnique({ where: { id } })
 
-    if (!post || post.status === 'REMOVED') {
+    if (!post || post.isDeleted) {
       return errors.notFound('Post não encontrado.')
     }
 
-    // TODO: Implementar via /auto-flow execute
-    // Adicionar controle de likes únicos por usuário (evitar spam)
-    const updated = await prisma.forumPost.update({
-      where: { id },
-      data: { likes: { increment: 1 } },
+    // Controle de likes únicos por usuário via ForumLike (@@unique([postId, userId]))
+    const existingLike = await prisma.forumLike.findUnique({
+      where: { postId_userId: { postId: id, userId: auth.user.id } },
     })
 
-    return ok({ likes: updated.likes })
+    if (existingLike) {
+      // Já curtiu — retorna contagem atual sem duplicar
+      const likeCount = await prisma.forumLike.count({ where: { postId: id } })
+      return ok({ likes: likeCount })
+    }
+
+    await prisma.forumLike.create({
+      data: {
+        postId: id,
+        userId: auth.user.id,
+      },
+    })
+
+    const likeCount = await prisma.forumLike.count({ where: { postId: id } })
+
+    return ok({ likes: likeCount })
   } catch {
     return errors.server()
   }

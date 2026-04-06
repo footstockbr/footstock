@@ -86,7 +86,7 @@ async function findPositionsByTicker(ticker: string): Promise<PositionForDividen
   if (!asset) return []
 
   const positions = await prisma.position.findMany({
-    where: { ticker: asset.ticker, status: 'OPEN', quantity: { gt: 0 } },
+    where: { assetId: asset.id, status: 'OPEN', quantity: { gt: 0 } },
     include: { user: { select: { planType: true } } },
   })
 
@@ -131,7 +131,7 @@ export class DividendService {
 
     // Buscar nome do clube
     const asset = await prisma.asset.findUnique({ where: { ticker } })
-    const clubName = asset?.displayName ?? ticker
+    const clubName = asset?.name ?? ticker
     const fator = sentimentFactor(sentiment)
 
     return processBatches(positions, async (pos) => {
@@ -318,7 +318,7 @@ export class DividendService {
             const ticker = key.replace('club:sentiment:', '')
             const asset = await prisma.asset.findUnique({ where: { ticker } })
             if (asset) {
-              results.push({ ticker, clubName: asset.displayName, sentiment })
+              results.push({ ticker, clubName: asset.name, sentiment })
             }
           }
         }
@@ -331,7 +331,7 @@ export class DividendService {
 
     // Fallback: buscar todos os ativos do DB (sem filtro de sentiment — Redis indisponível)
     const assets = await prisma.asset.findMany({ where: { isHalted: false } })
-    return assets.map(a => ({ ticker: a.ticker, clubName: a.displayName, sentiment: 1 }))
+    return assets.map(a => ({ ticker: a.ticker, clubName: a.name, sentiment: 1 }))
   }
 
   private async _saveCheckpoint(month: string, index: number): Promise<void> {

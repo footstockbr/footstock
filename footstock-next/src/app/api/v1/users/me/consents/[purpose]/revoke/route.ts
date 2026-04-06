@@ -4,10 +4,10 @@ import { prisma } from '@/lib/prisma'
 import { ok, error, errors } from '@/lib/api'
 
 /** Finalidades que podem ser revogadas pelo usuário */
-const REVOCABLE_PURPOSES = ['MARKETING', 'ANALYTICS', 'THIRD_PARTY'] as const
+const REVOCABLE_PURPOSES = ['MARKETING', 'ANALYTICS', 'DATA_TERCEIROS'] as const
 
 /** Finalidades obrigatórias para uso do serviço */
-const REQUIRED_PURPOSES = ['TERMS', 'PRIVACY'] as const
+const REQUIRED_PURPOSES = ['ESSENTIAL', 'AGE_VERIFICATION'] as const
 
 type RevocablePurpose = (typeof REVOCABLE_PURPOSES)[number]
 type RequiredPurpose = (typeof REQUIRED_PURPOSES)[number]
@@ -39,7 +39,7 @@ export async function POST(
   try {
     await prisma.consent.updateMany({
       where: { userId: auth.user.id, purpose: purpose as import("@prisma/client").ConsentPurpose },
-      data: { revoked: true, revokedAt: new Date() },
+      data: { granted: false, revokedAt: new Date() },
     })
 
     return ok({ revoked: true, purpose })

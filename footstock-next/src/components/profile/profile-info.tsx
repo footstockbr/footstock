@@ -6,7 +6,7 @@ const INVESTOR_PROFILE_LABELS: Record<string, string> = {
   INICIANTE: "Iniciante",
   INTERMEDIARIO: "Intermediário",
   AVANCADO: "Avançado",
-  FA_FUTEBOL: "Fã de Futebol",
+  FA: "Fã de Futebol",
 };
 
 interface ProfileInfoProps {

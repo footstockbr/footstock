@@ -71,18 +71,16 @@ export class AIAdvisorService {
 
     // Mapear Sentiment enum para número escalar para o prompt
     const SENTIMENT_SCORE: Record<string, number> = {
-      MUITO_POSITIVO: 1,
-      POSITIVO: 0.5,
-      NEUTRO: 0,
-      NEGATIVO: -0.5,
-      MUITO_NEGATIVO: -1,
+      BULLISH: 0.7,
+      NEUTRAL: 0,
+      BEARISH: -0.7,
     }
 
     // 3. Posição do usuário (por assetId)
     const userPositionRaw = assetId
       ? await prisma.position
           .findFirst({
-            where: { userId, ticker: assetId, status: 'OPEN' },
+            where: { userId, assetId, status: 'OPEN' },
             select: { quantity: true, avgPrice: true },
           })
           .catch(() => null)

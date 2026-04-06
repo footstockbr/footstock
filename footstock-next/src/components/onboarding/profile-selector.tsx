@@ -33,7 +33,7 @@ const PROFILES: Array<{
       "Experiência com ações/cripto. Quero usar estratégias avançadas.",
   },
   {
-    value: "FA_FUTEBOL",
+    value: "FA",
     icon: "⚽",
     title: "Fã de Futebol",
     description:

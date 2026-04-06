@@ -97,7 +97,7 @@ export async function getTodayNSM(): Promise<number> {
   const startBRT = startOfTodayBRT()
   const count = await prisma.order.count({
     where: {
-      status: 'EXECUTED',
+      status: 'FILLED',
       executedAt: { gte: startBRT },
     },
   })
@@ -140,7 +140,7 @@ export async function getNSMTrend(days: number): Promise<NSMTrendPoint[]> {
       TO_CHAR(executed_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD') AS date,
       COUNT(*)::integer AS count
     FROM orders
-    WHERE status = 'EXECUTED'
+    WHERE status = 'FILLED'
       AND executed_at >= NOW() - (${days} * INTERVAL '1 day')
     GROUP BY date
     ORDER BY date DESC

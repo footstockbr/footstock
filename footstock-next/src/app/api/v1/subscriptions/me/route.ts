@@ -5,9 +5,9 @@ import type { SubscriptionStatus, PaymentGateway, PaymentPeriod, PlanType } from
 
 function serializeSubscription(s: {
   id: string; userId: string; planType: string; gateway: string
-  period: string; status: string; startsAt: Date; expiresAt: Date | null
-  trialEndsAt: Date | null; cancelledAt: Date | null
-  cancellationLockExpiresAt: Date | null; createdAt: Date; updatedAt: Date
+  period: string; status: string; amount: number; startsAt: Date; expiresAt: Date
+  cancelledAt: Date | null; cancellationLockExpiresAt: Date | null
+  createdAt: Date; updatedAt: Date
 }) {
   return {
     id: s.id,
@@ -17,8 +17,7 @@ function serializeSubscription(s: {
     period: s.period as PaymentPeriod,
     status: s.status as SubscriptionStatus,
     startsAt: s.startsAt.toISOString(),
-    expiresAt: s.expiresAt?.toISOString() ?? null,
-    trialEndsAt: s.trialEndsAt?.toISOString() ?? null,
+    expiresAt: s.expiresAt.toISOString(),
     cancelledAt: s.cancelledAt?.toISOString() ?? null,
     cancellationLockExpiresAt: s.cancellationLockExpiresAt?.toISOString() ?? null,
     createdAt: s.createdAt.toISOString(),
@@ -32,8 +31,9 @@ export async function GET() {
   if (!auth) return errors.unauthorized()
 
   try {
-    const sub = await prisma.subscription.findUnique({
+    const sub = await prisma.subscription.findFirst({
       where: { userId: auth.user.id },
+      orderBy: { createdAt: 'desc' },
     })
 
     if (!sub || sub.status === 'CANCELLED' || sub.status === 'EXPIRED') {
@@ -52,8 +52,9 @@ export async function DELETE() {
   if (!auth) return errors.unauthorized()
 
   try {
-    const sub = await prisma.subscription.findUnique({
+    const sub = await prisma.subscription.findFirst({
       where: { userId: auth.user.id },
+      orderBy: { createdAt: 'desc' },
     })
 
     if (!sub) return errors.notFound('Nenhuma assinatura ativa encontrada.')
@@ -68,11 +69,11 @@ export async function DELETE() {
     const isWithinCoolingOff = daysSinceStart <= 7
 
     // TODO: Implementar via /auto-flow execute
-    // Se > 7 dias: liquidar shorts, cancelar ordens PENDING, resetar saldo para FS$ 2.000
+    // Se > 7 dias: liquidar shorts, cancelar ordens OPEN, resetar saldo para FS$ 2.000
     // Se <= 7 dias: reembolso integral via gateway
 
     const cancelled = await prisma.subscription.update({
-      where: { userId: auth.user.id },
+      where: { id: sub.id },
       data: {
         status: 'CANCELLED',
         cancelledAt: now,
@@ -87,7 +88,7 @@ export async function DELETE() {
         type: 'PLAN_CANCEL_ALERT',
         title: 'Cancelamento solicitado',
         body: 'Seu plano será rebaixado para Jogador ao final do período atual.',
-        read: false,
+        isRead: false,
       },
     }).catch((err) => {
       // Não bloquear resposta se notificação falhar

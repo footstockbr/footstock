@@ -2,7 +2,6 @@ import { NextRequest } from 'next/server'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { list, errors, parsePagination, buildPagination } from '@/lib/api'
-import type { PostStatus } from '@/types'
 
 // GET /api/v1/admin/forum/flagged — MODERADOR+
 export async function GET(request: NextRequest) {
@@ -16,16 +15,19 @@ export async function GET(request: NextRequest) {
   const { page, limit, skip } = parsePagination(request.nextUrl.searchParams)
 
   try {
-    const where = { flagged: true, status: 'FLAGGED' as PostStatus }
+    const where = { isFlagged: true, isDeleted: false }
 
     const [posts, total] = await Promise.all([
-      prisma.forumPost.findMany({
+      prisma.globalForumPost.findMany({
         where,
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
+        include: {
+          _count: { select: { likes: true } },
+        },
       }),
-      prisma.forumPost.count({ where }),
+      prisma.globalForumPost.count({ where }),
     ])
 
     const serialized = posts.map((p) => ({
@@ -33,9 +35,9 @@ export async function GET(request: NextRequest) {
       userId: p.userId,
       content: p.content,
       ticker: p.ticker ?? null,
-      status: p.status as PostStatus,
-      likes: p.likes,
-      flagged: p.flagged,
+      isFlagged: p.isFlagged,
+      flagCount: p.flagCount,
+      likes: p._count.likes,
       createdAt: p.createdAt.toISOString(),
       updatedAt: p.updatedAt.toISOString(),
     }))

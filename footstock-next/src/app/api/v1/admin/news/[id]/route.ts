@@ -7,48 +7,36 @@ import type { ImpactCategory } from '@/types'
 
 const UpdateNewsSchema = z.object({
   title: z.string().min(1, 'Título é obrigatório').max(200, 'Máximo 200 caracteres').optional(),
-  ticker: z.string().max(10, 'Máximo 10 caracteres').optional().or(z.literal('')),
-  sentiment: z.enum(['positive', 'negative', 'neutral'], {
+  sentiment: z.enum(['BULLISH', 'BEARISH', 'NEUTRAL'], {
     error: () => ({ message: 'Sentimento inválido' }),
   }).optional(),
   category: z.string().min(1, 'Categoria é obrigatória').optional(),
-  status: z.enum(['published', 'archived']).optional(),
+  isPublished: z.boolean().optional(),
 })
-
-// Mapeamento sentimento string → decimal
-const SENTIMENT_MAP: Record<string, number> = {
-  positive: 0.75,
-  negative: -0.75,
-  neutral: 0.0,
-}
 
 function serializeNews(n: {
   id: string
   title: string
-  source: string
-  url: string
-  ticker: string
-  sentiment: { toNumber: () => number }
-  impactCategory: string
-  status: string
-  publishedAt: Date
-  injectedAt: Date
+  content: string
+  source: string | null
+  sentiment: string
+  impact: string
+  assetIds: string[]
+  isPublished: boolean
+  publishedAt: Date | null
   createdAt: Date
 }) {
-  const raw = n.sentiment.toNumber()
   return {
     id: n.id,
     title: n.title,
+    content: n.content,
     source: n.source,
-    url: n.url,
-    ticker: n.ticker,
-    sentiment: raw > 0.1 ? 'positive' : raw < -0.1 ? 'negative' : 'neutral',
-    sentimentRaw: raw,
-    category: n.impactCategory,
-    status: n.status,
-    publishedAt: n.publishedAt.toISOString(),
-    injectedAt: n.injectedAt.toISOString(),
+    sentiment: n.sentiment,
+    category: n.impact,
+    isPublished: n.isPublished,
+    publishedAt: n.publishedAt?.toISOString() ?? null,
     createdAt: n.createdAt.toISOString(),
+    assetIds: n.assetIds,
   }
 }
 
@@ -74,32 +62,33 @@ export async function PUT(
     const existing = await prisma.news.findUnique({ where: { id } })
     if (!existing) return errors.notFound('Notícia não encontrada.')
 
-    const { title, ticker, sentiment, category, status } = parsed.data
+    const { title, sentiment, category, isPublished } = parsed.data
 
     const updateData: Record<string, unknown> = {}
     if (title !== undefined) updateData.title = title
-    if (ticker !== undefined && ticker !== '') updateData.ticker = ticker.toUpperCase()
-    if (category !== undefined) updateData.impactCategory = category as ImpactCategory
-    if (status !== undefined) updateData.status = status
-    if (sentiment !== undefined) updateData.sentiment = SENTIMENT_MAP[sentiment]
+    if (category !== undefined) updateData.impact = category as ImpactCategory
+    if (sentiment !== undefined) updateData.sentiment = sentiment
+    if (isPublished !== undefined) {
+      updateData.isPublished = isPublished
+      if (isPublished && !existing.publishedAt) updateData.publishedAt = new Date()
+    }
 
     const updated = await prisma.news.update({
       where: { id },
       data: updateData,
     })
 
-    const tickerChanged = ticker !== undefined && ticker !== '' && ticker.toUpperCase() !== existing.ticker
-    const sentimentChanged = sentiment !== undefined && SENTIMENT_MAP[sentiment] !== existing.sentiment.toNumber()
+    const sentimentChanged = sentiment !== undefined && sentiment !== existing.sentiment
 
     await prisma.adminMarketAction.create({
       data: {
         adminId: auth.user.id,
         action: 'EDIT_NEWS',
-        targetTicker: updated.ticker,
+        ticker: existing.assetIds[0] ?? null,
         details: {
           newsId: id,
           changes: parsed.data,
-          redisEvent: tickerChanged || sentimentChanged,
+          redisEvent: sentimentChanged,
         },
       },
     })
@@ -133,19 +122,19 @@ export async function DELETE(
 
     const updated = await prisma.news.update({
       where: { id },
-      data: { status: 'archived' },
+      data: { isPublished: false },
     })
 
     await prisma.adminMarketAction.create({
       data: {
         adminId: auth.user.id,
         action: 'ARCHIVE_NEWS',
-        targetTicker: existing.ticker,
+        ticker: existing.assetIds[0] ?? null,
         details: { newsId: id },
       },
     })
 
-    return ok({ id: updated.id, status: updated.status })
+    return ok({ id: updated.id, isPublished: updated.isPublished })
   } catch {
     return errors.server()
   }

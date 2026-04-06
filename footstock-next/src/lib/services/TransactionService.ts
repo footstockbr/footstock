@@ -23,7 +23,7 @@ export interface PositionWithPnL extends Position {
 export interface TransactionFilters {
   page?: number
   limit?: number
-  ticker?: string
+  assetId?: string
   financialType?: string
 }
 
@@ -38,7 +38,7 @@ export class TransactionService {
    * Atualiza saldo, cria transaction record e faz upsert da position.
    */
   async executeOrder(
-    order: Order & { asset: { ticker: string; currentPrice: import('@prisma/client').Prisma.Decimal } },
+    order: Order & { asset: { id: string; ticker: string; currentPrice: import('@prisma/client').Prisma.Decimal } },
     executionPrice: number,
   ): Promise<{ transaction: Transaction; position: Position }> {
     return await prisma.$transaction(async (tx) => {
@@ -79,12 +79,12 @@ export class TransactionService {
       }
 
       // Validar transição de status ANTES do update
-      validateTransition(order.status as import('@/lib/enums').OrderStatus, ORDER_STATUS.EXECUTED, order.id)
+      validateTransition(order.status as import('@/lib/enums').OrderStatus, ORDER_STATUS.FILLED, order.id)
 
       // Atualizar order status
       await tx.order.update({
         where: { id: order.id },
-        data: { status: 'EXECUTED' as import('@prisma/client').OrderStatus, feeAmount, executedAt: new Date() },
+        data: { status: 'FILLED' as import('@prisma/client').OrderStatus, fee: feeAmount, executedAt: new Date() },
       })
 
       // Atualizar saldo do usuário
@@ -96,7 +96,7 @@ export class TransactionService {
       // Upsert position
       let position: Position
       const existingPos = await tx.position.findFirst({
-        where: { userId: order.userId, ticker: order.ticker, side: 'LONG', status: 'OPEN' },
+        where: { userId: order.userId, assetId: order.assetId, side: 'LONG', status: 'OPEN' },
       })
 
       if (order.side === 'BUY') {
@@ -117,9 +117,10 @@ export class TransactionService {
           position = await tx.position.create({
             data: {
               userId: order.userId,
-              ticker: order.ticker,
-              quantity: Number(order.quantity),
+              assetId: order.assetId,
+              quantity: order.quantity,
               avgPrice: executionPrice,
+              totalInvested: order.quantity * executionPrice,
               side: 'LONG',
             },
           })
@@ -142,10 +143,15 @@ export class TransactionService {
       const transaction = await tx.transaction.create({
         data: {
           userId: order.userId,
-          ticker: order.ticker,
+          assetId: order.assetId,
           orderId: order.id,
-          type: order.side === 'BUY' ? 'BUY' : 'SELL',
-          amount: order.quantity,
+          type: order.type,
+          financialType: 'TRADE',
+          side: order.side,
+          quantity: order.quantity,
+          price: executionPrice,
+          fee: feeAmount,
+          totalAmount: operationValue,
           fsAmount,
           balanceBefore,
           balanceAfter: newBalance,
@@ -165,8 +171,8 @@ export class TransactionService {
     const skip = (page - 1) * limit
 
     const where: Record<string, unknown> = { userId }
-    if (filters.ticker) {
-      where.ticker = filters.ticker
+    if (filters.assetId) {
+      where.assetId = filters.assetId
     }
 
     const [data, total] = await Promise.all([

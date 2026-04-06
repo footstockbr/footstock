@@ -14,8 +14,9 @@ export async function GET() {
       data: {
         userId: auth.user.id,
         accessedBy: auth.user.id,
-        action: 'DATA_EXPORT_REQUEST',
-        details: { format: 'json' },
+        dataType: 'export',
+        endpoint: '/api/v1/users/me/data',
+        reason: 'DATA_EXPORT_REQUEST',
       },
     })
 

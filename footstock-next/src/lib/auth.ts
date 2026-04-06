@@ -34,10 +34,11 @@ export async function getAuthUser(): Promise<{ user: User; supabaseId: string } 
 // ─── Verificar se usuário tem adminRole mínimo ─────────────────────────────────
 
 const ADMIN_ROLE_LEVELS: Record<AdminRole, number> = {
+  CLUB_PARTNER: 0,
   MONITOR: 1,
   EDITOR: 2,
   MODERADOR: 3,
-  ADMIN: 4,
+  ADMINISTRADOR: 4,
   SUPER_ADMIN: 5,
 }
 

@@ -42,8 +42,8 @@ export async function GET(request: NextRequest) {
     if (!asset) return errors.notFound('Ativo não encontrado.')
 
     const recentNews = await prisma.news.findMany({
-      where: { ticker: ticker.toUpperCase() },
-      orderBy: { injectedAt: 'desc' },
+      where: { assetIds: { has: ticker.toUpperCase() } },
+      orderBy: { publishedAt: 'desc' },
       take: 5,
     })
 
@@ -53,9 +53,15 @@ export async function GET(request: NextRequest) {
     // 3. Parsear resposta estruturada
     // 4. Armazenar no cache Redis
 
+    const sentimentToAsset = (s: string): AIAnalysis['sentimentoGeral'] => {
+      if (s === 'BULLISH') return 'BULLISH'
+      if (s === 'BEARISH') return 'BEARISH'
+      return 'NEUTRO'
+    }
+
     const analysis: AIAnalysis = {
       ticker: asset.ticker,
-      clubName: asset.displayName,
+      clubName: asset.name,
       resumo: 'Análise em desenvolvimento. Execute /auto-flow execute para implementar.',
       pontosPositivos: [],
       pontosNegativos: [],
@@ -64,12 +70,8 @@ export async function GET(request: NextRequest) {
       nivelRisco: 'MEDIO',
       noticiasRecentes: recentNews.map((n) => ({
         titulo: n.title,
-        sentimento: n.sentiment.toNumber() > 0.1
-          ? 'BULLISH'
-          : n.sentiment.toNumber() < -0.1
-            ? 'BEARISH'
-            : 'NEUTRO',
-        emoji: n.sentiment.toNumber() > 0.1 ? '📈' : n.sentiment.toNumber() < -0.1 ? '📉' : '➡️',
+        sentimento: sentimentToAsset(n.sentiment),
+        emoji: n.sentiment === 'BULLISH' ? '📈' : n.sentiment === 'BEARISH' ? '📉' : '➡️',
       })),
     }
 

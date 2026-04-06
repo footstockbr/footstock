@@ -34,7 +34,7 @@ export class AppError extends Error {
 
 export interface OrderFilters {
   status?: string
-  ticker?: string
+  assetId?: string
   type?: string
   page?: number
   limit?: number
@@ -124,7 +124,7 @@ export class OrderService {
     } else {
       // SELL: verificar que usuário tem a posição
       const position = await prisma.position.findFirst({
-        where: { userId, ticker: asset.ticker, side: 'LONG' },
+        where: { userId, assetId: asset.id, side: 'LONG' },
       })
       const ownedQty = Number(position?.quantity ?? 0)
       if (ownedQty < dto.quantity) {
@@ -156,12 +156,12 @@ export class OrderService {
       const groupId = randomUUID()
       const baseData = {
         userId,
-        ticker: asset.ticker,
+        assetId: asset.id,
         type: 'OCO' as import('@prisma/client').OrderType,
         side: dto.side as import('@prisma/client').OrderSide,
-        status: 'PENDING' as import('@prisma/client').OrderStatus,
+        status: 'OPEN' as import('@prisma/client').OrderStatus,
         quantity: dto.quantity,
-        feeAmount,
+        fee: feeAmount,
         scheduledAt: null as Date | null,
       }
 
@@ -191,8 +191,8 @@ export class OrderService {
 
       // Publicar ambas as pernas para o motor
       await Promise.allSettled([
-        redis.publish('orders:pending', JSON.stringify({ orderId: stopLossLeg.id, ticker: dto.ticker, groupId })),
-        redis.publish('orders:pending', JSON.stringify({ orderId: takeProfitLeg.id, ticker: dto.ticker, groupId })),
+        redis.publish('orders:pending', JSON.stringify({ orderId: stopLossLeg.id, assetId: asset.id, ticker: dto.ticker, groupId })),
+        redis.publish('orders:pending', JSON.stringify({ orderId: takeProfitLeg.id, assetId: asset.id, ticker: dto.ticker, groupId })),
       ])
 
       await this._incrementDailyCounter(userId)
@@ -213,13 +213,13 @@ export class OrderService {
       prisma.order.create({
         data: {
           userId,
-          ticker: asset.ticker,
+          assetId: asset.id,
           type: dto.type as import('@prisma/client').OrderType,
           side: dto.side as import('@prisma/client').OrderSide,
-          status: 'PENDING' as import('@prisma/client').OrderStatus,
+          status: 'OPEN' as import('@prisma/client').OrderStatus,
           quantity: dto.quantity,
           price: dto.price ?? null,
-          feeAmount,
+          fee: feeAmount,
           scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : null,
         },
       }),
@@ -234,7 +234,7 @@ export class OrderService {
 
     // Publicar para o motor (MARKET → processamento imediato)
     if (dto.type === ORDER_TYPE.MARKET) {
-      await redis.publish('orders:pending', JSON.stringify({ orderId: order.id, ticker: dto.ticker }))
+      await redis.publish('orders:pending', JSON.stringify({ orderId: order.id, assetId: asset.id, ticker: dto.ticker }))
     }
 
     // Incrementar contador diário (Redis com TTL até meia-noite)
@@ -253,9 +253,9 @@ export class OrderService {
       throw new AppError('ORDER_080', 404, { message: 'Ordem não encontrada.' })
     }
 
-    if (order.status !== ORDER_STATUS.PENDING && order.status !== 'PARTIAL') {
-      throw new AppError('ORDER_053', order.status === ORDER_STATUS.EXECUTED ? 409 : 422, {
-        message: order.status === ORDER_STATUS.EXECUTED
+    if (order.status !== ORDER_STATUS.OPEN && order.status !== 'PARTIAL') {
+      throw new AppError('ORDER_053', order.status === ORDER_STATUS.FILLED ? 409 : 422, {
+        message: order.status === ORDER_STATUS.FILLED
           ? 'Ordem já foi executada.'
           : `Ordem não pode ser cancelada (status: ${order.status}).`,
       })
@@ -283,10 +283,10 @@ export class OrderService {
 
       // Liberar marginBlocked para ordens SHORT
       if (order.side === 'SELL') {
-        const asset = await tx.asset.findUnique({ where: { ticker: order.ticker } })
+        const asset = await tx.asset.findUnique({ where: { id: order.assetId } })
         if (asset) {
           const position = await tx.position.findFirst({
-            where: { userId, ticker: order.ticker, side: 'SHORT' },
+            where: { userId, assetId: order.assetId, side: 'SHORT' },
           })
           if (position && Number(position.marginBlocked) > 0) {
             const marginToRelease = Number(order.quantity) * Number(asset.currentPrice) * 1.5
@@ -327,13 +327,9 @@ export class OrderService {
     if (filters.status) where.status = filters.status
     if (filters.type) where.type = filters.type
 
-    // Filtro por ticker requer join com asset
-    let assetId: string | undefined
-    if (filters.ticker) {
-      const asset = await prisma.asset.findUnique({ where: { ticker: filters.ticker } })
-      assetId = asset?.id
-      if (!assetId) return { data: [], pagination: { page, limit, total: 0, totalPages: 0 } }
-      where.ticker = filters.ticker
+    // Filtro por assetId
+    if (filters.assetId) {
+      where.assetId = filters.assetId
     }
 
     const [data, total] = await Promise.all([

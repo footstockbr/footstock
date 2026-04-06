@@ -34,7 +34,8 @@ async function handler(_req: NextRequest) {
       accessedBy: true,
       dataType: true,
       endpoint: true,
-      details: true,
+      reason: true,
+      ipAddress: true,
       createdAt: true,
     },
   })

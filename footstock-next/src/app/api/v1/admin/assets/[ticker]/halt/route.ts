@@ -9,16 +9,16 @@ const HaltAssetSchema = z.object({
 })
 
 function serializeAsset(a: {
-  id: string; ticker: string; displayName: string; division: string
+  id: string; ticker: string; name: string; division: string
   currentPrice: { toNumber(): number }; fairValue: { toNumber(): number }
   currentSupply: bigint; totalShares: bigint; isHalted: boolean
-  haltReason: string | null; colors: unknown; financials: unknown
-  sentiment: string; updatedAt: Date
+  haltReason: string | null; colorPrimary: string; colorSecondary: string
+  financials: unknown; sentiment: string; updatedAt: Date
 }) {
   return {
     id: a.id,
     ticker: a.ticker,
-    displayName: a.displayName,
+    displayName: a.name,
     division: a.division,
     currentPrice: a.currentPrice.toNumber(),
     fairValue: a.fairValue.toNumber(),
@@ -26,7 +26,7 @@ function serializeAsset(a: {
     totalShares: Number(a.totalShares),
     isHalted: a.isHalted,
     haltReason: a.haltReason ?? null,
-    colors: a.colors,
+    colors: { primary: a.colorPrimary, secondary: a.colorSecondary },
     financials: a.financials,
     sentiment: a.sentiment,
     updatedAt: a.updatedAt.toISOString(),
@@ -41,7 +41,7 @@ export async function POST(
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()
 
-  if (!hasAdminRole(auth.user.adminRole, 'ADMIN')) {
+  if (!hasAdminRole(auth.user.adminRole, 'ADMINISTRADOR')) {
     return errors.forbidden()
   }
 
@@ -64,7 +64,7 @@ export async function POST(
       data: {
         adminId: auth.user.id,
         action: 'HALT_ASSET',
-        targetTicker: ticker.toUpperCase(),
+        ticker: ticker.toUpperCase(),
         details: { reason: parsed.data.reason },
       },
     })
@@ -83,7 +83,7 @@ export async function DELETE(
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()
 
-  if (!hasAdminRole(auth.user.adminRole, 'ADMIN')) {
+  if (!hasAdminRole(auth.user.adminRole, 'ADMINISTRADOR')) {
     return errors.forbidden()
   }
 
@@ -102,7 +102,7 @@ export async function DELETE(
       data: {
         adminId: auth.user.id,
         action: 'RELEASE_HALT',
-        targetTicker: ticker.toUpperCase(),
+        ticker: ticker.toUpperCase(),
         details: {},
       },
     })

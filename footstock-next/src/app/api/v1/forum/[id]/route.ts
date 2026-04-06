@@ -2,7 +2,6 @@ import { NextRequest } from 'next/server'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
-import type { PostStatus } from '@/types'
 
 // DELETE /api/v1/forum/:id — remover post (MODERADOR+)
 export async function DELETE(
@@ -19,13 +18,13 @@ export async function DELETE(
   const { id } = await params
 
   try {
-    const post = await prisma.forumPost.findUnique({ where: { id } })
+    const post = await prisma.globalForumPost.findUnique({ where: { id } })
 
     if (!post) return errors.notFound('Post não encontrado.')
 
-    const removed = await prisma.forumPost.update({
+    const removed = await prisma.globalForumPost.update({
       where: { id },
-      data: { status: 'REMOVED' },
+      data: { isDeleted: true },
     })
 
     return ok({
@@ -33,9 +32,9 @@ export async function DELETE(
       userId: removed.userId,
       content: removed.content,
       ticker: removed.ticker ?? null,
-      status: removed.status as PostStatus,
-      likes: removed.likes,
-      flagged: removed.flagged,
+      isFlagged: removed.isFlagged,
+      flagCount: removed.flagCount,
+      isDeleted: removed.isDeleted,
       createdAt: removed.createdAt.toISOString(),
       updatedAt: removed.updatedAt.toISOString(),
     })

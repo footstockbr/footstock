@@ -26,8 +26,9 @@ export async function POST(request: NextRequest) {
     const { planType, gateway, period } = parsed.data
 
     // Verificar se já tem assinatura ativa no mesmo plano
-    const existing = await prisma.subscription.findUnique({
+    const existing = await prisma.subscription.findFirst({
       where: { userId: auth.user.id },
+      orderBy: { createdAt: 'desc' },
     })
 
     if (existing && existing.status === 'ACTIVE' && existing.planType === planType) {

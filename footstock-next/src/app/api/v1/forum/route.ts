@@ -2,8 +2,7 @@ import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { getAuthUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { ok, created, list, errors, error, parsePagination, buildPagination } from '@/lib/api'
-import type { PostStatus } from '@/types'
+import { created, list, errors, error, parsePagination, buildPagination } from '@/lib/api'
 
 // Zod valida apenas tipo e presença do campo; os limites de tamanho (min/max)
 // são validados explicitamente abaixo para garantir os códigos FORUM_021 e
@@ -38,16 +37,17 @@ function sanitizeContent(content: string): { clean: string; flagged: boolean } {
 
 function serializePost(p: {
   id: string; userId: string; content: string; ticker: string | null
-  status: string; likes: number; flagged: boolean; createdAt: Date; updatedAt: Date
+  isFlagged: boolean; flagCount: number; isDeleted: boolean
+  createdAt: Date; updatedAt: Date
 }) {
   return {
     id: p.id,
     userId: p.userId,
     content: p.content,
     ticker: p.ticker ?? null,
-    status: p.status as PostStatus,
-    likes: p.likes,
-    flagged: p.flagged,
+    isFlagged: p.isFlagged,
+    flagCount: p.flagCount,
+    isDeleted: p.isDeleted,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
   }
@@ -65,22 +65,22 @@ export async function GET(request: NextRequest) {
 
   try {
     const where = {
-      status: 'ACTIVE' as PostStatus,
+      isDeleted: false,
       ...(ticker && { ticker: ticker.toUpperCase() }),
     }
 
     const orderBy = sort === 'curtidos'
-      ? { likes: 'desc' as const }
+      ? { likes: { _count: 'desc' as const } }
       : { createdAt: 'desc' as const }
 
     const [posts, total] = await Promise.all([
-      prisma.forumPost.findMany({
+      prisma.globalForumPost.findMany({
         where,
         orderBy,
         skip,
         take: Math.min(limit, 50),
       }),
-      prisma.forumPost.count({ where }),
+      prisma.globalForumPost.count({ where }),
     ])
 
     return list(posts.map(serializePost), buildPagination(page, Math.min(limit, 50), total))
@@ -116,13 +116,13 @@ export async function POST(request: NextRequest) {
 
     const { clean, flagged } = sanitizeContent(content)
 
-    const post = await prisma.forumPost.create({
+    const post = await prisma.globalForumPost.create({
       data: {
         userId: auth.user.id,
         content: clean,
         ticker: ticker?.toUpperCase() ?? null,
-        flagged,
-        status: flagged ? 'FLAGGED' : 'ACTIVE',
+        isFlagged: flagged,
+        flagCount: flagged ? 1 : 0,
       },
     })
 

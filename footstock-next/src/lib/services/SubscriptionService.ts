@@ -151,7 +151,7 @@ export class SubscriptionService extends BaseService {
         gateway: data.gateway as never,
         period: data.period as never,
         amount: data.amount,
-        status: 'PENDING_PAYMENT',
+        status: 'PENDING',
         startsAt: data.startsAt,
         expiresAt: data.expiresAt,
       },

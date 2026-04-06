@@ -43,7 +43,7 @@ export async function GET() {
     // ---------- Resolver assetId pelo ticker ----------
     const asset = await prisma.asset.findUnique({
       where: { ticker: clubId },
-      select: { id: true, ticker: true, displayName: true, currentPrice: true },
+      select: { id: true, ticker: true, name: true, currentPrice: true },
     })
 
     if (!asset) {
@@ -61,7 +61,7 @@ export async function GET() {
 
     // Total de fãs: usuários únicos com posição aberta no ativo do clube
     const totalFansResult = await prisma.position.findMany({
-      where: { ticker: asset.ticker, status: 'OPEN', quantity: { gt: 0 } },
+      where: { assetId: asset.id, status: 'OPEN', quantity: { gt: 0 } },
       select: { userId: true },
       distinct: ['userId'],
     })
@@ -71,7 +71,7 @@ export async function GET() {
     const fansByPlanRaw = await prisma.user.findMany({
       where: {
         positions: {
-          some: { ticker: asset.ticker, status: 'OPEN', quantity: { gt: 0 } },
+          some: { assetId: asset.id, status: 'OPEN', quantity: { gt: 0 } },
         },
       },
       select: { planType: true },
@@ -85,7 +85,7 @@ export async function GET() {
 
     // Valor médio da carteira (posições abertas, usando currentPrice do asset)
     const openPositions = await prisma.position.findMany({
-      where: { ticker: asset.ticker, status: 'OPEN', quantity: { gt: 0 } },
+      where: { assetId: asset.id, status: 'OPEN', quantity: { gt: 0 } },
       select: { quantity: true },
     })
 
@@ -99,8 +99,8 @@ export async function GET() {
     // Total FS$ movimentado (soma do valor de face das ordens executadas)
     const fsVolumeResult = await prisma.order.aggregate({
       where: {
-        ticker: asset.ticker,
-        status: 'EXECUTED',
+        assetId: asset.id,
+        status: 'FILLED',
       },
       _sum: { quantity: true },
     })
@@ -108,7 +108,7 @@ export async function GET() {
 
     // Top 5 posições (anônimas — sem userId, sem email)
     const topPositionsRaw = await prisma.position.findMany({
-      where: { ticker: asset.ticker, status: 'OPEN', quantity: { gt: 0 } },
+      where: { assetId: asset.id, status: 'OPEN', quantity: { gt: 0 } },
       orderBy: { quantity: 'desc' },
       take: 5,
       select: { quantity: true }, // SEM userId, email, dados pessoais
@@ -125,7 +125,7 @@ export async function GET() {
 
     const monthlyRaw = await prisma.position.findMany({
       where: {
-        ticker: asset.ticker,
+        assetId: asset.id,
         createdAt: { gte: sixMonthsAgo },
       },
       select: { createdAt: true },

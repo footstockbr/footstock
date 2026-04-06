@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { getAuthUser, hasAdminRole, serializeUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { list, errors, parsePagination, buildPagination } from '@/lib/api'
-import type { PlanType, AdminRole, UserType } from '@/types'
+import type { PlanType, AdminRole } from '@/types'
 
 // GET /api/v1/admin/users — MONITOR+
 // Suporta filtros: search, planType, adminRole, status (active/suspended), userType, page
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl
   const planType = searchParams.get('planType') as PlanType | null
   const adminRole = searchParams.get('adminRole') as AdminRole | null
-  const userType = searchParams.get('userType') as UserType | null
+  const userType = searchParams.get('userType')
   const status = searchParams.get('status') // 'active' | 'suspended'
   const search = searchParams.get('search')
   const { page, limit, skip } = parsePagination(searchParams)
@@ -27,8 +27,9 @@ export async function GET(request: NextRequest) {
       data: {
         userId: auth.user.id,
         accessedBy: auth.user.id,
-        action: 'ADMIN_LIST_USERS',
-        details: { filters: { planType, adminRole, userType, status, search } },
+        dataType: 'admin_view',
+        endpoint: '/api/v1/admin/users',
+        reason: 'ADMIN_LIST_USERS',
       },
     })
 
@@ -53,9 +54,8 @@ export async function GET(request: NextRequest) {
         skip,
         take: limit,
         include: {
-          affiliateCodes: {
+          affiliateCode: {
             select: { code: true, affiliateType: true, commissionPercentage: true },
-            take: 1,
           },
         },
       }),
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
       status: u.suspendedAt ? 'suspended' : 'active',
       suspendedAt: u.suspendedAt?.toISOString() ?? null,
       suspensionReason: u.suspensionReason ?? null,
-      affiliateCode: u.affiliateCodes[0] ?? null,
+      affiliateCode: u.affiliateCode ?? null,
     }))
 
     return list(serialized, buildPagination(page, limit, total))

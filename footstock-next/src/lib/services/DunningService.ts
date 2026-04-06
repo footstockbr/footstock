@@ -147,7 +147,7 @@ export class DunningService {
   async cancelDunning(subscriptionId: string): Promise<void> {
     await prisma.dunningAttempt.updateMany({
       where:  { subscriptionId, status: 'PENDING' },
-      data:   { status: 'REJECTED', processedAt: new Date() },
+      data:   { status: 'FAILED', processedAt: new Date() },
     })
   }
 }

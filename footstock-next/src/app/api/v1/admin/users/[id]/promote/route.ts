@@ -3,11 +3,11 @@ import { z } from 'zod'
 import { getAuthUser, hasAdminRole, serializeUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
-import type { AdminRole } from '@/types'
+import type { AdminRole } from '@prisma/client'
 
 const PromoteSchema = z.object({
   adminRole: z
-    .enum(['SUPER_ADMIN', 'ADMIN', 'MONITOR', 'EDITOR', 'MODERADOR'])
+    .enum(['SUPER_ADMIN', 'ADMINISTRADOR', 'MONITOR', 'EDITOR', 'MODERADOR', 'CLUB_PARTNER'])
     .nullable(),
 })
 

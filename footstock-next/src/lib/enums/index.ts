@@ -41,15 +41,11 @@ export const ORDER_SIDE = {
 } as const;
 export type OrderSide = (typeof ORDER_SIDE)[keyof typeof ORDER_SIDE];
 
-/** Status do ciclo de vida de uma ordem */
+/** Status do ciclo de vida de uma ordem (alinhado com Prisma OrderStatus enum) */
 export const ORDER_STATUS = {
-  /** Aguardando execução no order book */
-  PENDING: 'PENDING',
-  /** Ordem aberta no order book (legado) */
+  /** Ordem aberta no order book */
   OPEN: 'OPEN',
-  /** Executada com sucesso pelo motor */
-  EXECUTED: 'EXECUTED',
-  /** Executada completamente (legado) */
+  /** Executada completamente pelo motor */
   FILLED: 'FILLED',
   /** Cancelada pelo usuário ou sistema */
   CANCELLED: 'CANCELLED',
@@ -57,6 +53,11 @@ export const ORDER_STATUS = {
   EXPIRED: 'EXPIRED',
   /** Parcialmente executada */
   PARTIAL: 'PARTIAL',
+  // Aliases legados (mapeiam para os valores canônicos)
+  /** @deprecated Use OPEN */
+  PENDING: 'OPEN',
+  /** @deprecated Use FILLED */
+  EXECUTED: 'FILLED',
 } as const;
 export type OrderStatus = (typeof ORDER_STATUS)[keyof typeof ORDER_STATUS];
 
@@ -103,7 +104,7 @@ export const INVESTOR_PROFILE = {
   /** Investidor experiente */
   AVANCADO: 'AVANCADO',
   /** Fã de futebol (perfil torcedor) */
-  FA_FUTEBOL: 'FA_FUTEBOL',
+  FA: 'FA',
 } as const;
 export type InvestorProfile = (typeof INVESTOR_PROFILE)[keyof typeof INVESTOR_PROFILE];
 
