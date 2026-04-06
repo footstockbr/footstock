@@ -65,7 +65,7 @@ export default async function AssetDetailServerPage({ params }: Props) {
     id: asset.id,
     ticker: asset.ticker,
     displayName: asset.name,
-    division: asset.division as 'A' | 'B',
+    division: asset.division as 'SERIE_A' | 'SERIE_B',
     currentPrice,
     fairValue,
     currentSupply,
@@ -82,7 +82,7 @@ export default async function AssetDetailServerPage({ params }: Props) {
       totalShares: Number(asset.totalShares),
     },
     fairValuePremium,
-    sentiment: asset.sentiment as 'BULLISH' | 'NEUTRO' | 'BEARISH',
+    sentiment: asset.sentiment as 'BULLISH' | 'NEUTRAL' | 'BEARISH',
     updatedAt: asset.updatedAt.toISOString(),
     logoUrl: null as string | null,
   }

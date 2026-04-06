@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, Shield, Trophy } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants/routes";
@@ -19,26 +19,11 @@ const BASE_NAV_ITEMS = [
   { href: ROUTES.PERFIL, label: "Perfil" },
 ];
 
-const ADMIN_ROLES = ["SUPER_ADMIN", "ADMINISTRADOR", "MONITOR", "EDITOR", "MODERADOR"];
-
 function DesktopSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const currentPath = pathname ?? "";
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [adminRole, setAdminRole] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch("/api/v1/users/me")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((json) => {
-        if (json?.data?.adminRole) setAdminRole(json.data.adminRole);
-      })
-      .catch(() => {});
-  }, []);
-
-  const isAdmin = adminRole && ADMIN_ROLES.includes(adminRole);
-  const isClubPartner = adminRole === "CLUB_PARTNER";
 
   async function handleLogout() {
     if (isLoggingOut) return;
@@ -49,6 +34,7 @@ function DesktopSidebar() {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       );
       await supabase.auth.signOut();
+      document.cookie = "fs-admin-role=; path=/; max-age=0";
       router.replace(ROUTES.LOGIN);
     } catch {
       setIsLoggingOut(false);
@@ -93,35 +79,6 @@ function DesktopSidebar() {
           );
         })}
 
-        {isAdmin && (
-          <Link
-            href={ROUTES.ADMIN}
-            className={cn(
-              "flex items-center gap-2 rounded-md px-3 py-2 text-sm min-h-[44px] transition-colors mt-2 border-t border-[rgba(240,185,11,.08)] pt-3",
-              currentPath.startsWith(ROUTES.ADMIN)
-                ? "bg-[rgba(240,185,11,.12)] text-[#F0B90B] border border-[rgba(240,185,11,.25)]"
-                : "text-[#929AA5] hover:text-[#EAECEF] hover:bg-[#1E2329]"
-            )}
-          >
-            <Shield className="h-4 w-4" />
-            Admin
-          </Link>
-        )}
-
-        {isClubPartner && (
-          <Link
-            href={ROUTES.CLUB}
-            className={cn(
-              "flex items-center gap-2 rounded-md px-3 py-2 text-sm min-h-[44px] transition-colors mt-2 border-t border-[rgba(240,185,11,.08)] pt-3",
-              currentPath.startsWith(ROUTES.CLUB)
-                ? "bg-[rgba(240,185,11,.12)] text-[#F0B90B] border border-[rgba(240,185,11,.25)]"
-                : "text-[#929AA5] hover:text-[#EAECEF] hover:bg-[#1E2329]"
-            )}
-          >
-            <Trophy className="h-4 w-4" />
-            Portal do Clube
-          </Link>
-        )}
       </nav>
 
       <div className="mt-auto border-t border-[rgba(240,185,11,.1)] p-3">

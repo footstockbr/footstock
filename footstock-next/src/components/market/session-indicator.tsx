@@ -51,7 +51,7 @@ export function SessionIndicator({ compact = false, className }: SessionIndicato
 
   const color = SESSION_COLORS[session]
   const label = SESSION_LABELS[session]
-  const isNegociacao = session === MarketSession.NEGOCIACAO
+  const isNegociacao = session === MarketSession.REGULAR
   const countdownText = countdownSeconds > 0 ? `em ${formatCountdown(countdownSeconds)}` : ''
   const ariaLabel = compact
     ? `Sessão: ${label}`

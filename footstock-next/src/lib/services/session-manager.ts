@@ -20,11 +20,10 @@ export interface SessionWindow {
 }
 
 const SESSION_SCHEDULE: SessionWindow[] = [
-  { type: MarketSession.PRE_ABERTURA, startHour: 10, startMinute: 45, endHour: 11, endMinute: 0,  volatilityMultiplier: 0.30 },
-  { type: MarketSession.NEGOCIACAO,   startHour: 11, startMinute: 0,  endHour: 17, endMinute: 30, volatilityMultiplier: 1.00 },
-  { type: MarketSession.CALL,         startHour: 17, startMinute: 30, endHour: 17, endMinute: 45, volatilityMultiplier: 0.20 },
-  // AFTER_MARKET: 17:45 → 01:30 (cruza meia-noite — endHour usa 24+ para representar wrap)
-  { type: MarketSession.AFTER_MARKET, startHour: 17, startMinute: 45, endHour: 25, endMinute: 30, volatilityMultiplier: 0.10 },
+  { type: MarketSession.PRE_MARKET,   startHour: 10, startMinute: 45, endHour: 11, endMinute: 0,  volatilityMultiplier: 0.30 },
+  { type: MarketSession.REGULAR,      startHour: 11, startMinute: 0,  endHour: 17, endMinute: 30, volatilityMultiplier: 1.00 },
+  // AFTER_MARKET: 17:30 → 01:30 (cruza meia-noite — endHour usa 24+ para representar wrap)
+  { type: MarketSession.AFTER_MARKET, startHour: 17, startMinute: 30, endHour: 25, endMinute: 30, volatilityMultiplier: 0.10 },
 ]
 
 export interface NextTransition {
@@ -46,7 +45,7 @@ function findSession(hour: number, minute: number): MarketSession {
       if (timeMinutes >= start && timeMinutes < end) return w.type
     }
   }
-  return MarketSession.FECHADO
+  return MarketSession.CLOSED
 }
 
 function findNextWindow(hour: number, minute: number): SessionWindow {
@@ -90,7 +89,7 @@ export function getNextTransition(now = new Date()): NextTransition {
 
 export function isMarketOpen(now = new Date()): boolean {
   const s = getCurrentSession(now)
-  return s === MarketSession.NEGOCIACAO || s === MarketSession.PRE_ABERTURA
+  return s === MarketSession.REGULAR || s === MarketSession.PRE_MARKET
 }
 
 export function getSessionLabel(session: MarketSession): string {

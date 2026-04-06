@@ -1,9 +1,14 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import { getAuthUser } from "@/lib/auth";
 
-// TODO: implement with Supabase Auth session validation
-export async function GET(request: NextRequest) {
-  return NextResponse.json(
-    { user: null, authenticated: false },
-    { status: 200 }
-  );
+export async function GET() {
+  try {
+    const auth = await getAuthUser();
+    if (!auth) {
+      return NextResponse.json({ user: null, authenticated: false });
+    }
+    return NextResponse.json({ user: auth.user, authenticated: true });
+  } catch {
+    return NextResponse.json({ user: null, authenticated: false });
+  }
 }

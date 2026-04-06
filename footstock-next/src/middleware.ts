@@ -9,6 +9,7 @@ const PUBLIC_API_PATHS = [
   '/api/v1/auth/login',
   '/api/v1/auth/forgot-password',
   '/api/v1/auth/reset-password',
+  '/api/v1/auth/session',
   '/api/v1/auth/webauthn/authenticate',
   '/api/v1/health',
   '/api/v1/payments/webhook',
@@ -101,6 +102,18 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/', request.url))
     }
 
+    // Admin/club users on non-admin routes → redirect to their panel
+    if (!pathname.startsWith('/admin') && !pathname.startsWith('/club')) {
+      const adminRole = request.cookies.get('fs-admin-role')?.value
+      const adminRoles = ['SUPER_ADMIN', 'ADMINISTRADOR', 'MONITOR', 'EDITOR', 'MODERADOR']
+      if (adminRole && adminRoles.includes(adminRole)) {
+        return NextResponse.redirect(new URL('/admin', request.url))
+      }
+      if (adminRole === 'CLUB_PARTNER') {
+        return NextResponse.redirect(new URL('/club', request.url))
+      }
+    }
+
     return response
   }
 
@@ -110,6 +123,15 @@ export async function middleware(request: NextRequest) {
     } = await supabase.auth.getUser()
 
     if (user) {
+      // Admin users go to /admin, club partners to /club, others to /mercado
+      const adminRole = request.cookies.get('fs-admin-role')?.value
+      const adminRoles = ['SUPER_ADMIN', 'ADMINISTRADOR', 'MONITOR', 'EDITOR', 'MODERADOR']
+      if (adminRole && adminRoles.includes(adminRole)) {
+        return NextResponse.redirect(new URL('/admin', request.url))
+      }
+      if (adminRole === 'CLUB_PARTNER') {
+        return NextResponse.redirect(new URL('/club', request.url))
+      }
       return NextResponse.redirect(new URL('/mercado', request.url))
     }
   }

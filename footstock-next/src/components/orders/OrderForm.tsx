@@ -62,7 +62,7 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const currentPrice = tick?.lastPrice ?? 0
-  const isMarketClosed = session !== MarketSession.NEGOCIACAO
+  const isMarketClosed = session !== MarketSession.REGULAR
   const isMarketDisabled = orderType === 'MARKET' && isMarketClosed
   const atDailyLimit = dailyOrdersUsed >= dailyLimit
 

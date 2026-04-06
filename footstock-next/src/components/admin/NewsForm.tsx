@@ -25,12 +25,12 @@ interface NewsFormProps {
 }
 
 const IMPACT_CATEGORIES = [
-  { value: 'RESULTADO_ESPORTIVO', label: 'Resultado Esportivo' },
-  { value: 'CONTRATACAO', label: 'Contratação' },
-  { value: 'FINANCEIRO', label: 'Financeiro' },
-  { value: 'LESAO', label: 'Lesão' },
-  { value: 'SUSPENSAO', label: 'Suspensão' },
-  { value: 'INSTITUCIONAL', label: 'Institucional' },
+  { value: 'ESPORTIVA_MAJORITARIA', label: 'Esportiva Majoritária (+/-3%)' },
+  { value: 'FINANCEIRA_CRITICA', label: 'Financeira Crítica (+/-5%)' },
+  { value: 'MERCADO_ATIVOS', label: 'Mercado/Ativos (+/-2%)' },
+  { value: 'INTEGRIDADE_SAUDE', label: 'Integridade/Saúde (+/-1.5%)' },
+  { value: 'INSTITUCIONAL', label: 'Institucional (+/-1%)' },
+  { value: 'ESPORTIVA_MENOR', label: 'Esportiva Menor (+/-0.5%)' },
 ]
 
 export function NewsForm({ news, onSave, onCancel }: NewsFormProps) {

@@ -17,16 +17,18 @@ export const PLAN_TYPE = {
 } as const;
 export type PlanType = (typeof PLAN_TYPE)[keyof typeof PLAN_TYPE];
 
-/** Tipos de ordem disponíveis para negociação */
+/** Tipos de ordem disponíveis para negociação (alinhado com Prisma OrderType) */
 export const ORDER_TYPE = {
   /** Ordem executada ao preço de mercado */
   MARKET: 'MARKET',
   /** Ordem com preço-limite definido */
   LIMIT: 'LIMIT',
+  /** Ordem stop-loss */
+  STOP_LOSS: 'STOP_LOSS',
+  /** Ordem take-profit */
+  TAKE_PROFIT: 'TAKE_PROFIT',
   /** Ordem OCO (One Cancels Other) */
   OCO: 'OCO',
-  /** Ordem de venda a descoberto */
-  SHORT: 'SHORT',
   /** Ordem programada para execução futura */
   SCHEDULED: 'SCHEDULED',
 } as const;
@@ -78,23 +80,37 @@ export const ADMIN_ROLE = {
 } as const;
 export type AdminRole = (typeof ADMIN_ROLE)[keyof typeof ADMIN_ROLE];
 
-/** Sessões do pregão virtual */
+/** Sessões do pregão virtual (alinhado com Prisma SessionType) */
 export const SESSION_TYPE = {
   /** Período de pré-abertura */
-  PRE_ABERTURA: 'PRE_ABERTURA',
+  PRE_MARKET: 'PRE_MARKET',
   /** Pregão regular de negociação */
-  NEGOCIACAO: 'NEGOCIACAO',
-  /** Leilão de fechamento */
-  CALL: 'CALL',
+  REGULAR: 'REGULAR',
   /** After-market com restrições */
   AFTER_MARKET: 'AFTER_MARKET',
   /** Mercado fechado */
-  FECHADO: 'FECHADO',
+  CLOSED: 'CLOSED',
 } as const;
 export type SessionType = (typeof SESSION_TYPE)[keyof typeof SESSION_TYPE];
 
-/** Perfil de investidor do usuário */
+/** Labels em português para exibição de sessões no UI */
+export const SESSION_TYPE_LABELS: Record<SessionType, string> = {
+  PRE_MARKET: 'Pré-Abertura',
+  REGULAR: 'Negociação',
+  AFTER_MARKET: 'After Market',
+  CLOSED: 'Fechado',
+};
+
+/** Perfil de investidor do usuário (alinhado com Prisma InvestorProfile) */
 export const INVESTOR_PROFILE = {
+  /** @legacy Investidor conservador */
+  CONSERVADOR: 'CONSERVADOR',
+  /** @legacy Investidor moderado */
+  MODERADO: 'MODERADO',
+  /** @legacy Investidor arrojado */
+  ARROJADO: 'ARROJADO',
+  /** @legacy Investidor especulador */
+  ESPECULADOR: 'ESPECULADOR',
   /** Investidor iniciante */
   INICIANTE: 'INICIANTE',
   /** Investidor com experiência moderada */
@@ -154,55 +170,73 @@ export const NOTIFICATION_TYPE = {
 } as const;
 export type NotificationType = (typeof NOTIFICATION_TYPE)[keyof typeof NOTIFICATION_TYPE];
 
-/** Categorias de impacto nos preços dos ativos */
+/** Categorias de impacto nos preços dos ativos (alinhado com Prisma ImpactCategory) */
 export const IMPACT_CATEGORY = {
-  /** Vitória em partida */
-  VITORIA: 'VITORIA',
-  /** Derrota em partida */
-  DERROTA: 'DERROTA',
-  /** Empate em partida */
-  EMPATE: 'EMPATE',
-  /** Conquista de título */
-  TITULO: 'TITULO',
-  /** Rebaixamento de divisão */
-  REBAIXAMENTO: 'REBAIXAMENTO',
-  /** Contratação de jogador */
-  CONTRATACAO: 'CONTRATACAO',
-  /** Venda de jogador */
-  VENDA: 'VENDA',
-  /** Lesão de jogador */
-  LESAO: 'LESAO',
-  /** Suspensão de jogador */
-  SUSPENSAO: 'SUSPENSAO',
-  /** Mudança de técnico */
-  TECNICO: 'TECNICO',
-  /** Evento financeiro do clube */
-  FINANCEIRO: 'FINANCEIRO',
-  /** Contrato de patrocínio */
-  PATROCINIO: 'PATROCINIO',
-  /** Evento relacionado ao estádio */
-  ESTADIO: 'ESTADIO',
-  /** Evento de torcida */
-  TORCIDA: 'TORCIDA',
-  /** Polêmica de arbitragem */
-  ARBITRAGEM: 'ARBITRAGEM',
+  /** @legacy Impacto positivo */
+  POSITIVE: 'POSITIVE',
+  /** @legacy Impacto negativo */
+  NEGATIVE: 'NEGATIVE',
+  /** @legacy Impacto neutro */
+  NEUTRAL: 'NEUTRAL',
+  /** Crise/bonança financeira (+/-5%) */
+  FINANCEIRA_CRITICA: 'FINANCEIRA_CRITICA',
+  /** Resultado esportivo importante (+/-3%) */
+  ESPORTIVA_MAJORITARIA: 'ESPORTIVA_MAJORITARIA',
+  /** Movimento de mercado/ativos (+/-2%) */
+  MERCADO_ATIVOS: 'MERCADO_ATIVOS',
+  /** Integridade e saúde (+/-1.5%) */
+  INTEGRIDADE_SAUDE: 'INTEGRIDADE_SAUDE',
+  /** Evento institucional (+/-1%) */
+  INSTITUCIONAL: 'INSTITUCIONAL',
+  /** Evento esportivo menor (+/-0.5%) */
+  ESPORTIVA_MENOR: 'ESPORTIVA_MENOR',
 } as const;
 export type ImpactCategory = (typeof IMPACT_CATEGORY)[keyof typeof IMPACT_CATEGORY];
 
-/** Sentimento de mercado ou notícia */
+/**
+ * Tipos de evento esportivo (UI-only, NÃO armazenado no DB).
+ * Usado para classificar notícias e disparar dividendos.
+ * Cada evento mapeia para uma ImpactCategory do DB.
+ */
+export const IMPACT_EVENT_TYPE = {
+  VITORIA: 'VITORIA',
+  DERROTA: 'DERROTA',
+  EMPATE: 'EMPATE',
+  TITULO: 'TITULO',
+  REBAIXAMENTO: 'REBAIXAMENTO',
+  CONTRATACAO: 'CONTRATACAO',
+  VENDA: 'VENDA',
+  LESAO: 'LESAO',
+  SUSPENSAO: 'SUSPENSAO',
+  TECNICO: 'TECNICO',
+  FINANCEIRO: 'FINANCEIRO',
+  PATROCINIO: 'PATROCINIO',
+  ESTADIO: 'ESTADIO',
+  TORCIDA: 'TORCIDA',
+  ARBITRAGEM: 'ARBITRAGEM',
+} as const;
+export type ImpactEventType = (typeof IMPACT_EVENT_TYPE)[keyof typeof IMPACT_EVENT_TYPE];
+
+/** Sentimento de mercado (alinhado com Prisma Sentiment — 3 valores) */
 export const SENTIMENT = {
-  /** Impacto muito positivo */
-  MUITO_POSITIVO: 'MUITO_POSITIVO',
-  /** Impacto positivo */
-  POSITIVO: 'POSITIVO',
-  /** Impacto neutro */
-  NEUTRO: 'NEUTRO',
-  /** Impacto negativo */
-  NEGATIVO: 'NEGATIVO',
-  /** Impacto muito negativo */
-  MUITO_NEGATIVO: 'MUITO_NEGATIVO',
+  BULLISH: 'BULLISH',
+  BEARISH: 'BEARISH',
+  NEUTRAL: 'NEUTRAL',
 } as const;
 export type Sentiment = (typeof SENTIMENT)[keyof typeof SENTIMENT];
+
+/**
+ * Nível de sentimento para exibição no UI (5 valores).
+ * NÃO armazenado no DB — usado apenas para labels de notícias e análises.
+ */
+export const NEWS_SENTIMENT_LEVEL = {
+  MUITO_POSITIVO: 'MUITO_POSITIVO',
+  POSITIVO: 'POSITIVO',
+  NEUTRO: 'NEUTRO',
+  NEGATIVO: 'NEGATIVO',
+  MUITO_NEGATIVO: 'MUITO_NEGATIVO',
+} as const;
+export type NewsSentimentLevel = (typeof NEWS_SENTIMENT_LEVEL)[keyof typeof NEWS_SENTIMENT_LEVEL];
 
 /** Divisões do campeonato */
 export const DIVISION = {
@@ -213,20 +247,26 @@ export const DIVISION = {
 } as const;
 export type Division = (typeof DIVISION)[keyof typeof DIVISION];
 
-/** Status do ciclo de vida de uma assinatura */
+/** Status do ciclo de vida de uma assinatura (alinhado com Prisma SubscriptionStatus) */
 export const SUBSCRIPTION_STATUS = {
-  /** Período de teste gratuito */
-  TRIAL: 'TRIAL',
+  /** Aguardando confirmação */
+  PENDING: 'PENDING',
   /** Assinatura ativa */
   ACTIVE: 'ACTIVE',
-  /** Assinatura cancelada */
-  CANCELLED: 'CANCELLED',
+  /** Período de teste gratuito */
+  TRIAL: 'TRIAL',
   /** Assinatura expirada */
   EXPIRED: 'EXPIRED',
-  /** Aguardando confirmação de pagamento */
-  PENDING_PAYMENT: 'PENDING_PAYMENT',
+  /** Assinatura suspensa */
+  SUSPENDED: 'SUSPENDED',
   /** Trava de cancelamento (48h para liquidação de posições) */
   CANCELLATION_LOCK: 'CANCELLATION_LOCK',
+  /** Assinatura cancelada */
+  CANCELLED: 'CANCELLED',
+  /** @legacy Pagamento atrasado */
+  PAST_DUE: 'PAST_DUE',
+  /** @legacy Trial (alias) */
+  TRIALING: 'TRIALING',
 } as const;
 export type SubscriptionStatusType = (typeof SUBSCRIPTION_STATUS)[keyof typeof SUBSCRIPTION_STATUS];
 
@@ -237,20 +277,16 @@ export const PLAN_HIERARCHY: Record<PlanType, number> = {
   LENDA: 2,
 } as const;
 
-/** Status de pagamento */
+/** Status de pagamento (alinhado com Prisma PaymentStatus) */
 export const PAYMENT_STATUS = {
   /** Pagamento pendente */
   PENDING: 'PENDING',
-  /** Pagamento aprovado */
-  APPROVED: 'APPROVED',
-  /** Pagamento pago (legado) */
+  /** Pagamento pago */
   PAID: 'PAID',
-  /** Pagamento rejeitado */
-  REJECTED: 'REJECTED',
+  /** Pagamento falhou */
+  FAILED: 'FAILED',
   /** Pagamento estornado */
   REFUNDED: 'REFUNDED',
-  /** Chargeback */
-  CHARGEBACK: 'CHARGEBACK',
 } as const;
 export type PaymentStatus = (typeof PAYMENT_STATUS)[keyof typeof PAYMENT_STATUS];
 
@@ -324,7 +360,7 @@ export type GlossaryCategory = (typeof GLOSSARY_CATEGORY)[keyof typeof GLOSSARY_
 // Status de usuário (conta)
 // ---------------------------------------------------------------------------
 
-/** Status da conta de um usuário */
+/** Status da conta de um usuário (alinhado com Prisma UserStatus) */
 export const USER_STATUS = {
   /** Conta ativa */
   ACTIVE: 'ACTIVE',
@@ -332,8 +368,6 @@ export const USER_STATUS = {
   SUSPENDED: 'SUSPENDED',
   /** Conta banida permanentemente */
   BANNED: 'BANNED',
-  /** Sem plano pago (plano gratuito) */
-  FREE: 'FREE',
 } as const;
 export type UserStatusType = (typeof USER_STATUS)[keyof typeof USER_STATUS];
 

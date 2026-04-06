@@ -7,8 +7,8 @@
 
 import { prisma } from '@/lib/prisma'
 import { redisPublisher as redis } from '@/lib/redis'
-import { PLAN_TYPE, IMPACT_CATEGORY, DIVIDEND_TYPE, DIVIDEND_STATUS, NOTIFICATION_TYPE } from '@/lib/enums'
-import type { ImpactCategory } from '@/lib/enums'
+import { PLAN_TYPE, IMPACT_EVENT_TYPE, DIVIDEND_TYPE, DIVIDEND_STATUS, NOTIFICATION_TYPE } from '@/lib/enums'
+import type { ImpactEventType } from '@/lib/enums'
 import { getWalletBalance } from '@/lib/services/WalletService'
 import { sendNotification } from '@/lib/services/NotificationService'
 import { dividendRepository } from '@/lib/repositories/DividendRepository'
@@ -19,11 +19,11 @@ import type { Dividend } from '@prisma/client'
 // ---------------------------------------------------------------------------
 
 /** Taxas de yield por resultado esportivo (fração sobre valorPosicao) */
-const YIELD_RATES: Partial<Record<ImpactCategory, number>> = {
-  [IMPACT_CATEGORY.VITORIA]: 0.008,
-  [IMPACT_CATEGORY.TITULO]: 0.030,
-  [IMPACT_CATEGORY.EMPATE]: 0,
-  [IMPACT_CATEGORY.DERROTA]: 0,
+const YIELD_RATES: Partial<Record<ImpactEventType, number>> = {
+  [IMPACT_EVENT_TYPE.VITORIA]: 0.008,
+  [IMPACT_EVENT_TYPE.TITULO]: 0.030,
+  [IMPACT_EVENT_TYPE.EMPATE]: 0,
+  [IMPACT_EVENT_TYPE.DERROTA]: 0,
 }
 
 const FINANCIAL_YIELD_RATE = 0.005  // 0.5% ao mês
@@ -113,7 +113,7 @@ export class DividendService {
    */
   async calcularDividendoEsportivo(
     ticker: string,
-    impactCategory: ImpactCategory,
+    impactCategory: ImpactEventType,
     sentiment: number
   ): Promise<{ processed: number; failed: number }> {
     const yieldRate = YIELD_RATES[impactCategory] ?? 0

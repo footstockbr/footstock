@@ -62,9 +62,9 @@ export function useMarketSession(): UseMarketSessionReturn {
   const countdown = useCountdown(data?.countdownSeconds ?? 0)
 
   return {
-    session: data?.session ?? MarketSession.FECHADO,
+    session: data?.session ?? MarketSession.CLOSED,
     countdownSeconds: countdown,
-    nextSession: data?.nextSession ?? MarketSession.NEGOCIACAO,
+    nextSession: data?.nextSession ?? MarketSession.REGULAR,
     transitionAt: data?.transitionAt ?? null,
     isMarketOpen: data?.isMarketOpen ?? false,
     isLoading,

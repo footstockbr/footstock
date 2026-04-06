@@ -8,16 +8,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withAdmin } from '@/app/api/middleware'
 import { dividendService } from '@/lib/services/DividendService'
-import { IMPACT_CATEGORY } from '@/lib/enums'
+import { IMPACT_EVENT_TYPE } from '@/lib/enums'
 import type { AuthContext } from '@/app/api/middleware'
 
 const TriggerSchema = z.object({
   ticker: z.string().min(2).max(10),
   impactCategory: z.enum([
-    IMPACT_CATEGORY.VITORIA,
-    IMPACT_CATEGORY.TITULO,
-    IMPACT_CATEGORY.EMPATE,
-    IMPACT_CATEGORY.DERROTA,
+    IMPACT_EVENT_TYPE.VITORIA,
+    IMPACT_EVENT_TYPE.TITULO,
+    IMPACT_EVENT_TYPE.EMPATE,
+    IMPACT_EVENT_TYPE.DERROTA,
   ]),
   sentiment: z.number().min(0).max(1),
 })

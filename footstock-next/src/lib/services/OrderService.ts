@@ -398,11 +398,10 @@ export class OrderService {
   private async _checkMarketSession(): Promise<void> {
     try {
       const session = await redis.get('market:session')
-      if (session && session !== 'NEGOCIACAO') {
+      if (session && session !== 'REGULAR') {
         const messages: Record<string, string> = {
-          FECHADO: 'Mercado fechado. Ordens MARKET são aceitas apenas durante o pregão.',
-          PRE_ABERTURA: 'Mercado em pré-abertura. Aguarde o início do pregão.',
-          CALL: 'Mercado em leilão de fechamento. Tente novamente após o pregão.',
+          CLOSED: 'Mercado fechado. Ordens MARKET são aceitas apenas durante o pregão.',
+          PRE_MARKET: 'Mercado em pré-abertura. Aguarde o início do pregão.',
           AFTER_MARKET: 'Mercado em after-market. Ordens MARKET não são aceitas nesta sessão.',
         }
         throw new AppError('SESS_040', 422, {

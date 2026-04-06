@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
     const sentimentToAsset = (s: string): AIAnalysis['sentimentoGeral'] => {
       if (s === 'BULLISH') return 'BULLISH'
       if (s === 'BEARISH') return 'BEARISH'
-      return 'NEUTRO'
+      return 'NEUTRAL'
     }
 
     const analysis: AIAnalysis = {

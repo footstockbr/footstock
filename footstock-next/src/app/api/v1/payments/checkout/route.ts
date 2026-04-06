@@ -7,7 +7,7 @@ import { ok, errors } from '@/lib/api'
 const CheckoutSchema = z.object({
   planType: z.enum(['CRAQUE', 'LENDA']),
   gateway: z.enum(['MERCADO_PAGO', 'PAGSEGURO', 'PAYPAL']),
-  period: z.enum(['MONTHLY', 'ANNUAL']),
+  period: z.enum(['MONTHLY', 'YEARLY']),
 })
 
 // POST /api/v1/payments/checkout

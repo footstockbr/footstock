@@ -48,16 +48,16 @@ export type UserType = 'NORMAL' | 'TIME_PARCEIRO' | 'INFLUENCIADOR'
 export type InvestorProfile = 'CONSERVADOR' | 'MODERADO' | 'ARROJADO' | 'ESPECULADOR' | 'INICIANTE' | 'INTERMEDIARIO' | 'AVANCADO' | 'FA'
 export type PlanType = 'JOGADOR' | 'CRAQUE' | 'LENDA'
 export type AdminRole = 'SUPER_ADMIN' | 'ADMINISTRADOR' | 'MONITOR' | 'EDITOR' | 'MODERADOR' | 'CLUB_PARTNER'
-export type OrderType = 'MARKET' | 'LIMIT' | 'OCO' | 'SHORT' | 'SCHEDULED'
+export type OrderType = 'MARKET' | 'LIMIT' | 'STOP_LOSS' | 'TAKE_PROFIT' | 'OCO' | 'SCHEDULED'
 export type OrderSide = 'BUY' | 'SELL'
 export type OrderStatus = 'OPEN' | 'FILLED' | 'CANCELLED' | 'EXPIRED' | 'PARTIAL'
 export type PositionSide = 'LONG' | 'SHORT'
-export type AssetDivision = 'A' | 'B'
-export type AssetSentiment = 'BULLISH' | 'NEUTRO' | 'BEARISH'
+export type AssetDivision = 'SERIE_A' | 'SERIE_B'
+export type AssetSentiment = 'BULLISH' | 'NEUTRAL' | 'BEARISH'
 export type TransactionType = 'BUY' | 'SELL' | 'FEE' | 'DIVIDEND' | 'MARGIN_CALL'
-export type SubscriptionStatus = 'TRIAL' | 'ACTIVE' | 'CANCELLED' | 'EXPIRED' | 'PENDING_PAYMENT'
+export type SubscriptionStatus = 'PENDING' | 'ACTIVE' | 'TRIAL' | 'EXPIRED' | 'SUSPENDED' | 'CANCELLATION_LOCK' | 'CANCELLED' | 'PAST_DUE' | 'TRIALING'
 export type PaymentGateway = 'MERCADO_PAGO' | 'PAGSEGURO' | 'PAYPAL'
-export type PaymentPeriod = 'MONTHLY' | 'ANNUAL'
+export type PaymentPeriod = 'MONTHLY' | 'YEARLY'
 export type ImpactCategory = 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL' | 'FINANCEIRA_CRITICA' | 'ESPORTIVA_MAJORITARIA' | 'MERCADO_ATIVOS' | 'INTEGRIDADE_SAUDE' | 'INSTITUCIONAL' | 'ESPORTIVA_MENOR'
 export type LeagueType = 'PUBLICA' | 'AMIGOS' | 'PRO'
 export type LeagueDivision = 'BRONZE' | 'PRATA' | 'OURO' | 'ABERTA'
@@ -129,7 +129,8 @@ export interface User {
 export interface Asset {
   id: string
   ticker: string
-  displayName: string
+  name: string
+  clubSlug: string
   division: AssetDivision
   currentPrice: number
   fairValue: number
@@ -137,7 +138,9 @@ export interface Asset {
   totalShares: number
   isHalted: boolean
   haltReason?: string | null
-  colors: { primary: string; secondary: string }
+  colorPrimary: string
+  colorSecondary: string
+  logoUrl?: string | null
   financials: {
     receita?: number | null
     elenco?: number | null
@@ -145,13 +148,12 @@ export interface Asset {
     divida?: number | null
     freeFloat?: number | null
     multiplicador?: number | null
-    // Market detail computed fields
     marketCap?: number | null
     ipoPrice?: number | null
     equityValue?: number | null
     totalShares?: number | null
     [key: string]: unknown
-  }
+  } | null
   sentiment: AssetSentiment
   updatedAt: string
 }

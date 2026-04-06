@@ -3,7 +3,7 @@
 // Mapeia sentiment para duração de ticks do efeito da notícia.
 // ============================================================================
 
-import type { Sentiment } from '@/lib/enums'
+import type { NewsSentimentLevel } from '@/lib/enums'
 
 const SENTIMENT_DURATION_MAP: Record<string, number> = {
   MUITO_POSITIVO: 10,
@@ -13,6 +13,6 @@ const SENTIMENT_DURATION_MAP: Record<string, number> = {
   MUITO_NEGATIVO: 10,
 }
 
-export function sentimentToDurationTicks(sentiment: Sentiment | string): number {
+export function sentimentToDurationTicks(sentiment: NewsSentimentLevel | string): number {
   return SENTIMENT_DURATION_MAP[String(sentiment)] ?? 3
 }

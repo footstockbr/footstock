@@ -55,7 +55,18 @@ function LoginForm() {
       refresh_token: json.data.session.refresh_token,
     });
 
-    router.replace(ROUTES.MERCADO);
+    // Store admin role in cookie for middleware redirect
+    const userAdminRole = json.data.user?.adminRole;
+    if (userAdminRole) {
+      document.cookie = `fs-admin-role=${userAdminRole}; path=/; max-age=${60 * 60 * 24 * 30}; samesite=lax`;
+    } else {
+      document.cookie = "fs-admin-role=; path=/; max-age=0";
+    }
+
+    const adminRoles = ["SUPER_ADMIN", "ADMINISTRADOR", "MONITOR", "EDITOR", "MODERADOR"];
+    const isAdmin = userAdminRole && adminRoles.includes(userAdminRole);
+    const isClubPartner = userAdminRole === "CLUB_PARTNER";
+    router.replace(isAdmin ? ROUTES.ADMIN : isClubPartner ? ROUTES.CLUB : ROUTES.MERCADO);
   }
 
   const onSubmit = async (data: LoginFormData) => {

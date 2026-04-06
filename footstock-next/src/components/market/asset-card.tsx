@@ -14,29 +14,25 @@ export interface AssetData {
   name: string;
   price: number;
   change24h: number;
-  sentiment: "MUITO_POSITIVO" | "POSITIVO" | "NEUTRO" | "NEGATIVO" | "MUITO_NEGATIVO";
+  sentiment: "BULLISH" | "NEUTRAL" | "BEARISH";
   sparkData?: number[];
   ofi?: number;
   halted?: boolean;
   offline?: boolean;
-  division?: "A" | "B";
+  division?: "SERIE_A" | "SERIE_B";
   clubColor?: string;
 }
 
 const SENTIMENT_LABELS = {
-  MUITO_POSITIVO: "Muito Alta",
-  POSITIVO: "Alta",
-  NEUTRO: "Neutro",
-  NEGATIVO: "Baixa",
-  MUITO_NEGATIVO: "Muito Baixa",
+  BULLISH: "Alta",
+  NEUTRAL: "Neutro",
+  BEARISH: "Baixa",
 };
 
 const SENTIMENT_VARIANTS = {
-  MUITO_POSITIVO: "success-strong",
-  POSITIVO: "success",
-  NEUTRO: "default",
-  NEGATIVO: "error",
-  MUITO_NEGATIVO: "error",
+  BULLISH: "success",
+  NEUTRAL: "default",
+  BEARISH: "error",
 } as const;
 
 interface AssetCardProps {

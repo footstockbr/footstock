@@ -26,7 +26,9 @@ export default function RootPage() {
 
       if (json.authenticated && json.user) {
         setState("redirecting");
-        router.replace(ROUTES.MERCADO);
+        const adminRoles = ["SUPER_ADMIN", "ADMINISTRADOR", "MONITOR", "EDITOR", "MODERADOR"];
+        const isAdmin = json.user.adminRole && adminRoles.includes(json.user.adminRole);
+        router.replace(isAdmin ? ROUTES.ADMIN : ROUTES.MERCADO);
       } else {
         setState("show-login");
       }

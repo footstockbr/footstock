@@ -11,18 +11,18 @@ import { cn } from '@/lib/utils'
 import { CLUBS } from '@/lib/constants/clubs'
 
 const CATEGORIES = [
-  { value: 'RESULTADO_ESPORTIVO', label: 'Resultado Esportivo' },
-  { value: 'CONTRATACAO', label: 'Contratação' },
-  { value: 'FINANCEIRO', label: 'Financeiro' },
-  { value: 'LESAO', label: 'Lesão' },
-  { value: 'SUSPENSAO', label: 'Suspensão' },
-  { value: 'INSTITUCIONAL', label: 'Institucional' },
+  { value: 'ESPORTIVA_MAJORITARIA', label: 'Esportiva Majoritária (+/-3%)' },
+  { value: 'FINANCEIRA_CRITICA', label: 'Financeira Crítica (+/-5%)' },
+  { value: 'MERCADO_ATIVOS', label: 'Mercado/Ativos (+/-2%)' },
+  { value: 'INTEGRIDADE_SAUDE', label: 'Integridade/Saúde (+/-1.5%)' },
+  { value: 'INSTITUCIONAL', label: 'Institucional (+/-1%)' },
+  { value: 'ESPORTIVA_MENOR', label: 'Esportiva Menor (+/-0.5%)' },
 ] as const
 
 const Schema = z.object({
   title: z.string().min(10, 'Mínimo 10 caracteres').max(200, 'Máximo 200 caracteres'),
   ticker: z.string().min(1, 'Selecione um ativo'),
-  impactCategory: z.enum(['RESULTADO_ESPORTIVO', 'CONTRATACAO', 'FINANCEIRO', 'LESAO', 'SUSPENSAO', 'INSTITUCIONAL']),
+  impactCategory: z.enum(['ESPORTIVA_MAJORITARIA', 'FINANCEIRA_CRITICA', 'MERCADO_ATIVOS', 'INTEGRIDADE_SAUDE', 'INSTITUCIONAL', 'ESPORTIVA_MENOR']),
   sentiment: z.number().min(-1).max(1),
 })
 
@@ -42,7 +42,7 @@ export function NewsInjector() {
 
   const { register, handleSubmit, watch, setValue, reset, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(Schema),
-    defaultValues: { sentiment: 0, impactCategory: 'RESULTADO_ESPORTIVO', ticker: '', title: '' },
+    defaultValues: { sentiment: 0, impactCategory: 'ESPORTIVA_MAJORITARIA', ticker: '', title: '' },
   })
 
   const sentiment = watch('sentiment')

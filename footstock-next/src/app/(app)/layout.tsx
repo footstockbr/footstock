@@ -2,12 +2,14 @@ import type { ReactNode } from "react";
 import { AppHeader } from "@/components/shared/app-header";
 import { BottomTabBar } from "@/components/shared/bottom-tab-bar";
 import { DesktopSidebar } from "@/components/shared/desktop-sidebar";
+import { AdminRouteGuard } from "@/components/shared/admin-route-guard";
 import { MotorStatusProvider } from "@/contexts/motor-status-context";
 import { MotorOfflineBanner } from "@/components/market/motor-offline-banner";
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <MotorStatusProvider>
+      <AdminRouteGuard />
       <div data-testid="app-shell" className="min-h-dvh flex bg-[#0B0E11]">
         {/* Skip navigation */}
         <a
