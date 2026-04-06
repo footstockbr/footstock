@@ -1,17 +1,25 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { Bot, Lock } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ROUTES } from "@/lib/constants/routes";
+import { getAuthUser } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: "Assessor IA — Foot Stock",
 };
 
-export default function AssessorPage() {
-  // TODO: verificar plano do usuário — este componente mostra upgrade gate para plano Jogador
-  const isLocked = true;
+export default async function AssessorPage() {
+  const auth = await getAuthUser();
+
+  if (!auth) {
+    redirect(ROUTES.LOGIN);
+  }
+
+  const { user } = auth;
+  const isLocked = user.planType === "JOGADOR";
 
   if (isLocked) {
     return (

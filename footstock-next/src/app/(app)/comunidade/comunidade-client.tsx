@@ -4,70 +4,82 @@ import { MessageCircle } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
+import { GLOSSARY_TERMS } from "@/lib/data/glossary";
 
-const MOCK_POSTS = [
-  { id: 1, author: "Carlos M.", avatar: "CM", time: "há 5 min", content: "URU3 vai explodir essa semana. Notícia de renovação é muito bullish!", likes: 24, replies: 8 },
-  { id: 2, author: "Ana P.", avatar: "AP", time: "há 12 min", content: "Comprei mais 50 ações de POR4. O técnico novo vai fazer diferença nos próximos jogos.", likes: 15, replies: 3 },
-  { id: 3, author: "Roberto S.", avatar: "RS", time: "há 32 min", content: "Alguém mais acha que TIM3 está subvalorizado? Olhando o histórico, está numa mínima histórica.", likes: 31, replies: 12 },
-];
+export interface ForumPostView {
+  id: string;
+  authorName: string;
+  content: string;
+  ticker: string | null;
+  likesCount: number;
+  createdAgo: string;
+}
 
-const GLOSSARY = [
-  { term: "OFI", def: "Order Flow Imbalance — desequilíbrio entre ordens de compra e venda" },
-  { term: "GARCH", def: "Modelo de volatilidade que captura clustering de volatilidade" },
-  { term: "Short", def: "Venda a descoberto — apostar na queda de um ativo" },
-  { term: "Spread", def: "Diferença entre o preço de compra (ask) e venda (bid)" },
-  { term: "Circuit Breaker", def: "Mecanismo que suspende negociações durante variações extremas" },
-];
+const GLOSSARY_PREVIEW = GLOSSARY_TERMS.slice(0, 10);
 
-export function ComunidadeClient() {
+export function ComunidadeClient({ posts }: { posts: ForumPostView[] }) {
   return (
     <Tabs defaultValue="forum">
       <TabsList className="w-full">
-        <TabsTrigger value="forum">Fórum</TabsTrigger>
-        <TabsTrigger value="glossario">Glossário</TabsTrigger>
+        <TabsTrigger value="forum">Forum</TabsTrigger>
+        <TabsTrigger value="glossario">Glossario</TabsTrigger>
       </TabsList>
 
       <TabsContent value="forum" className="mt-4">
         <Button variant="primary" size="md" fullWidth className="mb-4">
           <MessageCircle className="h-4 w-4 mr-2" />
-          Nova publicação
+          Nova publicacao
         </Button>
 
-        <div className="flex flex-col gap-3">
-          {MOCK_POSTS.map((post) => (
-            <div
-              key={post.id}
-              className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.18)] p-4"
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <Avatar name={post.author} size="sm" />
-                <div>
-                  <p className="text-sm font-medium text-[#EAECEF]">{post.author}</p>
-                  <p className="text-[10px] text-[#707A8A]">{post.time}</p>
+        {posts.length === 0 ? (
+          <div className="text-center py-12">
+            <MessageCircle className="h-10 w-10 text-[#707A8A] mx-auto mb-3" />
+            <p className="text-sm text-[#929AA5]">
+              Nenhuma publicacao ainda. Seja o primeiro!
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {posts.map((post) => (
+              <div
+                key={post.id}
+                className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.18)] p-4"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Avatar name={post.authorName} size="sm" />
+                  <div>
+                    <p className="text-sm font-medium text-[#EAECEF]">{post.authorName}</p>
+                    <p className="text-[10px] text-[#707A8A]">{post.createdAgo}</p>
+                  </div>
+                  {post.ticker && (
+                    <span className="ml-auto text-xs font-mono font-bold text-[#F0B90B]">
+                      {post.ticker}
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-[#929AA5] leading-relaxed">{post.content}</p>
+                <div className="flex items-center gap-4 mt-3">
+                  <button className="flex items-center gap-1 text-xs text-[#929AA5] hover:text-[#F0B90B] transition-colors">
+                    &#10084;&#65039; {post.likesCount}
+                  </button>
                 </div>
               </div>
-              <p className="text-sm text-[#929AA5] leading-relaxed">{post.content}</p>
-              <div className="flex items-center gap-4 mt-3">
-                <button className="flex items-center gap-1 text-xs text-[#929AA5] hover:text-[#F0B90B] transition-colors">
-                  ❤️ {post.likes}
-                </button>
-                <button className="flex items-center gap-1 text-xs text-[#929AA5] hover:text-[#F0B90B] transition-colors">
-                  💬 {post.replies} respostas
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </TabsContent>
 
       <TabsContent value="glossario" className="mt-4">
         <div className="flex flex-col gap-2">
-          {GLOSSARY.map((item) => (
-            <div key={item.term} className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.1)] p-4">
-              <p className="text-sm font-mono font-bold text-[#F0B90B] mb-1">{item.term}</p>
-              <p className="text-sm text-[#929AA5]">{item.def}</p>
+          {GLOSSARY_PREVIEW.map((item) => (
+            <div key={item.slug} className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.1)] p-4">
+              <p className="text-sm font-mono font-bold text-[#F0B90B] mb-1">{item.title}</p>
+              <p className="text-sm text-[#929AA5]">{item.definition}</p>
             </div>
           ))}
+          <p className="text-xs text-center text-[#707A8A] mt-2">
+            {GLOSSARY_TERMS.length} termos disponiveis no glossario completo
+          </p>
         </div>
       </TabsContent>
     </Tabs>

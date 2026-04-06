@@ -5,9 +5,16 @@ import { Badge } from "@/components/ui/badge";
 import { PlanType } from "@/lib/constants/plans";
 import Link from "next/link";
 import { ROUTES } from "@/lib/constants/routes";
+import { getAuthUser } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: "Planos — Foot Stock",
+};
+
+const PLAN_ORDER: Record<PlanType, number> = {
+  [PlanType.JOGADOR]: 1,
+  [PlanType.CRAQUE]: 2,
+  [PlanType.LENDA]: 3,
 };
 
 const PLANS = [
@@ -15,74 +22,69 @@ const PLANS = [
     type: PlanType.JOGADOR,
     icon: Star,
     name: "Jogador",
-    price: "Grátis",
+    price: "Gratis",
     period: "",
-    description: "Para começar no mercado",
+    description: "Para comecar no mercado",
     badge: null,
     features: [
       "Acesso ao mercado ao vivo",
-      "Portfólio básico",
+      "Portfolio basico",
       "Dados com delay de 15 min",
-      "Comunidade & fórum",
-      "1 liga simultânea",
+      "Comunidade & forum",
+      "1 liga simultanea",
     ],
     missing: [
       "Dados em tempo real",
       "Assessor IA",
-      "Análises avançadas",
+      "Analises avancadas",
       "Dividendos",
     ],
-    cta: "Plano atual",
-    ctaVariant: "secondary" as const,
-    disabled: true,
   },
   {
     type: PlanType.CRAQUE,
     icon: Zap,
     name: "Craque",
     price: "R$ 19,90",
-    period: "/mês",
-    description: "Para traders sérios",
+    period: "/mes",
+    description: "Para traders serios",
     badge: "Mais popular",
     features: [
       "Tudo do Jogador",
       "Dados em tempo real",
       "Assessor IA (50 msg/dia)",
-      "Análises OFI & Kyle's λ",
-      "5 ligas simultâneas",
-      "Dividendos automáticos",
-      "Alertas de preço",
+      "Analises OFI & Kyle's \u03bb",
+      "5 ligas simultaneas",
+      "Dividendos automaticos",
+      "Alertas de preco",
     ],
     missing: [],
-    cta: "Assinar Craque",
-    ctaVariant: "plan" as const,
-    disabled: false,
   },
   {
     type: PlanType.LENDA,
     icon: Crown,
     name: "Lenda",
     price: "R$ 39,90",
-    period: "/mês",
-    description: "Experiência completa",
+    period: "/mes",
+    description: "Experiencia completa",
     badge: "Premium",
     features: [
       "Tudo do Craque",
       "Assessor IA ilimitado",
       "Book de ordens completo",
       "Ligas ilimitadas",
-      "Relatórios exportáveis",
-      "Suporte prioritário",
+      "Relatorios exportaveis",
+      "Suporte prioritario",
       "Badge exclusivo Lenda",
     ],
     missing: [],
-    cta: "Assinar Lenda",
-    ctaVariant: "plan" as const,
-    disabled: false,
   },
 ];
 
-export default function PlanosPage() {
+export default async function PlanosPage() {
+  const auth = await getAuthUser();
+  const userPlan = (auth?.user.planType as PlanType) ?? PlanType.JOGADOR;
+  const userPlanLevel = PLAN_ORDER[userPlan] ?? 1;
+
   return (
     <div data-testid="planos-page" className="px-4 pt-4 pb-8">
       <div className="text-center mb-6">
@@ -96,6 +98,30 @@ export default function PlanosPage() {
         {PLANS.map((plan) => {
           const Icon = plan.icon;
           const isCraque = plan.type === PlanType.CRAQUE;
+          const planLevel = PLAN_ORDER[plan.type];
+
+          const isCurrentPlan = plan.type === userPlan;
+          const isUpgrade = planLevel > userPlanLevel;
+          const isDowngrade = planLevel < userPlanLevel;
+
+          let ctaLabel: string;
+          let ctaVariant: "secondary" | "plan";
+          let ctaDisabled: boolean;
+
+          if (isCurrentPlan) {
+            ctaLabel = "Plano atual";
+            ctaVariant = "secondary";
+            ctaDisabled = true;
+          } else if (isUpgrade) {
+            ctaLabel = `Assinar ${plan.name}`;
+            ctaVariant = "plan";
+            ctaDisabled = false;
+          } else {
+            // downgrade
+            ctaLabel = "\u2014";
+            ctaVariant = "secondary";
+            ctaDisabled = true;
+          }
 
           return (
             <div
@@ -160,12 +186,12 @@ export default function PlanosPage() {
 
               <Button
                 data-testid={`plano-cta-button-${plan.type.toLowerCase()}`}
-                variant={plan.ctaVariant}
+                variant={ctaVariant}
                 size="md"
                 fullWidth
-                disabled={plan.disabled}
+                disabled={ctaDisabled}
               >
-                {plan.cta}
+                {ctaLabel}
               </Button>
             </div>
           );

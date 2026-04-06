@@ -1,57 +1,112 @@
-import type { Metadata } from "next";
-import { BookOpen, Search } from "lucide-react";
+"use client";
 
-export const metadata: Metadata = {
-  title: "Glossário — Foot Stock",
+import { useState, useMemo } from "react";
+import { BookOpen, Search } from "lucide-react";
+import { GLOSSARY_TERMS } from "@/lib/data/glossary";
+
+const CATEGORY_LABELS: Record<string, string> = {
+  "indicadores-tecnicos": "Indicadores Tecnicos",
+  "valuation-e-fundamentos": "Valuation e Fundamentos",
+  "tipos-de-ordem": "Tipos de Ordem",
+  "carteira-e-rentabilidade": "Carteira e Rentabilidade",
+  "sentimento-e-analise": "Sentimento e Analise",
+  "mercado-e-pregao": "Mercado e Pregao",
+  "divisoes-e-clubes": "Divisoes e Clubes",
+  "planos-e-funcionalidades": "Planos e Funcionalidades",
 };
 
-const TERMS = [
-  { term: "After Market", def: "Período de negociação após o fechamento oficial do mercado" },
-  { term: "Ask", def: "Preço pelo qual o vendedor está disposto a vender um ativo" },
-  { term: "Bid", def: "Preço pelo qual o comprador está disposto a comprar um ativo" },
-  { term: "Circuit Breaker", def: "Mecanismo automático que suspende as negociações em casos de volatilidade extrema" },
-  { term: "GARCH", def: "Modelo estatístico para estimar e prever a volatilidade de ativos financeiros" },
-  { term: "Kyle's Lambda", def: "Medida da pressão de preço por unidade de fluxo de ordens (impacto de mercado)" },
-  { term: "Liquidez", def: "Facilidade com que um ativo pode ser comprado ou vendido sem afetar seu preço" },
-  { term: "OFI", def: "Order Flow Imbalance — desequilíbrio entre ordens de compra e venda no book" },
-  { term: "OCO", def: "One Cancels Other — par de ordens onde a execução de uma cancela a outra" },
-  { term: "Ornstein-Uhlenbeck", def: "Processo estocástico de reversão à média usado para modelar preços" },
-  { term: "Posição Short", def: "Aposta na queda de preço de um ativo (venda a descoberto)" },
-  { term: "Spread", def: "Diferença entre o preço de compra (ask) e venda (bid) de um ativo" },
-  { term: "Stop Loss", def: "Ordem para limitar as perdas vendendo automaticamente quando o preço cai a certo nível" },
-  { term: "Supply Global", def: "No Foot Stock, quantidade total de ações de cada clube disponível para negociação" },
-  { term: "Volatilidade", def: "Medida de variação do preço de um ativo ao longo do tempo" },
-];
-
 export default function GlossarioPage() {
+  const [search, setSearch] = useState("");
+
+  const query = search.trim().toLowerCase();
+
+  const filteredTerms = useMemo(() => {
+    if (!query) return null;
+    return GLOSSARY_TERMS.filter(
+      (t) =>
+        t.title.toLowerCase().includes(query) ||
+        t.definition.toLowerCase().includes(query)
+    );
+  }, [query]);
+
+  const groupedTerms = useMemo(() => {
+    if (query) return null;
+    const groups = new Map<string, typeof GLOSSARY_TERMS>();
+    for (const term of GLOSSARY_TERMS) {
+      const cat = term.category;
+      if (!groups.has(cat)) groups.set(cat, []);
+      groups.get(cat)!.push(term);
+    }
+    return groups;
+  }, [query]);
+
   return (
     <div className="px-4 pt-4">
       <h1 className="text-lg font-bold text-[#EAECEF] mb-1 flex items-center gap-2">
         <BookOpen className="h-5 w-5 text-[#F0B90B]" />
-        Glossário
+        Glossario
       </h1>
-      <p className="text-sm text-[#929AA5] mb-4">116 termos de mercado financeiro</p>
+      <p className="text-sm text-[#929AA5] mb-4">
+        {GLOSSARY_TERMS.length} termos de mercado financeiro
+      </p>
 
       <div className="relative mb-4">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#707A8A]" />
         <input
           type="search"
           placeholder="Buscar termo..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
           className="h-10 w-full rounded-lg border border-[rgba(240,185,11,.18)] bg-[#181A20] pl-9 pr-3 text-sm text-[#EAECEF] placeholder:text-[#707A8A] focus:outline-none focus:border-[rgba(240,185,11,.4)]"
         />
       </div>
 
-      <div className="flex flex-col gap-2">
-        {TERMS.map((item) => (
-          <div
-            key={item.term}
-            className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.1)] p-4"
-          >
-            <p className="text-sm font-semibold text-[#F0B90B] mb-1">{item.term}</p>
-            <p className="text-sm text-[#929AA5] leading-relaxed">{item.def}</p>
+      {/* Search active: flat filtered list */}
+      {filteredTerms !== null && (
+        <>
+          <p className="text-xs text-[#707A8A] mb-3">
+            {filteredTerms.length} resultado{filteredTerms.length !== 1 ? "s" : ""}
+          </p>
+          <div className="flex flex-col gap-2">
+            {filteredTerms.map((item) => (
+              <TermCard key={item.slug} title={item.title} definition={item.definition} />
+            ))}
+            {filteredTerms.length === 0 && (
+              <p className="text-sm text-[#929AA5] text-center py-8">
+                Nenhum termo encontrado.
+              </p>
+            )}
           </div>
-        ))}
-      </div>
+        </>
+      )}
+
+      {/* No search: grouped by category */}
+      {groupedTerms !== null && (
+        <div className="flex flex-col gap-6">
+          {Array.from(groupedTerms.entries()).map(([category, terms]) => (
+            <div key={category}>
+              <h2 className="text-sm font-semibold text-[#EAECEF] mb-2 border-b border-[rgba(240,185,11,.12)] pb-1">
+                {CATEGORY_LABELS[category] ?? category}
+                <span className="text-xs text-[#707A8A] font-normal ml-2">({terms.length})</span>
+              </h2>
+              <div className="flex flex-col gap-2">
+                {terms.map((item) => (
+                  <TermCard key={item.slug} title={item.title} definition={item.definition} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TermCard({ title, definition }: { title: string; definition: string }) {
+  return (
+    <div className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.1)] p-4">
+      <p className="text-sm font-semibold text-[#F0B90B] mb-1">{title}</p>
+      <p className="text-sm text-[#929AA5] leading-relaxed">{definition}</p>
     </div>
   );
 }

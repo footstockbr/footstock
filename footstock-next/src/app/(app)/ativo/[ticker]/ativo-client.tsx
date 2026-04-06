@@ -5,9 +5,22 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 interface AtivoClientProps {
   ticker: string;
+  asset: {
+    name: string;
+    division: string;
+    currentSupply: number;
+    totalShares: number;
+    sentiment: string;
+    isHalted: boolean;
+  };
 }
 
-export function AtivoClient({ ticker }: AtivoClientProps) {
+export function AtivoClient({ ticker, asset }: AtivoClientProps) {
+  const divisionLabel = asset.division === "SERIE_A" ? "Série A" : "Série B";
+  const supplyDisplay = asset.currentSupply.toLocaleString("pt-BR");
+  const tradingStatus = asset.isHalted ? "Suspensa" : "Negociação";
+  const tradingStatusColor = asset.isHalted ? "text-[#F6465D]" : "text-[#2EBD85]";
+
   return (
     <div data-testid="ativo-page" className="px-4 pt-3">
       <Tabs defaultValue="grafico">
@@ -69,16 +82,20 @@ export function AtivoClient({ ticker }: AtivoClientProps) {
               <span className="text-xs font-mono font-bold text-[#EAECEF]">{ticker}</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-[rgba(240,185,11,.06)]">
+              <span className="text-xs text-[#929AA5]">Clube</span>
+              <span className="text-xs font-bold text-[#EAECEF]">{asset.name}</span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-[rgba(240,185,11,.06)]">
               <span className="text-xs text-[#929AA5]">Divisão</span>
-              <span className="text-xs text-[#EAECEF]">Série A</span>
+              <span className="text-xs text-[#EAECEF]">{divisionLabel}</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-[rgba(240,185,11,.06)]">
               <span className="text-xs text-[#929AA5]">Supply total</span>
-              <span className="text-xs font-mono text-[#EAECEF]">10.000 ações</span>
+              <span className="text-xs font-mono text-[#EAECEF]">{supplyDisplay} ações</span>
             </div>
             <div className="flex justify-between py-1.5">
               <span className="text-xs text-[#929AA5]">Sessão atual</span>
-              <span className="text-xs text-[#2EBD85]">Negociação</span>
+              <span className={`text-xs ${tradingStatusColor}`}>{tradingStatus}</span>
             </div>
           </div>
         </TabsContent>
