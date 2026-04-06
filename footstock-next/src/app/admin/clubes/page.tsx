@@ -6,12 +6,12 @@ export const metadata: Metadata = {
 };
 
 const CLUBS = [
-  { ticker: "FLAM4", name: "Flamengo", price: "FS$ 87,40", change: "+3,2%", positive: true, supply: "100.000", holders: "4.821" },
-  { ticker: "PALM4", name: "Palmeiras", price: "FS$ 72,15", change: "+1,8%", positive: true, supply: "100.000", holders: "3.547" },
-  { ticker: "CORI4", name: "Corinthians", price: "FS$ 48,30", change: "-2,1%", positive: false, supply: "100.000", holders: "3.102" },
-  { ticker: "SAOP4", name: "São Paulo", price: "FS$ 55,60", change: "+0,4%", positive: true, supply: "100.000", holders: "2.891" },
-  { ticker: "SANP4", name: "Santos", price: "FS$ 38,70", change: "-0,8%", positive: false, supply: "100.000", holders: "2.441" },
-  { ticker: "GREM4", name: "Grêmio", price: "FS$ 44,20", change: "+1,1%", positive: true, supply: "100.000", holders: "2.103" },
+  { ticker: "URU3", name: "Urubu da Gavea FC", price: "FS$ 87,40", change: "+3,2%", positive: true, supply: "100.000", holders: "4.821" },
+  { ticker: "POR4", name: "Porco do Parque FC", price: "FS$ 72,15", change: "+1,8%", positive: true, supply: "100.000", holders: "3.547" },
+  { ticker: "TIM3", name: "Timão do São Jorge FC", price: "FS$ 48,30", change: "-2,1%", positive: false, supply: "100.000", holders: "3.102" },
+  { ticker: "TRI4", name: "Tricolor do Morumbi AC", price: "FS$ 55,60", change: "+0,4%", positive: true, supply: "100.000", holders: "2.891" },
+  { ticker: "BAL4", name: "Baleia da Vila Belmiro SC", price: "FS$ 38,70", change: "-0,8%", positive: false, supply: "100.000", holders: "2.441" },
+  { ticker: "IMO3", name: "Imortal da Arena FC", price: "FS$ 44,20", change: "+1,1%", positive: true, supply: "100.000", holders: "2.103" },
 ];
 
 export default function AdminClubesPage() {

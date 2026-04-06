@@ -28,8 +28,8 @@ export default function ClubPortalPage() {
         </div>
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-lg font-bold text-[#EAECEF]">Flamengo</h1>
-            <Badge variant="craque" size="xs">FLAM4</Badge>
+            <h1 className="text-lg font-bold text-[#EAECEF]">Urubu da Gavea FC</h1>
+            <Badge variant="craque" size="xs">URU3</Badge>
           </div>
           <p className="text-sm text-[#929AA5]">Portal Oficial do Clube</p>
         </div>

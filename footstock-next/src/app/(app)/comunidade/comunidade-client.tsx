@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 
 const MOCK_POSTS = [
-  { id: 1, author: "Carlos M.", avatar: "CM", time: "há 5 min", content: "FLAM4 vai explodir essa semana. Notícia de renovação é muito bullish!", likes: 24, replies: 8 },
-  { id: 2, author: "Ana P.", avatar: "AP", time: "há 12 min", content: "Comprei mais 50 ações de PALM4. O técnico novo vai fazer diferença nos próximos jogos.", likes: 15, replies: 3 },
-  { id: 3, author: "Roberto S.", avatar: "RS", time: "há 32 min", content: "Alguém mais acha que CORI4 está subvalorizado? Olhando o histórico, está numa mínima histórica.", likes: 31, replies: 12 },
+  { id: 1, author: "Carlos M.", avatar: "CM", time: "há 5 min", content: "URU3 vai explodir essa semana. Notícia de renovação é muito bullish!", likes: 24, replies: 8 },
+  { id: 2, author: "Ana P.", avatar: "AP", time: "há 12 min", content: "Comprei mais 50 ações de POR4. O técnico novo vai fazer diferença nos próximos jogos.", likes: 15, replies: 3 },
+  { id: 3, author: "Roberto S.", avatar: "RS", time: "há 32 min", content: "Alguém mais acha que TIM3 está subvalorizado? Olhando o histórico, está numa mínima histórica.", likes: 31, replies: 12 },
 ];
 
 const GLOSSARY = [

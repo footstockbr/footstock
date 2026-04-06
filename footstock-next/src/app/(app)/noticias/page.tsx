@@ -9,10 +9,10 @@ export const metadata: Metadata = {
 type SentimentKey = "MUITO_POSITIVO" | "POSITIVO" | "NEUTRO" | "NEGATIVO" | "MUITO_NEGATIVO";
 
 const MOCK_NEWS: Array<{ id: number; ticker: string; title: string; sentiment: SentimentKey; time: string; source: string }> = [
-  { id: 1, ticker: "FLAM4", title: "Flamengo renova contrato com técnico", sentiment: "POSITIVO", time: "há 5 min", source: "GloboEsporte" },
-  { id: 2, ticker: "PALM4", title: "Palmeiras vence rival e sobe na tabela", sentiment: "MUITO_POSITIVO", time: "há 12 min", source: "UOL Esporte" },
-  { id: 3, ticker: "CORI4", title: "Corinthians empata e decepciona torcida", sentiment: "NEGATIVO", time: "há 25 min", source: "ESPN Brasil" },
-  { id: 4, ticker: "VAR1", title: "Vasco anuncia novo reforço para o segundo semestre", sentiment: "POSITIVO", time: "há 1h", source: "O Dia" },
+  { id: 1, ticker: "URU3", title: "Urubu da Gavea FC renova contrato com técnico", sentiment: "POSITIVO", time: "há 5 min", source: "GloboEsporte" },
+  { id: 2, ticker: "POR4", title: "Porco do Parque FC vence rival e sobe na tabela", sentiment: "MUITO_POSITIVO", time: "há 12 min", source: "UOL Esporte" },
+  { id: 3, ticker: "TIM3", title: "Timão do São Jorge FC empata e decepciona torcida", sentiment: "NEGATIVO", time: "há 25 min", source: "ESPN Brasil" },
+  { id: 4, ticker: "MAL4", title: "Cruz de Malta de São Januário SC anuncia novo reforço para o segundo semestre", sentiment: "POSITIVO", time: "há 1h", source: "O Dia" },
 ];
 
 const SENTIMENT_VARIANTS: Record<SentimentKey, BadgeVariant> = {

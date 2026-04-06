@@ -6,20 +6,20 @@ import { cn } from "@/lib/utils";
 import { AssetCard, AssetCardSkeleton, type AssetData } from "@/components/market/asset-card";
 import { EmptyState } from "@/components/ui/empty-state";
 
-// Dados mock temporários para build
+// Dados mock temporários para build — nomes fictícios conforme INTAKE
 const MOCK_ASSETS: AssetData[] = [
-  { ticker: "FLAM4", name: "Flamengo", price: 87.5, change24h: -1.5, sentiment: "NEGATIVO", sparkData: [90, 89, 88, 88.5, 87.8, 87.5], division: "A", clubColor: "#E32B28" },
-  { ticker: "PALM4", name: "Palmeiras", price: 156.8, change24h: 1.4, sentiment: "POSITIVO", sparkData: [152, 153, 154, 155, 156, 156.8], division: "A", clubColor: "#006432" },
-  { ticker: "CORI4", name: "Corinthians", price: 44.2, change24h: 0.3, sentiment: "NEUTRO", sparkData: [44, 44.1, 44.3, 44.1, 44.2, 44.2], division: "A", clubColor: "#444444" },
-  { ticker: "VAR1", name: "Vasco da Gama", price: 42.5, change24h: 2.3, sentiment: "POSITIVO", sparkData: [40, 41, 41.5, 42, 42.3, 42.5], division: "A", clubColor: "#000000" },
-  { ticker: "BOFA4", name: "Botafogo", price: 31.8, change24h: 1.8, sentiment: "POSITIVO", sparkData: [30, 30.5, 31, 31.3, 31.6, 31.8], division: "A", clubColor: "#111111" },
-  { ticker: "SPFX4", name: "São Paulo", price: 55.2, change24h: 0.5, sentiment: "POSITIVO", sparkData: [54.8, 54.9, 55, 55.1, 55.2, 55.2], division: "A", clubColor: "#FF0000" },
-  { ticker: "GREM4", name: "Grêmio", price: 68.4, change24h: -0.8, sentiment: "NEGATIVO", sparkData: [69, 68.9, 68.7, 68.6, 68.4, 68.4], division: "A", clubColor: "#003087" },
-  { ticker: "INTS4", name: "Internacional", price: 72.1, change24h: 2.1, sentiment: "POSITIVO", sparkData: [70, 71, 71.5, 71.8, 72, 72.1], division: "A", clubColor: "#FF0000" },
-  { ticker: "ATHU4", name: "Athletico-PR", price: 38.9, change24h: -2.3, sentiment: "NEGATIVO", sparkData: [40, 39.8, 39.5, 39.2, 39, 38.9], division: "A", clubColor: "#CC0000" },
-  { ticker: "CRUZ4", name: "Cruzeiro", price: 23.4, change24h: -1.1, sentiment: "NEGATIVO", sparkData: [24, 23.9, 23.7, 23.5, 23.4, 23.4], division: "B", clubColor: "#0033A0" },
-  { ticker: "SPOR4", name: "Sport Recife", price: 15.6, change24h: 3.2, sentiment: "MUITO_POSITIVO", sparkData: [14.8, 15, 15.2, 15.4, 15.5, 15.6], division: "B", clubColor: "#990000" },
-  { ticker: "VILA4", name: "Vila Nova", price: 8.9, change24h: -0.5, sentiment: "NEUTRO", sparkData: [9, 9, 8.9, 8.9, 8.9, 8.9], division: "B", clubColor: "#E84E1B" },
+  { ticker: "URU3", name: "Urubu da Gavea FC", price: 87.5, change24h: -1.5, sentiment: "NEGATIVO", sparkData: [90, 89, 88, 88.5, 87.8, 87.5], division: "A", clubColor: "#E32B28" },
+  { ticker: "POR4", name: "Porco do Parque FC", price: 156.8, change24h: 1.4, sentiment: "POSITIVO", sparkData: [152, 153, 154, 155, 156, 156.8], division: "A", clubColor: "#006432" },
+  { ticker: "TIM3", name: "Timão do São Jorge FC", price: 44.2, change24h: 0.3, sentiment: "NEUTRO", sparkData: [44, 44.1, 44.3, 44.1, 44.2, 44.2], division: "A", clubColor: "#444444" },
+  { ticker: "MAL4", name: "Cruz de Malta de São Januário SC", price: 42.5, change24h: 2.3, sentiment: "POSITIVO", sparkData: [40, 41, 41.5, 42, 42.3, 42.5], division: "A", clubColor: "#111111" },
+  { ticker: "FOG3", name: "Estrela do General Severiano RC", price: 31.8, change24h: 1.8, sentiment: "POSITIVO", sparkData: [30, 30.5, 31, 31.3, 31.6, 31.8], division: "A", clubColor: "#111111" },
+  { ticker: "TRI4", name: "Tricolor do Morumbi AC", price: 55.2, change24h: 0.5, sentiment: "POSITIVO", sparkData: [54.8, 54.9, 55, 55.1, 55.2, 55.2], division: "A", clubColor: "#C40A0A" },
+  { ticker: "IMO3", name: "Imortal da Arena FC", price: 68.4, change24h: -0.8, sentiment: "NEGATIVO", sparkData: [69, 68.9, 68.7, 68.6, 68.4, 68.4], division: "A", clubColor: "#003DA5" },
+  { ticker: "COL3", name: "Colorado do Beira-Rio SC", price: 72.1, change24h: 2.1, sentiment: "POSITIVO", sparkData: [70, 71, 71.5, 71.8, 72, 72.1], division: "A", clubColor: "#CC0000" },
+  { ticker: "FUR3", name: "Furacão do Capão da Imbuia FC", price: 38.9, change24h: -2.3, sentiment: "NEGATIVO", sparkData: [40, 39.8, 39.5, 39.2, 39, 38.9], division: "A", clubColor: "#CC0000" },
+  { ticker: "RAP3", name: "Raposa do Mineirão FC", price: 23.4, change24h: -1.1, sentiment: "NEGATIVO", sparkData: [24, 23.9, 23.7, 23.5, 23.4, 23.4], division: "A", clubColor: "#003087" },
+  { ticker: "LEI3", name: "Leão da Ilha do Retiro FC", price: 15.6, change24h: 3.2, sentiment: "MUITO_POSITIVO", sparkData: [14.8, 15, 15.2, 15.4, 15.5, 15.6], division: "B", clubColor: "#CC0000" },
+  { ticker: "TIS3", name: "Tigre da Serra Dourada FC", price: 8.9, change24h: -0.5, sentiment: "NEUTRO", sparkData: [9, 9, 8.9, 8.9, 8.9, 8.9], division: "B", clubColor: "#CC0000" },
 ];
 
 type Division = "all" | "A" | "B";

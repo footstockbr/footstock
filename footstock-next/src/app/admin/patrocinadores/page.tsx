@@ -9,9 +9,9 @@ export const metadata: Metadata = {
 };
 
 const SPONSORS = [
-  { id: 1, name: "TechBet Ltda", club: "Flamengo", type: "master", value: "R$ 50.000/mês", status: "ativo" },
-  { id: 2, name: "FinanceApp SA", club: "Palmeiras", type: "secundário", value: "R$ 20.000/mês", status: "ativo" },
-  { id: 3, name: "SportGear Inc", club: "Corinthians", type: "master", value: "R$ 35.000/mês", status: "negociação" },
+  { id: 1, name: "TechBet Ltda", club: "Urubu da Gavea FC", type: "master", value: "R$ 50.000/mês", status: "ativo" },
+  { id: 2, name: "FinanceApp SA", club: "Porco do Parque FC", type: "secundário", value: "R$ 20.000/mês", status: "ativo" },
+  { id: 3, name: "SportGear Inc", club: "Timão do São Jorge FC", type: "master", value: "R$ 35.000/mês", status: "negociação" },
 ];
 
 export default function AdminPatrocinadoresPage() {

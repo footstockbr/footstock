@@ -123,7 +123,7 @@ export function NewsForm({ news, onSave, onCancel }: NewsFormProps) {
           disabled={isSubmitting}
           aria-describedby={errors.ticker ? 'ticker-error' : undefined}
           className={inputClass}
-          placeholder="Ex: FLAM4"
+          placeholder="Ex: URU3"
         />
         {errors.ticker && (
           <span id="ticker-error" className="mt-1 text-xs text-[#F6465D]" role="alert">

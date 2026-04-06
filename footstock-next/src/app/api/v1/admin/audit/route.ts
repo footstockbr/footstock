@@ -3,7 +3,7 @@ import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { adminAuditService } from '@/lib/services/shared'
 import { ok, errors } from '@/lib/api'
 
-// GET /api/v1/admin/audit?limit=20&ticker=FLM3&action=HALT_ASSET — Monitor+
+// GET /api/v1/admin/audit?limit=20&ticker=URU3&action=HALT_ASSET — Monitor+
 export async function GET(request: NextRequest) {
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()

@@ -38,7 +38,7 @@ function BottomTabBar() {
     <>
       <nav
         data-testid="bottom-tab-bar"
-        className="fixed bottom-0 left-0 right-0 z-[200] h-14 flex items-center bg-[#181A20] border-t border-[rgba(240,185,11,.1)]"
+        className="fixed bottom-0 left-0 right-0 z-[200] h-14 flex items-center bg-[#181A20] border-t border-[rgba(240,185,11,.1)] md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         aria-label="Navegação principal"
       >

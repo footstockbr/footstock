@@ -42,7 +42,7 @@ export function Step3ClubSelect({ data, onNext }: Step3Props) {
       <Input
         label="Buscar clube"
         type="search"
-        placeholder="Ex: Flamengo, FLM3..."
+        placeholder="Ex: Urubu da Gavea FC, URU3..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
