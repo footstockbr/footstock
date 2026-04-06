@@ -67,11 +67,11 @@ export function serializeUser(dbUser: {
   email: string
   name: string
   phone?: string | null
-  birthDate: Date
-  favoriteClub: string
+  birthDate: Date | null
+  favoriteClub: string | null
   favoriteClubDisplayName?: string | null
   userType: string
-  investorProfile: string
+  investorProfile: string | null
   planType: string
   fsBalance: { toNumber(): number }
   marginBlocked: { toNumber(): number }
@@ -86,11 +86,11 @@ export function serializeUser(dbUser: {
     email: dbUser.email,
     name: dbUser.name,
     phone: dbUser.phone ?? null,
-    birthDate: dbUser.birthDate.toISOString().split('T')[0],
-    favoriteClub: dbUser.favoriteClub,
+    birthDate: dbUser.birthDate?.toISOString().split('T')[0] ?? '',
+    favoriteClub: dbUser.favoriteClub ?? '',
     favoriteClubDisplayName: dbUser.favoriteClubDisplayName ?? null,
     userType: dbUser.userType as User['userType'],
-    investorProfile: dbUser.investorProfile as User['investorProfile'],
+    investorProfile: (dbUser.investorProfile ?? 'INICIANTE') as User['investorProfile'],
     planType: dbUser.planType as User['planType'],
     fsBalance: dbUser.fsBalance.toNumber(),
     marginBlocked: dbUser.marginBlocked.toNumber(),

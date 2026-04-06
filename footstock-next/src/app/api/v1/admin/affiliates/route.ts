@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { Prisma, type AffiliateType } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { withAdmin } from '@/app/api/middleware'
 import { prisma } from '@/lib/prisma'
@@ -32,7 +32,7 @@ export const GET = withAdmin('financial:read')(async (request: NextRequest) => {
   const limit  = Math.min(50, parseInt(sp.get('limit') ?? '20', 10))
 
   const where: Prisma.AffiliateCodeWhereInput = {
-    ...(type   ? { affiliateType: type as AffiliateType } : {}),
+    ...(type   ? { affiliateType: type as string } : {}),
     ...(status === 'active'   ? { active: true }  : {}),
     ...(status === 'inactive' ? { active: false } : {}),
     ...(search ? {
@@ -106,7 +106,7 @@ export const POST = withAdmin('financial:write')(async (request: NextRequest) =>
     data: {
       userId:               user.id,
       code,
-      affiliateType:        parsed.data.affiliateType as AffiliateType,
+      affiliateType:        parsed.data.affiliateType as string,
       commissionPercentage: parsed.data.commissionPercentage,
       bankData:             parsed.data.bankData ?? Prisma.JsonNull,
     },

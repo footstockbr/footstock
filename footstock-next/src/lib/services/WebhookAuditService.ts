@@ -4,12 +4,12 @@
 // ============================================================================
 
 import { prisma } from '@/lib/prisma'
-import type { PaymentGateway, WebhookAuditStatus } from '@prisma/client'
+import type { SubscriptionGateway, WebhookAuditStatus } from '@prisma/client'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 export interface WebhookAuditInput {
-  gateway:        PaymentGateway
+  gateway:        SubscriptionGateway
   eventType?:     string
   transactionId?: string
   subscriptionId?: string
@@ -20,7 +20,7 @@ export interface WebhookAuditInput {
 }
 
 export interface WebhookAuditListParams {
-  gateway?:   PaymentGateway
+  gateway?:   SubscriptionGateway
   status?:    WebhookAuditStatus
   dateFrom?:  Date
   dateTo?:    Date

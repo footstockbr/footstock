@@ -6,15 +6,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAdmin } from '@/app/api/middleware'
 import { webhookAuditService } from '@/lib/services/WebhookAuditService'
-import type { PaymentGateway, WebhookAuditStatus } from '@prisma/client'
+import type { SubscriptionGateway, WebhookAuditStatus } from '@prisma/client'
 
-const GATEWAYS: PaymentGateway[] = ['MERCADO_PAGO', 'PAGSEGURO', 'PAYPAL']
+const GATEWAYS: SubscriptionGateway[] = ['MERCADO_PAGO', 'PAGSEGURO', 'PAYPAL']
 const STATUSES: WebhookAuditStatus[]  = ['ACCEPTED', 'REJECTED', 'DUPLICATE']
 
 export const GET = withAdmin('admin:audit')(async (req: NextRequest) => {
   const { searchParams } = new URL(req.url)
 
-  const gatewayParam = searchParams.get('gateway')?.toUpperCase() as PaymentGateway | null
+  const gatewayParam = searchParams.get('gateway')?.toUpperCase() as SubscriptionGateway | null
   const statusParam  = searchParams.get('status')?.toUpperCase() as WebhookAuditStatus | null
   const dateFrom     = searchParams.get('dateFrom')
   const dateTo       = searchParams.get('dateTo')

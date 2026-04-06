@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
       resumo: 'Análise em desenvolvimento. Execute /auto-flow execute para implementar.',
       pontosPositivos: [],
       pontosNegativos: [],
-      sentimentoGeral: asset.sentiment,
+      sentimentoGeral: asset.sentiment as AIAnalysis['sentimentoGeral'],
       recomendacao: 'MANTER',
       nivelRisco: 'MEDIO',
       noticiasRecentes: recentNews.map((n) => ({
