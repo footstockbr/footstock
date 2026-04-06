@@ -11,10 +11,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ROUTES } from "@/lib/constants/routes";
 import { loginSchema, type LoginFormData } from "@/lib/schemas/auth.schema";
+import { DEV_TEST_USERS } from "@/lib/constants/dev-test-users";
 
 function LoginForm() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [devLoginRole, setDevLoginRole] = useState<string | null>(null);
 
   const {
     register,
@@ -24,31 +26,51 @@ function LoginForm() {
     resolver: zodResolver(loginSchema),
   });
 
+  const devUsersByRole = Object.entries(DEV_TEST_USERS).map(([email, profile]) => ({
+    role: profile.label ?? profile.adminRole ?? profile.planType,
+    email,
+    password: profile.password,
+  }));
+
+  async function performLogin(email: string, password: string) {
+    const res = await fetch("/api/v1/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const json = await res.json();
+
+    if (!json.success) {
+      throw new Error(json.error?.message || "Email ou senha incorretos");
+    }
+
+    router.replace(ROUTES.MERCADO);
+  }
+
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/v1/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      const json = await res.json();
-
-      if (!json.success) {
-        toast.error(json.error?.message || "Email ou senha incorretos");
-        return;
-      }
-
-      router.replace(ROUTES.MERCADO);
-    } catch {
-      toast.error("Erro ao conectar. Tente novamente.");
+      await performLogin(data.email, data.password);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao conectar. Tente novamente.");
     } finally {
       setIsLoading(false);
     }
   };
 
+  async function handleDevCardLogin(email: string, password: string, role: string) {
+    setDevLoginRole(role);
+    try {
+      await performLogin(email, password);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao entrar com usuário de teste");
+    } finally {
+      setDevLoginRole(null);
+    }
+  }
+
   return (
-    <div data-testid="login-page" className="w-full max-w-sm">
+    <div data-testid="login-page" className="w-full max-w-md">
       <div className="flex flex-col items-center gap-1 mb-8">
         {/* Logo mini */}
         {/* @ASSET_PLACEHOLDER
@@ -137,6 +159,38 @@ avoid: Texto no logo
           Criar conta
         </Link>
       </p>
+
+      <footer className="pt-3 mt-4 border-t border-[#2B3139]/60">
+        <div className="mb-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-[#707A8A]">
+            Usuários de teste
+          </h2>
+        </div>
+
+        <div className="flex flex-row gap-2 overflow-x-auto pb-1">
+          {devUsersByRole.map((user) => (
+            <button
+              key={user.role}
+              type="button"
+              onClick={() => void handleDevCardLogin(user.email, user.password, user.role)}
+              aria-label={`Entrar como ${user.role}`}
+              disabled={isLoading || devLoginRole === user.role}
+              className="min-w-[190px] rounded-md border border-[#2B3139] bg-[#1E2329]/50 p-2 text-left transition-colors hover:border-[#F0B90B]/60 hover:bg-[#1E2329] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0B90B]/60 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              <p className="text-[11px] font-bold text-[#F0B90B]">{user.role}</p>
+              <p className="mt-1 text-[11px] text-[#929AA5] break-all">
+                Login: <span className="font-mono text-[#EAECEF]">{user.email}</span>
+              </p>
+              <p className="mt-1 text-[11px] text-[#929AA5] break-all">
+                Senha: <span className="font-mono text-[#EAECEF]">{user.password}</span>
+              </p>
+              <p className="mt-2 text-[10px] uppercase tracking-wide text-[#707A8A]">
+                {devLoginRole === user.role ? "Entrando..." : "Clique para entrar"}
+              </p>
+            </button>
+          ))}
+        </div>
+      </footer>
     </div>
   );
 }
