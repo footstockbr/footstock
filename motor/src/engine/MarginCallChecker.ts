@@ -1,7 +1,7 @@
 // ============================================================================
 // Foot Stock Motor — MarginCallChecker
 // Verifica margem de posições SHORT a cada tick e dispara alertas/liquidação.
-// Alert: margem restante = 50% | Liquidação forçada: perdas > 80% (restante < 20%)
+// Alert: perdas = 80% (restante < 20%) | Liquidação forçada: perdas = 100% (restante ≤ 0%)
 // Rastreabilidade: INT-014 / TASK-4/ST003
 // ============================================================================
 
@@ -10,8 +10,8 @@ import type Redis from 'ioredis'
 import { logger } from '../utils/logger'
 import type { PrismaPosition } from '../types/prisma.types'
 
-const MARGIN_ALERT_THRESHOLD = 0.50    // 50%: alerta de margin call (INTAKE canônico)
-const MARGIN_LIQUIDATION_THRESHOLD = 0.20  // 20%: liquidação forçada — perdas > 80% (INTAKE canônico)
+const MARGIN_ALERT_THRESHOLD = 0.20        // restante < 20% = 80% consumido — alerta (INTAKE canônico)
+const MARGIN_LIQUIDATION_THRESHOLD = 0.00  // restante ≤ 0% = 100% consumido — liquidação (INTAKE canônico)
 const ALERT_THROTTLE_TTL_SECONDS = 3600   // 1h entre alertas para a mesma posição
 
 export class MarginCallChecker {

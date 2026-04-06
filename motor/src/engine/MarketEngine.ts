@@ -25,7 +25,7 @@ import { CLUB_STATE_BY_TICKER } from '../microstructure/clubStates'
 import type { PreviousTickDelta } from '../types/motor.types'
 
 const TICK_INTERVAL_MS = parseInt(process.env.MOTOR_TICK_INTERVAL_MS ?? '2000', 10)
-const PERSIST_HISTORY_EVERY = 5  // Persistir PriceHistory a cada N ticks (A_TOP persiste sempre)
+const PERSIST_HISTORY_EVERY = 4  // Persistir PriceHistory a cada N ticks ≈8s (FDD canônico; A_TOP persiste sempre)
 // Heartbeat a cada N ticks (reduz comandos Redis — TTL do MotorHealthService: 60s)
 const HEARTBEAT_EVERY = parseInt(process.env.MOTOR_HEARTBEAT_EVERY ?? '5', 10)
 

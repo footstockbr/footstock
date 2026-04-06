@@ -22,8 +22,8 @@ export const CLUSTER_PARAMS: Record<AssetCluster, ClusterParams> = {
     cluster: 'A_MID',
     baseVolume: 20_000,
     drift: 0.0,
-    theta: 0.10,
-    sigma: 0.0022,
+    theta: 0.18,              // INTAKE canônico: 0.18
+    sigma: 0.0025,            // INTAKE canônico: 0.0025
     garchAlpha: 0.12,
     garchBeta: 0.85,
     lambdaKyle: 0.0002,
@@ -48,7 +48,7 @@ export const CLUSTER_PARAMS: Record<AssetCluster, ClusterParams> = {
     cluster: 'B_LIQUID',
     baseVolume: 3_000,
     drift: -0.0002,           // leve pressão vendedora
-    theta: 0.06,
+    theta: 0.23,              // INTAKE canônico: 0.23
     sigma: 0.0035,
     garchAlpha: 0.12,
     garchBeta: 0.85,
@@ -61,8 +61,8 @@ export const CLUSTER_PARAMS: Record<AssetCluster, ClusterParams> = {
     cluster: 'B_ILLIQ',
     baseVolume: 500,
     drift: -0.0005,           // pressão vendedora mais forte
-    theta: 0.04,
-    sigma: 0.0045,
+    theta: 0.25,              // INTAKE canônico: 0.25
+    sigma: 0.0040,            // INTAKE canônico: 0.0040
     garchAlpha: 0.12,
     garchBeta: 0.85,
     lambdaKyle: 0.003,

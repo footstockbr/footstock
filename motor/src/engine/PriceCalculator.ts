@@ -122,7 +122,7 @@ export class PriceCalculator {
     }
 
     // Calcular novo preço com floor em 0.01 (ativo não pode ir a zero)
-    const newPrice = Math.max(0.01, state.currentPrice + cappedDelta + correlationDelta)
+    const newPrice = Math.max(5.0, state.currentPrice + cappedDelta + correlationDelta)
 
     return { newPrice, layerResults, halted: false }
   }
