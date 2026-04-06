@@ -14,31 +14,31 @@ export const DEV_TEST_USERS: Record<string, DevTestUserProfile> = {
   'superadmin@foot-stock.test': {
     password: DEV_PASSWORD,
     name: 'Super Admin',
-    planType: 'JOGADOR',
+    planType: 'LENDA',
     adminRole: 'SUPER_ADMIN',
   },
   'admin@foot-stock.test': {
     password: DEV_PASSWORD,
     name: 'Administrador Teste',
-    planType: 'JOGADOR',
+    planType: 'LENDA',
     adminRole: 'ADMINISTRADOR',
   },
   'monitor@foot-stock.test': {
     password: DEV_PASSWORD,
     name: 'Monitor Teste',
-    planType: 'JOGADOR',
+    planType: 'LENDA',
     adminRole: 'MONITOR',
   },
   'editor@foot-stock.test': {
     password: DEV_PASSWORD,
     name: 'Editor Teste',
-    planType: 'JOGADOR',
+    planType: 'LENDA',
     adminRole: 'EDITOR',
   },
   'moderador@foot-stock.test': {
     password: DEV_PASSWORD,
     name: 'Moderador Teste',
-    planType: 'JOGADOR',
+    planType: 'LENDA',
     adminRole: 'MODERADOR',
   },
   'craque@foot-stock.test': {

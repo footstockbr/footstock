@@ -66,8 +66,6 @@ export const ADMIN_ROLE = {
   /** Acesso total ao sistema */
   SUPER_ADMIN: 'SUPER_ADMIN',
   /** Gestão geral da plataforma */
-  ADMIN: 'ADMIN',
-  /** Administrador (legado) */
   ADMINISTRADOR: 'ADMINISTRADOR',
   /** Visualização e monitoramento */
   MONITOR: 'MONITOR',
