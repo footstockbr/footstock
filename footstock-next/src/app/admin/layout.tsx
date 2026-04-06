@@ -3,7 +3,7 @@ import { AdminSidebar } from "@/components/admin/AdminSidebar";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-dvh bg-[#0B0E11] flex">
+    <div className="h-dvh overflow-hidden bg-[#0B0E11] flex">
       <AdminSidebar />
 
       {/* Main content */}
