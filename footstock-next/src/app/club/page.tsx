@@ -4,7 +4,6 @@ import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-import { ROUTES } from "@/lib/constants/routes";
 
 export const metadata: Metadata = {
   title: "Portal do Clube — Foot Stock",
@@ -68,11 +67,7 @@ export default function ClubPortalPage() {
         })}
       </div>
 
-      <div className="mt-6 text-center">
-        <Link href={ROUTES.MERCADO} className="text-xs text-[#929AA5] hover:text-[#F0B90B] transition-colors">
-          ← Voltar ao mercado
-        </Link>
-      </div>
+      {/* Link "Voltar ao mercado" disponível na sidebar */}
     </div>
   );
 }
