@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { User, Settings, LogOut, Shield, CreditCard, Bell } from "lucide-react";
+import { User, Shield, CreditCard, Bell } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { PlanBadge } from "@/components/shared/plan-badge";
@@ -9,6 +9,7 @@ import Link from "next/link";
 import { ROUTES } from "@/lib/constants/routes";
 import { getAuthUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { LogoutButton } from "@/components/conta/LogoutButton";
 
 export const metadata: Metadata = {
   title: "Minha Conta — Foot Stock",
@@ -83,11 +84,10 @@ export default async function ContaPage() {
       {/* Menu */}
       <div data-testid="conta-menu" className="flex flex-col gap-1">
         {[
-          { icon: User, label: "Editar perfil", href: "#" },
+          { icon: User, label: "Perfil & Configurações", href: ROUTES.PERFIL },
           { icon: Bell, label: "Notificações", href: ROUTES.INBOX },
           { icon: CreditCard, label: "Plano e pagamento", href: ROUTES.PLANOS },
-          { icon: Shield, label: "Privacidade e segurança", href: "#" },
-          { icon: Settings, label: "Configurações", href: "#" },
+          { icon: Shield, label: "Privacidade e segurança", href: ROUTES.PERFIL_CONSENTIMENTOS },
         ].map((item) => (
           <Link
             key={item.label}
@@ -102,10 +102,7 @@ export default async function ContaPage() {
 
         <hr className="my-2 border-[rgba(240,185,11,.08)]" />
 
-        <button data-testid="conta-logout-button" className="flex items-center gap-3 px-4 py-3.5 rounded-lg hover:bg-[rgba(239,68,68,.08)] transition-colors text-left w-full">
-          <LogOut className="h-5 w-5 text-[#F6465D]" />
-          <span className="text-sm font-medium text-[#F6465D]">Sair da conta</span>
-        </button>
+        <LogoutButton />
       </div>
     </div>
   );
