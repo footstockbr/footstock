@@ -67,6 +67,10 @@ enum AdminRole {
 }
 
 enum InvestorProfile {
+  CONSERVADOR   // legacy
+  MODERADO      // legacy
+  ARROJADO      // legacy
+  ESPECULADOR   // legacy
   INICIANTE
   INTERMEDIARIO
   AVANCADO
@@ -99,6 +103,9 @@ enum NotificationType {
 }
 
 enum ImpactCategory {
+  POSITIVE              // legacy
+  NEGATIVE              // legacy
+  NEUTRAL               // legacy
   FINANCEIRA_CRITICA      // +/-5%
   ESPORTIVA_MAJORITARIA   // +/-3%
   MERCADO_ATIVOS          // +/-2%
@@ -139,6 +146,8 @@ enum SubscriptionStatus {
   SUSPENDED
   CANCELLATION_LOCK
   CANCELLED
+  PAST_DUE      // legacy
+  TRIALING      // legacy
 }
 
 enum UserStatus {
@@ -201,6 +210,8 @@ model User {
   referredByCode         String?          @map("referred_by_code")
   favoriteClubDisplayName String?         @map("favorite_club_display_name")
   bio                    String?          @db.VarChar(300)
+  suspendedAt            DateTime?        @map("suspended_at")
+  suspensionReason       String?          @db.VarChar(500) @map("suspension_reason")
   userType               String           @default("NORMAL") @map("user_type")
   createdAt              DateTime         @default(now()) @map("created_at")
   updatedAt              DateTime         @updatedAt @map("updated_at")
