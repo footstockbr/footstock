@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { createBrowserClient } from "@supabase/ssr";
 import {
   LayoutDashboard,
   Gauge,
@@ -36,6 +37,24 @@ const NAV_ITEMS = [
 
 function SidebarNav({ onLinkClick }: { onLinkClick?: () => void }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  async function handleLogout() {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    try {
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      );
+      await supabase.auth.signOut();
+      document.cookie = "fs-admin-role=; path=/; max-age=0";
+      router.replace(ROUTES.LOGIN);
+    } catch {
+      setIsLoggingOut(false);
+    }
+  }
 
   return (
     <>
@@ -68,13 +87,19 @@ function SidebarNav({ onLinkClick }: { onLinkClick?: () => void }) {
       </nav>
 
       <div className="border-t border-[rgba(240,185,11,.1)] p-4">
-        <Link
-          href={ROUTES.MERCADO}
-          className="flex items-center gap-2 text-sm text-[#929AA5] hover:text-[#c5b99a] transition-colors"
+        <button
+          type="button"
+          onClick={() => void handleLogout()}
+          disabled={isLoggingOut}
+          className={`flex items-center gap-2 text-sm transition-colors ${
+            isLoggingOut
+              ? "cursor-not-allowed text-[#707A8A]"
+              : "text-[#929AA5] hover:text-[#c5b99a]"
+          }`}
         >
           <LogOut className="h-4 w-4" />
-          <span>Voltar ao app</span>
-        </Link>
+          <span>{isLoggingOut ? "Saindo..." : "Sair"}</span>
+        </button>
       </div>
     </>
   );

@@ -5,7 +5,6 @@ import { createServerClient } from '@supabase/ssr'
 // Rotas protegidas (requerem autenticacao)
 // ---------------------------------------------------------------------------
 const PROTECTED_ROUTES = [
-  '/dashboard',
   '/mercado',
   '/carteira',
   '/portfolio',
@@ -97,7 +96,7 @@ export async function middleware(request: NextRequest) {
 
     if (isAuthRoute) {
       const redirectUrl = new URL(
-        devClubId ? '/club' : devAuthIsAdmin ? '/admin' : '/dashboard',
+        devClubId ? '/club' : devAuthIsAdmin ? '/admin' : '/mercado',
         request.url
       )
       return NextResponse.redirect(redirectUrl)
@@ -253,7 +252,7 @@ export async function middleware(request: NextRequest) {
   const isAuthRoute = AUTH_ROUTES.some((route) => pathname === route)
 
   if (isAuthRoute && user) {
-    const redirectUrl = new URL('/dashboard', request.url)
+    const redirectUrl = new URL('/mercado', request.url)
     return NextResponse.redirect(redirectUrl)
   }
 
