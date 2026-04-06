@@ -1,7 +1,3 @@
-// Foot Stock — Prisma Schema
-// Gerado por /back-end-build em 2026-03-28
-// Referência: output/docs/foot-stock/project/LLD.md
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,12 +6,26 @@ datasource db {
   provider = "postgresql"
 }
 
-// ─── Enums ────────────────────────────────────────────────────────────────────
+// ─── Enums ────────────────────────────────────────────────────────
 
-enum UserStatus {
-  ACTIVE
-  SUSPENDED
-  BANNED
+enum PlanType {
+  JOGADOR
+  CRAQUE
+  LENDA
+}
+
+enum OrderType {
+  MARKET
+  LIMIT
+  STOP_LOSS
+  TAKE_PROFIT
+  OCO
+  SCHEDULED
+}
+
+enum PositionSide {
+  LONG
+  SHORT
 }
 
 enum PositionStatus {
@@ -23,10 +33,136 @@ enum PositionStatus {
   CLOSED
 }
 
+enum FinancialType {
+  TRADE
+  BONUS
+  DEPOSIT
+  WITHDRAWAL
+  SHORT_INTEREST
+  MARGIN_BLOCKED
+  SHORT_CLOSE
+  LEVERAGE_INTEREST
+}
+
+enum OrderSide {
+  BUY
+  SELL
+}
+
+enum OrderStatus {
+  OPEN
+  FILLED
+  CANCELLED
+  EXPIRED
+  PARTIAL
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMINISTRADOR
+  MONITOR
+  EDITOR
+  MODERADOR
+  CLUB_PARTNER
+}
+
+enum InvestorProfile {
+  INICIANTE
+  INTERMEDIARIO
+  AVANCADO
+  FA
+}
+
+enum LeagueType {
+  PUBLICA
+  AMIGOS
+  PRO
+}
+
+enum NotificationType {
+  // Alinhado com NOTIFICATION-SPEC.md (16 tipos)
+  ORDER_EXECUTED
+  ORDER_CANCELLED
+  MARGIN_CALL_ALERT
+  CIRCUIT_BREAKER
+  NEWS_FAVORITE_CLUB
+  PAYMENT_CONFIRMED
+  PAYMENT_FAILED
+  PLAN_CANCEL_ALERT
+  DIVIDEND_CREDITED
+  BONUS_CREDITED
+  LEAGUE_RESULT
+  ADMIN_BROADCAST
+  // Trava de cancelamento
+  CANCELLATION_LOCK_ACTIVE
+  CANCELLATION_LOCK_LIQUIDATED
+}
+
+enum ImpactCategory {
+  FINANCEIRA_CRITICA      // +/-5%
+  ESPORTIVA_MAJORITARIA   // +/-3%
+  MERCADO_ATIVOS          // +/-2%
+  INTEGRIDADE_SAUDE       // +/-1.5%
+  INSTITUCIONAL           // +/-1%
+  ESPORTIVA_MENOR         // +/-0.5%
+}
+
+enum Sentiment {
+  BULLISH
+  BEARISH
+  NEUTRAL
+}
+
+enum Division {
+  SERIE_A
+  SERIE_B
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
 enum WebhookAuditStatus {
   ACCEPTED
   REJECTED
   DUPLICATE
+}
+
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  TRIAL
+  EXPIRED
+  SUSPENDED
+  CANCELLATION_LOCK
+  CANCELLED
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+}
+
+enum SubscriptionGateway {
+  MERCADO_PAGO
+  PAGSEGURO
+  PAYPAL
+}
+
+enum SubscriptionPeriod {
+  MONTHLY
+  YEARLY
+}
+
+enum SessionType {
+  PRE_MARKET
+  REGULAR
+  AFTER_MARKET
+  CLOSED
 }
 
 enum ConsentPurpose {
@@ -44,389 +180,222 @@ enum ExportJobStatus {
   FAILED
 }
 
-
-enum InvestorProfile {
-  INICIANTE
-  INTERMEDIARIO
-  AVANCADO
-  FA_FUTEBOL
-}
-
-enum PlanType {
-  JOGADOR
-  CRAQUE
-  LENDA
-}
-
-enum AdminRole {
-  SUPER_ADMIN
-  ADMIN
-  ADMINISTRADOR
-  MONITOR
-  EDITOR
-  MODERADOR
-  CLUB_PARTNER
-}
-
-enum OrderType {
-  MARKET
-  LIMIT
-  OCO
-  SHORT
-  SCHEDULED
-}
-
-enum OrderSide {
-  BUY
-  SELL
-}
-
-enum OrderStatus {
-  PENDING
-  OPEN
-  EXECUTED
-  FILLED
-  CANCELLED
-  EXPIRED
-  PARTIAL
-}
-
-enum PositionSide {
-  LONG
-  SHORT
-}
-
-
-
-enum TransactionType {
-  BUY
-  SELL
-  FEE
-  DIVIDEND
-  MARGIN_CALL
-}
-
-enum SubscriptionStatus {
-  TRIAL
-  ACTIVE
-  CANCELLED
-  EXPIRED
-  PENDING_PAYMENT
-  CANCELLATION_LOCK
-}
-
-enum SubscriptionGateway {
-  MERCADO_PAGO
-  PAGSEGURO
-  PAYPAL
-}
-
-enum SubscriptionPeriod {
-  MONTHLY
-  ANNUAL
-}
-
-enum PaymentStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  REFUNDED
-  CHARGEBACK
-}
-
-enum ImpactCategory {
-  RESULTADO_ESPORTIVO
-  CONTRATACAO
-  FINANCEIRO
-  LESAO
-  SUSPENSAO
-  INSTITUCIONAL
-}
-
-enum LeagueType {
-  PUBLICA
-  AMIGOS
-  PRO
-}
-
-
-
-enum PostStatus {
-  ACTIVE
-  REMOVED
-  FLAGGED
-}
-
-
-
-
-enum Division {
-  SERIE_A
-  SERIE_B
-}
-
-enum Sentiment {
-  BULLISH
-  BEARISH
-  NEUTRAL
-}
-
-enum NotificationType {
-  ORDER_EXECUTED
-  ORDER_CANCELLED
-  MARGIN_CALL_ALERT
-  CIRCUIT_BREAKER
-  NEWS_FAVORITE_CLUB
-  PAYMENT_CONFIRMED
-  PAYMENT_FAILED
-  PLAN_CANCEL_ALERT
-  DIVIDEND_CREDITED
-  BONUS_CREDITED
-  LEAGUE_RESULT
-  ADMIN_BROADCAST
-  CANCELLATION_LOCK_ACTIVE
-  CANCELLATION_LOCK_LIQUIDATED
-}
-
-enum FinancialType {
-  TRADE
-  BONUS
-  DEPOSIT
-  WITHDRAWAL
-  SHORT_INTEREST
-  MARGIN_BLOCKED
-  SHORT_CLOSE
-  LEVERAGE_INTEREST
-}
-
-enum SessionType {
-  PRE_MARKET
-  REGULAR
-  AFTER_MARKET
-  CLOSED
-}
-
-enum AffiliateStatus {
-  PENDING
-  PAID
-  CANCELLED
-}
-
-// ─── Models ───────────────────────────────────────────────────────────────────
+// ─── Models ───────────────────────────────────────────────────────
 
 model User {
-  id                      String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email                   String          @unique @db.VarChar(255)
-  cpfHash                 String          @unique @db.Char(64) @map("cpf_hash")
-  name                    String          @db.VarChar(120)
-  phone                   String?         @db.VarChar(20)
-  birthDate               DateTime?        @db.Date @map("birth_date")
-  favoriteClub            String?          @db.VarChar(10) @map("favorite_club")
-  favoriteClubDisplayName String?         @db.VarChar(100) @map("favorite_club_display_name")
-  userType                String           @default("NORMAL") @map("user_type")
-  referredByCode          String?         @db.VarChar(20) @map("referred_by_code")
-  investorProfile         InvestorProfile? @map("investor_profile")
-  planType                PlanType        @default(JOGADOR) @map("plan_type")
-  fsBalance               Decimal         @default(2000.00) @db.Decimal(12, 2) @map("fs_balance")
-  marginBlocked           Decimal         @default(0.00) @db.Decimal(12, 2) @map("margin_blocked")
-  tourCompleted           Boolean         @default(false) @map("tour_completed")
-  ageVerificationPending  Boolean         @default(false) @map("age_verification_pending")
-  adminRole               AdminRole? @map("admin_role")
-  status                  UserStatus      @default(ACTIVE)
-  bio                     String?         @db.VarChar(300)
-  suspendedAt             DateTime? @map("suspended_at")
-  suspensionReason        String?         @db.VarChar(500) @map("suspension_reason")
-  version                 Int             @default(0)
-  createdAt               DateTime        @default(now()) @map("created_at")
-  updatedAt               DateTime        @updatedAt @map("updated_at")
+  id              String           @id @default(cuid())
+  email           String           @unique
+  name            String
+  phone           String?
+  cpfHash         String           @unique @map("cpf_hash")
+  birthDate       DateTime?        @map("birth_date") @db.Date
+  planType        PlanType         @default(JOGADOR) @map("plan_type")
+  status          UserStatus       @default(ACTIVE)
+  adminRole       AdminRole?       @map("admin_role")
+  investorProfile InvestorProfile? @map("investor_profile")
+  tourCompleted          Boolean          @default(false) @map("tour_completed")
+  favoriteClub           String?          @map("favorite_club")
+  fsBalance              Decimal          @default(10000) @map("fs_balance") @db.Decimal(18, 2)
+  marginBlocked          Decimal          @default(0) @map("margin_blocked") @db.Decimal(18, 2)
+  ageVerificationPending Boolean          @default(false) @map("age_verification_pending")
+  referredByCode         String?          @map("referred_by_code")
+  favoriteClubDisplayName String?         @map("favorite_club_display_name")
+  bio                    String?          @db.VarChar(300)
+  userType               String           @default("NORMAL") @map("user_type")
+  createdAt              DateTime         @default(now()) @map("created_at")
+  updatedAt              DateTime         @updatedAt @map("updated_at")
 
-  orders               Order[]
-  positions            Position[]
-  transactions         Transaction[]
-  notifications        Notification[]
-  forumPosts           ForumPost[]
-  globalForumPosts     GlobalForumPost[]
-  forumLikes           ForumLike[]
-  consents             Consent[]
-  dataAccessLogs       DataAccessLog[]  @relation("UserDataAccessLogs")
-  accessedDataLogs     DataAccessLog[]  @relation("AdminDataAccessLogs")
-  subscription         Subscription?
-  affiliateCodes       AffiliateCode[]
-  affiliateTransactions AffiliateTransaction[] @relation("ReferredUser")
-  pushSubscriptions    PushSubscription[]
-  adminActions         AdminMarketAction[]
-  leagueMembers        LeagueMember[]
-  glossaryInteractions GlossaryInteraction[]
-  dataExportJobs       DataExportJob[]
-  dividends            Dividend[]
-  leagueScoreEvents    LeagueScoreEvent[]
+  orders            Order[]
+  positions         Position[]
+  transactions      Transaction[]
+  subscriptions     Subscription[]
+  payments          Payment[]
+  notifications     Notification[]
+  consents          Consent[]
+  leagueMemberships LeagueMember[]
+  forumPosts        ForumPost[]
+  globalForumPosts  GlobalForumPost[]
+  forumLikes        ForumLike[]
+  dataAccessLogs    DataAccessLog[]
+  dataExportJobs    DataExportJob[]
+  createdLeagues    League[]            @relation("LeagueCreator")
+  adminActions      AdminMarketAction[] @relation("AdminActor")
+  dividends              Dividend[]
+  glossaryInteractions   GlossaryInteraction[]
+  affiliateCode          AffiliateCode?
+  affiliateReferrals     AffiliateTransaction[] @relation("AffiliateReferredUser")
+  pushSubscriptions      PushSubscription[]
+  leagueScoreEvents LeagueScoreEvent[] // RESOLVED: relação para eventos de pontuação de ligas
 
-  @@index([email])
-  @@index([cpfHash])
-  @@index([planType])
-  @@index([userType])
-  @@index([referredByCode])
   @@map("users")
 }
 
 model Asset {
-  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  ticker         String         @unique @db.VarChar(10)
-  name           String         @db.VarChar(100)
-  realName       String         @db.VarChar(80) @map("real_name")
-  displayName    String         @db.VarChar(100) @map("display_name")
+  id             String   @id @default(cuid())
+  ticker         String   @unique
+  name           String
+  clubSlug       String   @unique @map("club_slug")
   division       Division
-  currentPrice   Decimal        @db.Decimal(10, 4) @map("current_price")
-  fairValue      Decimal        @db.Decimal(10, 4) @map("fair_value")
-  openPrice      Decimal        @default(0) @db.Decimal(10, 4) @map("open_price")
-  closePrice     Decimal        @default(0) @db.Decimal(10, 4) @map("close_price")
-  cluster        String         @default("A_TOP") @db.VarChar(20)
-  volume         BigInt         @default(0)
-  currentSupply  BigInt @map("current_supply")
-  totalShares    BigInt @map("total_shares")
-  isActive       Boolean        @default(true) @map("is_active")
-  isHalted       Boolean        @default(false) @map("is_halted")
-  haltReason     String?        @db.VarChar(100) @map("halt_reason")
-  colorPrimary   String         @default("#000000") @db.VarChar(20) @map("color_primary")
-  colorSecondary String         @default("#FFFFFF") @db.VarChar(20) @map("color_secondary")
-  colors         Json
-  financials     Json
-  sentiment      String         @default("NEUTRAL")
-  updatedAt      DateTime       @updatedAt @map("updated_at")
+  cluster        String // A_TOP | A_MID | A_SMALL | B_LIQUID | B_ILLIQ
+  currentPrice   Decimal  @map("current_price") @db.Decimal(18, 8)
+  openPrice      Decimal  @map("open_price") @db.Decimal(18, 8)
+  closePrice     Decimal  @map("close_price") @db.Decimal(18, 8)
+  fairValue      Decimal  @default(0) @map("fair_value") @db.Decimal(18, 8)
+  volume         BigInt   @default(0)
+  marketCap      Decimal  @map("market_cap") @db.Decimal(18, 2)
+  currentSupply  BigInt   @default(1000000) @map("current_supply")
+  totalShares    BigInt   @default(1000000) @map("total_shares")
+  isActive       Boolean  @default(true) @map("is_active")
+  isHalted       Boolean  @default(false) @map("is_halted")
+  haltReason     String?  @map("halt_reason")
+  sentiment      String   @default("NEUTRAL") // BULLISH | BEARISH | NEUTRAL
+  financials     Json?    @db.JsonB
+  colorPrimary   String   @map("color_primary")
+  colorSecondary String   @map("color_secondary")
+  logoUrl        String?  @map("logo_url")
+  /// Aliases internos de busca (nomes reais, apelidos, siglas) — uso server-side APENAS.
+  /// NUNCA retornar ao cliente. Permite pesquisar "Flamengo" e encontrar URU3.
+  searchText     String   @default("") @map("search_text")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
+  priceHistory PriceHistory[]
   orders       Order[]
   positions    Position[]
-  priceHistory PriceHistory[]
-  news         News[]
+  transactions Transaction[]
+  sponsors     Sponsor[]
+  adminActions AdminMarketAction[]
 
-  @@index([ticker])
-  @@index([division])
   @@map("assets")
 }
 
 model Order {
-  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId          String      @db.Uuid @map("user_id")
-  ticker          String      @db.VarChar(10)
-  type            OrderType
-  side            OrderSide
-  quantity        Decimal     @db.Decimal(14, 4)
-  price           Decimal?    @db.Decimal(10, 4)
-  executedPrice   Decimal?    @db.Decimal(10, 4) @map("executed_price")
-  status          OrderStatus @default(PENDING)
-  stopLossPrice   Decimal?    @db.Decimal(10, 4) @map("stop_loss_price")
-  takeProfitPrice Decimal?    @db.Decimal(10, 4) @map("take_profit_price")
-  scheduledAt     DateTime? @map("scheduled_at")
-  feeAmount       Decimal?    @db.Decimal(8, 2) @map("fee_amount")
-  leverageMultiplier Int      @default(1) @map("leverage_multiplier")
-  executedAt      DateTime? @map("executed_at")
-  expiresAt       DateTime? @map("expires_at")
-  groupId         String?     @db.VarChar(50) @map("group_id")
-  version         Int         @default(0)
-  createdAt       DateTime    @default(now()) @map("created_at")
-  updatedAt       DateTime    @updatedAt @map("updated_at")
+  id            String      @id @default(cuid())
+  userId        String      @map("user_id")
+  assetId       String      @map("asset_id")
+  type          OrderType
+  side          OrderSide
+  status        OrderStatus @default(OPEN)
+  quantity      Int
+  price         Decimal?    @db.Decimal(18, 8)
+  executedPrice Decimal?    @map("executed_price") @db.Decimal(18, 8)
+  fee               Decimal     @default(0) @db.Decimal(18, 8)
+  expiresAt         DateTime?   @map("expires_at")
+  scheduledAt       DateTime?   @map("scheduled_at")
+  groupId           String?     @map("group_id")
+  leverageMultiplier Int        @default(1) @map("leverage_multiplier")
+  executedAt        DateTime?   @map("executed_at")
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
 
   user         User          @relation(fields: [userId], references: [id])
-  asset        Asset         @relation(fields: [ticker], references: [ticker])
+  asset        Asset         @relation(fields: [assetId], references: [id])
   transactions Transaction[]
 
+  @@index([userId])
+  @@index([assetId])
+  @@index([status])
   @@index([userId, status])
-  @@index([ticker, status])
   @@index([groupId])
   @@map("orders")
 }
 
 model Position {
-  id                  String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId              String       @db.Uuid @map("user_id")
-  ticker              String       @db.VarChar(10)
-  quantity            Decimal      @db.Decimal(14, 4)
-  avgPrice            Decimal      @db.Decimal(10, 4) @map("avg_price")
-  totalInvested       Decimal      @default(0) @db.Decimal(12, 2) @map("total_invested")
-  side                PositionSide
-  status              PositionStatus @default(OPEN)
-  marginBlocked       Decimal      @default(0) @db.Decimal(12, 2) @map("margin_blocked")
-  leverageMultiplier  Decimal      @default(1.0) @db.Decimal(3, 1) @map("leverage_multiplier")
-  leverageAmount      Decimal      @default(0.0) @db.Decimal(12, 2) @map("leverage_amount")
-  dailyInterestRate   Decimal      @default(0.0) @db.Decimal(6, 4) @map("daily_interest_rate")
-  interestAccrued     Decimal      @default(0.0) @db.Decimal(10, 2) @map("interest_accrued")
-  openedAt            DateTime? @map("opened_at")
-  version             Int          @default(0)
-  createdAt           DateTime     @default(now()) @map("created_at")
-  updatedAt           DateTime     @updatedAt @map("updated_at")
+  id                 String         @id @default(cuid())
+  userId             String         @map("user_id")
+  assetId            String         @map("asset_id")
+  quantity           Int
+  avgPrice           Decimal        @map("avg_price") @db.Decimal(18, 8)
+  totalInvested      Decimal        @map("total_invested") @db.Decimal(18, 2)
+  side               PositionSide   @default(LONG)
+  status             PositionStatus @default(OPEN)
+  marginBlocked      Decimal        @default(0) @map("margin_blocked") @db.Decimal(18, 2)
+  leverageMultiplier Int            @default(1) @map("leverage_multiplier")
+  leverageAmount     Decimal        @default(0) @map("leverage_amount") @db.Decimal(18, 2)
+  dailyInterestRate  Decimal        @default(0) @map("daily_interest_rate") @db.Decimal(10, 6)
+  interestAccrued    Decimal        @default(0) @map("interest_accrued") @db.Decimal(18, 2)
+  openedAt           DateTime?      @map("opened_at")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
 
   user  User  @relation(fields: [userId], references: [id])
-  asset Asset @relation(fields: [ticker], references: [ticker])
+  asset Asset @relation(fields: [assetId], references: [id])
 
   @@index([userId])
   @@index([userId, status])
-  @@index([ticker])
   @@map("positions")
 }
 
 model Transaction {
-  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId        String          @db.Uuid @map("user_id")
-  orderId       String?         @db.Uuid @map("order_id")
-  ticker        String          @db.VarChar(10)
-  type          TransactionType
-  amount        Decimal         @db.Decimal(14, 4)
-  fsAmount      Decimal         @db.Decimal(12, 2) @map("fs_amount")
-  balanceBefore Decimal         @db.Decimal(12, 2) @map("balance_before")
-  balanceAfter  Decimal         @db.Decimal(12, 2) @map("balance_after")
-  createdAt     DateTime        @default(now()) @map("created_at")
+  id             String        @id @default(cuid())
+  userId         String        @map("user_id")
+  assetId        String        @map("asset_id")
+  orderId        String?       @map("order_id")
+  type           OrderType
+  financialType  FinancialType @default(TRADE) @map("financial_type")
+  side           OrderSide
+  quantity       Int
+  price          Decimal       @db.Decimal(18, 8)
+  fee            Decimal       @db.Decimal(18, 8)
+  totalAmount    Decimal       @map("total_amount") @db.Decimal(18, 2)
+  fsAmount       Decimal?      @map("fs_amount") @db.Decimal(18, 2)
+  balanceBefore  Decimal?      @map("balance_before") @db.Decimal(18, 2)
+  balanceAfter   Decimal?      @map("balance_after") @db.Decimal(18, 2)
+  createdAt      DateTime      @default(now()) @map("created_at")
 
   user  User   @relation(fields: [userId], references: [id])
+  asset Asset  @relation(fields: [assetId], references: [id])
   order Order? @relation(fields: [orderId], references: [id])
 
   @@index([userId])
-  @@index([ticker])
+  @@index([assetId])
+  @@index([userId, createdAt])
   @@map("transactions")
 }
 
 model PriceHistory {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  ticker    String   @db.VarChar(10)
-  open      Decimal  @db.Decimal(10, 4)
-  high      Decimal  @db.Decimal(10, 4)
-  low       Decimal  @db.Decimal(10, 4)
-  close     Decimal  @db.Decimal(10, 4)
-  volume    Decimal  @db.Decimal(18, 4)
-  period    String   @db.VarChar(4)
-  timestamp DateTime
+  id          String      @id @default(cuid())
+  assetId     String      @map("asset_id")
+  timestamp   DateTime
+  open        Decimal     @db.Decimal(18, 8)
+  high        Decimal     @db.Decimal(18, 8)
+  low         Decimal     @db.Decimal(18, 8)
+  close       Decimal     @db.Decimal(18, 8)
+  volume      BigInt      @default(0)
+  sessionType SessionType @map("session_type")
 
-  asset Asset @relation(fields: [ticker], references: [ticker])
+  asset Asset @relation(fields: [assetId], references: [id])
 
-  @@index([ticker, period, timestamp(sort: Desc)])
+  @@index([assetId])
+  @@index([assetId, timestamp])
   @@map("price_history")
 }
 
 model Subscription {
-  id                        String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId                    String             @unique @db.Uuid @map("user_id")
-  planType                  PlanType @map("plan_type")
-  previousPlanType          PlanType? @map("previous_plan_type")
+  id                        String              @id @default(cuid())
+  userId                    String              @map("user_id")
+  planType                  PlanType            @map("plan_type")
+  previousPlanType          PlanType?           @map("previous_plan_type") // G-02: bônus diferencial de upgrade
   gateway                   SubscriptionGateway
   period                    SubscriptionPeriod
-  amount                    Int                @default(0)
-  status                    SubscriptionStatus
-  startsAt                  DateTime @map("starts_at")
-  expiresAt                 DateTime? @map("expires_at")
-  trialEndsAt               DateTime? @map("trial_ends_at")
-  cancelledAt               DateTime? @map("cancelled_at")
-  cancellationLockExpiresAt DateTime? @map("cancellation_lock_expires_at")
-  bonusScheduledAt          DateTime? @map("bonus_scheduled_at")
-  bonusCreditedAt           DateTime? @map("bonus_credited_at")
-  renewalReminderSentAt     DateTime? @map("renewal_reminder_sent_at")
-  refundRequested           Boolean            @default(false) @map("refund_requested")
-  createdAt                 DateTime           @default(now()) @map("created_at")
-  updatedAt                 DateTime           @updatedAt @map("updated_at")
+  amount                    Int // centavos BRL — NUNCA Float (PCI-DSS)
+  status                    SubscriptionStatus  @default(PENDING)
+  startsAt                  DateTime            @map("starts_at")
+  expiresAt                 DateTime            @map("expires_at")
+  cancelledAt               DateTime?           @map("cancelled_at")
+  cancellationLockExpiresAt DateTime?           @map("cancellation_lock_expires_at")
+  bonusScheduledAt          DateTime?           @map("bonus_scheduled_at")
+  bonusCreditedAt           DateTime?           @map("bonus_credited_at")
+  renewalReminderSentAt     DateTime?           @map("renewal_reminder_sent_at") // G-01: lembrete 7 dias antes do vencimento
+  refundRequested           Boolean             @default(false) @map("refund_requested")
+  createdAt                 DateTime            @default(now()) @map("created_at")
+  updatedAt                 DateTime            @updatedAt @map("updated_at")
 
-  user                  User                   @relation(fields: [userId], references: [id])
-  payments              Payment[]
-  affiliateTransactions AffiliateTransaction[]
-  dunningAttempts       DunningAttempt[]
+  user            User             @relation(fields: [userId], references: [id])
+  payments        Payment[]
+  dunningAttempts DunningAttempt[]
 
+  @@index([userId, status])
   @@index([expiresAt, status])
   @@index([cancellationLockExpiresAt, status])
   @@index([renewalReminderSentAt, status])
@@ -434,152 +403,211 @@ model Subscription {
 }
 
 model Payment {
-  id                   String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  subscriptionId       String         @db.Uuid @map("subscription_id")
+  id                   String              @id @default(cuid())
+  userId               String              @map("user_id")
+  subscriptionId       String              @map("subscription_id")
+  amount               Int // centavos BRL — NUNCA Float (PCI-DSS)
   gateway              SubscriptionGateway
-  gatewayTransactionId String         @unique @db.VarChar(255) @map("gateway_transaction_id")
-  amount               Decimal        @db.Decimal(10, 2)
-  currency             String         @default("BRL") @db.VarChar(3)
-  status               PaymentStatus
-  gatewayMeta          Json? @map("gateway_meta")
-  processedAt          DateTime? @map("processed_at")
-  createdAt            DateTime       @default(now()) @map("created_at")
+  gatewayTransactionId String              @unique @map("gateway_transaction_id") // idempotência de webhook (PAYMENT_052)
+  gatewayMeta          Json?               @map("gateway_meta") // metadados não sensíveis do gateway (sem PAN/CVV)
+  status               PaymentStatus       @default(PENDING)
+  processedAt          DateTime?           @map("processed_at") // preenchido ao processar webhook
+  createdAt            DateTime            @default(now()) @map("created_at")
 
+  user         User         @relation(fields: [userId], references: [id])
   subscription Subscription @relation(fields: [subscriptionId], references: [id])
 
-  @@index([subscriptionId])
+  @@index([userId])
+  @@index([gatewayTransactionId])
   @@map("payments")
 }
 
+// ─── Dunning: tentativas de cobrança D+1/D+3/D+7 ─────────────────────────────
+
+model DunningAttempt {
+  id             String              @id @default(cuid())
+  subscriptionId String              @map("subscription_id")
+  attemptNumber  Int                 @map("attempt_number") // 1, 2 ou 3
+  gateway        SubscriptionGateway
+  status         PaymentStatus       @default(PENDING)
+  scheduledAt    DateTime            @map("scheduled_at") // D+1, D+3, D+7
+  processedAt    DateTime?           @map("processed_at")
+  errorMessage   String?             @map("error_message")
+  createdAt      DateTime            @default(now()) @map("created_at")
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id])
+
+  @@unique([subscriptionId, attemptNumber])
+  @@index([scheduledAt, status])
+  @@map("dunning_attempts")
+}
+
+// ─── Auditoria de webhooks (PCI-DSS req. 6 — 90 dias) ────────────────────────
+
+model WebhookAuditLog {
+  id             String             @id @default(cuid())
+  gateway        SubscriptionGateway
+  eventType      String?            @map("event_type") // PAYMENT_CONFIRMED | PAYMENT_FAILED | REFUND_COMPLETED | null
+  transactionId  String?            @map("transaction_id")
+  subscriptionId String?            @map("subscription_id")
+  status         WebhookAuditStatus // ACCEPTED | REJECTED | DUPLICATE
+  hmacValid      Boolean            @map("hmac_valid")
+  ipAddress      String?            @map("ip_address")
+  errorMessage   String?            @map("error_message")
+  processedAt    DateTime           @default(now()) @map("processed_at")
+
+  @@index([gateway, status])
+  @@index([processedAt]) // para cleanup de retenção 90 dias
+  @@index([transactionId])
+  @@map("webhook_audit_logs")
+}
+
 model News {
-  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  title          String         @db.VarChar(255)
-  content        String?        @db.Text
-  source         String         @db.VarChar(100)
-  url            String         @db.VarChar(500)
-  ticker         String         @db.VarChar(10)
-  assetIds       String[]
-  sentiment      Decimal        @db.Decimal(4, 3)
-  impactCategory ImpactCategory @map("impact_category")
-  isPublished    Boolean        @default(true) @map("is_published")
-  status         String         @default("published") @db.VarChar(20)
-  publishedAt    DateTime @map("published_at")
-  injectedAt     DateTime       @default(now()) @map("injected_at")
-  createdAt      DateTime       @default(now()) @map("created_at")
+  id          String         @id @default(cuid())
+  title       String
+  content     String         @db.Text
+  impact      ImpactCategory
+  sentiment   Sentiment
+  // Array de IDs de ativos relacionados (suporte nativo PostgreSQL)
+  assetIds    String[]       @map("asset_ids")
+  source      String?
+  isPublished Boolean        @default(false) @map("is_published")
+  publishedAt DateTime?      @map("published_at")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
 
-  asset Asset @relation(fields: [ticker], references: [ticker])
-
-  @@index([ticker])
-  @@index([status])
+  @@index([publishedAt])
   @@index([isPublished])
-  @@index([injectedAt(sort: Desc)])
   @@map("news")
 }
 
-model League {
-  id        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name      String         @db.VarChar(60)
-  slug      String         @unique @db.VarChar(80)
-  type      LeagueType
-  division  String           @default("BRONZE")
-  duration  String         @db.VarChar(12) // '1S' | '1M' | 'TEMPORADA'
-  sponsorId String?        @db.Uuid @map("sponsor_id")
-  createdBy String?        @db.Uuid @map("created_by")
-  startsAt  DateTime @map("starts_at")
-  endsAt    DateTime? @map("ends_at")
-  status    String           @default("ACTIVE")
-  createdAt DateTime       @default(now()) @map("created_at")
+model NewsSourceWhitelist {
+  id        String   @id @default(cuid())
+  domain    String   @unique
+  addedBy   String   @map("added_by")
+  createdAt DateTime @default(now()) @map("created_at")
 
+  @@map("news_source_whitelist")
+}
+
+model League {
+  id         String     @id @default(cuid())
+  name       String
+  slug       String     @unique
+  type       LeagueType
+  division   String     @default("BRONZE") // BRONZE | PRATA | OURO | ABERTA
+  duration   String     // 1S | 1M | TEMPORADA
+  status     String     @default("ACTIVE") // ACTIVE | FINISHED
+  maxMembers Int        @default(20) @map("max_members")
+  prizePool  Decimal    @default(0) @map("prize_pool") @db.Decimal(18, 2)
+  startsAt   DateTime   @default(now()) @map("starts_at")
+  endsAt     DateTime   @map("ends_at")
+  createdBy  String     @map("created_by")
+  sponsorId  String?    @map("sponsor_id")
+  emblemUrl  String?    @map("emblem_url")
+  inviteCode String?    @unique @map("invite_code")
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  creator     User               @relation("LeagueCreator", fields: [createdBy], references: [id])
   sponsor     Sponsor?           @relation(fields: [sponsorId], references: [id])
   members     LeagueMember[]
-  scoreEvents LeagueScoreEvent[]
+  forumPosts  ForumPost[]
+  scoreEvents LeagueScoreEvent[] // RESOLVED: relação inversa para eventos de pontuação
 
+  @@index([createdBy])
   @@index([type, status])
   @@map("leagues")
 }
 
 model LeagueMember {
-  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  leagueId       String    @db.Uuid @map("league_id")
-  userId         String    @db.Uuid @map("user_id")
-  score          Decimal   @default(0) @db.Decimal(12, 4) // = finalScore
-  rank           Int       @default(0)
-  scoreBreakdown Json?     // ScoreBreakdown completo em JSON @map("score_breakdown")
-  joinedAt       DateTime  @default(now()) @map("joined_at")
-  lastScoreAt    DateTime? @map("last_score_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  id              String    @id @default(cuid())
+  leagueId        String    @map("league_id")
+  userId          String    @map("user_id")
+  joinedAt        DateTime  @default(now()) @map("joined_at")
+  score           Decimal   @default(0) @db.Decimal(18, 2)
+  rank            Int       @default(0)
+  scoreBreakdown  Json?     @map("score_breakdown")
+  lastScoreAt     DateTime? @map("last_score_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([leagueId, userId])
   @@index([leagueId, score(sort: Desc)])
+  @@index([userId])
   @@map("league_members")
 }
 
-model GlossaryInteraction {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId    String   @db.Uuid @map("user_id")
-  termSlug  String   @db.VarChar(100) @map("term_slug")
-  createdAt DateTime @default(now()) @map("created_at")
+// RESOLVED: modelo criado para rastrear eventos de pontuação do Pilar 2 (Sofisticação Operacional)
+// Registra AI_CONSULTED, LIMIT_ORDER_EXECUTED, OCO_EXECUTED, SHORT_PROFITABLE, etc.
+model LeagueScoreEvent {
+  id          String   @id @default(cuid())
+  leagueId    String   @map("league_id")
+  userId      String   @map("user_id")
+  eventType   String   @map("event_type") // AI_CONSULTED | LIMIT_ORDER_EXECUTED | OCO_EXECUTED | SHORT_PROFITABLE | SCHEDULED_ORDER_EXECUTED | GLOSSARY_5_CARDS | FORUM_POST_LIKED | GLOSSARY_3_CATEGORIES | PLAN_UPGRADED
+  points      Int      @default(0)
+  metadata    Json?    // ticker, orderId, etc.
+  period      String   @map("period")    // "YYYY-MM-DD" — para deduplicação diária
+  createdAt   DateTime @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId, createdAt])
-  @@map("glossary_interactions")
+  @@unique([leagueId, userId, eventType, period]) // deduplicação: 1 evento por dia por liga por usuário
+  @@index([leagueId, userId])
+  @@index([leagueId, period])
+  @@map("league_score_events")
 }
 
 model ForumPost {
-  id        String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId    String     @db.Uuid @map("user_id")
-  content   String     @db.VarChar(280)
-  ticker    String?    @db.VarChar(10)
-  status    PostStatus @default(ACTIVE)
-  likes     Int        @default(0)
-  flagged   Boolean    @default(false)
-  createdAt DateTime   @default(now()) @map("created_at")
-  updatedAt DateTime   @updatedAt @map("updated_at")
+  id        String   @id @default(cuid())
+  leagueId  String   @map("league_id")
+  userId    String   @map("user_id")
+  content   String   @db.Text
+  isPinned  Boolean  @default(false) @map("is_pinned")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id])
+  league League @relation(fields: [leagueId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
 
-  @@index([ticker])
-  @@index([status])
+  @@index([leagueId])
+  @@index([userId])
   @@map("forum_posts")
 }
 
 model Notification {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId    String   @db.Uuid @map("user_id")
-  type      String   @db.VarChar(40)
-  title     String   @db.VarChar(120)
-  body      String   @db.VarChar(500)
-  read      Boolean  @default(false)
-  isRead    Boolean  @default(false) @map("is_read")
+  id        String           @id @default(cuid())
+  userId    String           @map("user_id")
+  type      NotificationType
+  title     String
+  body      String
   data      Json?
-  metadata  Json?
-  createdAt DateTime @default(now()) @map("created_at")
+  isRead    Boolean          @default(false) @map("is_read")
+  createdAt DateTime         @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id])
 
-  @@index([userId, read])
+  @@index([userId])
   @@index([userId, isRead])
   @@map("notifications")
 }
 
 model Consent {
-  id        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId    String         @db.Uuid @map("user_id")
+  id        String         @id @default(cuid())
+  userId    String         @map("user_id")
   purpose   ConsentPurpose
-  granted   Boolean        @default(true)
-  grantedAt DateTime       @default(now()) @map("granted_at")
-  ipAddress String?        @db.VarChar(45) @map("ip_address")
-  userAgent String?        @db.VarChar(255) @map("user_agent")
-  revoked   Boolean        @default(false)
-  revokedAt DateTime? @map("revoked_at")
+  granted   Boolean        @default(false)
+  grantedAt DateTime?      @map("granted_at")
+  revokedAt DateTime?      @map("revoked_at")
+  ipAddress String?        @map("ip_address")
+  userAgent String?        @map("user_agent")
   createdAt DateTime       @default(now()) @map("created_at")
   updatedAt DateTime       @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, purpose])
   @@index([userId])
@@ -587,128 +615,70 @@ model Consent {
 }
 
 model DataAccessLog {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId      String   @db.Uuid @map("user_id")
-  accessedBy  String   @db.Uuid @map("accessed_by")
-  action      String   @db.VarChar(60)
-  dataType    String?  @db.VarChar(60) @map("data_type")
-  endpoint    String?  @db.VarChar(255)
-  details     Json?
-  timestamp   DateTime @default(now())
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  accessedBy  String   @map("accessed_by") // userId do admin ou 'system' ou próprio userId
+  dataType    String   @map("data_type") // 'profile'|'financial'|'export'|'consents'|'admin_view'|'full_export'
+  endpoint    String
+  reason      String?
+  ipAddress   String?  @map("ip_address")
   createdAt   DateTime @default(now()) @map("created_at")
 
-  user     User @relation("UserDataAccessLogs", fields: [userId], references: [id])
-  accessor User @relation("AdminDataAccessLogs", fields: [accessedBy], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
   @@index([userId, createdAt])
   @@index([createdAt])
-  @@index([timestamp(sort: Desc)])
   @@map("data_access_logs")
 }
 
 model Sponsor {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name      String   @db.VarChar(120)
-  banners   Json?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at")
+  id               String   @id @default(cuid())
+  assetId          String?  @map("asset_id")
+  name             String
+  logoUrl          String?  @map("logo_url")
+  contractStart    DateTime @map("contract_start")
+  contractEnd      DateTime @map("contract_end")
+  sponsorshipValue Decimal  @map("sponsorship_value") @db.Decimal(18, 2)
+  createdAt        DateTime @default(now()) @map("created_at")
 
-  leagues League[]
+  asset            Asset?   @relation(fields: [assetId], references: [id])
+  sponsoredLeagues League[]
 
   @@map("sponsors")
 }
 
 model AdminMarketAction {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  adminId      String   @db.Uuid @map("admin_id")
-  action       String   @db.VarChar(40)
-  targetTicker String?  @db.VarChar(10) @map("target_ticker")
-  details      Json?
-  timestamp    DateTime @default(now())
+  id            String   @id @default(cuid())
+  adminId       String   @map("admin_id")
+  assetId       String?  @map("asset_id")
+  action        String // INJECT_NEWS | PAUSE_ASSET | ADJUST_PRICE | HALT_TRADING | NEWS_INJECT | TICKER_HALT | TICKER_RESUME | MOD_RULE_UPDATE | USER_SUSPEND | ADMIN_BROADCAST | UNAUTHORIZED_ATTEMPT
+  reason        String?  @db.Text
+  ticker        String?  // ticker direto (alternativa ao assetId FK)
+  details       Json?    // detalhes específicos da ação (module-22)
+  ipAddress     String?  @map("ip_address")
+  previousPrice Decimal? @map("previous_price") @db.Decimal(18, 8)
+  newPrice      Decimal? @map("new_price") @db.Decimal(18, 8)
+  createdAt     DateTime @default(now()) @map("created_at")
 
-  admin User @relation(fields: [adminId], references: [id])
+  admin User   @relation("AdminActor", fields: [adminId], references: [id])
+  asset Asset? @relation(fields: [assetId], references: [id])
 
   @@index([adminId])
-  @@index([timestamp(sort: Desc)])
+  @@index([action])
+  @@index([createdAt])
   @@map("admin_market_actions")
 }
 
-model AffiliateCode {
-  id                   String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId               String        @db.Uuid @map("user_id")
-  code                 String        @unique @db.VarChar(20)
-  affiliateType        String        @default("INFLUENCER") @map("affiliate_type")
-  commissionPercentage Decimal       @db.Decimal(5, 2) @map("commission_percentage")
-  bankData             Json? @map("bank_data")
-  active               Boolean       @default(true)
-  createdAt            DateTime      @default(now()) @map("created_at")
-  updatedAt            DateTime      @updatedAt @map("updated_at")
-
-  user         User                   @relation(fields: [userId], references: [id])
-  transactions AffiliateTransaction[]
-
-  @@map("affiliate_codes")
-}
-
-model AffiliateTransaction {
-  id                String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  affiliateCodeId   String                     @db.Uuid @map("affiliate_code_id")
-  referredUserId    String                     @db.Uuid @map("referred_user_id")
-  subscriptionId    String                     @db.Uuid @map("subscription_id")
-  transactionType   String                   @default("SIGNUP") @map("transaction_type")
-  amount            Decimal                    @db.Decimal(10, 2)
-  status            AffiliateStatus @default(PENDING)
-  paidAt            DateTime? @map("paid_at")
-  createdAt         DateTime                   @default(now()) @map("created_at")
-
-  affiliateCode AffiliateCode @relation(fields: [affiliateCodeId], references: [id])
-  referredUser  User          @relation("ReferredUser", fields: [referredUserId], references: [id])
-  subscription  Subscription  @relation(fields: [subscriptionId], references: [id])
-
-  @@map("affiliate_transactions")
-}
-
-model PushSubscription {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId      String   @db.Uuid @map("user_id")
-  endpoint    String   @unique @db.VarChar(500)
-  p256dh      String   @db.VarChar(200)
-  auth        String   @db.VarChar(100)
-  userAgent   String?  @db.VarChar(255) @map("user_agent")
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id])
-
-  @@index([userId])
-  @@map("push_subscriptions")
-}
-
-// ─── Missing Models (migrated from legacy) ────────────────────────────────────
-
-model NsmDailyRecord {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  date         DateTime @unique @db.Date
-  filledOrders Int @map("filled_orders")
-  target       Int      @default(500)
-  percentage   Float
-  alertSent    Boolean  @default(false) @map("alert_sent")
-  createdAt    DateTime @default(now()) @map("created_at")
-
-  @@map("nsm_daily_records")
-}
-
 model DataExportJob {
-  id          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId      String          @db.Uuid @map("user_id")
+  id          String          @id @default(cuid())
+  userId      String          @map("user_id")
   status      ExportJobStatus @default(PENDING)
-  format      String          @default("json+csv") @db.VarChar(20)
-  filePath    String?         @db.VarChar(500) @map("file_path")
-  downloadUrl String?         @db.VarChar(500) @map("download_url")
-  expiresAt   DateTime? @map("expires_at")
+  format      String          @default("json+csv")
+  filePath    String?         @map("file_path")
+  downloadUrl String?         @map("download_url")
+  expiresAt   DateTime?       @map("expires_at")
   error       String?
-  completedAt DateTime? @map("completed_at")
+  completedAt DateTime?       @map("completed_at")
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
 
@@ -718,19 +688,56 @@ model DataExportJob {
   @@map("data_export_jobs")
 }
 
-model BlockedWord {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  word      String   @unique @db.VarChar(100)
-  createdAt DateTime @default(now()) @map("created_at")
+model IncidentLog {
+  id              String    @id @default(cuid())
+  type            String
+  description     String    @db.Text
+  affectedUsers   Int       @map("affected_users")
+  dataTypes       String[]  @map("data_types")
+  detectedAt      DateTime  @map("detected_at")
+  containedAt     DateTime? @map("contained_at")
+  estimatedImpact String    @map("estimated_impact")
+  report          String    @db.Text
+  notifiedAt      DateTime  @default(now()) @map("notified_at")
+  emailSent       Boolean   @default(true) @map("email_sent")
+  createdAt       DateTime  @default(now()) @map("created_at")
 
-  @@map("blocked_words")
+  @@map("incident_logs")
 }
 
+// ─── module-16: Dividendos ────────────────────────────────────────────────────
+
+model Dividend {
+  id             String    @id @default(cuid())
+  userId         String    @map("user_id")
+  ticker         String
+  clubName       String    @map("club_name")
+  type           String    // DividendType: ESPORTIVO | FINANCEIRO
+  amount         Decimal   @db.Decimal(18, 8)
+  yieldPercent   Float     @map("yield_percent")
+  status         String    @default("PENDING") // DividendStatus: CREDITED | PENDING | EXPIRADO
+  processedMonth String?   @map("processed_month") // "YYYY-MM" — idempotência do job mensal
+  scheduledFor   DateTime? @map("scheduled_for")   // prazo PENDING (createdAt + 7 dias)
+  triggerEvent   String?   @map("trigger_event")   // VITORIA | TITULO (apenas ESPORTIVO)
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([ticker])
+  @@index([processedMonth])
+  @@index([status, scheduledFor]) // job de crédito
+  @@index([status, createdAt])    // job de expiração
+  @@map("dividends")
+}
+
+// ─── module-18: Forum Global & Glossário ─────────────────────────────────────
+
 model GlobalForumPost {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId    String   @db.Uuid @map("user_id")
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
   content   String   @db.VarChar(280)
-  ticker    String?  @db.VarChar(10)
+  ticker    String?
   isFlagged Boolean  @default(false) @map("is_flagged")
   flagCount Int      @default(0) @map("flag_count")
   isDeleted Boolean  @default(false) @map("is_deleted")
@@ -747,18 +754,41 @@ model GlobalForumPost {
 }
 
 model ForumLike {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  postId    String   @db.Uuid @map("post_id")
-  userId    String   @db.Uuid @map("user_id")
-  createdAt DateTime @default(now()) @map("created_at")
+  id        String          @id @default(cuid())
+  postId    String          @map("post_id")
+  userId    String          @map("user_id")
+  createdAt DateTime        @default(now()) @map("created_at")
 
   post GlobalForumPost @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([postId, userId])
   @@map("forum_likes")
 }
 
+model GlossaryInteraction {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  termSlug  String   @map("term_slug")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([termSlug])
+  @@map("glossary_interactions")
+}
+
+model BlockedWord {
+  id        String   @id @default(cuid())
+  word      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("blocked_words")
+}
+
+// Regras de auto-moderação — source of truth: Redis (moderation:rules)
+// Este modelo serve como fallback persistente quando Redis está indisponível.
 model ModerationRule {
   id          Int      @id
   name        String   @db.VarChar(100)
@@ -770,122 +800,98 @@ model ModerationRule {
   @@map("moderation_rules")
 }
 
+// Patrocinadores publicitários com banners em posições configuráveis.
+// Separado do modelo Sponsor (patrocínio financeiro de ligas).
 model AdSponsor {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name         String   @db.VarChar(100)
-  logo         String?
-  banners      Json     @default("{}")
-  activeLigaId String?  @db.VarChar(50) @map("active_liga_id")
-  startsAt     DateTime @map("starts_at")
-  endsAt       DateTime @map("ends_at")
-  active       Boolean  @default(false)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id           String    @id @default(cuid())
+  name         String    @db.VarChar(100)
+  logo         String?   // URL Supabase Storage
+  banners      Json      @default("{}")
+  // banners: { [position: BannerPosition]: { imageUrl, linkUrl, altText } }
+  activeLigaId String?   @map("active_liga_id")
+  startsAt     DateTime  @map("starts_at")
+  endsAt       DateTime  @map("ends_at")
+  active       Boolean   @default(false)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
   @@map("ad_sponsors")
 }
 
-model WebhookAuditLog {
-  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  gateway        SubscriptionGateway
-  eventType      String?             @db.VarChar(60) @map("event_type")
-  transactionId  String?             @db.VarChar(255) @map("transaction_id")
-  subscriptionId String?             @db.Uuid @map("subscription_id")
-  status         WebhookAuditStatus
-  hmacValid      Boolean @map("hmac_valid")
-  ipAddress      String?             @db.VarChar(45) @map("ip_address")
-  errorMessage   String? @map("error_message")
-  processedAt    DateTime            @default(now()) @map("processed_at")
+// ─── Affiliate (Programa de Afiliados para Influenciadores) ──────────────────
 
-  @@index([gateway, status])
-  @@index([processedAt])
-  @@index([transactionId])
-  @@map("webhook_audit_logs")
+enum AffiliateStatus {
+  PENDING
+  PROCESSING
+  PAID
 }
 
-model DunningAttempt {
-  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  subscriptionId String         @db.Uuid @map("subscription_id")
-  attemptNumber  Int @map("attempt_number")
-  gateway        SubscriptionGateway
-  status         PaymentStatus  @default(PENDING)
-  scheduledAt    DateTime @map("scheduled_at")
-  processedAt    DateTime? @map("processed_at")
-  errorMessage   String? @map("error_message")
-  createdAt      DateTime       @default(now()) @map("created_at")
+model AffiliateCode {
+  id                   String               @id @default(cuid())
+  userId               String               @unique @map("user_id")
+  code                 String               @unique @db.VarChar(50)
+  affiliateType        String               @default("INFLUENCER") @map("affiliate_type") @db.VarChar(30)
+  commissionPercentage Decimal              @default(0.10) @map("commission_percentage") @db.Decimal(5, 4)
+  bankData             Json?                @map("bank_data")
+  // bankData: { banco, agencia, conta, pixKey, cnpj } — criptografado em repouso
+  active               Boolean              @default(true)
+  createdAt            DateTime             @default(now()) @map("created_at")
+  updatedAt            DateTime             @updatedAt @map("updated_at")
 
-  subscription Subscription @relation(fields: [subscriptionId], references: [id])
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions AffiliateTransaction[]
 
-  @@unique([subscriptionId, attemptNumber])
-  @@index([scheduledAt, status])
-  @@map("dunning_attempts")
+  @@map("affiliate_codes")
 }
 
-model Dividend {
-  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId         String    @db.Uuid @map("user_id")
-  ticker         String    @db.VarChar(10)
-  clubName       String    @db.VarChar(100) @map("club_name")
-  type           String    @db.VarChar(20)
-  amount         Decimal   @db.Decimal(18, 8)
-  yieldPercent   Float @map("yield_percent")
-  status         String    @default("PENDING") @db.VarChar(20)
-  processedMonth String?   @db.VarChar(7) @map("processed_month")
-  scheduledFor   DateTime? @map("scheduled_for")
-  triggerEvent   String?   @db.VarChar(40) @map("trigger_event")
-  createdAt      DateTime  @default(now()) @map("created_at")
+model AffiliateTransaction {
+  id               String          @id @default(cuid())
+  affiliateCodeId  String          @map("affiliate_code_id")
+  referredUserId   String          @map("referred_user_id")
+  subscriptionId   String?         @map("subscription_id")
+  transactionType  String          @default("SIGNUP") @map("transaction_type") @db.VarChar(30)
+  // transactionType: SIGNUP | CONVERSION | RENEWAL
+  amount           Decimal         @default(0) @db.Decimal(14, 8)
+  // amount em FS$ (tokens da plataforma)
+  status           AffiliateStatus @default(PENDING)
+  paidAt           DateTime?       @map("paid_at")
+  createdAt        DateTime        @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id])
+  affiliateCode  AffiliateCode @relation(fields: [affiliateCodeId], references: [id], onDelete: Cascade)
+  referredUser   User          @relation("AffiliateReferredUser", fields: [referredUserId], references: [id])
 
-  @@index([userId])
-  @@index([ticker])
-  @@index([processedMonth])
-  @@index([status, scheduledFor])
-  @@index([status, createdAt])
-  @@map("dividends")
+  @@map("affiliate_transactions")
 }
 
-model IncidentLog {
-  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  type            String    @db.VarChar(60)
-  description     String    @db.Text
-  affectedUsers   Int @map("affected_users")
-  dataTypes       String[]
-  detectedAt      DateTime @map("detected_at")
-  containedAt     DateTime? @map("contained_at")
-  estimatedImpact String    @db.VarChar(255) @map("estimated_impact")
-  report          String    @db.Text
-  notifiedAt      DateTime  @default(now()) @map("notified_at")
-  emailSent       Boolean   @default(true) @map("email_sent")
-  createdAt       DateTime  @default(now()) @map("created_at")
+// ─── NSM (North Star Metric): historico diario de ordens executadas ──────────
 
-  @@map("incident_logs")
+model NsmDailyRecord {
+  id           String   @id @default(cuid())
+  date         DateTime @unique @db.Date
+  filledOrders Int      @map("filled_orders")
+  target       Int      @default(500)
+  percentage   Float    // filledOrders / target * 100
+  alertSent    Boolean  @default(false) @map("alert_sent")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("nsm_daily_records")
 }
 
-model LeagueScoreEvent {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  leagueId  String   @db.Uuid @map("league_id")
-  userId    String   @db.Uuid @map("user_id")
-  eventType String   @db.VarChar(60) @map("event_type")
-  points    Int      @default(0)
-  metadata  Json?
-  period    String   @db.VarChar(10)
+// ─── Push Subscriptions (EP045/EP046 — VAPID web push) ───────────────────────
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  endpoint  String   @unique
+  p256dh    String   @map("p256dh")
+  auth      String
+  userAgent String?  @map("user_agent")
+  active    Boolean  @default(true)
   createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([leagueId, userId, eventType, period])
-  @@index([leagueId, userId])
-  @@index([leagueId, period])
-  @@map("league_score_events")
-}
-
-model NewsSourceWhitelist {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  domain    String   @unique @db.VarChar(255)
-  addedBy   String   @db.VarChar(100) @map("added_by")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@map("news_source_whitelist")
+  @@index([userId, active])
+  @@map("push_subscriptions")
 }

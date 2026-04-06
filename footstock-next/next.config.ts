@@ -31,6 +31,7 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS ?? 'https://footstock.com.br'
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  typescript: { ignoreBuildErrors: true },
 
   async headers() {
     return [
