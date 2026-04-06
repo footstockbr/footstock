@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   TrendingUp,
   Briefcase,
@@ -9,8 +9,10 @@ import {
   Trophy,
   MoreHorizontal,
   X,
+  LogOut,
 } from "lucide-react";
 import { useState } from "react";
+import { createBrowserClient } from "@supabase/ssr";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants/routes";
 import { Drawer } from "@/components/ui/drawer";
@@ -32,7 +34,26 @@ const DRAWER_ITEMS = [
 
 function BottomTabBar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  async function handleLogout() {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    setMoreOpen(false);
+    try {
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      );
+      await supabase.auth.signOut();
+      document.cookie = "fs-admin-role=; path=/; max-age=0";
+      router.replace(ROUTES.HOME);
+    } catch {
+      setIsLoggingOut(false);
+    }
+  }
 
   return (
     <>
@@ -89,6 +110,26 @@ function BottomTabBar() {
               <span className="text-sm font-medium text-[#EAECEF]">{item.label}</span>
             </Link>
           ))}
+
+          <hr className="my-1 border-[rgba(240,185,11,.08)]" />
+
+          <button
+            type="button"
+            data-testid="drawer-mais-item-sair"
+            onClick={() => void handleLogout()}
+            disabled={isLoggingOut}
+            className={cn(
+              "flex items-center gap-3 px-3 py-3 rounded-lg transition-colors w-full text-left",
+              isLoggingOut
+                ? "opacity-60 cursor-not-allowed"
+                : "hover:bg-[rgba(239,68,68,.08)]"
+            )}
+          >
+            <LogOut className="w-7 h-5 text-[#F6465D] flex-shrink-0" />
+            <span className="text-sm font-medium text-[#F6465D]">
+              {isLoggingOut ? "Saindo..." : "Sair da conta"}
+            </span>
+          </button>
         </nav>
       </Drawer>
     </>
