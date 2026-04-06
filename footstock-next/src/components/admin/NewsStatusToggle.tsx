@@ -29,7 +29,7 @@ export function NewsStatusToggle({ newsId, currentStatus, onToggle }: NewsStatus
         res = await fetch(`/api/v1/admin/news/${newsId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'published' }),
+          body: JSON.stringify({ isPublished: true }),
         })
       }
 
@@ -50,6 +50,7 @@ export function NewsStatusToggle({ newsId, currentStatus, onToggle }: NewsStatus
   const isPublished = optimisticStatus === 'published'
 
   return (
+    // Wrapper: touch target mínimo 44×44 sem distorcer o visual do trilho
     <button
       role="switch"
       aria-checked={isPublished}
@@ -57,23 +58,31 @@ export function NewsStatusToggle({ newsId, currentStatus, onToggle }: NewsStatus
       disabled={loading}
       onClick={handleToggle}
       className={[
-        'relative inline-flex h-5 w-9 min-h-[44px] min-w-[44px] items-center justify-center flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent',
-        'transition-colors duration-200 ease-in-out focus-visible:outline-none',
-        'focus-visible:ring-2 focus-visible:ring-[#F0B90B] focus-visible:ring-offset-2',
+        'inline-flex min-h-[44px] min-w-[44px] flex-shrink-0 items-center justify-center',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0B90B] focus-visible:ring-offset-2 rounded-md',
         'disabled:cursor-not-allowed disabled:opacity-50',
-        isPublished ? 'bg-[#4ade80]' : 'bg-[#707A8A]',
       ].join(' ')}
     >
+      {/* Trilho visual — dimensões independentes do touch target */}
       <span
         className={[
-          'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow',
-          'transform transition duration-200 ease-in-out',
-          isPublished ? 'translate-x-4' : 'translate-x-0',
+          'relative inline-flex h-5 w-9 items-center rounded-full border-2 border-transparent',
+          'transition-colors duration-200 ease-in-out',
+          isPublished ? 'bg-[#4ade80]' : 'bg-[#707A8A]',
         ].join(' ')}
       >
-        {loading && (
-          <Loader2 className="h-3 w-3 animate-spin text-[#929AA5] absolute inset-0.5" />
-        )}
+        {/* Thumb */}
+        <span
+          className={[
+            'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow',
+            'transform transition duration-200 ease-in-out',
+            isPublished ? 'translate-x-4' : 'translate-x-0',
+          ].join(' ')}
+        >
+          {loading && (
+            <Loader2 className="h-3 w-3 animate-spin text-[#929AA5] absolute inset-0.5" />
+          )}
+        </span>
       </span>
     </button>
   )

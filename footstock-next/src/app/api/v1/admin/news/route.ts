@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, created, errors, parsePagination, buildPagination } from '@/lib/api'
+import { redisPublisher, REDIS_CHANNELS } from '@/lib/redis'
 import type { ImpactCategory, Sentiment } from '@prisma/client'
 
 const PAGE_SIZE = 20
@@ -174,6 +175,35 @@ export async function POST(request: NextRequest) {
         details: { newsId: news.id, sentiment, impact },
       },
     })
+
+    // Publicar no motor via Redis para impactar o preço imediatamente
+    // Falha aqui não cancela a notícia — já foi salva no DB e auditada
+    try {
+      const durationTicks = sentimentNum >= 0.7 || sentimentNum <= -0.7 ? 10 : sentimentNum >= 0.3 || sentimentNum <= -0.3 ? 6 : 3
+      await Promise.all([
+        redisPublisher.publish(REDIS_CHANNELS.NEWS_INJECT, JSON.stringify({
+          ticker: asset.ticker,
+          title,
+          sentiment: sentimentNum,
+          impactCategory: impactCategory,
+          source: 'ADMIN_MANUAL',
+          durationTicks,
+        })),
+        redisPublisher.publish(REDIS_CHANNELS.MOTOR_CONTROL, JSON.stringify({
+          type: 'INJECT_NEWS',
+          assetId: asset.id,
+          adminId: auth.user.id,
+          payload: {
+            impact: sentimentNum < 0 ? 'NEGATIVE' : 'POSITIVE',
+            magnitude: Math.min(Math.abs(sentimentNum), 1),
+            durationTicks,
+            sentiment: sentimentNum,
+          },
+        })),
+      ])
+    } catch (err) {
+      console.error('[admin/news] Falha ao publicar no motor via Redis:', err)
+    }
 
     return created(serializeNews(news))
   } catch {
