@@ -42,7 +42,7 @@ function DesktopSidebar() {
   }
 
   return (
-    <aside className="hidden md:fixed md:inset-y-0 md:left-0 md:flex md:w-64 md:flex-col md:border-r md:border-[rgba(240,185,11,.1)] md:bg-[#0B0E11]/70 md:z-40">
+    <aside className="hidden md:flex md:w-64 md:flex-col md:flex-shrink-0 md:h-dvh md:sticky md:top-0 md:border-r md:border-[rgba(240,185,11,.1)] md:bg-[#0B0E11]/70">
       <div className="h-14 border-b border-[rgba(240,185,11,.1)] px-4 flex items-center">
         <Link href={ROUTES.MERCADO} className="flex items-center gap-2">
           <Image

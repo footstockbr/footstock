@@ -10,7 +10,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <MotorStatusProvider>
       <AdminRouteGuard />
-      <div data-testid="app-shell" className="min-h-dvh flex bg-[#0B0E11]">
+      <div data-testid="app-shell" className="min-h-dvh md:h-dvh md:overflow-hidden flex bg-[#0B0E11]">
         {/* Skip navigation */}
         <a
           href="#main-content"
@@ -21,7 +21,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
         <DesktopSidebar />
 
-        <div className="flex min-w-0 flex-1 flex-col md:ml-64">
+        <div className="flex min-w-0 flex-1 flex-col md:overflow-y-auto">
           <AppHeader />
           <MotorOfflineBanner />
 
