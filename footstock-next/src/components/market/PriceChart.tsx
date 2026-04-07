@@ -19,11 +19,31 @@ interface CompareTicker {
 
 interface PriceChartProps {
   ticker: string
-  colors?: { primary: string }
+  primaryColor?: string
   compareTickers?: CompareTicker[]
   period?: ChartPeriod
   onPeriodChange?: (p: ChartPeriod) => void
   onChartReady?: (chart: IChartApi) => void
+}
+
+// Reduz array para no máximo maxPoints por amostragem uniforme
+function downsample<T>(data: T[], maxPoints: number): T[] {
+  if (data.length <= maxPoints) return data
+  const step = data.length / maxPoints
+  return Array.from({ length: maxPoints }, (_, i) => data[Math.floor(i * step)])
+}
+
+// Suavização EMA para reduzir ruído visual (alpha ∈ 0-1; menor = mais suave)
+function applyEMA(data: LineData[], alpha: number): LineData[] {
+  if (data.length === 0) return data
+  const out: LineData[] = [data[0]]
+  for (let i = 1; i < data.length; i++) {
+    out.push({
+      time: data[i].time,
+      value: +((alpha * (data[i].value as number)) + ((1 - alpha) * (out[i - 1].value as number))).toFixed(4),
+    })
+  }
+  return out
 }
 
 // Normaliza candles para % de variação a partir do primeiro close
@@ -57,7 +77,7 @@ async function fetchHistory(ticker: string, period: ChartPeriod): Promise<Candle
 
 export function PriceChart({
   ticker,
-  colors,
+  primaryColor,
   compareTickers = [],
   period: externalPeriod,
   onPeriodChange,
@@ -165,27 +185,27 @@ export function PriceChart({
     if (isCompareMode) {
       // Em modo comparação: sempre linha com % de variação
       mainSeriesRef.current = chart.addLineSeries({
-        color: colors?.primary ?? '#F0B90B',
+        color: primaryColor ?? '#F0B90B',
         lineWidth: 2,
         title: ticker,
         priceLineVisible: false,
       })
     } else if (chartType === 'candle') {
       mainSeriesRef.current = chart.addCandlestickSeries({
-        upColor: colors?.primary ?? '#2EBD85',
+        upColor: primaryColor ?? '#2EBD85',
         downColor: '#F6465D',
         borderVisible: false,
-        wickUpColor: colors?.primary ?? '#2EBD85',
+        wickUpColor: primaryColor ?? '#2EBD85',
         wickDownColor: '#F6465D',
       })
     } else {
       mainSeriesRef.current = chart.addLineSeries({
-        color: colors?.primary ?? '#F0B90B',
+        color: primaryColor ?? '#F0B90B',
         lineWidth: 2,
       })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartType, colors, isCompareMode])
+  }, [chartType, primaryColor, isCompareMode])
 
   // Popula dados da série principal
   useEffect(() => {
@@ -207,12 +227,13 @@ export function PriceChart({
         } as CandlestickData))
       )
     } else {
-      ;(series as ISeriesApi<'Line'>).setData(
-        candles.map((c) => ({
-          time: c.timestamp as unknown as import('lightweight-charts').Time,
-          value: c.close,
-        }))
-      )
+      const raw = candles.map((c) => ({
+        time: c.timestamp as unknown as import('lightweight-charts').Time,
+        value: c.close,
+      }))
+      // Suaviza quando há dados densos (sub-minuto) para evitar linha irregular
+      const display = raw.length > 300 ? applyEMA(downsample(raw, 300), 0.15) : raw
+      ;(series as ISeriesApi<'Line'>).setData(display)
     }
   }, [candles, chartType, isCompareMode])
 
@@ -362,7 +383,7 @@ export function PriceChart({
           <span className="text-[#F0B90B] font-semibold">Comparação — % vs abertura</span>
           <div className="flex items-center gap-2 ml-1">
             <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full inline-block" style={{ background: colors?.primary ?? '#F0B90B' }} />
+              <span className="w-2 h-2 rounded-full inline-block" style={{ background: primaryColor ?? '#F0B90B' }} />
               <span className="text-[#929AA5]">{ticker}</span>
             </span>
             {compareTickers.map((ct) => (

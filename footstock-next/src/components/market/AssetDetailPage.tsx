@@ -186,7 +186,7 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
       <section className="px-0 md:px-4 mt-3" aria-label="Gráfico de preços">
         <PriceChart
           ticker={asset.ticker}
-          colors={{ primary: asset.colors.primary }}
+          primaryColor={asset.colorPrimary ?? asset.colors.primary}
           compareTickers={compareTickers}
           period={currentPeriod}
           onPeriodChange={handlePeriodChange}
