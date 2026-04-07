@@ -79,7 +79,8 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
   const [currentPeriod, setCurrentPeriod] = useState<ChartPeriod>('1M')
   const [orderFormOpen, setOrderFormOpen] = useState<{ side: 'BUY' | 'SELL' } | null>(null)
   const [compareOpen, setCompareOpen] = useState(false)
-  const [compareColors, setCompareColors] = useState<Record<string, string>>({})
+  const [compareTickers, setCompareTickers] = useState<Array<{ ticker: string; color: string }>>([])
+
   const priceChartRef = useRef<IChartApi | null>(null)
   const ofiChartRef = useRef<IChartApi | null>(null)
   const router = useRouter()
@@ -96,14 +97,16 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
   const change24h = tick?.change24h ?? asset.change24h
 
   function handleCompare(tickers: string[]) {
-    const selected = tickers.map((t) => {
-      const a = [asset, ...allAssets].find(
-        (x) => x.ticker === t
-      )
+    // tickers inclui o baseTicker na posição 0 — removemos para passar só os secundários
+    const allWithBase = tickers.map((t) => {
+      const a = [asset, ...allAssets].find((x) => x.ticker === t)
       return { ticker: t, primaryColor: a?.colors?.primary ?? '#F0B90B' }
     })
-    const colors = assignChartColors(selected)
-    setCompareColors(colors)
+    const colorMap = assignChartColors(allWithBase)
+    const secondary = allWithBase
+      .filter((a) => a.ticker !== asset.ticker)
+      .map((a) => ({ ticker: a.ticker, color: colorMap[a.ticker] }))
+    setCompareTickers(secondary)
   }
 
   function handlePeriodChange(p: ChartPeriod) {
@@ -183,9 +186,8 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
       <section className="px-0 md:px-4 mt-3" aria-label="Gráfico de preços">
         <PriceChart
           ticker={asset.ticker}
-          colors={{
-            primary: compareColors[asset.ticker] ?? asset.colors.primary,
-          }}
+          colors={{ primary: asset.colors.primary }}
+          compareTickers={compareTickers}
           period={currentPeriod}
           onPeriodChange={handlePeriodChange}
           onChartReady={handleChartReady('price')}
