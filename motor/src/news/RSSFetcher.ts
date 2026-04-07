@@ -7,6 +7,7 @@
 
 import Parser from 'rss-parser'
 import type Redis from 'ioredis'
+import type { PrismaClient } from '@prisma/client'
 import { logger } from '../utils/logger'
 import { newsQueue, type RawNewsItem } from './NewsQueue'
 import { FallbackPool } from './FallbackPool'
@@ -15,7 +16,8 @@ import { FallbackPool } from './FallbackPool'
 // Config
 // ---------------------------------------------------------------------------
 
-const FEEDS = [
+/** Fallback hardcoded — usado quando DB não está disponível */
+const FEEDS_FALLBACK = [
   { url: 'https://www.espn.com.br/rss', source: 'ESPN Brasil' },
   { url: 'https://www.gazetaesportiva.com/feed/', source: 'Gazeta Esportiva' },
   { url: 'https://trivela.com.br/feed/', source: 'Trivela' },
@@ -35,8 +37,33 @@ export class RSSFetcher {
   private parser: Parser
   private _interval: ReturnType<typeof setInterval> | null = null
 
-  constructor(private readonly redis: Redis) {
+  constructor(
+    private readonly redis: Redis,
+    private readonly prisma?: PrismaClient
+  ) {
     this.parser = new Parser({ timeout: 10_000 })
+  }
+
+  // ---------------------------------------------------------------------------
+  // Resolução dos feeds: DB → fallback hardcoded
+  // ---------------------------------------------------------------------------
+
+  private async resolveFeeds(): Promise<Array<{ url: string; source: string }>> {
+    if (!this.prisma) return FEEDS_FALLBACK
+
+    try {
+      // $queryRaw independe do Prisma client gerado — funciona mesmo sem RssFeed no schema local
+      const rows = await this.prisma.$queryRaw<Array<{ url: string; name: string }>>`
+        SELECT url, name FROM rss_feeds WHERE is_active = true ORDER BY created_at ASC
+      `
+      if (rows.length > 0) {
+        return rows.map((r: { url: string; name: string }) => ({ url: r.url, source: r.name }))
+      }
+    } catch (err) {
+      logger.warn(`[RSS] Falha ao ler feeds do DB — usando fallback hardcoded: ${(err as Error).message}`)
+    }
+
+    return FEEDS_FALLBACK
   }
 
   // ---------------------------------------------------------------------------
@@ -91,12 +118,13 @@ export class RSSFetcher {
     const startTime = Date.now()
     logger.info(`[RSS] Ciclo iniciado — ${new Date().toISOString()}`)
 
-    const results = await Promise.allSettled(FEEDS.map(f => this.fetchFeed(f)))
+    const feeds = await this.resolveFeeds()
+    const results = await Promise.allSettled(feeds.map(f => this.fetchFeed(f)))
     let totalCount = 0
 
     for (let i = 0; i < results.length; i++) {
       const result = results[i]
-      const source = FEEDS[i].source
+      const source = feeds[i].source
 
       if (result.status === 'rejected') {
         logger.error(`[SYS_001] Feed ${source} rejeitado: ${result.reason}`)

@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Newspaper, PlusCircle } from 'lucide-react'
 import Link from 'next/link'
 import { NewsManager } from '@/components/admin/NewsManager'
+import { FeedWhitelist } from '@/components/admin/FeedWhitelist'
 
 export const metadata: Metadata = {
   title: 'Gestão de Notícias | Admin | Foot Stock',
@@ -30,6 +31,7 @@ export default function AdminNoticiasPage() {
       </div>
 
       <NewsManager />
+      <FeedWhitelist />
     </div>
   )
 }

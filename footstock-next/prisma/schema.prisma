@@ -501,6 +501,17 @@ model NewsSourceWhitelist {
   @@map("news_source_whitelist")
 }
 
+model RssFeed {
+  id        String   @id @default(cuid())
+  url       String   @unique
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("rss_feeds")
+}
+
 model League {
   id         String     @id @default(cuid())
   name       String
