@@ -74,7 +74,7 @@ async function main() {
     if (!rssFetcher) {
       newsPrisma = new PrismaClient()
       const publisher = new NewsPublisher(newsPrisma, redis)
-      newsClassifier = new NewsClassifier(redis)
+      newsClassifier = new NewsClassifier(redis, newsPrisma)
       rssFetcher = new RSSFetcher(redis, newsPrisma)
       newsClassifier.startClassifying(publisher).catch(err =>
         logger.error('[motor] Classifier error:', err)

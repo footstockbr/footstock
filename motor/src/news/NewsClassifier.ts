@@ -7,6 +7,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import type Redis from 'ioredis'
+import type { PrismaClient } from '@prisma/client'
 import { ImpactCategory } from './types'
 import { logger } from '../utils/logger'
 import { newsQueue, type RawNewsItem } from './NewsQueue'
@@ -71,11 +72,39 @@ const IMPACT_CATEGORIES = Object.values(ImpactCategory).join(', ')
 export class NewsClassifier {
   private anthropic: Anthropic
   private running = false
+  /** Linha compacta "URU3=flamengo,fla,urubu | POR4=palmeiras,porco | ..." carregada do DB */
+  private tickerMapLine = ''
 
-  constructor(private readonly redis: Redis) {
+  constructor(
+    private readonly redis: Redis,
+    private readonly prisma?: PrismaClient,
+  ) {
     this.anthropic = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY,
     })
+  }
+
+  // ---------------------------------------------------------------------------
+  // Carregamento do mapeamento ticker → clube real (search_text do DB)
+  // ---------------------------------------------------------------------------
+
+  private async loadTickerAliases(): Promise<void> {
+    if (!this.prisma) {
+      logger.warn('[NewsClassifier] Sem Prisma — mapeamento de tickers desativado (qualidade reduzida)')
+      return
+    }
+    try {
+      const rows = await this.prisma.$queryRaw<Array<{ ticker: string; search_text: string }>>`
+        SELECT ticker, search_text FROM assets WHERE is_active = true AND search_text <> '' ORDER BY ticker
+      `
+      // Formato compacto para o prompt: "URU3=flamengo,fla,mengao,urubu | POR4=palmeiras,porco,verdao"
+      this.tickerMapLine = rows
+        .map(r => `${r.ticker}=${r.search_text.replace(/\s+/g, ',').split(',').slice(0, 6).join(',')}`)
+        .join(' | ')
+      logger.info(`[NewsClassifier] Mapeamento real→ticker: ${rows.length} ativos carregados`)
+    } catch (err) {
+      logger.warn(`[NewsClassifier] Falha ao carregar mapeamento do DB: ${(err as Error).message}`)
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -101,11 +130,14 @@ export class NewsClassifier {
   // ---------------------------------------------------------------------------
 
   private buildPrompt(item: RawNewsItem): string {
-    return `Você é um classificador de notícias de futebol brasileiro para um sistema financeiro.
-
-Analise a notícia abaixo e retorne APENAS um JSON válido com os campos especificados.
-
-Tickers disponíveis (40 clubes): ${TICKERS_40.join(', ')}
+    const mapSection = this.tickerMapLine
+      ? `\nMapeamento ticker → nomes reais do clube (use para identificar o ticker correto):\n${this.tickerMapLine}\n`
+      : ''
+    return `Você é um classificador de notícias de futebol brasileiro para um sistema financeiro fictício.
+Os clubes têm nomes fictícios internos (ex: "Urubu da Gávea FC") mas correspondem a clubes reais.
+Use o mapeamento abaixo para identificar corretamente o ticker a partir do nome real do clube na notícia.
+${mapSection}
+Tickers disponíveis: ${TICKERS_40.join(', ')}
 Categorias de impacto: ${IMPACT_CATEGORIES}
 
 Regras:
@@ -184,6 +216,7 @@ Responda SOMENTE com JSON no formato:
 
   async startClassifying(publisher: NewsPublisher): Promise<void> {
     this.running = true
+    await this.loadTickerAliases()
     logger.info('[NewsClassifier] Worker iniciado')
 
     while (this.running) {
