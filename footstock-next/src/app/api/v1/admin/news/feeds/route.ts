@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { withAdmin } from '@/app/api/middleware'
-import type { AuthContext } from '@/app/api/middleware'
+import { getAuthUser } from '@/lib/auth/server'
+import { canAccess } from '@/lib/auth/canAccess'
+import type { AdminRole } from '@/lib/enums'
 
 const createSchema = z.object({
   url:      z.string().url('URL inválida'),
@@ -10,12 +11,29 @@ const createSchema = z.object({
   isActive: z.boolean().optional().default(true),
 })
 
-async function getHandler(_req: NextRequest): Promise<NextResponse> {
+async function requireAccess() {
+  const auth = await getAuthUser()
+  if (!auth) {
+    return { error: NextResponse.json({ success: false, error: { code: 'AUTH_001', message: 'Não autorizado.' } }, { status: 401 }) }
+  }
+  if (!auth.user.adminRole || !canAccess(auth.user.adminRole as AdminRole, 'news:sources')) {
+    return { error: NextResponse.json({ success: false, error: { code: 'ADMIN_050', message: 'Acesso negado.' } }, { status: 403 }) }
+  }
+  return { auth }
+}
+
+export async function GET() {
+  const { error } = await requireAccess()
+  if (error) return error
+
   const feeds = await prisma.rssFeed.findMany({ orderBy: { createdAt: 'asc' } })
   return NextResponse.json({ success: true, data: { feeds } })
 }
 
-async function postHandler(req: NextRequest, _ctx: AuthContext): Promise<NextResponse> {
+export async function POST(req: NextRequest) {
+  const { error } = await requireAccess()
+  if (error) return error
+
   const body = await req.json()
   const parsed = createSchema.safeParse(body)
   if (!parsed.success) {
@@ -36,6 +54,3 @@ async function postHandler(req: NextRequest, _ctx: AuthContext): Promise<NextRes
   const feed = await prisma.rssFeed.create({ data: parsed.data })
   return NextResponse.json({ success: true, data: { feed } }, { status: 201 })
 }
-
-export const GET  = withAdmin('news:sources')(getHandler)
-export const POST = withAdmin('news:sources')(postHandler)
