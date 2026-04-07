@@ -16,11 +16,11 @@ export class ValueInvestorAgent extends BaseAgent {
     }
 
     if (ctx.currentPrice < ctx.fairValue * 0.95) {
-      return { side: 'BUY', quantity: 10, priceModifier: -0.001, reason: 'undervalued' }
+      return { side: 'BUY', quantity: 2, priceModifier: 0.001, reason: 'undervalued' }
     }
 
     if (ctx.currentPrice > ctx.fairValue * 1.10) {
-      return { side: 'SELL', quantity: 10, priceModifier: 0.001, reason: 'overvalued' }
+      return { side: 'SELL', quantity: 2, priceModifier: 0.001, reason: 'overvalued' }
     }
 
     return { side: 'HOLD', quantity: 0, priceModifier: 0, reason: 'fair_value_range' }
