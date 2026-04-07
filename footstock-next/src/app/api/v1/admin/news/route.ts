@@ -6,7 +6,7 @@ import { ok, created, errors, parsePagination, buildPagination } from '@/lib/api
 import { redisPublisher, REDIS_CHANNELS } from '@/lib/redis'
 import type { ImpactCategory, Sentiment } from '@prisma/client'
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 10
 
 // Mapeamento de sentimento enum → label legível
 function sentimentToLabel(value: Sentiment): 'positive' | 'negative' | 'neutral' {
