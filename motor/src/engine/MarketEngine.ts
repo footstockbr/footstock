@@ -166,7 +166,8 @@ export class MarketEngine {
           state.isPaused = true
           setTimeout(() => {
             state.isPaused = false
-            logger.info(`[engine] ${state.ticker} retomado após circuit breaker`)
+            state.closePrice = state.currentPrice  // Reset âncora: evita re-trigger imediato do CB
+            logger.info(`[engine] ${state.ticker} retomado após circuit breaker (closePrice reset para ${state.currentPrice.toFixed(4)})`)
           }, 150 * TICK_INTERVAL_MS)
           continue
         }
