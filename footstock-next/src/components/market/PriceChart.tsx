@@ -46,13 +46,16 @@ function applyEMA(data: LineData[], alpha: number): LineData[] {
   return out
 }
 
-// Normaliza candles para % de variação a partir do primeiro close
-function toPercentChange(candles: Candle[]): LineData[] {
-  if (candles.length === 0) return []
-  const base = candles[0].close
+// Em modo comparação: mapeia candles para % de variação usando timestamps de referência.
+// Todos os tickers ficam remapeados ao mesmo eixo X (timestamps do ticker principal),
+// eliminando o problema de ranges de tempo diferentes entre tickers.
+function toCompareSeries(candles: Candle[], refTimestamps: number[]): LineData[] {
+  if (candles.length === 0 || refTimestamps.length === 0) return []
+  const sampled = downsample(candles, refTimestamps.length)
+  const base = sampled[0].close
   if (base === 0) return []
-  return candles.map((c) => ({
-    time: c.timestamp as unknown as import('lightweight-charts').Time,
+  return sampled.map((c, i) => ({
+    time: refTimestamps[i] as unknown as import('lightweight-charts').Time,
     value: parseFloat(((c.close - base) / base * 100).toFixed(4)),
   }))
 }
@@ -102,6 +105,9 @@ export function PriceChart({
   const bollingerMiddleRef = useRef<ISeriesApi<'Line'> | null>(null)
   const bollingerLowerRef = useRef<ISeriesApi<'Line'> | null>(null)
   const compareSeriesRefs = useRef<Map<string, ISeriesApi<'Line'>>>(new Map())
+  // Timestamps de referência do ticker principal (downsampled) — compartilhados com o effect de comparação
+  // para garantir que todos os tickers usem o mesmo eixo X
+  const compareTimestampsRef = useRef<number[]>([])
 
   const { candles, isLoading, isError, isRateLimited, rateError, refetch } =
     usePriceHistory(ticker, activePeriod)
@@ -214,10 +220,12 @@ export function PriceChart({
     if (!chart || !series || candles.length === 0) return
 
     if (isCompareMode) {
-      const pctData = toPercentChange(candles)
+      // Calcula timestamps de referência (300 pts downsampled) e persiste para o effect de comparação
+      const refTimes = downsample(candles, 300).map((c) => c.timestamp)
+      compareTimestampsRef.current = refTimes
+      const pctData = toCompareSeries(candles, refTimes)
       if (pctData.length > 0) {
         ;(series as ISeriesApi<'Line'>).setData(pctData)
-        chart.timeScale().fitContent()
       }
     } else if (chartType === 'candle') {
       ;(series as ISeriesApi<'Candlestick'>).setData(
@@ -261,13 +269,18 @@ export function PriceChart({
       }
     }
 
+    // Usa os timestamps de referência calculados em Effect 2 (eixo X compartilhado)
+    const refTimes = compareTimestampsRef.current
+    if (refTimes.length === 0) return // Effect 2 ainda não rodou; aguarda próxima execução
+
     // Adiciona/atualiza séries com dados disponíveis
     let anyDataSet = false
     compareTickers.forEach(({ ticker: ct, color }, idx) => {
       const queryData = compareQueries[idx]?.data
       if (!queryData || queryData.length === 0) return
 
-      const normalizedData = toPercentChange(queryData)
+      // Remapeia os dados do ticker comparado para o mesmo eixo X do ticker principal
+      const normalizedData = toCompareSeries(queryData, refTimes)
       if (normalizedData.length === 0) return
 
       let series = compareSeriesRefs.current.get(ct)
@@ -286,16 +299,14 @@ export function PriceChart({
     })
 
     if (anyDataSet) {
-      // Re-popula dados do ticker principal para garantir que a série URU3 esteja no DOM
-      // antes de fitContent() calcular o range (caso o effect-2 tenha rodado antes da série existir)
+      // Re-popula o ticker principal (mesmo eixo X) para garantir que está visible após fitContent
       const mainSeries = mainSeriesRef.current
       if (mainSeries && candles.length > 0) {
-        const pctData = toPercentChange(candles)
+        const pctData = toCompareSeries(candles, refTimes)
         if (pctData.length > 0) {
           ;(mainSeries as ISeriesApi<'Line'>).setData(pctData)
         }
       }
-      // Força escala de preço a recalcular incluindo TODAS as séries (inclusive URU3 em 0%)
       chart.priceScale('right').applyOptions({ autoScale: true })
       chart.timeScale().fitContent()
     }
