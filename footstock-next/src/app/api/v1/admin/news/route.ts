@@ -98,8 +98,22 @@ export async function GET(request: NextRequest) {
       }),
     ])
 
+    // Resolve assetIds → tickers para exibição na tabela admin
+    const allAssetIds = [...new Set(items.flatMap(i => i.assetIds))]
+    const assetTickerMap: Record<string, string> = {}
+    if (allAssetIds.length > 0) {
+      const assets = await prisma.asset.findMany({
+        where: { id: { in: allAssetIds } },
+        select: { id: true, ticker: true },
+      })
+      for (const a of assets) assetTickerMap[a.id] = a.ticker
+    }
+
     return ok({
-      items: items.map(serializeNews),
+      items: items.map(n => ({
+        ...serializeNews(n),
+        ticker: n.assetIds.map(id => assetTickerMap[id]).filter(Boolean).join(', '),
+      })),
       pagination: buildPagination(page, limit, total),
       meta: {
         totalPublished,
