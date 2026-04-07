@@ -1,7 +1,6 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import Image from 'next/image'
 import { useState, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { IChartApi, type Range, type Time } from 'lightweight-charts'
@@ -18,8 +17,6 @@ import { OrderBook } from '@/components/market/OrderBook'
 import { AssetStats } from '@/components/market/AssetStats'
 import { SentimentGauge } from '@/components/market/SentimentGauge'
 import { CompareMode } from '@/components/market/CompareMode'
-import type { Asset } from '@/types'
-
 // Lazy-load gráficos — lightweight-charts usa window no topo do módulo
 const PriceChart = dynamic(
   () => import('@/components/market/PriceChart').then((m) => ({ default: m.PriceChart })),
@@ -41,11 +38,39 @@ const OFIChart = dynamic(
   }
 )
 
+interface RecentNewsItem {
+  title: string
+  sentiment: 'BULLISH' | 'NEUTRAL' | 'BEARISH'
+  publishedAt: string
+}
+
+interface SerializedAsset {
+  id: string
+  ticker: string
+  displayName: string
+  division: 'SERIE_A' | 'SERIE_B'
+  currentPrice: number
+  openPrice: number
+  change24h: number
+  fairValue: number
+  fairValuePremium: number | null
+  currentSupply: number
+  totalShares: number
+  isHalted: boolean
+  haltReason?: string | null
+  colors: { primary: string; secondary: string }
+  colorPrimary: string
+  financials: Record<string, unknown> | null
+  sentiment: 'BULLISH' | 'NEUTRAL' | 'BEARISH'
+  sentimentScore: number
+  recentNews: RecentNewsItem[]
+  volume24h: number
+  updatedAt: string
+  logoUrl?: string | null
+}
+
 interface AssetDetailPageProps {
-  asset: Asset & {
-    fairValuePremium: number | null
-    logoUrl?: string | null
-  }
+  asset: SerializedAsset
   allAssets?: Array<{ ticker: string; displayName: string; colors: { primary: string } }>
 }
 
@@ -67,7 +92,8 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
   const canCompare = hasAccess('CRAQUE')
 
   const currentPrice = tick?.lastPrice ?? asset.currentPrice
-  const change24h = tick?.change24h ?? 0
+  // Fallback para variação calculada no SSR (openPrice → currentPrice) quando SSE não está disponível
+  const change24h = tick?.change24h ?? asset.change24h
 
   function handleCompare(tickers: string[]) {
     const selected = tickers.map((t) => {
@@ -108,17 +134,16 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
     <div className="flex flex-col pb-32 md:pb-0">
       {/* Header */}
       <header className="flex items-center gap-3 p-4 border-b border-[rgba(240,185,11,.08)]">
-        <Image
-          src={asset.logoUrl ?? '/placeholder-club.svg'}
-          alt={asset.displayName}
-          width={40}
-          height={40}
-          priority
-          className="rounded-full"
-          onError={(e) => {
-            ;(e.target as HTMLImageElement).src = '/placeholder-club.svg'
+        <div
+          className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-black text-white shrink-0 border border-[rgba(240,185,11,.12)]"
+          style={{
+            background: asset.colorPrimary
+              ? `linear-gradient(145deg, ${asset.colorPrimary}, ${asset.colorPrimary}88)`
+              : 'linear-gradient(145deg, #F0B90B, #8a6820)',
           }}
-        />
+        >
+          {asset.ticker.slice(0, 3)}
+        </div>
         <div>
           <h1 className="text-lg font-bold text-[#EAECEF]">{asset.displayName}</h1>
           <span className="text-xs text-[#929AA5] font-mono">{asset.ticker}</span>
@@ -192,18 +217,18 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
           </TabsContent>
 
           <TabsContent value="stats">
-            <AssetStats asset={asset} fairValuePremium={asset.fairValuePremium} />
+            <AssetStats
+              asset={asset}
+              fairValuePremium={asset.fairValuePremium}
+              volume24h={asset.volume24h}
+              change24h={asset.change24h}
+            />
           </TabsContent>
 
           <TabsContent value="sentimento">
             <SentimentGauge
-              sentiment={
-                asset.sentiment === 'BULLISH'
-                  ? 0.7
-                  : asset.sentiment === 'BEARISH'
-                  ? -0.7
-                  : 0
-              }
+              sentiment={asset.sentimentScore}
+              recentNews={asset.recentNews}
             />
           </TabsContent>
         </Tabs>

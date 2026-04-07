@@ -10,27 +10,46 @@ function getSentimentLabel(v: number): { label: string; color: string } {
   return { label: 'Muito Positivo', color: '#2EBD85' }
 }
 
-interface SentimentGaugeProps {
-  sentiment: number
+const NEWS_SENTIMENT_COLOR: Record<string, string> = {
+  BULLISH: '#2EBD85',
+  NEUTRAL: '#929AA5',
+  BEARISH: '#F6465D',
 }
 
-export function SentimentGauge({ sentiment }: SentimentGaugeProps) {
+const NEWS_SENTIMENT_LABEL: Record<string, string> = {
+  BULLISH: 'Alta',
+  NEUTRAL: 'Neutro',
+  BEARISH: 'Baixa',
+}
+
+interface RecentNewsItem {
+  title: string
+  sentiment: 'BULLISH' | 'NEUTRAL' | 'BEARISH'
+  publishedAt: string
+}
+
+interface SentimentGaugeProps {
+  sentiment: number   // -1.0 a +1.0 (score real calculado a partir de notícias recentes)
+  recentNews?: RecentNewsItem[]
+}
+
+export function SentimentGauge({ sentiment, recentNews = [] }: SentimentGaugeProps) {
   const clamped = Math.max(-1, Math.min(1, sentiment))
   const { label, color } = getSentimentLabel(clamped)
 
-  // Ângulo: -90° = muito negativo, 0° = neutro, +90° = muito positivo
-  const angleDeg = -90 + clamped * 90
+  // Ângulo: -90° = muito negativo (esquerda), 0° = neutro (cima), +90° = muito positivo (direita)
+  const angleDeg = clamped * 90
   const angleRad = (angleDeg * Math.PI) / 180
 
-  const tipX = 100 + 70 * Math.cos(angleRad)
-  const tipY = 100 + 70 * Math.sin(angleRad)
+  const tipX = 100 + 70 * Math.sin(angleRad)
+  const tipY = 100 - 70 * Math.cos(angleRad)
 
   return (
     <div
       role="img"
       aria-label={`Sentimento do ativo: ${label} (${clamped.toFixed(2)})`}
       data-testid="sentiment-gauge"
-      className="flex flex-col items-center"
+      className="flex flex-col items-center gap-3 py-2"
     >
       <svg
         width="200"
@@ -81,15 +100,52 @@ export function SentimentGauge({ sentiment }: SentimentGaugeProps) {
         </text>
       </svg>
 
-      <p className="text-center font-mono text-lg mt-1" style={{ color }}>
-        {clamped.toFixed(2)}
+      <p className="text-center font-mono text-lg -mt-2" style={{ color }}>
+        {clamped >= 0 ? '+' : ''}{clamped.toFixed(2)}
       </p>
-      <p className="text-center text-sm font-semibold mt-1 inline-flex items-center gap-1" style={{ color }}>
+      <p
+        className="text-center text-sm font-semibold inline-flex items-center gap-1"
+        style={{ color }}
+      >
         {label}
-        <span title="Indicador agregado de sentimento da torcida e do mercado — varia de -1 (muito negativo) a +1 (muito positivo)" aria-label="Explicacao do sentimento" className="cursor-help">
+        <span
+          title="Score agregado de sentimento baseado nas notícias das últimas 24h. Varia de -1 (muito negativo) a +1 (muito positivo)"
+          aria-label="Explicação do sentimento"
+          className="cursor-help"
+        >
           <Info className="w-3 h-3 text-[#707A8A]" />
         </span>
       </p>
+
+      {/* Notícias recentes */}
+      {recentNews.length > 0 && (
+        <div className="w-full mt-1 space-y-1.5">
+          <p className="text-xs text-[#929AA5] px-1">Notícias recentes (24h)</p>
+          {recentNews.slice(0, 5).map((n, i) => (
+            <div
+              key={i}
+              className="flex items-start gap-2 px-1 py-1.5 rounded-lg bg-[#1E2329] border border-[#2B3139]"
+            >
+              <span
+                className="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 mt-0.5"
+                style={{
+                  color: NEWS_SENTIMENT_COLOR[n.sentiment],
+                  backgroundColor: NEWS_SENTIMENT_COLOR[n.sentiment] + '22',
+                }}
+              >
+                {NEWS_SENTIMENT_LABEL[n.sentiment]}
+              </span>
+              <p className="text-xs text-[#929AA5] leading-snug line-clamp-2">{n.title}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {recentNews.length === 0 && (
+        <p className="text-xs text-[#555e6a] text-center">
+          Sem notícias nas últimas 24h
+        </p>
+      )}
     </div>
   )
 }

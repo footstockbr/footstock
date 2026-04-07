@@ -30,7 +30,13 @@ export class NotificationRepository {
 
     return {
       data: rows.map(this._serialize),
-      pagination: { page, limit, total, hasNext: page * limit < total },
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+        hasNext: page * limit < total,
+      },
     }
   }
 

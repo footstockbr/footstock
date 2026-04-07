@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
       page: 1,
       limit: serialized.length,
       total: serialized.length,
+      totalPages: 1,
       hasNext: false,
     })
   } catch {

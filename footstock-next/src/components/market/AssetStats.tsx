@@ -22,16 +22,18 @@ interface AssetForStats {
 interface AssetStatsProps {
   asset: AssetForStats
   fairValuePremium: number | null
+  volume24h?: number
+  change24h?: number
 }
 
-function formatCurrency(value: number | null | undefined): string {
+function formatFS(value: number | null | undefined): string {
   if (value == null) return 'N/D'
   return `FS$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function formatPercent(value: number | null | undefined): string {
   if (value == null) return 'N/D'
-  return `${value.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}%`
+  return `${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`
 }
 
 function formatPremium(value: number): string {
@@ -66,7 +68,7 @@ function StatCard({ label, value, tooltip, valueColor }: StatCardProps) {
   )
 }
 
-export function AssetStats({ asset, fairValuePremium }: AssetStatsProps) {
+export function AssetStats({ asset, fairValuePremium, volume24h, change24h }: AssetStatsProps) {
   if (!asset.financials) {
     return (
       <div
@@ -79,8 +81,7 @@ export function AssetStats({ asset, fairValuePremium }: AssetStatsProps) {
   }
 
   const f = asset.financials
-  const marketCap =
-    f.marketCap ?? asset.currentPrice * asset.currentSupply
+  const marketCap = f.marketCap ?? asset.currentPrice * asset.currentSupply
 
   const premiumColor =
     fairValuePremium == null
@@ -91,6 +92,20 @@ export function AssetStats({ asset, fairValuePremium }: AssetStatsProps) {
       ? '#F6465D'
       : '#929AA5'
 
+  const change24hColor =
+    change24h == null
+      ? '#EAECEF'
+      : change24h > 0
+      ? '#2EBD85'
+      : change24h < 0
+      ? '#F6465D'
+      : '#929AA5'
+
+  const change24hDisplay =
+    change24h != null
+      ? `${change24h >= 0 ? '+' : ''}${change24h.toFixed(2)}%`
+      : 'N/D'
+
   return (
     <div
       data-testid="asset-stats"
@@ -98,17 +113,28 @@ export function AssetStats({ asset, fairValuePremium }: AssetStatsProps) {
     >
       <StatCard
         label="Market Cap"
-        value={formatCurrency(marketCap)}
+        value={formatFS(marketCap)}
         tooltip="Valor total de mercado = preço atual × ações em circulação"
       />
       <StatCard
+        label="Variação 24h"
+        value={change24hDisplay}
+        tooltip="Variação percentual do preço em relação à abertura do dia"
+        valueColor={change24hColor}
+      />
+      <StatCard
+        label="Volume 24h"
+        value={volume24h != null && volume24h > 0 ? formatFS(volume24h) : 'N/D'}
+        tooltip="Volume financeiro negociado nas últimas 24 horas"
+      />
+      <StatCard
         label="Preço IPO"
-        value={formatCurrency(f.ipoPrice as number | null)}
+        value={formatFS(f.ipoPrice as number | null)}
         tooltip="Preço de lançamento inicial do ativo na plataforma"
       />
       <StatCard
         label="Equity Value"
-        value={formatCurrency(f.equityValue as number | null)}
+        value={formatFS(f.equityValue as number | null)}
         tooltip="Valor patrimonial estimado do clube"
       />
       <StatCard
@@ -118,7 +144,9 @@ export function AssetStats({ asset, fairValuePremium }: AssetStatsProps) {
       />
       <StatCard
         label="Total de Ações"
-        value={(f.totalShares as number | null ?? asset.totalShares)?.toLocaleString('pt-BR') ?? 'N/D'}
+        value={
+          (f.totalShares as number | null ?? asset.totalShares)?.toLocaleString('pt-BR') ?? 'N/D'
+        }
         tooltip="Quantidade total de ações emitidas pelo clube"
       />
       <StatCard

@@ -20,7 +20,9 @@ export function useMarketTickTimeout(
     }
 
     const timer = setTimeout(() => {
-      if (!lastTickTime.current || Date.now() - lastTickTime.current > timeoutMs) {
+      // Só considera "conexão perdida" se já recebemos pelo menos um tick antes.
+      // Se lastTickTime é null, nunca houve conexão — fica no estado "Aguardando" (skeleton).
+      if (lastTickTime.current && Date.now() - lastTickTime.current > timeoutMs) {
         setIsTimedOut(true)
       }
     }, timeoutMs)
