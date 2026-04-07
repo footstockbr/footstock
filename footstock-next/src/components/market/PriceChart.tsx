@@ -95,9 +95,14 @@ export function PriceChart({
       queryKey: ['price-history', ct, activePeriod],
       queryFn: () => fetchHistory(ct, activePeriod),
       staleTime: activePeriod === '1D' ? 60_000 : 300_000,
-      enabled: !!ct,
+      enabled: isCompareMode && !!ct,
     })),
   })
+
+  // Chave estável que muda apenas quando dados reais chegam
+  const compareDataKey = compareQueries
+    .map((q) => (q.data ? q.data.length : -1))
+    .join(',')
 
   // Rate limit countdown (deve estar antes de early returns — Rules of Hooks)
   const [rateLimitCountdown, setRateLimitCountdown] = useState(0)
@@ -184,11 +189,16 @@ export function PriceChart({
 
   // Popula dados da série principal
   useEffect(() => {
+    const chart = chartRef.current
     const series = mainSeriesRef.current
-    if (!series || candles.length === 0) return
+    if (!chart || !series || candles.length === 0) return
 
     if (isCompareMode) {
-      ;(series as ISeriesApi<'Line'>).setData(toPercentChange(candles))
+      const pctData = toPercentChange(candles)
+      if (pctData.length > 0) {
+        ;(series as ISeriesApi<'Line'>).setData(pctData)
+        chart.timeScale().fitContent()
+      }
     } else if (chartType === 'candle') {
       ;(series as ISeriesApi<'Candlestick'>).setData(
         candles.map((c) => ({
@@ -206,22 +216,32 @@ export function PriceChart({
     }
   }, [candles, chartType, isCompareMode])
 
-  // Sincroniza séries de comparação
+  // Gerencia ciclo de vida completo das séries de comparação
   useEffect(() => {
     const chart = chartRef.current
     if (!chart) return
 
-    const currentTickers = new Set(compareTickers.map((ct) => ct.ticker))
+    if (!isCompareMode) {
+      // Saindo do modo comparação: remove todas as séries secundárias
+      for (const series of compareSeriesRefs.current.values()) {
+        try { chart.removeSeries(series) } catch { /* série já removida */ }
+      }
+      compareSeriesRefs.current.clear()
+      return
+    }
 
-    // Remove séries de tickers que saíram
+    const currentTickerSet = new Set(compareTickers.map((ct) => ct.ticker))
+
+    // Remove séries de tickers que saíram da seleção
     for (const [t, series] of compareSeriesRefs.current) {
-      if (!currentTickers.has(t)) {
-        chart.removeSeries(series)
+      if (!currentTickerSet.has(t)) {
+        try { chart.removeSeries(series) } catch { /* série já removida */ }
         compareSeriesRefs.current.delete(t)
       }
     }
 
-    // Adiciona/atualiza séries para cada ticker
+    // Adiciona/atualiza séries com dados disponíveis
+    let anyDataSet = false
     compareTickers.forEach(({ ticker: ct, color }, idx) => {
       const queryData = compareQueries[idx]?.data
       if (!queryData || queryData.length === 0) return
@@ -229,34 +249,26 @@ export function PriceChart({
       const normalizedData = toPercentChange(queryData)
       if (normalizedData.length === 0) return
 
-      if (!compareSeriesRefs.current.has(ct)) {
-        const series = chart.addLineSeries({
+      let series = compareSeriesRefs.current.get(ct)
+      if (!series) {
+        series = chart.addLineSeries({
           color,
           lineWidth: 2,
           title: ct,
           priceLineVisible: false,
+          lastValueVisible: true,
         })
         compareSeriesRefs.current.set(ct, series)
-        series.setData(normalizedData)
-      } else {
-        compareSeriesRefs.current.get(ct)!.setData(normalizedData)
       }
+      series.setData(normalizedData)
+      anyDataSet = true
     })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compareTickers, compareQueries.map((q) => q.data)])
 
-  // Remove séries de comparação quando sai do compare mode
-  useEffect(() => {
-    if (!isCompareMode) {
-      const chart = chartRef.current
-      if (chart) {
-        for (const series of compareSeriesRefs.current.values()) {
-          chart.removeSeries(series)
-        }
-      }
-      compareSeriesRefs.current.clear()
+    if (anyDataSet) {
+      chart.timeScale().fitContent()
     }
-  }, [isCompareMode])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCompareMode, compareTickers, compareDataKey])
 
   // MM9
   useEffect(() => {
