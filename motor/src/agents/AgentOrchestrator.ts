@@ -83,7 +83,9 @@ export function aggregateImpact(decisions: AgentDecision[]): number {
   let raw = 0
   for (const d of decisions) {
     const sign = d.side === 'BUY' ? 1 : -1
-    raw += sign * d.priceModifier * d.quantity
+    // Math.abs: garante que `sign` controla a direção; evita que priceModifier
+    // negativo em decisões de BUY inverta o impacto (pressão de compra → queda).
+    raw += sign * Math.abs(d.priceModifier) * d.quantity
   }
 
   const capped = Math.max(-MAX_AGGREGATE_IMPACT, Math.min(MAX_AGGREGATE_IMPACT, raw))
