@@ -16,9 +16,9 @@ import { FallbackPool } from './FallbackPool'
 // ---------------------------------------------------------------------------
 
 const FEEDS = [
-  { url: 'https://www.espnbrasil.com.br/rss', source: 'ESPN Brasil' },
-  { url: 'https://ge.globo.com/rss/globoesporte/', source: 'Globo Esporte' },
-  { url: 'https://www.lance.com.br/rss', source: 'Lance!' },
+  { url: 'https://www.espn.com.br/rss', source: 'ESPN Brasil' },
+  { url: 'https://www.gazetaesportiva.com/feed/', source: 'Gazeta Esportiva' },
+  { url: 'https://trivela.com.br/feed/', source: 'Trivela' },
 ]
 
 const NEWS_URLS_KEY = 'news:urls'
