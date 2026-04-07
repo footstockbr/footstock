@@ -199,9 +199,8 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
         />
       </section>
 
-      {/* Desktop layout: 65/35 split */}
-      <div className="md:grid md:grid-cols-[65fr_35fr] md:gap-4 md:px-4 mt-4">
-        {/* Tabs */}
+      {/* Tabs — largura total */}
+      <div className="md:px-4 mt-4">
         <Tabs
           defaultValue={activeTab}
           onValueChange={(tab) =>
