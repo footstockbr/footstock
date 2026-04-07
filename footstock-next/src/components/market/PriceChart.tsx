@@ -66,7 +66,7 @@ export function PriceChart({
   const [internalPeriod, setInternalPeriod] = useState<ChartPeriod>('1M')
   const activePeriod = externalPeriod ?? internalPeriod
 
-  const [chartType, setChartType] = useState<'line' | 'candle'>('candle')
+  const [chartType, setChartType] = useState<'line' | 'candle'>('line')
   const [showMM9, setShowMM9] = useState(false)
   const [showMM21, setShowMM21] = useState(false)
   const [showBollinger, setShowBollinger] = useState(false)
@@ -133,7 +133,7 @@ export function PriceChart({
       height: 300,
       layout: { background: { color: '#1E2329' }, textColor: '#9ca3af' },
       grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } },
-      rightPriceScale: { borderColor: '#2B3139' },
+      rightPriceScale: { borderColor: '#2B3139', autoScale: true },
       timeScale: { borderColor: '#2B3139', timeVisible: true },
     })
 
@@ -265,10 +265,21 @@ export function PriceChart({
     })
 
     if (anyDataSet) {
+      // Re-popula dados do ticker principal para garantir que a série URU3 esteja no DOM
+      // antes de fitContent() calcular o range (caso o effect-2 tenha rodado antes da série existir)
+      const mainSeries = mainSeriesRef.current
+      if (mainSeries && candles.length > 0) {
+        const pctData = toPercentChange(candles)
+        if (pctData.length > 0) {
+          ;(mainSeries as ISeriesApi<'Line'>).setData(pctData)
+        }
+      }
+      // Força escala de preço a recalcular incluindo TODAS as séries (inclusive URU3 em 0%)
+      chart.priceScale('right').applyOptions({ autoScale: true })
       chart.timeScale().fitContent()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCompareMode, compareTickers, compareDataKey])
+  }, [isCompareMode, compareTickers, compareDataKey, candles])
 
   // MM9
   useEffect(() => {
