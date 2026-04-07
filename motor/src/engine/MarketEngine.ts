@@ -109,7 +109,7 @@ export class MarketEngine {
         closePrice: currentPriceNum,   // warm start: âncora do CB = preço atual
         fairValue: Number(asset.fairValue ?? asset.currentPrice),
         volume: 0,
-        variance: 0.0001,  // Variância GARCH inicial
+        variance: 0.00001,  // Variância GARCH inicial (reduzida 10x: evita ruído GARCH soterrar L2_Anchor)
         pendingBuyVolume: 0,
         pendingSellVolume: 0,
         isPaused: false,
