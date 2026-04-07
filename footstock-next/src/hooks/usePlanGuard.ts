@@ -1,18 +1,17 @@
 'use client'
 
-/**
- * Stub plan guard — returns the user's plan tier.
- * Replace with real useSession integration when module-3 is implemented.
- *
- * Plan tiers: JOGADOR (free) < CRAQUE < LENDA
- */
+import useSWR from 'swr'
 
 export type PlanTier = 'JOGADOR' | 'CRAQUE' | 'LENDA'
+
+interface MeResponse {
+  data: { planType: PlanTier }
+}
 
 interface PlanGuardResult {
   plan: PlanTier
   isLoading: boolean
-  /** Check if user has at least the given tier */
+  /** Retorna true se o plano do usuário for >= ao tier exigido */
   hasAccess: (requiredTier: PlanTier) => boolean
 }
 
@@ -22,15 +21,25 @@ const TIER_ORDER: Record<PlanTier, number> = {
   LENDA: 2,
 }
 
+async function fetchMe(): Promise<PlanTier> {
+  const res = await fetch('/api/v1/users/me')
+  if (!res.ok) return 'JOGADOR'
+  const json = (await res.json()) as MeResponse
+  return (json.data?.planType ?? 'JOGADOR') as PlanTier
+}
+
 export function usePlanGuard(): PlanGuardResult {
-  // TODO: Replace with real useSession from module-3
-  const plan: PlanTier = 'JOGADOR'
-  const isLoading = false
+  const { data: plan, isLoading } = useSWR<PlanTier>('plan-guard', fetchMe, {
+    revalidateOnFocus: false,
+    dedupingInterval: 60_000, // revalida no máximo 1x/min
+  })
+
+  const resolvedPlan = plan ?? 'JOGADOR'
 
   return {
-    plan,
+    plan: resolvedPlan,
     isLoading,
     hasAccess: (requiredTier: PlanTier) =>
-      TIER_ORDER[plan] >= TIER_ORDER[requiredTier],
+      TIER_ORDER[resolvedPlan] >= TIER_ORDER[requiredTier],
   }
 }
