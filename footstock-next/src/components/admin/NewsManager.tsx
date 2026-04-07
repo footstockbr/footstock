@@ -101,7 +101,11 @@ export function NewsManager() {
 
   const items: AdminNewsItem[] = data?.data?.items ?? []
   const meta = data?.data?.meta ?? { totalPublished: 0, totalArchived: 0, classifiedToday: 0 }
-  const pagination = data?.data?.pagination ?? { page: 1, totalPages: 1, total: 0 }
+  const pagination = {
+    page: data?.data?.pagination?.page ?? 1,
+    totalPages: data?.data?.pagination?.totalPages ?? 1,
+    total: data?.data?.pagination?.total ?? 0,
+  }
 
   function handleFilterChange(key: keyof NewsFilters, value: string) {
     setFilters((prev) => ({ ...prev, [key]: value }))

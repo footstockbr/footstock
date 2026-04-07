@@ -77,8 +77,8 @@ export function parsePagination(
   searchParams: URLSearchParams,
   defaultLimit = 20
 ): { page: number; limit: number; skip: number } {
-  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
-  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? String(defaultLimit), 10)))
+  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1)
+  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? String(defaultLimit), 10) || defaultLimit))
   const skip = (page - 1) * limit
   return { page, limit, skip }
 }
@@ -88,5 +88,6 @@ export function buildPagination(
   limit: number,
   total: number
 ): Pagination {
-  return { page, limit, total, hasNext: page * limit < total }
+  const totalPages = Math.max(1, Math.ceil(total / limit))
+  return { page, limit, total, totalPages, hasNext: page * limit < total }
 }
