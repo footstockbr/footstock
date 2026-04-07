@@ -81,7 +81,7 @@ function AssetCard({ asset, isFavorite }: AssetCardProps) {
 
   return (
     <Link
-      href={ROUTES.ATIVO(asset.ticker)}
+      href={ROUTES.MERCADO_DETALHE(asset.ticker)}
       data-testid="asset-card"
       className={cn(
         "relative block bg-[#1E2329] rounded-lg border p-3 transition-all duration-150 hover:border-[rgba(240,185,11,.35)] hover:bg-[rgba(240,185,11,.04)] active:scale-[0.99]",
