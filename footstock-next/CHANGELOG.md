@@ -205,7 +205,7 @@ _(baseado em BUDGET.md — release notes não encontradas)_
 
 ### Added
 - Cadastro completo em 4 etapas (wizard mobile-first): dados pessoais, credenciais, clube favorito, aceite de termos LGPD
-- Verificação de maioridade via CPF com FlagCheck API (bloqueio automático de menores de 18 anos)
+- Verificação de maioridade por autodeclaração de data de nascimento com confirmação explícita pelo usuário (bloqueio automático de menores de 18 anos)
 - Login com email e senha com rate limiting (10 tentativas a cada 5 minutos)
 - Infraestrutura de biometria WebAuthn (Face ID / Touch ID) — botão presente, ativação completa em milestone futura
 - Recuperação de senha (solicitar link → receber email → redefinir → login)

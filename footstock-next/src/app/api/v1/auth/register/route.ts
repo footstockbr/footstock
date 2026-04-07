@@ -71,21 +71,8 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // ── 3. Verificar maioridade via FlagCheck (VAL-002) ───────────────────────
-    const ageVerification = await verifyAge(cpf, birthDate)
-    if (!ageVerification.verified) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODES.SYS_001,
-            message: 'Não foi possível concluir a verificação de maioridade via CPF. Tente novamente.',
-          },
-        },
-        { status: 503 }
-      )
-    }
-
+    // ── 3. Verificar maioridade por data de nascimento declarada (VAL-002) ──────
+    const ageVerification = verifyAge(birthDate)
     if (!ageVerification.isAdult) {
       return NextResponse.json(
         { success: false, error: { code: ERROR_CODES.VAL_002, message: ERROR_MESSAGES['VAL-002'] } },
@@ -138,7 +125,7 @@ export async function POST(req: NextRequest) {
         userType: userType ?? 'NORMAL',
         referredByCode: validReferralCode,
         investorProfile: 'INICIANTE',
-        ageVerificationPending: !ageVerification.verified,
+        ageVerificationPending: false,
         tourCompleted: false,
       },
     })

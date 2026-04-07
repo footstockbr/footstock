@@ -4,16 +4,17 @@ import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft } from 'lucide-react'
 import { Step1PersonalData } from './register/Step1PersonalData'
-import { Step2Access } from './register/Step2Access'
-import { Step3ClubSelect } from './register/Step3ClubSelect'
-import { Step4Terms } from './register/Step4Terms'
+import { Step2AgeConfirmation } from './register/Step2AgeConfirmation'
+import { Step2Access as Step3Access } from './register/Step2Access'
+import { Step3ClubSelect as Step4ClubSelect } from './register/Step3ClubSelect'
+import { Step4Terms as Step5Terms } from './register/Step4Terms'
 import { ROUTES } from '@/lib/constants/routes'
 import { cn } from '@/lib/utils'
 
-type WizardStep = 1 | 2 | 3 | 4
+type WizardStep = 1 | 2 | 3 | 4 | 5
 
-const STEP_LABELS = ['Dados', 'Acesso', 'Clube', 'Termos']
-const STEP_TITLES = ['Seus dados', 'Criar acesso', 'Clube favorito', 'Termos de uso']
+const STEP_LABELS = ['Dados', 'Idade', 'Acesso', 'Clube', 'Termos']
+const STEP_TITLES = ['Seus dados', 'Confirmação de idade', 'Criar acesso', 'Clube favorito', 'Termos de uso']
 
 export interface WizardData {
   // Step 1
@@ -37,7 +38,7 @@ export interface WizardData {
 }
 
 /**
- * Orquestrador do wizard de registro de 4 etapas.
+ * Orquestrador do wizard de registro de 5 etapas.
  * Estado mantido localmente — sem persistência em URL.
  */
 export function RegisterWizard() {
@@ -50,7 +51,7 @@ export function RegisterWizard() {
   }, [])
 
   const goNext = useCallback(() => {
-    if (currentStep < 4) setCurrentStep((prev) => (prev + 1) as WizardStep)
+    if (currentStep < 5) setCurrentStep((prev) => (prev + 1) as WizardStep)
   }, [currentStep])
 
   const goPrev = useCallback(() => {
@@ -94,8 +95,8 @@ export function RegisterWizard() {
           role="progressbar"
           aria-valuenow={currentStep}
           aria-valuemin={1}
-          aria-valuemax={4}
-          aria-label={`Etapa ${currentStep} de 4`}
+          aria-valuemax={5}
+          aria-label={`Etapa ${currentStep} de 5`}
         >
           {STEP_LABELS.map((_, i) => (
             <div
@@ -134,7 +135,7 @@ export function RegisterWizard() {
         {STEP_TITLES[currentStep - 1]}
       </h1>
       <p className="text-xs text-[#707A8A] mb-6" aria-live="polite">
-        Etapa {currentStep} de 4
+        Etapa {currentStep} de 5
       </p>
 
       {/* Steps */}
@@ -142,13 +143,16 @@ export function RegisterWizard() {
         <Step1PersonalData data={wizardData} onNext={handleStepNext} />
       )}
       {currentStep === 2 && (
-        <Step2Access data={wizardData} onNext={handleStepNext} />
+        <Step2AgeConfirmation data={wizardData} onNext={handleStepNext} />
       )}
       {currentStep === 3 && (
-        <Step3ClubSelect data={wizardData} onNext={handleStepNext} />
+        <Step3Access data={wizardData} onNext={handleStepNext} />
       )}
       {currentStep === 4 && (
-        <Step4Terms data={wizardData} onComplete={handleComplete} />
+        <Step4ClubSelect data={wizardData} onNext={handleStepNext} />
+      )}
+      {currentStep === 5 && (
+        <Step5Terms data={wizardData} onComplete={handleComplete} />
       )}
 
       {currentStep === 1 && (

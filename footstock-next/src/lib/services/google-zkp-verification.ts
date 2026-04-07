@@ -1,9 +1,8 @@
 // google-zkp-verification.ts — Integração Google ZKP para verificação de idade
-// Alternativa ao FlagCheck (CL-308, CL-012)
 
 export interface ZKPVerificationResult {
   verified: boolean
-  method: 'google-zkp' | 'flagcheck' | 'fallback'
+  method: 'google-zkp' | 'fallback'
   ageAbove18: boolean | null
   error?: string
 }
@@ -42,7 +41,7 @@ export class GoogleZKPVerification {
         ageAbove18: data.ageAbove18 ?? null,
       }
     } catch (error) {
-      console.warn('[GoogleZKP] Falha, usando fallback FlagCheck:', error)
+      console.warn('[GoogleZKP] Falha na verificação ZKP:', error)
       return {
         verified: false,
         method: 'google-zkp',

@@ -3,20 +3,19 @@ import { cn } from '@/lib/utils'
 
 interface AgeVerificationBadgeProps {
   verified: boolean
-  method?: 'flagcheck' | 'self_declaration' | 'date_only'
+  method?: 'self_declaration' | 'date_only'
   className?: string
 }
 
 /**
- * Badge de verificação ECA Digital (Lei 14.790/2023).
+ * Badge de verificação de maioridade.
  * Exibido no perfil do usuário e durante o cadastro.
  */
 export function AgeVerificationBadge({
   verified,
-  method,
   className,
 }: AgeVerificationBadgeProps) {
-  if (verified && method === 'flagcheck') {
+  if (verified) {
     return (
       <div
         className={cn(
@@ -24,10 +23,10 @@ export function AgeVerificationBadge({
           'bg-[rgba(34,197,94,.12)] text-[#2EBD85] border border-[rgba(34,197,94,.25)]',
           className
         )}
-        title="Maioridade verificada via FlagCheck (ECA Digital)"
+        title="Maioridade confirmada por autodeclaração"
       >
         <ShieldCheck className="w-3.5 h-3.5" aria-hidden="true" />
-        <span>Maior de idade verificado</span>
+        <span>Maior de idade confirmado</span>
       </div>
     )
   }
@@ -40,10 +39,10 @@ export function AgeVerificationBadge({
           'bg-[rgba(240,185,11,.1)] text-[#F0B90B] border border-[rgba(240,185,11,.25)]',
           className
         )}
-        title="Verificação de maioridade pendente"
+        title="Confirmação de maioridade pendente"
       >
         <ShieldAlert className="w-3.5 h-3.5" aria-hidden="true" />
-        <span>Verificação pendente</span>
+        <span>Confirmação pendente</span>
       </div>
     )
   }

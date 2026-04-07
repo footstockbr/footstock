@@ -137,8 +137,8 @@ export function Step4Terms({ data, onComplete }: Step4Props) {
           onChange={() => toggleConsent('terms')}
         />
         <p className="text-xs text-[#707A8A] ml-7">
-          O Foot Stock é uma plataforma educacional de simulação financeira. Usuários devem ter 18
-          anos conforme o ECA Digital (Lei 14.790/2023).
+          O Foot Stock é uma plataforma educacional de simulação financeira. É necessário ter 18 anos
+          ou mais para se cadastrar.
         </p>
       </fieldset>
 

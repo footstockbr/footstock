@@ -1,79 +1,49 @@
-/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-require-imports */
 // Mock do validators para controlar calcAge
 jest.mock('@/lib/utils/validators', () => ({
   calcAge: jest.fn().mockReturnValue(25), // adulto por padrão
 }))
 
-// Mock global fetch
-const mockFetch = jest.fn()
-global.fetch = mockFetch
-
-if (!AbortSignal.timeout) {
-  ;(AbortSignal as any).timeout = (ms: number) => {
-    const controller = new AbortController()
-    setTimeout(() => controller.abort(), ms)
-    return controller.signal
-  }
-}
-
 describe('verifyAge', () => {
-  const OLD_ENV = process.env
-
   beforeEach(() => {
     jest.clearAllMocks()
     const { calcAge } = require('@/lib/utils/validators')
     calcAge.mockReturnValue(25) // reset para adulto
-    process.env = {
-      ...OLD_ENV,
-      FLAGCHECK_API_URL: 'https://api.flagcheck.example',
-      FLAGCHECK_API_KEY: 'test-key',
-    }
   })
 
-  afterAll(() => {
-    process.env = OLD_ENV
-  })
-
-  test('retorna date_only para menor de 18 (sem chamar FlagCheck)', async () => {
+  test('retorna isAdult false para menor de 18', () => {
     const { calcAge } = require('@/lib/utils/validators')
     calcAge.mockReturnValue(17)
     const { verifyAge } = require('../age-verification')
-    const result = await verifyAge('529.982.247-25', '2010-01-01')
-    expect(result.method).toBe('date_only')
+    const result = verifyAge('2010-01-01')
     expect(result.isAdult).toBe(false)
     expect(result.verified).toBe(true)
-    expect(mockFetch).not.toHaveBeenCalled()
+    expect(result.method).toBe('self_declaration')
   })
 
-  test('retorna flagcheck quando FlagCheck confirma adulto', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ is_adult: true }),
-    })
+  test('retorna isAdult true para usuário com 18 anos exatos', () => {
+    const { calcAge } = require('@/lib/utils/validators')
+    calcAge.mockReturnValue(18)
     const { verifyAge } = require('../age-verification')
-    const result = await verifyAge('52998224725', '2000-01-01')
-    expect(result.method).toBe('flagcheck')
+    const result = verifyAge('2008-01-01')
     expect(result.isAdult).toBe(true)
     expect(result.verified).toBe(true)
+    expect(result.method).toBe('self_declaration')
   })
 
-  test('retorna self_declaration quando FlagCheck falha 3x', async () => {
-    mockFetch.mockRejectedValue(new Error('Network error'))
+  test('retorna isAdult true para adulto acima de 18', () => {
     const { verifyAge } = require('../age-verification')
-    const result = await verifyAge('52998224725', '2000-01-01')
+    const result = verifyAge('2000-01-01')
+    expect(result.isAdult).toBe(true)
+    expect(result.verified).toBe(true)
     expect(result.method).toBe('self_declaration')
-    expect(result.isAdult).toBe(false)
-    expect(result.verified).toBe(false)
   })
 
-  test('retorna self_declaration quando FLAGCHECK não configurado', async () => {
-    delete process.env.FLAGCHECK_API_URL
-    delete process.env.FLAGCHECK_API_KEY
+  test('verificação é sempre síncrona e não faz chamadas externas', () => {
+    const fetchSpy = jest.spyOn(global, 'fetch')
     const { verifyAge } = require('../age-verification')
-    const result = await verifyAge('52998224725', '2000-01-01')
-    expect(result.method).toBe('self_declaration')
-    expect(result.verified).toBe(false)
-    expect(result.isAdult).toBe(false)
-    expect(mockFetch).not.toHaveBeenCalled()
+    verifyAge('2000-01-01')
+    expect(fetchSpy).not.toHaveBeenCalled()
+    fetchSpy.mockRestore()
   })
 })

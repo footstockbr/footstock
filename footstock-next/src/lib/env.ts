@@ -33,8 +33,6 @@ const envSchema = z.object({
 
   // Auth — Registro
   CPF_HASH_SALT: z.string().min(32, 'CPF_HASH_SALT deve ter ao menos 32 caracteres'),
-  FLAGCHECK_API_URL: z.string().url().optional(),
-  FLAGCHECK_API_KEY: z.string().optional(),
 
   // App
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),

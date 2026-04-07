@@ -56,7 +56,7 @@
 - [x] Nenhum link com `href="#"` em produção (verificado por auditoria Playwright ST001)
 - [x] Todos os CTAs principais funcionais: "Comprar", "Vender", "Criar Liga", "Assinar", "Enviar post"
 - [x] Botões de ação destructiva têm confirmação modal (delete liga, cancelar plano)
-- [x] Formulários de cadastro (4 etapas wizard) têm navegação prev/next funcional
+- [x] Formulários de cadastro (5 etapas wizard) têm navegação prev/next funcional
 - [x] Botões de loading desabilitados durante submissão (evita double-submit)
 - [x] Todos os `<select>` e `<radio>` têm `onChange` handler
 
