@@ -78,11 +78,14 @@ export class NewsPublisher {
     if (shouldPublish) {
       try {
         const resolvedCategory = this.resolveImpactCategory(classified.impactCategory)
+        const baseMagnitude = IMPACT_MAGNITUDE[resolvedCategory] ?? 0.01
+        // Aplicar sinal do sentimento: negativo → queda de preço
+        const signedMagnitude = classified.sentiment < -0.1 ? -baseMagnitude : baseMagnitude
         const event: NewsInjectEvent = {
           type: 'NEWS',
           assetId: classified.ticker,
           impact: resolvedCategory as NewsInjectEvent['impact'],
-          magnitude: IMPACT_MAGNITUDE[resolvedCategory] ?? 0.01,
+          magnitude: signedMagnitude,
           durationTicks: sentimentToDurationTicks(classified.sentiment),
         }
         await this.redis.publish(NEWS_INJECT_CHANNEL, JSON.stringify(event))

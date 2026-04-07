@@ -7,7 +7,7 @@
 import type Redis from 'ioredis'
 import type { MarketEngine } from '../engine/MarketEngine'
 import { REDIS_CHANNELS } from '../types/events.types'
-import type { MotorControlEvent } from '../types/events.types'
+import type { MotorControlEvent, NewsInjectEvent } from '../types/events.types'
 import { logger } from '../utils/logger'
 
 export class AdminChannel {
@@ -20,17 +20,19 @@ export class AdminChannel {
   }
 
   async start(): Promise<void> {
-    await this.subscriber.subscribe(REDIS_CHANNELS.MOTOR_CONTROL)
+    await this.subscriber.subscribe(REDIS_CHANNELS.MOTOR_CONTROL, REDIS_CHANNELS.NEWS_INJECT)
     this.subscriber.on('message', (channel, message) => {
       if (channel === REDIS_CHANNELS.MOTOR_CONTROL) {
         this.handleControlMessage(message)
+      } else if (channel === REDIS_CHANNELS.NEWS_INJECT) {
+        this.handleNewsInject(message)
       }
     })
-    logger.info('[admin-channel] Subscrito em motor:control')
+    logger.info('[admin-channel] Subscrito em motor:control e news:inject')
   }
 
   async stop(): Promise<void> {
-    await this.subscriber.unsubscribe(REDIS_CHANNELS.MOTOR_CONTROL)
+    await this.subscriber.unsubscribe(REDIS_CHANNELS.MOTOR_CONTROL, REDIS_CHANNELS.NEWS_INJECT)
   }
 
   private handleControlMessage(message: string): void {
@@ -99,6 +101,27 @@ export class AdminChannel {
       }
       default:
         logger.warn(`[admin-channel] Tipo de ação desconhecido: ${event.type}`)
+    }
+  }
+
+  private handleNewsInject(message: string): void {
+    try {
+      const event = JSON.parse(message) as NewsInjectEvent
+      if (event.type !== 'NEWS' || !event.assetId) return
+
+      // NewsPublisher publica com assetId = ticker; resolver para UUID interno
+      const assetId = this.engine.findAssetIdByTicker(event.assetId)
+      if (!assetId) {
+        logger.warn(`[news-channel] Ticker não encontrado: ${event.assetId}`)
+        return
+      }
+
+      this.engine.injectNewsImpact(assetId, event.magnitude, event.durationTicks)
+      logger.info(
+        `[news-channel] Notícia injetada: ${event.assetId} | magnitude=${event.magnitude} | ticks=${event.durationTicks}`
+      )
+    } catch (err) {
+      logger.error(`[news-channel] Erro ao processar news:inject: ${(err as Error).message}`)
     }
   }
 }

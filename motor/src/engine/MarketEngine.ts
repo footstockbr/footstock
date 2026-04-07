@@ -390,6 +390,14 @@ export class MarketEngine {
     state.newsImpactTicks = durationTicks
   }
 
+  /** Resolve ticker (ex: 'FOG3') para o assetId (UUID) interno do engine. */
+  findAssetIdByTicker(ticker: string): string | undefined {
+    for (const [id, state] of this.assetStates) {
+      if (state.ticker === ticker) return id
+    }
+    return undefined
+  }
+
   pauseAsset(assetId: string): void {
     const state = this.assetStates.get(assetId)
     if (state) state.isPaused = true
