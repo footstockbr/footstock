@@ -327,31 +327,11 @@ export function PriceChart({
     }
   }, [showBollinger, candles, isCompareMode])
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center bg-[#1E2329] rounded-lg" style={{ height: 300 }} aria-busy="true">
-        <Spinner />
-      </div>
-    )
-  }
-
-  if (isRateLimited && rateError) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-2 bg-[#1E2329] rounded-lg p-4" style={{ height: 300 }}>
-        <p className="text-sm text-[#929AA5]">Muitas requisições. Aguardando {rateLimitCountdown}s para tentar novamente.</p>
-        <button onClick={() => refetch()} className="text-xs text-[#F0B90B] underline">Tentar agora</button>
-      </div>
-    )
-  }
-
-  if (isError) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-2 bg-[#1E2329] rounded-lg p-4" style={{ height: 300 }}>
-        <p className="text-sm text-[#929AA5]">Dados de histórico indisponíveis. Tente novamente.</p>
-        <button onClick={() => refetch()} className="text-xs bg-[#F0B90B] text-[#0B0E11] px-3 py-1.5 rounded font-semibold">Tentar novamente</button>
-      </div>
-    )
-  }
+  // Overlay state: chart container fica sempre no DOM para não destruir o canvas
+  const showLoadingOverlay = isLoading
+  const showRateLimitOverlay = isRateLimited && !!rateError
+  const showErrorOverlay = isError && !isRateLimited
+  const showOverlay = showLoadingOverlay || showRateLimitOverlay || showErrorOverlay
 
   return (
     <div
@@ -359,14 +339,14 @@ export function PriceChart({
       aria-label={`Gráfico de preços de ${ticker} no período ${activePeriod}.${isLoading ? ' Carregando...' : ''}`}
       className="relative w-full"
     >
-      {isHalted && (
+      {isHalted && !showOverlay && (
         <span className="absolute top-2 right-2 z-10 bg-[#F6465D] text-white text-xs font-bold px-2 py-0.5 rounded-full animate-pulse">
           SUSPENSO
         </span>
       )}
 
       {/* Banner de modo comparação */}
-      {isCompareMode && (
+      {isCompareMode && !showOverlay && (
         <div className="flex items-center gap-2 px-2 py-1 bg-[#1a1610] border-b border-[rgba(240,185,11,.15)] text-xs">
           <span className="text-[#F0B90B] font-semibold">Comparação — % vs abertura</span>
           <div className="flex items-center gap-2 ml-1">
@@ -384,7 +364,48 @@ export function PriceChart({
         </div>
       )}
 
-      <div ref={containerRef} data-testid="price-chart" className="w-full" />
+      {/* Chart canvas — sempre no DOM, nunca desmontado */}
+      <div className="relative">
+        <div ref={containerRef} data-testid="price-chart" className="w-full" />
+
+        {/* Overlays ficam sobre o canvas sem desmontá-lo */}
+        {showLoadingOverlay && (
+          <div
+            className="absolute inset-0 flex items-center justify-center bg-[#1E2329] rounded-lg z-10"
+            style={{ height: 300 }}
+            aria-busy="true"
+          >
+            <Spinner />
+          </div>
+        )}
+        {showRateLimitOverlay && (
+          <div
+            className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#1E2329] rounded-lg p-4 z-10"
+            style={{ height: 300 }}
+          >
+            <p className="text-sm text-[#929AA5]">
+              Muitas requisições. Aguardando {rateLimitCountdown}s para tentar novamente.
+            </p>
+            <button onClick={() => refetch()} className="text-xs text-[#F0B90B] underline">
+              Tentar agora
+            </button>
+          </div>
+        )}
+        {showErrorOverlay && (
+          <div
+            className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#1E2329] rounded-lg p-4 z-10"
+            style={{ height: 300 }}
+          >
+            <p className="text-sm text-[#929AA5]">Dados de histórico indisponíveis. Tente novamente.</p>
+            <button
+              onClick={() => refetch()}
+              className="text-xs bg-[#F0B90B] text-[#0B0E11] px-3 py-1.5 rounded font-semibold"
+            >
+              Tentar novamente
+            </button>
+          </div>
+        )}
+      </div>
 
       <div className="flex flex-wrap items-center gap-2 mt-2 px-1">
         {/* Period buttons */}
