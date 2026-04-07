@@ -14,7 +14,9 @@ CREATE TABLE IF NOT EXISTS rss_feeds (
 -- Seed: feeds iniciais (mesmo array do motor RSSFetcher.ts)
 INSERT INTO rss_feeds (id, url, name, is_active)
 VALUES
-  ('rss_espn',    'https://www.espn.com.br/rss',           'ESPN Brasil',      true),
-  ('rss_gazeta',  'https://www.gazetaesportiva.com/feed/', 'Gazeta Esportiva', true),
-  ('rss_trivela', 'https://trivela.com.br/feed/',          'Trivela',          true)
+  ('rss_espn',    'https://www.espn.com.br/rss',                  'ESPN Brasil',        true),
+  ('rss_gazeta',  'https://www.gazetaesportiva.com/feed/',         'Gazeta Esportiva',   true),
+  ('rss_trivela', 'https://trivela.com.br/feed/',                  'Trivela',            true),
+  ('rss_jp',      'https://jovempan.com.br/esportes/feed',         'Jovem Pan Esportes', true),
+  ('rss_mdb',     'https://www.mercadodabola.com.br/feed/',        'Mercado da Bola',    true)
 ON CONFLICT (url) DO NOTHING;

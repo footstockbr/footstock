@@ -18,9 +18,11 @@ import { FallbackPool } from './FallbackPool'
 
 /** Fallback hardcoded — usado quando DB não está disponível */
 const FEEDS_FALLBACK = [
-  { url: 'https://www.espn.com.br/rss', source: 'ESPN Brasil' },
-  { url: 'https://www.gazetaesportiva.com/feed/', source: 'Gazeta Esportiva' },
-  { url: 'https://trivela.com.br/feed/', source: 'Trivela' },
+  { url: 'https://www.espn.com.br/rss',                  source: 'ESPN Brasil'       },
+  { url: 'https://www.gazetaesportiva.com/feed/',         source: 'Gazeta Esportiva'  },
+  { url: 'https://trivela.com.br/feed/',                  source: 'Trivela'           },
+  { url: 'https://jovempan.com.br/esportes/feed',         source: 'Jovem Pan Esportes'},
+  { url: 'https://www.mercadodabola.com.br/feed/',        source: 'Mercado da Bola'   },
 ]
 
 const NEWS_URLS_KEY = 'news:urls'
