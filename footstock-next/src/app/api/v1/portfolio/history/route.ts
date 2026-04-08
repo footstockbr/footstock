@@ -5,6 +5,7 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { getAuthUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
 const PERIOD_DAYS: Record<string, number> = {
@@ -16,14 +17,14 @@ function toDate(d: Date): string {
 }
 
 export async function GET(req: NextRequest) {
-  // O middleware já validou auth e injetou x-user-id — sem double-auth
-  const userId = req.headers.get('x-user-id')
-  if (!userId) {
+  const auth = await getAuthUser()
+  if (!auth) {
     return NextResponse.json(
       { success: false, error: { code: 'AUTH_010', message: 'Sessão expirada.' } },
       { status: 401 }
     )
   }
+  const userId = auth.user.id
 
   const period = req.nextUrl.searchParams.get('period') ?? '7D'
   const days = PERIOD_DAYS[period] ?? 7

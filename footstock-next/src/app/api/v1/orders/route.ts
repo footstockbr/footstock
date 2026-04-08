@@ -30,9 +30,9 @@ export async function POST(request: NextRequest) {
 
 // GET /api/v1/orders — lista ordens paginadas do usuário
 export async function GET(request: NextRequest) {
-  // Usar x-user-id injetado pelo middleware (sem double-auth)
-  const userId = request.headers.get('x-user-id')
-  if (!userId) return errors.unauthorized()
+  const auth = await getAuthUser()
+  if (!auth) return errors.unauthorized()
+  const userId = auth.user.id
 
   try {
     const { searchParams } = request.nextUrl
