@@ -9,6 +9,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { OrderHistory } from "@/components/orders/OrderHistory";
 import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils";
+import { PortfolioChart } from "@/components/portfolio/PortfolioChart";
 
 interface PortfolioPosition {
   ticker: string;
@@ -115,6 +116,8 @@ export function PortfolioClient() {
             />
           </div>
         )}
+
+        <PortfolioChart />
 
         <Tabs defaultValue="posicoes">
           <TabsList data-testid="portfolio-tabs" className="w-full">
