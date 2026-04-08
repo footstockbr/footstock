@@ -7,6 +7,7 @@ import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { OrderHistory } from "@/components/orders/OrderHistory";
+import { TransactionHistory } from "@/components/portfolio/TransactionHistory";
 import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils";
 import { PortfolioChart } from "@/components/portfolio/PortfolioChart";
@@ -192,11 +193,7 @@ export function PortfolioClient() {
           </TabsContent>
 
           <TabsContent value="extrato" className="mt-4">
-            <EmptyState
-              icon={<TrendingDown />}
-              title="Extrato vazio"
-              description="Suas transacoes aparecerao aqui apos a primeira operacao"
-            />
+            <TransactionHistory />
           </TabsContent>
         </Tabs>
       </div>

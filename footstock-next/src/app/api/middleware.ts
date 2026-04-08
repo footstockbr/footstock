@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 import { env } from '@/lib/env'
 import { prisma } from '@/lib/prisma'
 import { canAccess, type AdminResource } from '@/lib/auth/canAccess'
@@ -60,6 +61,32 @@ export function withAuth(handler: RouteHandler) {
       const token = authHeader?.replace('Bearer ', '') ?? queryToken ?? undefined
 
       if (!token) {
+        // Fallback: cookie de sessão Supabase (browser fetch sem Bearer header)
+        try {
+          const cookieStore = await cookies()
+          const supabaseCookie = createServerClient(
+            env.NEXT_PUBLIC_SUPABASE_URL,
+            env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+            {
+              cookies: {
+                getAll: () => cookieStore.getAll(),
+                setAll: () => { /* noop */ },
+              },
+            }
+          )
+          const { data: { user: cookieUser } } = await supabaseCookie.auth.getUser()
+          if (cookieUser) {
+            const dbUser = await prisma.user.findUnique({ where: { id: cookieUser.id } })
+            if (dbUser) {
+              const normalizedUser =
+                dbUser.adminRole && dbUser.planType !== 'JOGADOR'
+                  ? await prisma.user.update({ where: { id: dbUser.id }, data: { planType: 'JOGADOR' } })
+                  : dbUser
+              return handler(req, { user: normalizedUser as unknown as User })
+            }
+          }
+        } catch { /* cookie auth indisponível — continua para 401 */ }
+
         // DEV local fallback: autenticação por cookie HttpOnly (sem Supabase)
         if (process.env.NODE_ENV !== 'production') {
           const devAuthRaw = req.cookies.get('fs_dev_auth')?.value
