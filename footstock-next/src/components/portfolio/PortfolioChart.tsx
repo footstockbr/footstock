@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   AreaChart,
   Area,
@@ -19,6 +20,16 @@ interface HistoryPoint {
 
 const PERIODS: Period[] = ['1H', '12H', '24H', '7D', '30D', '1Y', 'ALL']
 
+const REFETCH_INTERVAL: Record<Period, number> = {
+  '1H':  30_000,
+  '12H': 30_000,
+  '24H': 30_000,
+  '7D':  2 * 60_000,
+  '30D': 2 * 60_000,
+  '1Y':  10 * 60_000,
+  'ALL': 10 * 60_000,
+}
+
 function formatFS(value: number): string {
   return `FS$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
@@ -36,17 +47,19 @@ function formatAxisDate(date: string, period: Period): string {
 
 export function PortfolioChart() {
   const [period, setPeriod] = useState<Period>('7D')
-  const [data, setData] = useState<HistoryPoint[]>([])
-  const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    setIsLoading(true)
-    fetch(`/api/v1/portfolio/history?period=${period}`)
-      .then(r => r.json())
-      .then(json => { if (json.success) setData(json.data) })
-      .catch(() => {})
-      .finally(() => setIsLoading(false))
-  }, [period])
+  const { data: historyData, isLoading } = useQuery<HistoryPoint[]>({
+    queryKey: ['portfolio-history', period],
+    queryFn: async () => {
+      const res = await fetch(`/api/v1/portfolio/history?period=${period}`)
+      const json = await res.json()
+      return json.success ? json.data : []
+    },
+    refetchInterval: REFETCH_INTERVAL[period],
+    staleTime: REFETCH_INTERVAL[period] / 2,
+  })
+
+  const data = historyData ?? []
 
   const first = data[0]?.totalValue ?? 0
   const last = data[data.length - 1]?.totalValue ?? 0
