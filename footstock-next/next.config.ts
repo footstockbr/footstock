@@ -21,7 +21,7 @@ const securityHeaders = [
       "img-src 'self' data: blob: https:",
       "font-src 'self' https://fonts.gstatic.com",
       `connect-src 'self' https://*.supabase.co ${sentryIngestHost} wss://*.supabase.co`,
-      "worker-src blob:",
+      "worker-src blob: 'self'",
       "frame-ancestors 'none'",
     ].join('; '),
   },

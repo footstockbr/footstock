@@ -102,7 +102,7 @@ export function PortfolioChart() {
                 interval="preserveStartEnd"
               />
               <YAxis
-                tickFormatter={v => `FS$${(v / 1000).toFixed(0)}k`}
+                tickFormatter={v => v >= 1000 ? `FS$${(v / 1000).toFixed(1)}k` : `FS$${v.toFixed(0)}`}
                 tick={{ fontSize: 9, fill: '#929AA5' }}
                 tickLine={false}
                 axisLine={false}
