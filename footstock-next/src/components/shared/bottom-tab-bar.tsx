@@ -25,6 +25,7 @@ const MAIN_TABS = [
 ];
 
 const DRAWER_ITEMS = [
+  { label: "Dividendos", href: ROUTES.DIVIDENDOS, emoji: "💰" },
   { label: "Comunidade", href: ROUTES.COMUNIDADE, emoji: "💬" },
   { label: "Assessor IA", href: ROUTES.ASSESSOR, emoji: "🤖" },
   { label: "Glossário", href: ROUTES.GLOSSARIO, emoji: "📚" },

@@ -12,6 +12,7 @@ import { ROUTES } from "@/lib/constants/routes";
 const BASE_NAV_ITEMS = [
   { href: ROUTES.MERCADO, label: "Mercado" },
   { href: ROUTES.PORTFOLIO, label: "Carteira" },
+  { href: ROUTES.DIVIDENDOS, label: "Dividendos" },
   { href: ROUTES.NOTICIAS, label: "Notícias" },
   { href: ROUTES.LIGAS, label: "Ligas" },
   { href: ROUTES.COMUNIDADE, label: "Comunidade" },
