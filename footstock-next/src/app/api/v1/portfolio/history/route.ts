@@ -6,13 +6,21 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { withAuth, type AuthContext } from '@/app/api/middleware'
+import { getAuthUser } from '@/lib/auth'
 import { positionRepository } from '@/lib/repositories/PositionRepository'
 import type { PortfolioPeriod } from '@/lib/enums'
 
 const periodSchema = z.enum(['1H', '12H', '24H', '7D', '30D', '1Y', 'ALL']).default('7D')
 
-async function handler(req: NextRequest, { user }: AuthContext) {
+export async function GET(req: NextRequest) {
+  const auth = await getAuthUser()
+  if (!auth) {
+    return NextResponse.json(
+      { success: false, error: { code: 'AUTH_010', message: 'Sessão expirada. Faça login novamente.' } },
+      { status: 401 }
+    )
+  }
+
   try {
     const { searchParams } = new URL(req.url)
     const parsed = periodSchema.safeParse(searchParams.get('period') ?? undefined)
@@ -31,7 +39,7 @@ async function handler(req: NextRequest, { user }: AuthContext) {
     }
 
     const history = await positionRepository.getHistory(
-      user.id,
+      auth.user.id,
       parsed.data as PortfolioPeriod
     )
 
@@ -50,5 +58,3 @@ async function handler(req: NextRequest, { user }: AuthContext) {
     )
   }
 }
-
-export const GET = withAuth(handler)

@@ -67,8 +67,7 @@ export function OrderHistory() {
       if (statusFilter !== 'ALL') params.set('status', statusFilter)
       const res = await fetch(`/api/v1/orders?${params}`)
       if (!res.ok) throw new Error('Erro ao carregar ordens')
-      const json = await res.json()
-      return json.data ?? json
+      return res.json()
     },
   })
 
