@@ -65,31 +65,31 @@ export async function middleware(request: NextRequest) {
   )
 
   // ─── API routes ──────────────────────────────────────────────────────────
+  // O middleware NÃO bloqueia rotas de API — apenas tenta refreshar o token
+  // e injetar x-user-id se possível. A validação real fica nos route handlers.
+  //
+  // Motivo: múltiplos requests simultâneos (portfolio + history + orders) chegam
+  // com o mesmo refresh token expirado. Se o middleware chamar getUser() em cada
+  // um, todos tentam rotacionar o refresh token ao mesmo tempo → race condition →
+  // 2 de 3 tomam 401. A solução é deixar os route handlers fazerem auth serial.
   if (pathname.startsWith('/api/v1')) {
-    // Rotas públicas passam direto
     if (PUBLIC_API_PATHS.some((p) => pathname.startsWith(p))) {
       return response
     }
 
-    // Rotas protegidas — verificar autenticação
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser()
+    // Tenta injetar x-user-id sem bloquear; se falhar, passa adiante.
+    // Route handlers são responsáveis por retornar 401 se não autenticado.
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const requestHeaders = new Headers(request.headers)
+        requestHeaders.set('x-user-id', user.id)
+        requestHeaders.set('x-user-email', user.email ?? '')
+        return NextResponse.next({ request: { headers: requestHeaders } })
+      }
+    } catch { /* getUser falhou — passa adiante, route handler valida */ }
 
-    if (error || !user) {
-      return NextResponse.json(
-        { error: { code: 'AUTH_001', message: 'Sessão expirada. Faça login novamente.' } },
-        { status: 401 }
-      )
-    }
-
-    // Injetar userId para uso nos route handlers
-    const requestHeaders = new Headers(request.headers)
-    requestHeaders.set('x-user-id', user.id)
-    requestHeaders.set('x-user-email', user.email ?? '')
-
-    return NextResponse.next({ request: { headers: requestHeaders } })
+    return NextResponse.next({ request: { headers: request.headers } })
   }
 
   // ─── Page routes ──────────────────────────────────────────────────────────
