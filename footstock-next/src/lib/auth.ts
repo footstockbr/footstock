@@ -1,29 +1,37 @@
 import 'server-only'
 
+import { jwtVerify } from 'jose'
 import { createSupabaseServerClient } from '@/lib/supabase'
 import { prisma } from '@/lib/prisma'
 import type { User, AdminRole } from '@/types'
 
 // ─── Obter usuário autenticado a partir da sessão Supabase ─────────────────────
+//
+// Usa verificação LOCAL do JWT (SUPABASE_JWT_SECRET) em vez de supabase.auth.getUser().
+// getUser() faz uma chamada de rede ao Supabase Auth a cada invocação — com 4+ requests
+// simultâneos no carregamento da página, o Supabase rate-limita alguns deles, causando
+// 401 esporádicos mesmo com token válido. getSession() + jwtVerify() é 100% local.
 
 export async function getAuthUser(): Promise<{ user: User; supabaseId: string } | null> {
   try {
+    // 1. Ler sessão do cookie — sem chamada de rede
     const supabase = await createSupabaseServerClient()
-    const {
-      data: { user: supabaseUser },
-      error,
-    } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) return null
 
-    if (error || !supabaseUser) return null
+    // 2. Verificar assinatura JWT localmente — sem chamada de rede
+    const secret = new TextEncoder().encode(process.env.SUPABASE_JWT_SECRET!)
+    const { payload } = await jwtVerify(session.access_token, secret)
+    if (!payload.sub) return null
 
+    // 3. Buscar usuário no banco (única chamada de rede necessária)
     const dbUser = await prisma.user.findUnique({
-      where: { id: supabaseUser.id },
+      where: { id: payload.sub },
     })
-
     if (!dbUser) return null
 
     return {
-      supabaseId: supabaseUser.id,
+      supabaseId: payload.sub,
       user: serializeUser(dbUser),
     }
   } catch {
