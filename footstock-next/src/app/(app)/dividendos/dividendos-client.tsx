@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
+import { formatFS, formatDateShort } from '@/lib/utils/format'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -61,23 +62,6 @@ const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: 'CREDITED', label: 'Creditado' },
   { value: 'EXPIRADO', label: 'Expirado' },
 ]
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatFS(value: number) {
-  return `FS$ ${Number(value).toLocaleString('pt-BR', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-  })
-}
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -179,7 +163,7 @@ function DividendRow({
           )}
         </div>
         <p className="text-xs text-[#929AA5] truncate">{dividend.clubName}</p>
-        <p className="text-[10px] text-[#707A8A] mt-0.5">{formatDate(dividend.createdAt)}</p>
+        <p className="text-[10px] text-[#707A8A] mt-0.5">{formatDateShort(dividend.createdAt)}</p>
       </div>
 
       {/* Right: amount + yield + status + action */}

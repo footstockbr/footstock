@@ -1,141 +1,143 @@
-import { NextRequest } from 'next/server'
-import { z } from 'zod'
+import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
-import type { ImpactCategory } from '@/types'
+import type { User, AdminRole } from '@/types'
 
-const UpdateNewsSchema = z.object({
-  title: z.string().min(1, 'Título é obrigatório').max(200, 'Máximo 200 caracteres').optional(),
-  sentiment: z.enum(['BULLISH', 'BEARISH', 'NEUTRAL'], {
-    error: () => ({ message: 'Sentimento inválido' }),
-  }).optional(),
-  category: z.string().min(1, 'Categoria é obrigatória').optional(),
-  isPublished: z.boolean().optional(),
-})
-
-function serializeNews(n: {
-  id: string
-  title: string
-  content: string
-  source: string | null
-  sentiment: string
-  impact: string
-  assetIds: string[]
-  isPublished: boolean
-  publishedAt: Date | null
-  createdAt: Date
-}) {
-  return {
-    id: n.id,
-    title: n.title,
-    content: n.content,
-    source: n.source,
-    sentiment: n.sentiment,
-    category: n.impact,
-    isPublished: n.isPublished,
-    publishedAt: n.publishedAt?.toISOString() ?? null,
-    createdAt: n.createdAt.toISOString(),
-    assetIds: n.assetIds,
-  }
+interface NewsParams {
+  params: Promise<{ id: string }>
 }
 
-// PUT /api/v1/admin/news/:id — EDITOR+
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const auth = await getAuthUser()
-  if (!auth) return errors.unauthorized()
+export async function PATCH(request: NextRequest, { params }: NewsParams) {
+  const { id } = await params
+  let auth = await getAuthUser()
 
-  if (!hasAdminRole(auth.user.adminRole, 'EDITOR')) {
-    return errors.forbidden()
+  // Dev mode fallback
+  if (!auth && process.env.NODE_ENV === 'development') {
+    const adminRole = request.cookies.get('fs-admin-role')?.value
+    if (adminRole) {
+      const dummyUser: User = {
+        id: 'dev-user',
+        email: 'dev@foot-stock.test',
+        name: 'Dev User',
+        phone: null,
+        birthDate: '',
+        favoriteClub: '',
+        favoriteClubDisplayName: null,
+        userType: 'NORMAL',
+        investorProfile: 'INICIANTE',
+        planType: 'JOGADOR',
+        fsBalance: 0,
+        marginBlocked: 0,
+        tourCompleted: false,
+        ageVerificationPending: false,
+        adminRole: adminRole as AdminRole,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+      auth = { user: dummyUser, supabaseId: 'dev-user' }
+    }
   }
 
-  const { id } = await params
+  if (!auth) return errors.unauthorized()
+  if (!hasAdminRole(auth.user.adminRole, 'EDITOR')) {
+    return NextResponse.json(
+      { error: { code: 'ADMIN-051', message: 'Permissão insuficiente.' } },
+      { status: 403 }
+    )
+  }
 
   try {
     const body = await request.json()
-    const parsed = UpdateNewsSchema.safeParse(body)
-    if (!parsed.success) return errors.validation()
-
-    const existing = await prisma.news.findUnique({ where: { id } })
-    if (!existing) return errors.notFound('Notícia não encontrada.')
-
-    const { title, sentiment, category, isPublished } = parsed.data
+    const { title, content, impact, sentiment, isPublished, isArchived } = body
 
     const updateData: Record<string, unknown> = {}
     if (title !== undefined) updateData.title = title
-    if (category !== undefined) updateData.impact = category as ImpactCategory
+    if (content !== undefined) updateData.content = content
+    if (impact !== undefined) updateData.impact = impact
     if (sentiment !== undefined) updateData.sentiment = sentiment
+    if (isArchived !== undefined) {
+      updateData.isArchived = isArchived
+      if (isArchived) updateData.archivedAt = new Date()
+    }
     if (isPublished !== undefined) {
       updateData.isPublished = isPublished
-      if (isPublished && !existing.publishedAt) updateData.publishedAt = new Date()
+      if (isPublished && !updateData.publishedAt) {
+        updateData.publishedAt = new Date()
+      }
     }
 
-    const updated = await prisma.news.update({
+    const news = await prisma.news.update({
       where: { id },
       data: updateData,
     })
 
-    const sentimentChanged = sentiment !== undefined && sentiment !== existing.sentiment
-
-    await prisma.adminMarketAction.create({
-      data: {
-        adminId: auth.user.id,
-        action: 'EDIT_NEWS',
-        ticker: existing.assetIds[0] ?? null,
-        details: {
-          newsId: id,
-          changes: parsed.data,
-          redisEvent: sentimentChanged,
-        },
-      },
-    })
-
-    // Redis event news:updated — deferred to module-29-integration (requires Redis client setup)
-    // When implemented: if (tickerChanged || sentimentChanged) redis.publish('news:updated', { newsId: id, ticker: updated.ticker })
-
-    return ok(serializeNews(updated))
-  } catch {
+    return ok(news)
+  } catch (error) {
+    if ((error as { code?: string }).code === 'P2025') {
+      return NextResponse.json(
+        { error: { code: 'NEWS-001', message: 'Notícia não encontrada' } },
+        { status: 404 }
+      )
+    }
+    console.error('[news] Error:', error)
     return errors.server()
   }
 }
 
-// DELETE /api/v1/admin/news/:id — EDITOR+ (soft delete: status = 'archived')
-export async function DELETE(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const auth = await getAuthUser()
-  if (!auth) return errors.unauthorized()
+export async function DELETE(request: NextRequest, { params }: NewsParams) {
+  const { id } = await params
+  let auth = await getAuthUser()
 
-  if (!hasAdminRole(auth.user.adminRole, 'EDITOR')) {
-    return errors.forbidden()
+  // Dev mode fallback
+  if (!auth && process.env.NODE_ENV === 'development') {
+    const adminRole = request.cookies.get('fs-admin-role')?.value
+    if (adminRole) {
+      const dummyUser: User = {
+        id: 'dev-user',
+        email: 'dev@foot-stock.test',
+        name: 'Dev User',
+        phone: null,
+        birthDate: '',
+        favoriteClub: '',
+        favoriteClubDisplayName: null,
+        userType: 'NORMAL',
+        investorProfile: 'INICIANTE',
+        planType: 'JOGADOR',
+        fsBalance: 0,
+        marginBlocked: 0,
+        tourCompleted: false,
+        ageVerificationPending: false,
+        adminRole: adminRole as AdminRole,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+      auth = { user: dummyUser, supabaseId: 'dev-user' }
+    }
   }
 
-  const { id } = await params
+  if (!auth) return errors.unauthorized()
+  if (!hasAdminRole(auth.user.adminRole, 'SUPER_ADMIN')) {
+    return NextResponse.json(
+      { error: { code: 'ADMIN-051', message: 'Apenas super admin pode deletar notícias.' } },
+      { status: 403 }
+    )
+  }
 
   try {
-    const existing = await prisma.news.findUnique({ where: { id } })
-    if (!existing) return errors.notFound('Notícia não encontrada.')
-
-    const updated = await prisma.news.update({
+    await prisma.news.delete({
       where: { id },
-      data: { isPublished: false },
     })
 
-    await prisma.adminMarketAction.create({
-      data: {
-        adminId: auth.user.id,
-        action: 'ARCHIVE_NEWS',
-        ticker: existing.assetIds[0] ?? null,
-        details: { newsId: id },
-      },
-    })
-
-    return ok({ id: updated.id, isPublished: updated.isPublished })
-  } catch {
+    return ok({ message: 'Notícia deletada com sucesso' })
+  } catch (error) {
+    if ((error as { code?: string }).code === 'P2025') {
+      return NextResponse.json(
+        { error: { code: 'NEWS-001', message: 'Notícia não encontrada' } },
+        { status: 404 }
+      )
+    }
+    console.error('[news] Error:', error)
     return errors.server()
   }
 }

@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     const parsed = CreateOrderSchema.safeParse(body)
     if (!parsed.success) {
       return errors.validation(
-        parsed.error.errors.map((e) => e.message).join('; ')
+        parsed.error.issues.map((e) => e.message).join('; ')
       )
     }
 

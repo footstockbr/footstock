@@ -18,7 +18,7 @@ jest.mock('@/lib/prisma', () => ({
     order: { create: jest.fn(), findMany: jest.fn() },
     user: { findUnique: jest.fn() },
     subscription: { findUnique: jest.fn() },
-    notification: { findMany: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
+    notification: { findMany: jest.fn(), update: jest.fn(), updateMany: jest.fn(), count: jest.fn() },
     forumPost: { findMany: jest.fn(), create: jest.fn(), delete: jest.fn() },
     league: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn() },
     $queryRaw: jest.fn().mockResolvedValue([{ '?column?': 1 }]),
@@ -141,21 +141,22 @@ describe('ST001: Schema ApiResponse<T> — Resposta padronizada', () => {
       {
         id: '1',
         ticker: 'FLA',
-        displayName: 'Flamengo',
+        name: 'Flamengo',
         division: 'SERIE_A',
         currentPrice: { toNumber: () => 25.50 },
+        openPrice: { toNumber: () => 24.00 },
         fairValue: { toNumber: () => 28.00 },
+        volume: BigInt(500000),
+        marketCap: { toNumber: () => 25500000 },
         currentSupply: BigInt(1000000),
         totalShares: BigInt(10000000),
         isHalted: false,
         haltReason: null,
-        colors: { primary: '#E40000', secondary: '#000000' },
+        colorPrimary: '#E40000',
+        colorSecondary: '#000000',
+        financials: null,
         sentiment: 'BULLISH',
-        dividendYield: { toNumber: () => 0.05 },
-        logoUrl: null,
-        createdAt: new Date(),
         updatedAt: new Date(),
-        deletedAt: null,
       },
     ])
 
@@ -225,8 +226,7 @@ describe('ST002: Autenticação — Endpoints protegidos retornam 401 sem sessã
 
   test('GET /api/v1/portfolio retorna 401 sem auth', async () => {
     const { GET } = await import('@/app/api/v1/portfolio/route')
-    const req = createRequest('GET', '/api/v1/portfolio')
-    const res = await GET(req)
+    const res = await GET()
     const body = await res.json()
 
     expect(res.status).toBe(401)
@@ -440,6 +440,7 @@ describe('ST007: Endpoints de Notificação', () => {
     mockAuthUser({ planType: 'CRAQUE' })
     const { prisma } = require('@/lib/prisma')
     prisma.notification.findMany.mockResolvedValue([])
+    prisma.notification.count.mockResolvedValue(0)
 
     const { GET } = await import('@/app/api/v1/notifications/route')
     const req = createRequest('GET', '/api/v1/notifications', undefined, {

@@ -9,6 +9,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { OrderHistory } from "@/components/orders/OrderHistory";
 import { TransactionHistory } from "@/components/portfolio/TransactionHistory";
 import { ROUTES } from "@/lib/constants/routes";
+import { formatFS, formatPct } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import { PortfolioChart } from "@/components/portfolio/PortfolioChart";
 
@@ -30,15 +31,6 @@ interface PortfolioData {
   pnlToday: number;
   todayTransactionsCount: number;
   positions: PortfolioPosition[];
-}
-
-function formatFS(value: number): string {
-  return `FS$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function formatPct(value: number): string {
-  const sign = value >= 0 ? "+" : "";
-  return `${sign}${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 }
 
 export function PortfolioClient() {

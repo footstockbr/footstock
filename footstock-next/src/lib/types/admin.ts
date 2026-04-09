@@ -56,6 +56,8 @@ export interface EngagementMetricsDTO {
     taxas: number
   }
   topAsset: { ticker: string; volume: number } | null
+  topPnlUser: { name: string; pnl: number } | null
+  peakHourRange: string // ex: "19h–22h"
   inactiveByPeriod: {
     d1: number
     d7: number
@@ -91,10 +93,33 @@ export interface RevenueDayPoint {
   mrr: number
 }
 
+export interface FinancialMetricsDTO {
+  mrr: number
+  arr: number
+  churnRate: number
+  newSubscriptions24h: number
+  cancelledThisMonth: number
+  cancelledPrevMonth: number
+  planDistribution: Record<string, number>
+  volume24h: number
+  revenueByGateway: { gateway: string; revenue: number }[]
+  gatewayStatus: { gateway: string; lastActivity: string | null; transactionCount: number }[]
+  mrrHistory: { date: string; value: number }[]
+}
+
 export interface EngagementDayPoint {
   date: string // ISO date
   dau: number
   wau?: number
+}
+
+export interface ImpactMatrixDTO {
+  financeiraCritica: number
+  esportivaMajoritaria: number
+  mercadoAtivos: number
+  integridadeSaude: number
+  institucional: number
+  esportivaMenor: number
 }
 
 export enum AdminNav {
@@ -145,6 +170,7 @@ export interface AdminUserItem {
   adminRole?: string | null
   suspendedAt?: string | null
   createdAt: string
+  fsBalance?: number
 }
 
 /** Subconjunto de AdminUserItem usado pelo menu de ações */
@@ -153,4 +179,23 @@ export interface AdminUserActionItem {
   name: string
   status: string
   adminRole?: string | null
+}
+
+/** GatewayConfig como retornado pela API admin/gateways/config */
+export interface GatewayConfig {
+  code: 'MERCADO_PAGO' | 'PAGSEGURO' | 'PAYPAL'
+  name: string
+  icon: string
+  color: string
+  active: boolean
+  splitPercent: number
+  creditFeePercent: number
+  creditSettlement: string
+  debitFeePercent: number
+  debitSettlement: string
+  pixFeePercent: number
+  pixSettlement: string
+  webhookEndpoint?: string | null
+  webhookApiKey?: string | null
+  webhookSecret?: string | null
 }

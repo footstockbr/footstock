@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Flag, Trash2 } from 'lucide-react'
+import { Flag, Trash2, CheckCircle, Clock } from 'lucide-react'
 
 interface ModerationPost {
   id: string
@@ -17,6 +17,45 @@ interface ModerationPost {
     planType: string
   }
   createdAt: string
+  moderationActions: Array<{
+    id: string
+    action: string
+    createdAt: string
+    reason?: string
+    moderator: {
+      name: string
+    }
+  }>
+}
+
+interface ModerationAction {
+  id: string
+  action: string
+  createdAt: string
+  reason?: string
+  moderator: {
+    name: string
+  }
+  post: {
+    content: string
+  }
+}
+
+interface UserHistory {
+  id: string
+  action: string
+  createdAt: string
+  reason?: string
+  moderator: {
+    name: string
+  }
+  post: {
+    id: string
+    content: string
+    createdAt: string
+    isFlagged: boolean
+    isDeleted: boolean
+  }
 }
 
 const PLAN_BADGES: Record<string, { label: string; color: string }> = {
@@ -25,9 +64,14 @@ const PLAN_BADGES: Record<string, { label: string; color: string }> = {
   LENDA: { label: 'Lenda', color: 'var(--gold)' },
 }
 
-const getPlanBadge = (planType: string) => {
-  const plan = PLAN_BADGES[planType] || { label: 'User', color: 'var(--muted)' }
-  return `<span class="badge" style="color: ${plan.color}; background: rgba(255,255,255,.08)">${plan.label}</span>`
+const getPlanColor = (planType: string): string => {
+  if (planType === 'CRAQUE') return 'var(--accent)'
+  if (planType === 'LENDA') return '#F0B90B'
+  return 'var(--muted)'
+}
+
+const getPlanLabel = (planType: string): string => {
+  return PLAN_BADGES[planType]?.label || 'User'
 }
 
 const getTimeAgo = (createdAt: string) => {
@@ -48,9 +92,19 @@ export default function AdminModeracaoPage() {
   const [blockedWords, setBlockedWords] = useState<string[]>([])
   const [newWord, setNewWord] = useState('')
   const [loading, setLoading] = useState(true)
+  const [selectedPostIds, setSelectedPostIds] = useState<Set<string>>(new Set())
+  const [bulkLoading, setBulkLoading] = useState(false)
+  const [showUserHistory, setShowUserHistory] = useState<string | null>(null)
+  const [userHistory, setUserHistory] = useState<UserHistory[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [recentActions, setRecentActions] = useState<ModerationAction[]>([])
+  const [showNotifications, setShowNotifications] = useState(false)
 
   useEffect(() => {
     fetchData()
+    // Poll for recent actions every 10 seconds
+    const interval = setInterval(fetchRecentActions, 10000)
+    return () => clearInterval(interval)
   }, [filter])
 
   const fetchData = async () => {
@@ -67,10 +121,23 @@ export default function AdminModeracaoPage() {
 
       setPosts(postsRes.data || [])
       setBlockedWords(wordsRes.data?.words || [])
+      setSelectedPostIds(new Set())
     } catch (error) {
       console.error('Error fetching data:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchRecentActions = async () => {
+    try {
+      const res = await fetch('/api/v1/admin/moderation/history?minutes=5', {
+        credentials: 'include',
+      }).then((r) => r.json())
+
+      setRecentActions(res.data || [])
+    } catch (error) {
+      console.error('Error fetching recent actions:', error)
     }
   }
 
@@ -102,6 +169,33 @@ export default function AdminModeracaoPage() {
     }
   }
 
+  const handleBulkAction = async (action: 'approve' | 'remove') => {
+    if (selectedPostIds.size === 0) return
+
+    setBulkLoading(true)
+    try {
+      const res = await fetch('/api/v1/admin/moderation/bulk', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          postIds: Array.from(selectedPostIds),
+          action,
+        }),
+      })
+
+      if (res.ok) {
+        const updatedIds = Array.from(selectedPostIds)
+        setPosts(posts.filter((p) => !updatedIds.includes(p.id)))
+        setSelectedPostIds(new Set())
+      }
+    } catch (error) {
+      console.error('Error bulk action:', error)
+    } finally {
+      setBulkLoading(false)
+    }
+  }
+
   const handleAddWord = async () => {
     if (!newWord.trim()) return
 
@@ -124,10 +218,13 @@ export default function AdminModeracaoPage() {
 
   const handleRemoveWord = async (word: string) => {
     try {
-      const res = await fetch(`/api/v1/admin/moderation/blocked-words/${encodeURIComponent(word)}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      })
+      const res = await fetch(
+        `/api/v1/admin/moderation/blocked-words/${encodeURIComponent(word)}`,
+        {
+          method: 'DELETE',
+          credentials: 'include',
+        }
+      )
 
       if (res.ok) {
         setBlockedWords(blockedWords.filter((w) => w !== word))
@@ -137,14 +234,38 @@ export default function AdminModeracaoPage() {
     }
   }
 
-  const getPlanColor = (planType: string): string => {
-    if (planType === 'CRAQUE') return 'var(--accent)'
-    if (planType === 'LENDA') return '#F0B90B'
-    return 'var(--muted)'
+  const handleShowUserHistory = async (userId: string) => {
+    setShowUserHistory(userId)
+    setHistoryLoading(true)
+    try {
+      const res = await fetch(`/api/v1/admin/moderation/users/${userId}/history`, {
+        credentials: 'include',
+      }).then((r) => r.json())
+
+      setUserHistory(res.data || [])
+    } catch (error) {
+      console.error('Error fetching user history:', error)
+    } finally {
+      setHistoryLoading(false)
+    }
   }
 
-  const getPlanLabel = (planType: string): string => {
-    return PLAN_BADGES[planType]?.label || 'User'
+  const togglePostSelection = (postId: string) => {
+    const newSelected = new Set(selectedPostIds)
+    if (newSelected.has(postId)) {
+      newSelected.delete(postId)
+    } else {
+      newSelected.add(postId)
+    }
+    setSelectedPostIds(newSelected)
+  }
+
+  const toggleAllSelection = () => {
+    if (selectedPostIds.size === posts.length) {
+      setSelectedPostIds(new Set())
+    } else {
+      setSelectedPostIds(new Set(posts.map((p) => p.id)))
+    }
   }
 
   return (
@@ -156,7 +277,63 @@ export default function AdminModeracaoPage() {
             <div className="section-title">Moderação</div>
             <div className="section-sub">{posts.length} posts aguardando revisão</div>
           </div>
+          {recentActions.length > 0 && (
+            <button
+              onClick={() => setShowNotifications(!showNotifications)}
+              className="notification-btn"
+              style={{
+                position: 'relative',
+                background: 'rgba(240, 185, 11, 0.1)',
+                border: '1px solid rgba(240, 185, 11, 0.2)',
+                color: '#f0b90b',
+                padding: '8px 12px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                cursor: 'pointer',
+              }}
+            >
+              🔔 {recentActions.length} ações
+            </button>
+          )}
         </div>
+
+        {/* Recent Notifications */}
+        {showNotifications && recentActions.length > 0 && (
+          <div
+            className="notifications-panel"
+            style={{
+              background: '#1e2329',
+              border: '1px solid rgba(240, 185, 11, 0.1)',
+              borderRadius: '8px',
+              padding: '12px',
+              marginBottom: '16px',
+              maxHeight: '300px',
+              overflowY: 'auto',
+            }}
+          >
+            {recentActions.slice(0, 10).map((action) => (
+              <div
+                key={action.id}
+                style={{
+                  padding: '8px',
+                  borderBottom: '1px solid rgba(240, 185, 11, 0.05)',
+                  fontSize: '11px',
+                  color: '#929aa5',
+                }}
+              >
+                <span style={{ fontWeight: 600, color: '#f0b90b' }}>
+                  {action.action === 'APPROVED' && '✓ Aprovado'}
+                  {action.action === 'REMOVED' && '🗑 Removido'}
+                  {action.action === 'FLAGGED' && '⚠ Flagged'}
+                </span>
+                {' por '}
+                <span style={{ color: '#eaecef' }}>{action.moderator.name}</span>
+                {' - '}
+                {getTimeAgo(action.createdAt)}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Sub-Tabs */}
         <div className="sub-tabs mb-4">
@@ -199,6 +376,81 @@ export default function AdminModeracaoPage() {
               </button>
             </div>
 
+            {/* Bulk Actions */}
+            {selectedPostIds.size > 0 && (
+              <div
+                className="bulk-actions"
+                style={{
+                  display: 'flex',
+                  gap: '8px',
+                  marginBottom: '16px',
+                  padding: '12px',
+                  background: 'rgba(240, 185, 11, 0.05)',
+                  border: '1px solid rgba(240, 185, 11, 0.1)',
+                  borderRadius: '6px',
+                }}
+              >
+                <span style={{ flex: 1, color: '#929aa5', fontSize: '12px' }}>
+                  {selectedPostIds.size} post{selectedPostIds.size !== 1 ? 's' : ''} selecionado
+                  {selectedPostIds.size !== 1 ? 's' : ''}
+                </span>
+                <button
+                  onClick={() => handleBulkAction('approve')}
+                  disabled={bulkLoading}
+                  style={{
+                    background: 'transparent',
+                    color: 'var(--green)',
+                    border: '1px solid var(--green)',
+                    padding: '6px 12px',
+                    borderRadius: '4px',
+                    fontSize: '11px',
+                    cursor: bulkLoading ? 'not-allowed' : 'pointer',
+                    opacity: bulkLoading ? 0.5 : 1,
+                  }}
+                >
+                  ✓ Aprovar tudo
+                </button>
+                <button
+                  onClick={() => handleBulkAction('remove')}
+                  disabled={bulkLoading}
+                  style={{
+                    background: 'transparent',
+                    color: 'var(--red)',
+                    border: '1px solid var(--red)',
+                    padding: '6px 12px',
+                    borderRadius: '4px',
+                    fontSize: '11px',
+                    cursor: bulkLoading ? 'not-allowed' : 'pointer',
+                    opacity: bulkLoading ? 0.5 : 1,
+                  }}
+                >
+                  🗑 Remover tudo
+                </button>
+              </div>
+            )}
+
+            {/* Select All */}
+            {posts.length > 0 && (
+              <div
+                style={{
+                  marginBottom: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '12px',
+                  color: '#929aa5',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedPostIds.size === posts.length && posts.length > 0}
+                  onChange={toggleAllSelection}
+                  style={{ cursor: 'pointer' }}
+                />
+                <span>Selecionar tudo nesta página</span>
+              </div>
+            )}
+
             {/* Posts */}
             <div className="space-y-3">
               {loading ? (
@@ -215,64 +467,114 @@ export default function AdminModeracaoPage() {
                       key={post.id}
                       className={`post-card ${post.isFlagged ? 'flagged' : ''}`}
                     >
-                      <div className="post-header">
-                        <div>
-                          <div className="post-author">
-                            {post.user.name}{' '}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: '12px',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedPostIds.has(post.id)}
+                          onChange={() => togglePostSelection(post.id)}
+                          style={{ marginTop: '4px', cursor: 'pointer' }}
+                        />
+
+                        <div style={{ flex: 1 }}>
+                          <div className="post-header">
+                            <div>
+                              <div className="post-author" style={{ cursor: 'pointer' }}>
+                                <span
+                                  onClick={() => handleShowUserHistory(post.user.id)}
+                                  style={{ color: '#eaecef', textDecoration: 'underline' }}
+                                >
+                                  {post.user.name}
+                                </span>{' '}
+                                <span
+                                  className="badge"
+                                  style={{
+                                    color: getPlanColor(post.user.planType),
+                                    background: 'rgba(255,255,255,.08)',
+                                  }}
+                                >
+                                  {getPlanLabel(post.user.planType)}
+                                </span>
+                              </div>
+                              <div className="post-meta">
+                                {post.ticker} · {getTimeAgo(post.createdAt)} ·{' '}
+                                <span style={{ color: 'var(--orange)' }}>
+                                  ⚑ {post.flagCount} denúncia{post.flagCount !== 1 ? 's' : ''}
+                                </span>
+                              </div>
+                            </div>
                             <span
                               className="badge"
                               style={{
-                                color: getPlanColor(post.user.planType),
-                                background: 'rgba(255,255,255,.08)',
+                                color: badgeColor,
+                                background:
+                                  post.isFlagged
+                                    ? 'rgba(249,115,22,.12)'
+                                    : 'rgba(46,189,133,.12)',
                               }}
                             >
-                              {getPlanLabel(post.user.planType)}
+                              {badgeLabel}
                             </span>
                           </div>
-                          <div className="post-meta">
-                            {post.ticker} · {getTimeAgo(post.createdAt)} ·{' '}
-                            <span style={{ color: 'var(--orange)' }}>
-                              ⚑ {post.flagCount} denúncia{post.flagCount !== 1 ? 's' : ''}
-                            </span>
+                          <div className="post-text">{post.content}</div>
+
+                          {/* Moderation History */}
+                          {post.moderationActions.length > 0 && (
+                            <div
+                              style={{
+                                fontSize: '10px',
+                                color: '#929aa5',
+                                marginTop: '8px',
+                                borderTop: '1px solid rgba(240, 185, 11, 0.08)',
+                                paddingTop: '8px',
+                              }}
+                            >
+                              <Clock size={12} style={{ display: 'inline', marginRight: '4px' }} />
+                              <span>Histórico: </span>
+                              {post.moderationActions.slice(0, 2).map((action, idx) => (
+                                <span key={idx} style={{ marginRight: '8px' }}>
+                                  {action.action === 'APPROVED' && '✓ Aprovado'}
+                                  {action.action === 'REMOVED' && '🗑 Removido'}
+                                  {action.action === 'FLAGGED' && '⚠ Flagged'}
+                                  {' por '}
+                                  <strong>{action.moderator.name}</strong>
+                                  {' · '}
+                                  {getTimeAgo(action.createdAt)}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="post-actions">
+                            <button
+                              onClick={() => handleApprovePost(post.id)}
+                              className="btn btn-sm btn-outline"
+                              style={{
+                                background: 'transparent',
+                                color: 'var(--green)',
+                                borderColor: 'var(--green)',
+                              }}
+                            >
+                              ✓ Aprovar
+                            </button>
+                            <button
+                              onClick={() => handleRemovePost(post.id)}
+                              className="btn btn-sm btn-outline"
+                              style={{
+                                background: 'transparent',
+                                color: 'var(--red)',
+                                borderColor: 'var(--red)',
+                              }}
+                            >
+                              🗑 Remover
+                            </button>
                           </div>
                         </div>
-                        <span
-                          className="badge"
-                          style={{
-                            color: badgeColor,
-                            background:
-                              post.isFlagged
-                                ? 'rgba(249,115,22,.12)'
-                                : 'rgba(46,189,133,.12)',
-                          }}
-                        >
-                          {badgeLabel}
-                        </span>
-                      </div>
-                      <div className="post-text">{post.content}</div>
-                      <div className="post-actions">
-                        <button
-                          onClick={() => handleApprovePost(post.id)}
-                          className="btn btn-sm btn-outline"
-                          style={{
-                            background: 'transparent',
-                            color: 'var(--green)',
-                            borderColor: 'var(--green)',
-                          }}
-                        >
-                          ✓ Aprovar
-                        </button>
-                        <button
-                          onClick={() => handleRemovePost(post.id)}
-                          className="btn btn-sm btn-outline"
-                          style={{
-                            background: 'transparent',
-                            color: 'var(--red)',
-                            borderColor: 'var(--red)',
-                          }}
-                        >
-                          🗑 Remover
-                        </button>
                       </div>
                     </div>
                   )
@@ -331,6 +633,106 @@ export default function AdminModeracaoPage() {
           </>
         )}
       </div>
+
+      {/* User History Modal */}
+      {showUserHistory && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => setShowUserHistory(null)}
+        >
+          <div
+            style={{
+              background: '#1e2329',
+              border: '1px solid rgba(240, 185, 11, 0.1)',
+              borderRadius: '8px',
+              padding: '24px',
+              maxWidth: '600px',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+              width: '90%',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <h2 style={{ color: '#eaecef', fontSize: '16px', fontWeight: 700 }}>
+                Histórico do Usuário
+              </h2>
+              <button
+                onClick={() => setShowUserHistory(null)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#929aa5',
+                  fontSize: '20px',
+                  cursor: 'pointer',
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {historyLoading ? (
+              <div style={{ color: '#929aa5', textAlign: 'center', padding: '20px' }}>
+                Carregando...
+              </div>
+            ) : userHistory.length === 0 ? (
+              <div style={{ color: '#929aa5', textAlign: 'center', padding: '20px' }}>
+                Sem histórico de moderação
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {userHistory.map((action) => (
+                  <div
+                    key={action.id}
+                    style={{
+                      background: '#181a20',
+                      border: '1px solid rgba(240, 185, 11, 0.08)',
+                      borderRadius: '6px',
+                      padding: '12px',
+                      fontSize: '12px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <span
+                        style={{
+                          fontWeight: 600,
+                          color:
+                            action.action === 'APPROVED'
+                              ? '#2ebd85'
+                              : action.action === 'REMOVED'
+                                ? '#f6465d'
+                                : '#f59e0b',
+                        }}
+                      >
+                        {action.action === 'APPROVED' && '✓ Aprovado'}
+                        {action.action === 'REMOVED' && '🗑 Removido'}
+                        {action.action === 'FLAGGED' && '⚠ Flagged'}
+                      </span>
+                      <span style={{ color: '#929aa5' }}>{getTimeAgo(action.createdAt)}</span>
+                    </div>
+                    <div style={{ color: '#c5b99a', marginBottom: '6px' }}>
+                      &ldquo;{action.post.content.substring(0, 80)}
+                      {action.post.content.length > 80 ? '...' : ''}&rdquo;
+                    </div>
+                    <div style={{ color: '#929aa5', fontSize: '11px' }}>
+                      Por: <strong>{action.moderator.name}</strong>
+                      {action.reason && ` · ${action.reason}`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <style jsx>{`
         .fade-in {
@@ -559,6 +961,18 @@ export default function AdminModeracaoPage() {
 
         .btn-solid:hover {
           opacity: 0.9;
+        }
+
+        .space-y-3 {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .space-y-2 {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
         }
       `}</style>
     </div>

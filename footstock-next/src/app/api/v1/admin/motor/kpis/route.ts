@@ -4,16 +4,11 @@ import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
 import type { User, AdminRole } from '@/types'
 
-interface WordParams {
-  params: {
-    word: string
-  }
-}
-
-export async function DELETE(request: NextRequest, { params }: WordParams) {
+// GET /api/v1/admin/motor/kpis
+// Retorna: circuitBreakers (ativos halted) + aggregatePnl (soma P&L aberto)
+export async function GET(request: NextRequest) {
   let auth = await getAuthUser()
 
-  // Dev mode fallback
   if (!auth && process.env.NODE_ENV === 'development') {
     const adminRole = request.cookies.get('fs-admin-role')?.value
     if (adminRole) {
@@ -25,7 +20,7 @@ export async function DELETE(request: NextRequest, { params }: WordParams) {
         birthDate: '',
         favoriteClub: '',
         favoriteClubDisplayName: null,
-        userType: 'INVESTIDOR',
+        userType: 'NORMAL',
         investorProfile: 'INICIANTE',
         planType: 'JOGADOR',
         fsBalance: 0,
@@ -41,7 +36,7 @@ export async function DELETE(request: NextRequest, { params }: WordParams) {
   }
 
   if (!auth) return errors.unauthorized()
-  if (!hasAdminRole(auth.user.adminRole, 'MODERADOR')) {
+  if (!hasAdminRole(auth.user.adminRole, 'MONITOR')) {
     return NextResponse.json(
       { error: { code: 'ADMIN-050', message: 'Permissão insuficiente.' } },
       { status: 403 }
@@ -49,21 +44,28 @@ export async function DELETE(request: NextRequest, { params }: WordParams) {
   }
 
   try {
-    const decodedWord = decodeURIComponent(params.word).toLowerCase().trim()
+    const [circuitBreakers, pnlResult] = await Promise.all([
+      // Ativos com halt ativo no banco
+      prisma.asset.count({ where: { isHalted: true } }),
 
-    const deleted = await prisma.blockedWord.delete({
-      where: { word: decodedWord },
-    })
+      // P&L agregado de todas as posições OPEN
+      // P&L = (currentPrice - avgPrice) * quantity
+      prisma.$queryRaw<{ aggregate_pnl: string }[]>`
+        SELECT COALESCE(
+          SUM((a.current_price - p.avg_price) * p.quantity),
+          0
+        ) AS aggregate_pnl
+        FROM positions p
+        JOIN assets a ON a.id = p.asset_id
+        WHERE p.status = 'OPEN'
+      `,
+    ])
 
-    return ok({ message: 'Palavra removida da lista bloqueada', word: deleted.word })
-  } catch (error: any) {
-    if (error.code === 'P2025') {
-      return NextResponse.json(
-        { error: { code: 'MODERATION-003', message: 'Palavra não encontrada' } },
-        { status: 404 }
-      )
-    }
-    console.error('[moderation] Error:', error)
+    const aggregatePnl = parseFloat(pnlResult[0]?.aggregate_pnl ?? '0')
+
+    return ok({ circuitBreakers, aggregatePnl })
+  } catch (error) {
+    console.error('[motor/kpis] Error:', error)
     return errors.server()
   }
 }

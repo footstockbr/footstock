@@ -13,7 +13,7 @@
  * Idempotente: executar 2x não duplica dados
  */
 
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, NotificationType } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
@@ -109,7 +109,7 @@ async function seedForumPosts(users: { jogadorId: string; craqueId: string; lend
   let created = 0
   for (const post of posts) {
     // Verificar por conteúdo + userId para idempotência
-    const existing = await prisma.forumPost.findFirst({
+    const existing = await prisma.globalForumPost.findFirst({
       where: {
         userId: post.userId,
         content: post.content,
@@ -117,13 +117,11 @@ async function seedForumPosts(users: { jogadorId: string; craqueId: string; lend
     })
 
     if (!existing) {
-      await prisma.forumPost.create({
+      await prisma.globalForumPost.create({
         data: {
           userId: post.userId,
           content: post.content,
           ticker: post.ticker,
-          status: 'ACTIVE',
-          likes: post.likes,
         },
       })
       created++
@@ -151,6 +149,7 @@ async function seedLeague(users: { jogadorId: string; craqueId: string; lendaId:
         status: 'ACTIVE',
         startsAt: new Date(),
         endsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        createdBy: users.lendaId,
       },
     })
   }
@@ -253,18 +252,18 @@ async function seedNotifications(
   let created = 0
   for (const n of demoNotifications) {
     const existing = await prisma.notification.findFirst({
-      where: { userId: n.userId, type: n.type, title: n.title },
+      where: { userId: n.userId, type: n.type as NotificationType },
     })
 
     if (!existing) {
       await prisma.notification.create({
         data: {
           userId: n.userId,
-          type: n.type,
+          type: n.type as NotificationType,
           title: n.title,
           body: n.body,
-          metadata: n.metadata as object,
-          read: n.read,
+          data: n.metadata ?? undefined,
+          isRead: n.read,
         },
       })
       created++

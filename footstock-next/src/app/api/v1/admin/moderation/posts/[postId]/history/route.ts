@@ -4,14 +4,9 @@ import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
 import type { User, AdminRole } from '@/types'
 
-interface PostParams {
-  params: {
-    id: string
-  }
-}
-
-// Aprovar post (remover flag)
-export async function POST(request: NextRequest, { params }: PostParams) {
+// GET moderation history for a specific post
+export async function GET(request: NextRequest, context: { params: Promise<{ postId: string }> }) {
+  const params = await context.params
   let auth = await getAuthUser()
 
   // Dev mode fallback
@@ -26,7 +21,7 @@ export async function POST(request: NextRequest, { params }: PostParams) {
         birthDate: '',
         favoriteClub: '',
         favoriteClubDisplayName: null,
-        userType: 'INVESTIDOR',
+        userType: 'NORMAL',
         investorProfile: 'INICIANTE',
         planType: 'JOGADOR',
         fsBalance: 0,
@@ -49,31 +44,22 @@ export async function POST(request: NextRequest, { params }: PostParams) {
     )
   }
 
-  const action = request.nextUrl.searchParams.get('action') || 'approve'
-
   try {
-    if (action === 'approve') {
-      await prisma.globalForumPost.update({
-        where: { id: params.id },
-        data: { isFlagged: false, flagCount: 0 },
-      })
-      return ok({ message: 'Post aprovado', postId: params.id })
-    } else if (action === 'remove') {
-      await prisma.globalForumPost.update({
-        where: { id: params.id },
-        data: { isDeleted: true },
-      })
-      return ok({ message: 'Post removido', postId: params.id })
-    }
+    const actions = await prisma.moderationAction.findMany({
+      where: { postId: params.postId },
+      include: {
+        moderator: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
 
-    return errors.badRequest('Ação inválida')
-  } catch (error: any) {
-    if (error.code === 'P2025') {
-      return NextResponse.json(
-        { error: { code: 'MODERATION-001', message: 'Post não encontrado' } },
-        { status: 404 }
-      )
-    }
+    return ok(actions)
+  } catch (error) {
     console.error('[moderation] Error:', error)
     return errors.server()
   }

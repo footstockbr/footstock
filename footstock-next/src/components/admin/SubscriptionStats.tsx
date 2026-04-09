@@ -2,6 +2,10 @@
 
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { formatBRL } from '@/lib/utils/format'
+import { PLAN_HEX_COLORS, PLAN_PRICE_VALUES } from '@/lib/constants/admin-ui'
+
+const PLAN_COLORS = PLAN_HEX_COLORS
+const PLAN_PRICES = PLAN_PRICE_VALUES
 
 interface RevenueByGateway {
   gateway: string
@@ -11,18 +15,6 @@ interface RevenueByGateway {
 interface SubscriptionStatsProps {
   planDistribution: Record<string, number>
   revenueByGateway: RevenueByGateway[]
-}
-
-const PLAN_COLORS: Record<string, string> = {
-  JOGADOR: '#374151',
-  CRAQUE: '#F0B90B',
-  LENDA: '#B8860B',
-}
-
-const PLAN_PRICES: Record<string, number> = {
-  JOGADOR: 0,
-  CRAQUE: 19.9,
-  LENDA: 39.9,
 }
 
 export function SubscriptionStats({ planDistribution, revenueByGateway }: SubscriptionStatsProps) {

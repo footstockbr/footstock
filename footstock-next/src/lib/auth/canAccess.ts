@@ -63,29 +63,6 @@ const PERMISSIONS: Record<AdminRole, AdminResource[]> = {
     'gateway:config',
     'news:sources',
   ],
-  ADMIN: [
-    'users:read',
-    'users:write',
-    'users:suspend',
-    'assets:read',
-    'assets:write',
-    'assets:halt',
-    'assets:price',
-    'motor:read',
-    'motor:control',
-    'news:read',
-    'news:write',
-    'news:delete',
-    'leagues:read',
-    'leagues:moderate',
-    'forum:read',
-    'forum:moderate',
-    'financial:read',
-    'financial:write',
-    'engagement:read',
-    'admin:dashboard',
-    'admin:audit',
-  ],
   MONITOR: [
     'admin:dashboard',
     'motor:read',
@@ -107,7 +84,6 @@ const PERMISSIONS: Record<AdminRole, AdminResource[]> = {
   CLUB_PARTNER: [
     'club:metrics',
   ],
-  // Legacy alias — mantido para compatibilidade com o enum AdminRole do Prisma
   ADMINISTRADOR: [
     'users:read',
     'users:write',

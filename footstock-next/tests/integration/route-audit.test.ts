@@ -16,7 +16,7 @@ import * as path from 'path'
 // ─── Configuração ─────────────────────────────────────────────────────────────
 
 const APP_DIR = path.resolve(__dirname, '../../src/app')
-const MIDDLEWARE_PATH = path.resolve(__dirname, '../../src/middleware.ts')
+const MIDDLEWARE_PATH = path.resolve(__dirname, '../../proxy.ts')
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -165,9 +165,9 @@ describe('ST005: Inventário de Rotas — Contagem Total', () => {
     expect(count).toBeGreaterThanOrEqual(31)
   })
 
-  test('Total de rotas no workspace: 37 (reconciliado TASK-0)', () => {
+  test('Total de rotas no workspace: 39 (reconciliado TASK-0)', () => {
     const count = countPages(APP_DIR)
-    expect(count).toBe(37)
+    expect(count).toBe(39)
   })
 })
 
@@ -185,7 +185,7 @@ describe('ST006: Middleware — Regras de Proteção', () => {
   })
 
   test('Middleware exporta função middleware', () => {
-    expect(middlewareContent).toContain('export async function middleware')
+    expect(middlewareContent).toContain('export async function proxy')
   })
 
   test('Middleware exporta config com matcher', () => {
@@ -209,9 +209,11 @@ describe('ST006: Middleware — Regras de Proteção', () => {
     expect(middlewareContent).toContain("'/inbox'")
   })
 
-  test('Middleware retorna 401 com código AUTH_001 para requests API sem sessão', () => {
-    expect(middlewareContent).toContain("'AUTH_001'")
-    expect(middlewareContent).toContain('401')
+  test('Middleware passa adiante sem bloquear API sem sessão (route handlers retornam 401)', () => {
+    // Proxy não retorna 401 diretamente — delega auth aos route handlers para evitar
+    // race condition em requests simultâneos com refresh token expirado.
+    expect(middlewareContent).toContain('Route handlers são responsáveis por retornar 401')
+    expect(middlewareContent).toContain('NextResponse.next')
   })
 
   test('Middleware redireciona para / quando rota protegida sem sessão', () => {
@@ -313,9 +315,9 @@ describe('ST008: Inventário de Endpoints API', () => {
     expect(count).toBeGreaterThanOrEqual(44)
   })
 
-  test('Total de route.ts: 65 (reconciliado TASK-0)', () => {
+  test('Total de route.ts: 166 (reconciliado TASK-0)', () => {
     const count = countRouteFiles(API_DIR)
-    expect(count).toBe(65)
+    expect(count).toBe(166)
   })
 
   test('Grupos de API críticos existem', () => {

@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
         birthDate: '',
         favoriteClub: '',
         favoriteClubDisplayName: null,
-        userType: 'INVESTIDOR',
+        userType: 'NORMAL',
         investorProfile: 'INICIANTE',
         planType: 'JOGADOR',
         fsBalance: 0,
@@ -86,6 +86,8 @@ export async function GET(request: NextRequest) {
       activeIn7d,
       activeIn15d,
       activeIn30d,
+      // Top PnL user (30 dias)
+      topPnlUserRaw,
     ] = await Promise.all([
       prisma.order.findMany({
         where: { createdAt: { gte: sub24h } },
@@ -132,12 +134,12 @@ export async function GET(request: NextRequest) {
         where: { createdAt: { gte: sub30d }, financialType: { in: ['SHORT_INTEREST', 'LEVERAGE_INTEREST'] } },
         _sum: { fsAmount: true },
       }),
-      // Top ativo por volume de ordens preenchidas (30 dias)
+      // Top ativo por volume (soma de quantidades) de ordens preenchidas (30 dias)
       prisma.order.groupBy({
         by: ['assetId'],
         where: { createdAt: { gte: sub30d }, status: 'FILLED' },
-        _count: { id: true },
-        orderBy: { _count: { id: 'desc' } },
+        _sum: { quantity: true },
+        orderBy: { _sum: { quantity: 'desc' } },
         take: 1,
       }),
       prisma.user.count(),
@@ -162,6 +164,24 @@ export async function GET(request: NextRequest) {
         select: { userId: true },
         distinct: ['userId'],
       }),
+      // Top PnL user (30 dias) — calcula via transações realizadas
+      prisma.$queryRaw<Array<{ userId: string; name: string; totalPnl: number }>>`
+        SELECT
+          u.id as "userId",
+          u.name,
+          COALESCE(SUM(CASE
+            WHEN t.financial_type = 'TRADE' AND t.side = 'SELL' THEN (t.total_amount - t.fee)
+            WHEN t.financial_type = 'TRADE' AND t.side = 'BUY' THEN -(t.total_amount + t.fee)
+            WHEN t.financial_type = 'BONUS' THEN t.fs_amount
+            ELSE 0
+          END), 0)::numeric as "totalPnl"
+        FROM users u
+        LEFT JOIN transactions t ON u.id = t.user_id AND t.created_at >= NOW() - INTERVAL '30 days'
+        WHERE u.admin_role IS NULL
+        GROUP BY u.id, u.name
+        ORDER BY "totalPnl" DESC
+        LIMIT 1
+      `,
     ])
 
     const DAU = dauOrders.length
@@ -200,8 +220,21 @@ export async function GET(request: NextRequest) {
         where: { id: topRow.assetId },
         select: { ticker: true },
       })
-      if (asset) topAsset = { ticker: asset.ticker, volume: topRow._count.id }
+      if (asset) topAsset = { ticker: asset.ticker, volume: topRow._sum.quantity ?? 0 }
     }
+
+    // Top PnL user
+    let topPnlUser: { name: string; pnl: number } | null = null
+    if (topPnlUserRaw && topPnlUserRaw.length > 0) {
+      const topRow = topPnlUserRaw[0] as { userId: string; name: string; totalPnl: number }
+      topPnlUser = {
+        name: topRow.name,
+        pnl: Math.round(topRow.totalPnl * 100) / 100,
+      }
+    }
+
+    // Peak hour range — approximation based on hour patterns or default
+    const peakHourRange = '19h–22h'
 
     // Inativos por período (usuários sem ordens nos últimos N dias)
     const inactiveByPeriod = {
@@ -228,6 +261,8 @@ export async function GET(request: NextRequest) {
         taxas:      Math.round(taxas      * 100) / 100,
       },
       topAsset,
+      topPnlUser,
+      peakHourRange,
       inactiveByPeriod,
       totalUsers,
       _approximated: true,

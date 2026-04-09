@@ -1,141 +1,122 @@
-/**
- * Seed: Notícias de demonstração para painel admin
- * Module: module-23-admin-usuarios-financeiro / TASK-5
- */
+import { PrismaClient } from '@prisma/client'
+import { PrismaPg } from '@prisma/adapter-pg'
 
-import type { PrismaClient } from '@prisma/client'
-
-const DEMO_NEWS = [
-  {
-    title: 'Urubu da Gavea FC anuncia renovação com jogador estrela',
-    source: 'ADMIN_DEMO',
-    url: '#',
-    ticker: 'URU3',
-    sentiment: 0.85,
-    impactCategory: 'CONTRATACAO' as const,
-    status: 'published',
-  },
-  {
-    title: 'Porco do Parque FC vence clássico e lidera tabela',
-    source: 'ADMIN_DEMO',
-    url: '#',
-    ticker: 'PORC3',
-    sentiment: 0.75,
-    impactCategory: 'RESULTADO_ESPORTIVO' as const,
-    status: 'published',
-  },
-  {
-    title: 'Menino da Vila anuncia patrocínio master de R$ 50 milhões',
-    source: 'ADMIN_DEMO',
-    url: '#',
-    ticker: 'MENIL4',
-    sentiment: 0.9,
-    impactCategory: 'FINANCEIRO' as const,
-    status: 'published',
-  },
-  {
-    title: 'Soberano do Parque perde artilheiro por lesão muscular',
-    source: 'ADMIN_DEMO',
-    url: '#',
-    ticker: 'SOBT3',
-    sentiment: -0.8,
-    impactCategory: 'LESAO' as const,
-    status: 'published',
-  },
-  {
-    title: 'Tricolor do Morumbi suspenso de competições por 3 rodadas',
-    source: 'ADMIN_DEMO',
-    url: '#',
-    ticker: 'TRIC4',
-    sentiment: -0.75,
-    impactCategory: 'SUSPENSAO' as const,
-    status: 'published',
-  },
-  {
-    title: 'Azul-Celeste anuncia dívida de R$ 120M com credores',
-    source: 'ADMIN_DEMO',
-    url: '#',
-    ticker: 'AZUL3',
-    sentiment: -0.7,
-    impactCategory: 'FINANCEIRO' as const,
-    status: 'published',
-  },
-  {
-    title: 'CBF anuncia mudanças no calendário do Brasileirão 2026',
-    source: 'ADMIN_DEMO',
-    url: '#',
-    ticker: 'URU3',
-    sentiment: 0.05,
-    impactCategory: 'INSTITUCIONAL' as const,
-    status: 'published',
-  },
-  {
-    title: 'Transferências de inverno: janela aberta sem movimentações relevantes',
-    source: 'ADMIN_DEMO',
-    url: '#',
-    ticker: 'PORC3',
-    sentiment: 0.0,
-    impactCategory: 'CONTRATACAO' as const,
-    status: 'published',
-  },
-  {
-    title: 'Resultado do clássico decide posição no ranking — análise técnica',
-    source: 'ADMIN_DEMO',
-    url: '#',
-    ticker: 'TRIC4',
-    sentiment: 0.55,
-    impactCategory: 'RESULTADO_ESPORTIVO' as const,
-    status: 'archived',
-  },
-  {
-    title: 'Novo técnico contratado para temporada 2026/2027',
-    source: 'ADMIN_DEMO',
-    url: '#',
-    ticker: 'AZUL3',
-    sentiment: 0.6,
-    impactCategory: 'CONTRATACAO' as const,
-    status: 'archived',
-  },
-]
-
-export async function seedAdminDemoNews(prisma: PrismaClient): Promise<void> {
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('[seed] Não executar seed de demo em produção!')
+const newsSeed = async () => {
+  const connectionString = process.env.DATABASE_URL
+  if (!connectionString) {
+    throw new Error('DATABASE_URL environment variable is not set')
   }
 
-  console.log('[seed] Iniciando seed de notícias de demonstração...')
+  const adapter = new PrismaPg({ connectionString })
+  const prisma = new PrismaClient({ adapter })
 
-  for (const news of DEMO_NEWS) {
-    // Idempotente: verificar se notícia com mesmo título já existe
-    const existing = await prisma.news.findFirst({
-      where: { title: news.title },
-    })
+  console.log('[seed] News: clearing existing...')
+  await prisma.news.deleteMany({})
 
-    if (!existing) {
-      // Verificar se o ticker existe no banco (asset)
-      const asset = await prisma.asset.findUnique({ where: { ticker: news.ticker } })
-      if (!asset) {
-        console.log(`[seed]   ⚠ Ticker ${news.ticker} não encontrado — pulando notícia "${news.title.slice(0, 40)}..."`)
-        continue
-      }
+  console.log('[seed] News: creating demo articles...')
 
-      await prisma.news.create({
-        data: {
-          title: news.title,
-          source: news.source,
-          url: news.url,
-          ticker: news.ticker,
-          sentiment: news.sentiment,
-          impactCategory: news.impactCategory,
-          status: news.status,
-          publishedAt: new Date(),
-        },
-      })
-      console.log(`[seed]   ✓ "${news.title.slice(0, 50)}..."`)
-    } else {
-      console.log(`[seed]   ↩ Já existe: "${news.title.slice(0, 50)}..."`)
-    }
-  }
+  const now = new Date()
+  const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000)
+  const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000)
+  const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000)
+  const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
+  const fourDaysAgo = new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000)
 
-  console.log('[seed] Seed de notícias concluído')
+  const news = await prisma.news.createMany({
+    data: [
+      {
+        id: 'n001',
+        title: 'URU3 anuncia patrocínio master com banco digital',
+        content:
+          'Clube Uruguaio anunciou parceria estratégica com instituição financeira digital para os próximos 3 anos, reforçando sua estrutura de receitas.',
+        impact: 'ESPORTIVA_MAJORITARIA',
+        sentiment: 'BULLISH',
+        assetIds: ['uru3'],
+        source: 'Comunicado Oficial',
+        isPublished: true,
+        publishedAt: twoHoursAgo,
+        isArchived: false,
+        clicks: 1420,
+        author: 'admin',
+        createdAt: sixHoursAgo,
+        updatedAt: twoHoursAgo,
+      },
+      {
+        id: 'n002',
+        title: 'POR4 reforça elenco com contratações milionárias',
+        content:
+          'Clube português anuncia três novas contratações de peso para o elenco. Investimento total estimado em €5 milhões para reforçar defesa e ataque.',
+        impact: 'ESPORTIVA_MAJORITARIA',
+        sentiment: 'BULLISH',
+        assetIds: ['por4'],
+        source: 'SportTV',
+        isPublished: true,
+        publishedAt: fourHoursAgo,
+        isArchived: false,
+        clicks: 840,
+        author: 'ana',
+        createdAt: fourDaysAgo,
+        updatedAt: fourHoursAgo,
+      },
+      {
+        id: 'n003',
+        title: 'TIM3 sofre rebaixamento para Série B',
+        content:
+          'Após campanha decepcionante, TIM3 é rebaixada para a segunda divisão. Clube já começou processo de reformulação administrativa e técnica.',
+        impact: 'ESPORTIVA_MAJORITARIA',
+        sentiment: 'BEARISH',
+        assetIds: ['tim3'],
+        source: 'CBV',
+        isPublished: true,
+        publishedAt: new Date(now.getTime() - 10 * 60 * 60 * 1000),
+        isArchived: false,
+        clicks: 3200,
+        author: 'admin',
+        createdAt: threeDaysAgo,
+        updatedAt: new Date(now.getTime() - 10 * 60 * 60 * 1000),
+      },
+      {
+        id: 'n004',
+        title: 'FOG3 envolto em polêmica financeira',
+        content:
+          'Investigação preliminar aponta possíveis irregularidades contábeis. Clube sob supervisão de órgãos reguladores. Ações em queda de 15% no pré-mercado.',
+        impact: 'FINANCEIRA_CRITICA',
+        sentiment: 'BEARISH',
+        assetIds: ['fog3'],
+        source: 'BRL Financeiro',
+        isPublished: false,
+        publishedAt: null,
+        isArchived: false,
+        clicks: 0,
+        author: 'ana',
+        createdAt: new Date(now.getTime() - 1 * 60 * 60 * 1000),
+        updatedAt: new Date(now.getTime() - 1 * 60 * 60 * 1000),
+      },
+      {
+        id: 'n005',
+        title: 'BAL4 promovida à Série A após campanha histórica',
+        content:
+          'Após 5 anos na Série B, BAL4 conquistou seu retorno à primeira divisão com campanha impressionante. Torcida celebra retorno histórico.',
+        impact: 'ESPORTIVA_MAJORITARIA',
+        sentiment: 'BULLISH',
+        assetIds: ['bal4'],
+        source: 'Globo Sports',
+        isPublished: false,
+        publishedAt: null,
+        isArchived: false,
+        clicks: 0,
+        author: 'marcos',
+        createdAt: new Date(now.getTime() - 30 * 60 * 1000),
+        updatedAt: new Date(now.getTime() - 30 * 60 * 1000),
+      },
+    ],
+  })
+
+  console.log(`[seed] News: created ${news.count} articles`)
+  await prisma.$disconnect()
 }
+
+newsSeed().catch((err) => {
+  console.error('[seed] News error:', err)
+  process.exit(1)
+})

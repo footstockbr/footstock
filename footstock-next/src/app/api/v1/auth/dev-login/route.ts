@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
         path: '/',
         maxAge: 60 * 60 * 24 * 30, // 30 days
         sameSite: 'lax',
-        secure: process.env.NODE_ENV === 'production',
+        secure: false, // dev-only route — never in production
       })
     }
 

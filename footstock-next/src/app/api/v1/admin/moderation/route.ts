@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
+import { autoDetectBlockedWords, recordModerationAction } from '@/lib/moderation'
 import type { User, AdminRole } from '@/types'
 
 export async function GET(request: NextRequest) {
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
         birthDate: '',
         favoriteClub: '',
         favoriteClubDisplayName: null,
-        userType: 'INVESTIDOR',
+        userType: 'NORMAL',
         investorProfile: 'INICIANTE',
         planType: 'JOGADOR',
         fsBalance: 0,
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
   const filter = request.nextUrl.searchParams.get('filter') || 'flagged'
 
   try {
-    let where: any = {}
+    let where: Record<string, unknown> = {}
 
     if (filter === 'flagged') {
       where = { isFlagged: true, isDeleted: false }
@@ -65,10 +66,47 @@ export async function GET(request: NextRequest) {
             planType: true,
           },
         },
+        moderationActions: {
+          include: {
+            moderator: {
+              select: {
+                name: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+        },
       },
       orderBy: { flagCount: 'desc' },
       take: 50,
     })
+
+    // Auto-detect blocked words and update if needed
+    for (const post of posts) {
+      if (!post.isDeleted && !post.isFlagged) {
+        const hasBlockedWords = await autoDetectBlockedWords(post.content)
+        if (hasBlockedWords) {
+          await prisma.globalForumPost.update({
+            where: { id: post.id },
+            data: { isFlagged: true, flagCount: 1 },
+          })
+
+          // Record auto-flag action
+          const adminUser = await prisma.user.findFirst({
+            where: { adminRole: 'SUPER_ADMIN' },
+            select: { id: true },
+          })
+
+          if (adminUser) {
+            await recordModerationAction(post.id, adminUser.id, 'FLAGGED', 'Auto-detected blocked words')
+          }
+
+          post.isFlagged = true
+          post.flagCount = 1
+        }
+      }
+    }
 
     const postsWithBadge = posts.map((post) => ({
       ...post,

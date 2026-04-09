@@ -9,6 +9,7 @@ import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 import { prisma } from '@/lib/prisma'
 import { adminSessionService } from '@/lib/admin/AdminSessionService'
+import type { AdminRole } from '@/lib/enums'
 
 export async function POST(request: NextRequest) {
   try {
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
 
     // Dev mode: fallback to fs-admin-role cookie if no Supabase user
     if (!dbUser && devAdminRole) {
-      dbUser = { id: 'dev-user', adminRole: devAdminRole }
+      dbUser = { id: 'dev-user', adminRole: devAdminRole as AdminRole | null }
     }
 
     if (!dbUser) {

@@ -1,87 +1,139 @@
-import { cn } from '@/lib/utils'
+'use client'
 
-const IMPACT_DATA: {
-  category: string
-  a: number
-  b: number
-  c: number
-  d: number
-}[] = [
-  { category: 'Resultado (vitória)', a: 3, b: 2, c: 1.5, d: 1 },
-  { category: 'Título', a: 8, b: 6, c: 4, d: 2 },
-  { category: 'Derrota', a: -3, b: -2, c: -1.5, d: -1 },
-  { category: 'Empate', a: 0, b: 0, c: 0, d: 0 },
-  { category: 'Contratação', a: 2, b: 1.5, c: 1, d: 0.5 },
-  { category: 'Rescisão', a: -1, b: -0.75, c: -0.5, d: -0.25 },
-  { category: 'Lesão', a: -1.5, b: -1, c: -0.8, d: -0.5 },
-]
+import { useState, useEffect } from 'react'
+import { useQuery, useMutation } from '@tanstack/react-query'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Button } from '@/components/ui/button'
+import type { ImpactMatrixDTO } from '@/lib/types/admin'
 
-function cellStyle(v: number): string {
-  const abs = Math.abs(v)
-  if (v === 0) return 'bg-slate-700/20 text-slate-500'
-  const intensity = abs >= 6 ? 'strong' : abs >= 3 ? 'medium' : 'light'
-  if (v > 0) {
-    return intensity === 'strong'
-      ? 'bg-emerald-500/30 text-emerald-300'
-      : intensity === 'medium'
-      ? 'bg-emerald-500/20 text-emerald-400'
-      : 'bg-emerald-500/10 text-emerald-500'
-  }
-  return intensity === 'strong'
-    ? 'bg-red-500/30 text-red-300'
-    : intensity === 'medium'
-    ? 'bg-red-500/20 text-red-400'
-    : 'bg-red-500/10 text-red-500'
+const CATEGORIES = [
+  { key: 'financeiraCritica', label: 'Financeira Crítica', defaultValue: 0.05 },
+  { key: 'esportivaMajoritaria', label: 'Esportiva Majoritária', defaultValue: 0.03 },
+  { key: 'mercadoAtivos', label: 'Mercado de Ativos', defaultValue: 0.02 },
+  { key: 'integridadeSaude', label: 'Integridade/Saúde', defaultValue: 0.015 },
+  { key: 'institucional', label: 'Institucional', defaultValue: 0.01 },
+  { key: 'esportivaMenor', label: 'Esportiva Menor', defaultValue: 0.005 },
+] as const
+
+async function fetchMatrix(): Promise<ImpactMatrixDTO> {
+  const res = await fetch('/api/v1/admin/motor/impact-matrix', { credentials: 'include' })
+  if (!res.ok) throw new Error('Failed')
+  const { data } = await res.json()
+  return data
+}
+
+async function saveMatrix(data: ImpactMatrixDTO): Promise<ImpactMatrixDTO> {
+  const res = await fetch('/api/v1/admin/motor/impact-matrix', {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) throw new Error('Failed')
+  const { data: result } = await res.json()
+  return result
 }
 
 export function ImpactMatrix() {
+  const [formData, setFormData] = useState<ImpactMatrixDTO>({
+    financeiraCritica: 0.05,
+    esportivaMajoritaria: 0.03,
+    mercadoAtivos: 0.02,
+    integridadeSaude: 0.015,
+    institucional: 0.01,
+    esportivaMenor: 0.005,
+  })
+
+  const [isSaved, setIsSaved] = useState(false)
+
+  const { data: matrix, isLoading } = useQuery({
+    queryKey: ['impact-matrix'],
+    queryFn: fetchMatrix,
+    staleTime: 60_000,
+  })
+
+  const saveMutation = useMutation({
+    mutationFn: saveMatrix,
+    onSuccess: () => {
+      setIsSaved(true)
+      setTimeout(() => setIsSaved(false), 2000)
+    },
+  })
+
+  // Sincronizar com dados da API
+  useEffect(() => {
+    if (matrix) {
+      setFormData(matrix)
+    }
+  }, [matrix])
+
+  const handleSliderChange = (key: keyof ImpactMatrixDTO, value: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      [key]: value,
+    }))
+  }
+
+  const handleSave = () => {
+    saveMutation.mutate(formData)
+  }
+
+  if (isLoading) {
+    return (
+      <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4 space-y-3">
+        <Skeleton className="h-5 w-40" />
+        <div className="space-y-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-12 w-full" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
-      <h2 className="text-sm font-semibold text-[#EAECEF] mb-1">
-        Matriz de Impacto — Variação esperada por evento e divisão
-      </h2>
-      <p className="text-xs text-[#929AA5] mb-3">% de variação de preço esperada por evento</p>
-
-      <div className="overflow-x-auto rounded-lg">
-        <table className="w-full min-w-[380px] text-xs">
-          <thead>
-            <tr className="text-[#929AA5] border-b border-[rgba(240,185,11,.08)]">
-              <th className="text-left py-2 px-2 font-medium">Categoria</th>
-              <th className="text-center py-2 px-2 font-medium">Série A</th>
-              <th className="text-center py-2 px-2 font-medium">Série B</th>
-              <th className="text-center py-2 px-2 font-medium hidden sm:table-cell">Série C</th>
-              <th className="text-center py-2 px-2 font-medium hidden sm:table-cell">Série D</th>
-            </tr>
-          </thead>
-          <tbody>
-            {IMPACT_DATA.map((row) => (
-              <tr key={row.category} className="border-b border-[rgba(240,185,11,.06)] last:border-0">
-                <td className="py-2 px-2 text-[#c5b99a]">{row.category}</td>
-                <td className="py-2 px-2 text-center">
-                  <span className={cn('inline-block px-1.5 py-0.5 rounded text-[11px] font-medium', cellStyle(row.a))}>
-                    {row.a > 0 ? '+' : ''}{row.a}%
-                  </span>
-                </td>
-                <td className="py-2 px-2 text-center">
-                  <span className={cn('inline-block px-1.5 py-0.5 rounded text-[11px] font-medium', cellStyle(row.b))}>
-                    {row.b > 0 ? '+' : ''}{row.b}%
-                  </span>
-                </td>
-                <td className="py-2 px-2 text-center hidden sm:table-cell">
-                  <span className={cn('inline-block px-1.5 py-0.5 rounded text-[11px] font-medium', cellStyle(row.c))}>
-                    {row.c > 0 ? '+' : ''}{row.c}%
-                  </span>
-                </td>
-                <td className="py-2 px-2 text-center hidden sm:table-cell">
-                  <span className={cn('inline-block px-1.5 py-0.5 rounded text-[11px] font-medium', cellStyle(row.d))}>
-                    {row.d > 0 ? '+' : ''}{row.d}%
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="mb-1">
+        <h2 className="text-sm font-semibold text-[#EAECEF]">Matriz de Impacto</h2>
       </div>
+      <p className="text-xs text-[#929AA5] mb-4">Impacto spot máximo por categoria (cap ±2.5%)</p>
+
+      <div className="space-y-4">
+        {CATEGORIES.map(({ key, label }) => {
+          const value = formData[key] ?? 0
+          const percentage = (value * 100).toFixed(1)
+
+          return (
+            <div key={key}>
+              <label className="text-xs text-[#929AA5] mb-2 flex items-center justify-between">
+                <span>{label}</span>
+                <span className="font-mono font-bold text-[#F0B90B]">{percentage}%</span>
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="0.10"
+                step="0.001"
+                value={value}
+                onChange={(e) => handleSliderChange(key, parseFloat(e.target.value))}
+                className="w-full accent-[#F0B90B]"
+              />
+            </div>
+          )
+        })}
+      </div>
+
+      <Button
+        onClick={handleSave}
+        disabled={saveMutation.isPending || isSaved}
+        variant="primary"
+        size="md"
+        fullWidth
+        isLoading={saveMutation.isPending}
+        className="mt-5"
+      >
+        {isSaved ? '✓ Salvo!' : '💾 Salvar Matriz'}
+      </Button>
     </div>
   )
 }

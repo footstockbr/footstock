@@ -96,8 +96,8 @@ export async function seedAdminDemoModeration(prisma: PrismaClient): Promise<voi
       })
       console.log(`[seed]   ✓ Post criado: "${postData.content.substring(0, 40)}..."`)
       postsCreated++
-    } catch (error: any) {
-      console.log(`[seed]   ~ Erro ao criar post: ${error.message}`)
+    } catch (error) {
+      console.log(`[seed]   ~ Erro ao criar post: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -112,11 +112,11 @@ export async function seedAdminDemoModeration(prisma: PrismaClient): Promise<voi
       })
       console.log(`[seed]   ✓ Palavra bloqueada: "${word}"`)
       wordsCreated++
-    } catch (error: any) {
-      if (error.code === 'P2002') {
+    } catch (error) {
+      if ((error as { code?: string }).code === 'P2002') {
         console.log(`[seed]   ~ Palavra já existe: "${word}"`)
       } else {
-        console.log(`[seed]   ~ Erro ao criar palavra: ${error.message}`)
+        console.log(`[seed]   ~ Erro ao criar palavra: ${error instanceof Error ? error.message : String(error)}`)
       }
     }
   }

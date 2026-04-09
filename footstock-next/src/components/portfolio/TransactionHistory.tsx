@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { TrendingDown } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { cn } from '@/lib/utils'
+import { formatFS, formatDateTime } from '@/lib/utils/format'
 
 interface Transaction {
   id: string
@@ -37,14 +38,6 @@ const TYPE_LABELS: Record<string, string> = {
   LIMIT:      'Limitada',
   STOP_LOSS:  'Stop Loss',
   TAKE_PROFIT:'Take Profit',
-}
-
-function formatFS(value: number): string {
-  return `FS$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
 export function TransactionHistory() {
@@ -108,7 +101,7 @@ export function TransactionHistory() {
               <span>{tx.quantity} cotas × {formatFS(tx.price)}</span>
               <span>taxa: {formatFS(tx.fee)}</span>
             </div>
-            <div className="text-[10px] text-[#707A8A] mt-1">{formatDate(tx.createdAt)}</div>
+            <div className="text-[10px] text-[#707A8A] mt-1">{formatDateTime(tx.createdAt)}</div>
           </div>
           <div className="text-right">
             <p className={cn('text-sm font-bold font-mono', SIDE_COLORS[tx.side] ?? 'text-[#EAECEF]')}>

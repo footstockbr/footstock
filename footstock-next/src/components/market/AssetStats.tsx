@@ -1,4 +1,5 @@
 import { Info } from 'lucide-react'
+import { formatFS, formatPercent } from '@/lib/utils/format'
 
 interface AssetFinancials {
   marketCap?: number | null
@@ -24,16 +25,6 @@ interface AssetStatsProps {
   fairValuePremium: number | null
   volume24h?: number
   change24h?: number
-}
-
-function formatFS(value: number | null | undefined): string {
-  if (value == null) return 'N/D'
-  return `FS$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
-
-function formatPercent(value: number | null | undefined): string {
-  if (value == null) return 'N/D'
-  return `${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`
 }
 
 function formatPremium(value: number): string {

@@ -230,13 +230,14 @@ model User {
   dataAccessLogs    DataAccessLog[]
   dataExportJobs    DataExportJob[]
   createdLeagues    League[]            @relation("LeagueCreator")
-  adminActions      AdminMarketAction[] @relation("AdminActor")
-  dividends              Dividend[]
-  glossaryInteractions   GlossaryInteraction[]
-  affiliateCode          AffiliateCode?
-  affiliateReferrals     AffiliateTransaction[] @relation("AffiliateReferredUser")
-  pushSubscriptions      PushSubscription[]
-  leagueScoreEvents LeagueScoreEvent[] // RESOLVED: relação para eventos de pontuação de ligas
+  adminActions         AdminMarketAction[] @relation("AdminActor")
+  dividends            Dividend[]
+  glossaryInteractions GlossaryInteraction[]
+  affiliateCode        AffiliateCode?
+  affiliateReferrals   AffiliateTransaction[] @relation("AffiliateReferredUser")
+  pushSubscriptions    PushSubscription[]
+  leagueScoreEvents    LeagueScoreEvent[] // RESOLVED: relação para eventos de pontuação de ligas
+  moderationActions    ModerationAction[] @relation("ModerationActions")
 
   @@map("users")
 }
@@ -484,11 +485,16 @@ model News {
   source      String?
   isPublished Boolean        @default(false) @map("is_published")
   publishedAt DateTime?      @map("published_at")
+  isArchived  Boolean        @default(false) @map("is_archived")
+  archivedAt  DateTime?      @map("archived_at")
+  clicks      Int            @default(0)
+  author      String         @default("admin")
   createdAt   DateTime       @default(now()) @map("created_at")
   updatedAt   DateTime       @updatedAt @map("updated_at")
 
   @@index([publishedAt])
   @@index([isPublished])
+  @@index([isArchived])
   @@map("news")
 }
 
@@ -499,6 +505,44 @@ model NewsSourceWhitelist {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("news_source_whitelist")
+}
+
+model SponsorBanner {
+  id          String   @id @default(cuid())
+  title       String
+  company     String
+  position    String   @default("home-top")
+  isActive    Boolean  @default(true) @map("is_active")
+  clicks      Int      @default(0)
+  impressions Int      @default(0)
+  color       String   @default("#00B1EA")
+  ctaText     String   @default("Saiba mais") @map("cta_text")
+  ctaColor    String   @default("#00B1EA") @map("cta_color")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([isActive])
+  @@map("sponsor_banners")
+}
+
+model SponsoredLeague {
+  id            String   @id @default(cuid())
+  name          String
+  company       String
+  prize         String   @default("FS$0") // prêmio em texto (FS$X.000)
+  participants  Int      @default(0)
+  maxParticipants Int    @default(50) @map("max_participants")
+  minPlan       String   @default("JOGADOR") @map("min_plan") // JOGADOR, CRAQUE, LENDA
+  status        String   @default("AGENDADA") // ATIVA, ENCERRADA, AGENDADA
+  borderColor   String   @default("#f59e0b") @map("border_color") // cor da borda esquerda
+  startDate     DateTime @map("start_date")
+  endDate       DateTime @map("end_date")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([startDate])
+  @@map("sponsored_leagues")
 }
 
 model RssFeed {
@@ -766,8 +810,9 @@ model GlobalForumPost {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  user  User        @relation(fields: [userId], references: [id])
-  likes ForumLike[]
+  user              User                 @relation(fields: [userId], references: [id])
+  likes             ForumLike[]
+  moderationActions ModerationAction[]
 
   @@index([userId])
   @@index([ticker])
@@ -807,6 +852,24 @@ model BlockedWord {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("blocked_words")
+}
+
+// Histórico de ações de moderação — auditoria completa
+model ModerationAction {
+  id        String   @id @default(cuid())
+  postId    String   @map("post_id")
+  moderatorId String  @map("moderator_id")
+  action    String   @db.VarChar(50) // APPROVED, REMOVED, FLAGGED
+  reason    String?  // motivo da ação
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post      GlobalForumPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  moderator User           @relation("ModerationActions", fields: [moderatorId], references: [id])
+
+  @@index([postId])
+  @@index([moderatorId])
+  @@index([createdAt])
+  @@map("moderation_actions")
 }
 
 // Regras de auto-moderação — source of truth: Redis (moderation:rules)
@@ -916,4 +979,29 @@ model PushSubscription {
 
   @@index([userId, active])
   @@map("push_subscriptions")
+}
+
+// ─── Motor: Matriz de Impacto de Notícias (Admin) ──────────────────────────
+
+model ImpactMatrixConfig {
+  id String @id @default(cuid())
+
+  // Impacto spot máximo por categoria de notícia (0-1, representado como percentual)
+  financeiraCritica Decimal @default(0.05) @map("financeira_critica") @db.Decimal(5, 3)
+  // ↑ 5% (0.050)
+  esportivaMajoritaria Decimal @default(0.03) @map("esportiva_majoritaria") @db.Decimal(5, 3)
+  // ↑ 3% (0.030)
+  mercadoAtivos Decimal @default(0.02) @map("mercado_ativos") @db.Decimal(5, 3)
+  // ↑ 2% (0.020)
+  integridadeSaude Decimal @default(0.015) @map("integridade_saude") @db.Decimal(5, 3)
+  // ↑ 1.5% (0.015)
+  institucional Decimal @default(0.01) @map("institucional") @db.Decimal(5, 3)
+  // ↑ 1% (0.010)
+  esportivaMenor Decimal @default(0.005) @map("esportiva_menor") @db.Decimal(5, 3)
+  // ↑ 0.5% (0.005)
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("impact_matrix_configs")
 }

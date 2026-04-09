@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
         birthDate: '',
         favoriteClub: '',
         favoriteClubDisplayName: null,
-        userType: 'INVESTIDOR',
+        userType: 'NORMAL',
         investorProfile: 'INICIANTE',
         planType: 'JOGADOR',
         fsBalance: 0,
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
         birthDate: '',
         favoriteClub: '',
         favoriteClubDisplayName: null,
-        userType: 'INVESTIDOR',
+        userType: 'NORMAL',
         investorProfile: 'INICIANTE',
         planType: 'JOGADOR',
         fsBalance: 0,
@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
     const { word } = body
 
     if (!word || typeof word !== 'string' || word.trim().length === 0) {
-      return errors.badRequest('Palavra inválida')
+      return errors.validation('Palavra inválida')
     }
 
     const normalizedWord = word.toLowerCase().trim()

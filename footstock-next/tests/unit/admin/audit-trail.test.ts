@@ -38,18 +38,18 @@ describe('Admin Audit Trail Middleware', () => {
       })
     })
 
-    it('deve registrar ação com targetTicker quando fornecido', async () => {
+    it('deve registrar ação com ticker quando fornecido', async () => {
       const { prisma } = await import('@/lib/prisma')
 
       await logAdminAction({
         adminId: 'admin-uuid',
         action: 'ARCHIVE_NEWS',
-        targetTicker: 'FLAM4',
+        ticker: 'FLAM4',
       })
 
       expect(prisma.adminMarketAction.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          targetTicker: 'FLAM4',
+          ticker: 'FLAM4',
         }),
       })
     })
@@ -65,7 +65,7 @@ describe('Admin Audit Trail Middleware', () => {
       })).resolves.not.toThrow()
     })
 
-    it('deve usar targetTicker: null quando não fornecido', async () => {
+    it('deve usar ticker: null quando não fornecido', async () => {
       const { prisma } = await import('@/lib/prisma')
 
       await logAdminAction({
@@ -75,7 +75,7 @@ describe('Admin Audit Trail Middleware', () => {
 
       expect(prisma.adminMarketAction.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          targetTicker: null,
+          ticker: null,
         }),
       })
     })

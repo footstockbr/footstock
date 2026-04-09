@@ -4,12 +4,11 @@ import { useQuery } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
 import { AdminBreadcrumb } from '@/components/admin/AdminBreadcrumb'
 import { KPICards } from '@/components/admin/KPICards'
-import { NSMProgressBar } from '@/components/admin/NSMProgressBar'
 import { RevenueChart } from '@/components/admin/RevenueChart'
 import { UserStatsCard } from '@/components/admin/UserStatsCard'
 import { FinanceiroCard } from '@/components/admin/FinanceiroCard'
 import { EngagementCard } from '@/components/admin/EngagementCard'
-import type { AdminDashboardDTO, RevenueDayPoint, EngagementMetricsDTO } from '@/lib/types/admin'
+import type { AdminDashboardDTO, RevenueDayPoint, EngagementMetricsDTO, FinancialMetricsDTO } from '@/lib/types/admin'
 
 async function fetchDashboard(): Promise<AdminDashboardDTO> {
   const res = await fetch('/api/v1/admin/dashboard', { credentials: 'include' })
@@ -25,7 +24,7 @@ async function fetchRevenue(): Promise<RevenueDayPoint[]> {
   return data
 }
 
-async function fetchFinancial() {
+async function fetchFinancial(): Promise<FinancialMetricsDTO> {
   const res = await fetch('/api/v1/admin/financial', { credentials: 'include' })
   if (!res.ok) throw new Error('Failed')
   const { data } = await res.json()
@@ -101,17 +100,12 @@ export default function AdminDashboardPage() {
       {/* KPIs */}
       <KPICards data={dashboard ?? null} isLoading={loadingDash} />
 
-      {/* NSM + Chart */}
+      {/* Chart + Top Assets */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
         <div className="lg:col-span-3">
           <RevenueChart data={revenue} isLoading={loadingRevenue} />
         </div>
-        <div className="lg:col-span-2 space-y-4">
-          <NSMProgressBar
-            ordersToday={dashboard?.ordersVsTarget.today ?? 0}
-            target={dashboard?.ordersVsTarget.target ?? 500}
-          />
-
+        <div className="lg:col-span-2">
           {/* Top Assets */}
           {dashboard?.topAssets && dashboard.topAssets.length > 0 && (
             <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
@@ -152,7 +146,7 @@ export default function AdminDashboardPage() {
 
         {/* Financeiro Card */}
         <FinanceiroCard
-          data={financial}
+          data={financial ?? null}
           isLoading={loadingFinancial}
         />
 

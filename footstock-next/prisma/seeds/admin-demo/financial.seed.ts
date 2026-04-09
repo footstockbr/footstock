@@ -35,7 +35,7 @@ export async function seedAdminDemoFinancial(prisma: PrismaClient): Promise<void
   ]
 
   for (const sub of subscriptionData) {
-    const existing = await prisma.subscription.findUnique({ where: { userId: sub.userId } })
+    const existing = await prisma.subscription.findFirst({ where: { userId: sub.userId } })
     if (!existing) {
       const subscription = await prisma.subscription.create({
         data: {
@@ -43,6 +43,7 @@ export async function seedAdminDemoFinancial(prisma: PrismaClient): Promise<void
           planType: sub.planType,
           gateway: 'MERCADO_PAGO',
           period: 'MONTHLY',
+          amount: sub.amount,
           status: 'ACTIVE',
           startsAt: new Date(now.getFullYear(), now.getMonth(), 1),
           expiresAt: new Date(now.getFullYear(), now.getMonth() + 1, 1),
@@ -52,12 +53,12 @@ export async function seedAdminDemoFinancial(prisma: PrismaClient): Promise<void
       // Criar pagamento aprovado para esta assinatura
       await prisma.payment.create({
         data: {
+          userId: sub.userId,
           subscriptionId: subscription.id,
           gateway: 'MERCADO_PAGO',
           gatewayTransactionId: `DEMO-${sub.userId.slice(0, 8)}-${Date.now()}`,
           amount: sub.amount,
-          currency: 'BRL',
-          status: 'APPROVED',
+          status: 'PAID',
           processedAt: now,
         },
       })
@@ -68,12 +69,12 @@ export async function seedAdminDemoFinancial(prisma: PrismaClient): Promise<void
         date.setDate(date.getDate() - i)
         await prisma.payment.create({
           data: {
+            userId: sub.userId,
             subscriptionId: subscription.id,
             gateway: 'MERCADO_PAGO',
             gatewayTransactionId: `DEMO-HIST-${sub.userId.slice(0, 8)}-${i}-${Date.now()}`,
             amount: sub.amount,
-            currency: 'BRL',
-            status: 'APPROVED',
+            status: 'PAID',
             processedAt: date,
             createdAt: date,
           },

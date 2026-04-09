@@ -10,12 +10,12 @@
 
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
-import { seedAdminDemoUsers } from './users.seed.ts'
-import { seedAdminDemoAssets } from './assets.seed.ts'
-import { seedAdminDemoNews } from './news.seed.ts'
-import { seedAdminDemoFinancial } from './financial.seed.ts'
-import { seedAdminDemoEngagement } from './engagement.seed.ts'
-import { seedAdminDemoModeration } from './moderation.seed.ts'
+import { seedAdminDemoUsers } from './users.seed'
+import { seedAdminDemoAssets } from './assets.seed'
+// news.seed is a standalone script — imported dynamically if needed
+import { seedAdminDemoFinancial } from './financial.seed'
+import { seedAdminDemoEngagement } from './engagement.seed'
+import { seedAdminDemoModeration } from './moderation.seed'
 
 const connectionString = process.env.DATABASE_URL!
 const adapter = new PrismaPg({ connectionString })
@@ -46,8 +46,7 @@ async function main() {
   console.log()
 
   if (!skipInitial) {
-    await seedAdminDemoNews(prisma)
-    console.log()
+    // news.seed.ts is standalone — run separately: npx ts-node prisma/seeds/admin-demo/news.seed.ts
     await seedAdminDemoFinancial(prisma)
     console.log()
   }

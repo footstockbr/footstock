@@ -26,7 +26,7 @@ const mockPrisma = prisma as jest.Mocked<typeof prisma>
 
 // ─── Helper builders ──────────────────────────────────────────────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function makeTrading(overrides: any = {}): TradingDataForScoring {
+function makeTrading(overrides: Partial<TradingDataForScoring> & Record<string, unknown> = {}): TradingDataForScoring {
   return {
     pnLPercent: 0,
     totalOrders: 0,
@@ -34,11 +34,8 @@ function makeTrading(overrides: any = {}): TradingDataForScoring {
     positions: [],
     dailyReturns: [],
     glossaryInteractions: 0,
-    postsWithLikes: 0,
-    planUpgraded: false,
-    hasBothDivisions: false,
     ...overrides,
-  }
+  } as TradingDataForScoring
 }
 
 function mockLeague(division = 'ABERTA', startsAt = new Date('2024-01-01')) {

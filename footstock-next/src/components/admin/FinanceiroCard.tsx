@@ -3,35 +3,12 @@
 import { CreditCard } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatBRL } from '@/lib/utils/format'
-
-interface FinanceiroData {
-  mrr: number
-  planDistribution: Record<string, number>
-  revenueByGateway: { gateway: string; revenue: number }[]
-  volume24h?: number
-}
+import type { FinancialMetricsDTO } from '@/lib/types/admin'
+import { getGatewayMeta, PLAN_PRICE_VALUES } from '@/lib/constants/admin-ui'
 
 interface FinanceiroCardProps {
-  data: FinanceiroData | null
+  data: FinancialMetricsDTO | null
   isLoading: boolean
-}
-
-const GATEWAY_META: Record<string, { label: string; color: string }> = {
-  stripe: { label: 'Stripe', color: '#635BFF' },
-  mercadopago: { label: 'Mercado Pago', color: '#00B1EA' },
-  pix: { label: 'PIX', color: '#00D4FF' },
-  paypal: { label: 'PayPal', color: '#003087' },
-  pagseguro: { label: 'PagSeguro', color: '#f97316' },
-  manual: { label: 'Manual', color: '#929AA5' },
-}
-
-// PagSeguro token conforme solicitado
-const PAGSEGURO_TOKEN = '8b9a2745-f9e7-4083-88c5-4c21a61b964d0303632844e99412b1f4d3cce6955de79148-b526-4b4b-91fc-2d6f96fe2110'
-
-const PLAN_META: Record<string, { label: string; color: string; icon: string }> = {
-  LENDA: { label: 'Lenda', color: '#F0B90B', icon: '👑' },
-  CRAQUE: { label: 'Craque', color: '#6c63ff', icon: '⭐' },
-  JOGADOR: { label: 'Jogador', color: '#929AA5', icon: '⚡' },
 }
 
 export function FinanceiroCard({ data, isLoading }: FinanceiroCardProps) {
@@ -58,9 +35,10 @@ export function FinanceiroCard({ data, isLoading }: FinanceiroCardProps) {
     )
   }
 
-  const totalRevenue = data?.revenueByGateway.reduce((sum, g) => sum + g.revenue, 0) ?? 0
+  const totalRevenue = data?.revenueByGateway?.reduce((sum, g) => sum + g.revenue, 0) ?? 0
   const planCounts = data?.planDistribution ?? {}
   const totalPaidSubscribers = (planCounts.CRAQUE ?? 0) + (planCounts.LENDA ?? 0)
+  const hasPaymentMethods = data?.revenueByGateway && data.revenueByGateway.length > 0
 
   return (
     <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4 space-y-5">
@@ -94,10 +72,9 @@ export function FinanceiroCard({ data, isLoading }: FinanceiroCardProps) {
             { key: 'LENDA', label: '👑 Lenda', color: '#F0B90B' },
             { key: 'CRAQUE', label: '⭐ Craque', color: '#6c63ff' },
           ].map(({ key, label, color }) => {
-            const count = (data.planDistribution as Record<string, number>)[key] ?? 0
-            const price = getPlanPrice(key)
+            const count = planCounts[key] ?? 0
+            const price = PLAN_PRICE_VALUES[key] ?? 0
             const mrrValue = count * price
-            if (count === 0 || mrrValue === 0) return null
             return (
               <div
                 key={key}
@@ -123,14 +100,14 @@ export function FinanceiroCard({ data, isLoading }: FinanceiroCardProps) {
       )}
 
       {/* Métodos de Pagamento */}
-      {data?.revenueByGateway && data.revenueByGateway.length > 0 && (
-        <div>
-          <p className="text-[10px] font-bold text-[#929AA5] uppercase tracking-wider mb-3">
-            Métodos de Pagamento
-          </p>
+      <div>
+        <p className="text-[10px] font-bold text-[#929AA5] uppercase tracking-wider mb-3">
+          Métodos de Pagamento
+        </p>
+        {hasPaymentMethods ? (
           <div className="space-y-3">
-            {data.revenueByGateway.map((gw) => {
-              const meta = GATEWAY_META[gw.gateway] ?? { label: gw.gateway, color: '#929AA5' }
+            {data!.revenueByGateway!.map((gw) => {
+              const meta = getGatewayMeta(gw.gateway)
               const pct = totalRevenue > 0 ? Math.round((gw.revenue / totalRevenue) * 100) : 0
               return (
                 <div key={gw.gateway}>
@@ -164,8 +141,10 @@ export function FinanceiroCard({ data, isLoading }: FinanceiroCardProps) {
               )
             })}
           </div>
-        </div>
-      )}
+        ) : (
+          <p className="text-[10px] text-[#929AA5] italic">Sem pagamentos neste período</p>
+        )}
+      </div>
     </div>
   )
 }
@@ -178,13 +157,4 @@ function formatVolume24h(volume: number): string {
     return (volume / 1_000).toFixed(1) + 'k'
   }
   return volume.toString()
-}
-
-function getPlanPrice(plan: string): number {
-  const prices: Record<string, number> = {
-    JOGADOR: 0,
-    CRAQUE: 19.9,
-    LENDA: 39.9,
-  }
-  return prices[plan] ?? 0
 }

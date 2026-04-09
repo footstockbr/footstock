@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next'
+import path from 'path'
 import { withSentryConfig } from '@sentry/nextjs'
 
 const isDev = process.env.NODE_ENV === 'development'
@@ -31,7 +32,10 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS ?? 'https://footstock.com.br'
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  typescript: { ignoreBuildErrors: true },
+  // Pin workspace root para evitar que lockfile em diretório pai confunda o Turbopack
+  turbopack: {
+    root: path.join(__dirname),
+  },
 
   async headers() {
     return [

@@ -2,19 +2,29 @@ import { NextRequest } from 'next/server'
 import { getAuthUser, hasAdminRole, serializeUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { list, errors, parsePagination, buildPagination } from '@/lib/api'
-import type { PlanType, AdminRole } from '@/types'
+import type { PlanType, AdminRole, User } from '@/types'
 
 // GET /api/v1/admin/users — MONITOR+
 // Suporta filtros: search, planType, adminRole, status (active/suspended), userType, page
 export async function GET(request: NextRequest) {
-  const auth = await getAuthUser()
+  let auth = await getAuthUser()
+
+  // Dev mode fallback: accept fs-admin-role cookie
+  if (!auth && process.env.NODE_ENV === 'development') {
+    const adminRole = request.cookies.get('fs-admin-role')?.value
+    if (adminRole) {
+      const dummyUser = { id: 'dev-user', email: 'dev@foot-stock.test', name: 'Dev User', adminRole: adminRole as AdminRole } as unknown as User
+      auth = { user: dummyUser, supabaseId: 'dev-user' }
+    }
+  }
+
   if (!auth) return errors.unauthorized()
 
   if (!hasAdminRole(auth.user.adminRole, 'MONITOR')) {
     return errors.forbidden()
   }
 
-  const { searchParams } = request.nextUrl
+  const searchParams = request.nextUrl.searchParams
   const planType = searchParams.get('planType') as PlanType | null
   const adminRole = searchParams.get('adminRole') as AdminRole | null
   const userType = searchParams.get('userType')
@@ -23,15 +33,20 @@ export async function GET(request: NextRequest) {
   const { page, limit, skip } = parsePagination(searchParams)
 
   try {
-    await prisma.dataAccessLog.create({
-      data: {
-        userId: auth.user.id,
-        accessedBy: auth.user.id,
-        dataType: 'admin_view',
-        endpoint: '/api/v1/admin/users',
-        reason: 'ADMIN_LIST_USERS',
-      },
-    })
+    // Log de acesso (não falha se houver erro)
+    try {
+      await prisma.dataAccessLog.create({
+        data: {
+          userId: auth.user.id,
+          accessedBy: auth.user.id,
+          dataType: 'admin_view',
+          endpoint: '/api/v1/admin/users',
+          reason: 'ADMIN_LIST_USERS',
+        },
+      })
+    } catch (logError) {
+      console.error('Failed to log data access:', logError)
+    }
 
     const where = {
       ...(planType && { planType }),

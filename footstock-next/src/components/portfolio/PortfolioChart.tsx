@@ -10,6 +10,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts'
+import { formatFS } from '@/lib/utils/format'
 
 type Period = '1H' | '12H' | '24H' | '7D' | '30D' | '1Y' | 'ALL'
 
@@ -28,10 +29,6 @@ const REFETCH_INTERVAL: Record<Period, number> = {
   '30D': 2 * 60_000,
   '1Y':  10 * 60_000,
   'ALL': 10 * 60_000,
-}
-
-function formatFS(value: number): string {
-  return `FS$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function formatAxisDate(date: string, period: Period): string {
@@ -130,8 +127,10 @@ export function PortfolioChart() {
                   fontSize: 12,
                 }}
                 labelStyle={{ color: '#F0B90B' }}
-                formatter={(value: number) => [formatFS(value), 'Patrimônio']}
-                labelFormatter={(label: string) => new Date(label).toLocaleString('pt-BR')}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                formatter={(value: any) => [formatFS(value as number), 'Patrimônio'] as any}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                labelFormatter={(label: any) => new Date(label as string).toLocaleString('pt-BR')}
               />
               <Area
                 type="monotone"

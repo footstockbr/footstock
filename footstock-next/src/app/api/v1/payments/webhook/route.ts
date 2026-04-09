@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getGatewayByHeader, detectGatewayType } from '@/lib/gateways/GatewayFactory'
+import { validateWebhookByGateway } from '@/lib/gateways/webhook-validator'
 import { planService } from '@/lib/services/PlanService'
 import { webhookAuditService } from '@/lib/services/WebhookAuditService'
 import type { SubscriptionGateway } from '@prisma/client'
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest) {
   // 3. Validar assinatura HMAC
   let hmacValid: boolean
   try {
-    hmacValid = gateway.validateWebhook(rawBody, request.headers)
+    hmacValid = await validateWebhookByGateway(request.headers, rawBody, gatewayType)
   } catch {
     hmacValid = false
   }

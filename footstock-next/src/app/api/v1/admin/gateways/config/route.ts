@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { withAdmin } from '@/app/api/middleware'
+import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { redisPublisher } from '@/lib/redis'
 import { env } from '@/lib/env'
-import type { AuthContext } from '@/app/api/middleware'
+import type { User, AdminRole } from '@/types'
 
 const REDIS_KEY = 'admin:gateway:config:v1'
 
@@ -120,7 +120,50 @@ async function getStoredConfig(): Promise<GatewayConfig[] | null> {
   return parsed.data.gateways
 }
 
-async function getHandler(_req: NextRequest, _ctx: AuthContext): Promise<NextResponse> {
+async function getHandler(req: NextRequest) {
+  let auth = await getAuthUser()
+
+  // Dev mode fallback: accept fs-admin-role cookie
+  if (!auth && process.env.NODE_ENV === 'development') {
+    const adminRole = req.cookies.get('fs-admin-role')?.value
+    if (adminRole) {
+      const dummyUser: User = {
+        id: 'dev-user',
+        email: 'dev@foot-stock.test',
+        name: 'Dev User',
+        phone: null,
+        birthDate: '',
+        favoriteClub: '',
+        favoriteClubDisplayName: null,
+        userType: 'NORMAL',
+        investorProfile: 'INICIANTE',
+        planType: 'JOGADOR',
+        fsBalance: 0,
+        marginBlocked: 0,
+        tourCompleted: false,
+        ageVerificationPending: false,
+        adminRole: adminRole as AdminRole,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+      auth = { user: dummyUser, supabaseId: 'dev-user' }
+    }
+  }
+
+  if (!auth) {
+    return NextResponse.json(
+      { success: false, error: { code: 'AUTH_010', message: 'Sessão inválida' } },
+      { status: 401 }
+    )
+  }
+
+  if (!hasAdminRole(auth.user.adminRole, 'ADMINISTRADOR')) {
+    return NextResponse.json(
+      { success: false, error: { code: 'AUTH_009', message: 'Acesso negado' } },
+      { status: 403 }
+    )
+  }
+
   try {
     const defaults = buildDefaultConfig()
     const stored = await getStoredConfig()
@@ -136,7 +179,50 @@ async function getHandler(_req: NextRequest, _ctx: AuthContext): Promise<NextRes
   }
 }
 
-async function patchHandler(req: NextRequest, { user }: AuthContext): Promise<NextResponse> {
+async function patchHandler(req: NextRequest) {
+  let auth = await getAuthUser()
+
+  // Dev mode fallback: accept fs-admin-role cookie
+  if (!auth && process.env.NODE_ENV === 'development') {
+    const adminRole = req.cookies.get('fs-admin-role')?.value
+    if (adminRole) {
+      const dummyUser: User = {
+        id: 'dev-user',
+        email: 'dev@foot-stock.test',
+        name: 'Dev User',
+        phone: null,
+        birthDate: '',
+        favoriteClub: '',
+        favoriteClubDisplayName: null,
+        userType: 'NORMAL',
+        investorProfile: 'INICIANTE',
+        planType: 'JOGADOR',
+        fsBalance: 0,
+        marginBlocked: 0,
+        tourCompleted: false,
+        ageVerificationPending: false,
+        adminRole: adminRole as AdminRole,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+      auth = { user: dummyUser, supabaseId: 'dev-user' }
+    }
+  }
+
+  if (!auth) {
+    return NextResponse.json(
+      { success: false, error: { code: 'AUTH_010', message: 'Sessão inválida' } },
+      { status: 401 }
+    )
+  }
+
+  if (!hasAdminRole(auth.user.adminRole, 'ADMINISTRADOR')) {
+    return NextResponse.json(
+      { success: false, error: { code: 'AUTH_009', message: 'Acesso negado' } },
+      { status: 403 }
+    )
+  }
+
   let body: unknown
   try {
     body = await req.json()
@@ -188,7 +274,7 @@ async function patchHandler(req: NextRequest, { user }: AuthContext): Promise<Ne
       success: true,
       data: {
         gateways: sanitizeForResponse(mergedGateways),
-        updatedBy: user.id,
+        updatedBy: auth.user.id,
         updatedAt: new Date().toISOString(),
       },
     })
@@ -201,5 +287,5 @@ async function patchHandler(req: NextRequest, { user }: AuthContext): Promise<Ne
   }
 }
 
-export const GET = withAdmin('financial:read')(getHandler)
-export const PATCH = withAdmin('financial:write')(patchHandler)
+export const GET = getHandler
+export const PATCH = patchHandler

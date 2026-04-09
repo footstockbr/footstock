@@ -47,6 +47,7 @@ export interface PaginatedResult<T> {
     limit: number
     total: number
     totalPages: number
+    hasNext: boolean
   }
 }
 
@@ -339,7 +340,7 @@ export class OrderService {
 
     return {
       data,
-      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit), hasNext: page * limit < total },
     }
   }
 

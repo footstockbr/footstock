@@ -24,6 +24,7 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'https://footstock.com.br'),
   title: "Foot Stock — O Mercado do Futebol Brasileiro",
   description:
     "Simule investimentos em clubes de futebol brasileiros com moeda virtual educacional. Compre e venda ações de 40 clubes da Série A e Série B.",

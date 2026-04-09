@@ -6,6 +6,7 @@ import { Search, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight, ChevronDow
 import { Badge } from '@/components/ui/badge'
 import { UserActions } from './UserActions'
 import type { AdminUserItem } from '@/lib/types/admin'
+import { PLAN_LABELS, PLAN_BADGE_VARIANTS } from '@/lib/constants/admin-ui'
 
 interface UserFilters {
   search: string
@@ -16,18 +17,6 @@ interface UserFilters {
 }
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
-
-const PLAN_COLORS: Record<string, string> = {
-  JOGADOR: 'default',
-  CRAQUE: 'warning',
-  LENDA: 'premium',
-}
-
-const PLAN_LABELS: Record<string, string> = {
-  JOGADOR: 'Jogador',
-  CRAQUE: 'Craque',
-  LENDA: 'Lenda',
-}
 
 export function UserList({ currentAdminRole }: { currentAdminRole?: string | null }) {
   const [filters, setFilters] = useState<UserFilters>({ search: '', planType: '', adminRole: '', status: '', userType: '' })
@@ -104,8 +93,8 @@ export function UserList({ currentAdminRole }: { currentAdminRole?: string | nul
             <option value="TIME_PARCEIRO">Time Parceiro</option>
             <option value="INFLUENCIADOR">Influenciador</option>
           </select>
-          <select value={filters.adminRole} onChange={(e) => handleFilterChange('adminRole', e.target.value)} aria-label="Filtrar por role admin" className={selectClass}>
-            <option value="">Todos roles</option>
+          <select value={filters.adminRole} onChange={(e) => handleFilterChange('adminRole', e.target.value)} aria-label="Filtrar por papel administrativo" className={selectClass}>
+            <option value="">Todos os papéis</option>
             <option value="SUPER_ADMIN">SuperAdmin</option>
             <option value="ADMINISTRADOR">Administrador</option>
             <option value="MONITOR">Monitor</option>
@@ -173,7 +162,7 @@ export function UserList({ currentAdminRole }: { currentAdminRole?: string | nul
                         </div>
                       </td>
                       <td className="py-3 px-4">
-                        <Badge variant={PLAN_COLORS[user.planType] as 'default' | 'warning'} size="xs">
+                        <Badge variant={PLAN_BADGE_VARIANTS[user.planType]} size="xs">
                           {PLAN_LABELS[user.planType] ?? user.planType}
                         </Badge>
                       </td>
@@ -203,28 +192,44 @@ export function UserList({ currentAdminRole }: { currentAdminRole?: string | nul
 
             {/* Mobile: cards */}
             <div className="md:hidden flex flex-col gap-2 p-3">
-              {users.map((user) => (
-                <div key={user.id} className="rounded-lg border border-[rgba(240,185,11,.08)] p-3">
-                  <div className="flex items-start justify-between gap-2">
+              {users.map((user) => {
+                const initials = user.name
+                  .split(' ')
+                  .slice(0, 2)
+                  .map((n) => n[0])
+                  .join('')
+                  .toUpperCase()
+
+                return (
+                  <div key={user.id} className="flex items-center gap-3 rounded-lg border border-[rgba(240,185,11,.1)] p-4 bg-[#1E2329] hover:bg-[#232930] transition-colors">
+                    {/* Avatar */}
+                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#F0B90B] to-[#d4971e] flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-bold text-[#0B0E11]">{initials}</span>
+                    </div>
+
+                    {/* Info */}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-[#EAECEF] truncate">{user.name}</p>
+                      <div className="flex items-center gap-1">
+                        <p className="text-sm font-medium text-[#EAECEF] truncate">{user.name}</p>
+                        {user.status === 'active' && (
+                          <div className="h-2 w-2 rounded-full bg-[#4ade80] flex-shrink-0" />
+                        )}
+                      </div>
                       <p className="text-xs text-[#929AA5] truncate">{user.email}</p>
                     </div>
-                    <UserActions user={user} currentAdminRole={currentAdminRole} onActionComplete={() => mutate()} />
+
+                    {/* Meta */}
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      <Badge variant={PLAN_BADGE_VARIANTS[user.planType]} size="xs">
+                        {PLAN_LABELS[user.planType] ?? user.planType}
+                      </Badge>
+                      <span className="text-[9px] font-mono font-bold text-[#2EBD85]">
+                        +FS${(user.fsBalance ?? 0).toLocaleString('pt-BR')}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <Badge variant={PLAN_COLORS[user.planType] as 'default' | 'warning'} size="xs">
-                      {PLAN_LABELS[user.planType] ?? user.planType}
-                    </Badge>
-                    <span className={`text-xs font-medium ${user.status === 'active' ? 'text-[#4ade80]' : 'text-[#F6465D]'}`}>
-                      {user.status === 'active' ? 'Ativo' : 'Suspenso'}
-                    </span>
-                    {user.adminRole && (
-                      <span className="text-xs text-[#F0B90B]">{user.adminRole}</span>
-                    )}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             {/* Paginação */}

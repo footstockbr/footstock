@@ -6,41 +6,14 @@ import { getAuthUser } from '@/lib/auth'
 import { subscriptionService } from '@/lib/services/SubscriptionService'
 import { ROUTES } from '@/lib/constants/routes'
 import { CancelSubscriptionButton } from '@/components/payments/CancelSubscriptionButton'
+import { PLAN_LABELS, SUBSCRIPTION_STATUS, getGatewayMeta } from '@/lib/constants/admin-ui'
+import { formatDateLong, formatBRLFromCents } from '@/lib/utils/format'
 
 export const metadata: Metadata = {
   title: 'Minha Assinatura — Foot Stock',
 }
 
 const PLAN_ICONS = { JOGADOR: Star, CRAQUE: Zap, LENDA: Crown }
-const PLAN_NAMES = { JOGADOR: 'Jogador', CRAQUE: 'Craque', LENDA: 'Lenda' }
-const GATEWAY_LABELS: Record<string, string> = {
-  MERCADO_PAGO: 'Mercado Pago',
-  PAGSEGURO: 'PagSeguro',
-  PAYPAL: 'PayPal',
-}
-const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  ACTIVE: { label: 'Ativo', color: 'text-[#2EBD85]' },
-  TRIAL: { label: 'Trial', color: 'text-[#F0B90B]' },
-  CANCELLATION_LOCK: { label: 'Cancelamento em andamento', color: 'text-[#F0B90B]' },
-  PAST_DUE: { label: 'Pagamento pendente', color: 'text-[#F6465D]' },
-  CANCELLED: { label: 'Cancelado', color: 'text-[#929AA5]' },
-  EXPIRED: { label: 'Expirado', color: 'text-[#929AA5]' },
-}
-
-function formatDate(date: Date | string) {
-  return new Date(date).toLocaleDateString('pt-BR', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  })
-}
-
-function formatCurrency(centavos: number) {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(centavos / 100)
-}
 
 export default async function AssinaturaPage() {
   const auth = await getAuthUser()
@@ -77,8 +50,8 @@ export default async function AssinaturaPage() {
   }
 
   const Icon = PLAN_ICONS[subscription.planType] ?? Star
-  const planName = PLAN_NAMES[subscription.planType] ?? subscription.planType
-  const statusInfo = STATUS_LABELS[subscription.status] ?? { label: subscription.status, color: 'text-[#929AA5]' }
+  const planName = PLAN_LABELS[subscription.planType] ?? subscription.planType
+  const statusInfo = SUBSCRIPTION_STATUS[subscription.status] ?? { label: subscription.status, color: 'text-[#929AA5]' }
   const canCancel = subscription.status === 'ACTIVE' || subscription.status === 'TRIAL'
 
   return (
@@ -102,7 +75,7 @@ export default async function AssinaturaPage() {
           </div>
           <div className="text-right">
             <p className="text-lg font-bold font-mono text-[#EAECEF]">
-              {formatCurrency(subscription.amount)}
+              {formatBRLFromCents(subscription.amount)}
             </p>
             <p className="text-xs text-[#929AA5]">
               /{subscription.period === 'MONTHLY' ? 'mês' : 'ano'}
@@ -113,16 +86,16 @@ export default async function AssinaturaPage() {
         <div className="border-t border-[rgba(240,185,11,.1)] pt-3 flex flex-col gap-2">
           <div className="flex justify-between text-sm">
             <span className="text-[#929AA5]">Início</span>
-            <span className="text-[#EAECEF]">{formatDate(subscription.startsAt)}</span>
+            <span className="text-[#EAECEF]">{formatDateLong(subscription.startsAt)}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-[#929AA5]">Próxima cobrança</span>
-            <span className="text-[#EAECEF]">{formatDate(subscription.expiresAt)}</span>
+            <span className="text-[#EAECEF]">{formatDateLong(subscription.expiresAt)}</span>
           </div>
           {subscription.gateway && (
             <div className="flex justify-between text-sm">
               <span className="text-[#929AA5]">Método</span>
-              <span className="text-[#EAECEF]">{GATEWAY_LABELS[subscription.gateway] ?? subscription.gateway}</span>
+              <span className="text-[#EAECEF]">{getGatewayMeta(subscription.gateway).label}</span>
             </div>
           )}
           {subscription.daysUntilExpiry <= 7 && subscription.daysUntilExpiry > 0 && (
@@ -141,7 +114,7 @@ export default async function AssinaturaPage() {
           <div>
             <p className="text-sm font-medium text-[#2EBD85]">Bônus em processamento</p>
             <p className="text-xs text-[#929AA5] mt-0.5">
-              {formatCurrency(subscription.bonusCredit.amount)} em FS$ serão creditados após o período de arrependimento.
+              {formatBRLFromCents(subscription.bonusCredit.amount)} em FS$ serão creditados após o período de arrependimento.
             </p>
           </div>
         </div>

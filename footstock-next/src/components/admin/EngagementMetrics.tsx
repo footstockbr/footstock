@@ -13,6 +13,7 @@ import { Users, Activity, Zap, Clock, TrendingUp, ArrowUpRight, ArrowDownRight }
 import { StatCard } from '@/components/ui/stat-card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { EngagementMetricsDTO, EngagementDayPoint } from '@/lib/types/admin'
+import { formatFSValue } from '@/lib/utils/format'
 
 interface EngagementMetricsProps {
   data: EngagementMetricsDTO | null
@@ -25,9 +26,7 @@ function formatDate(iso: string) {
   return `${d}/${m}`
 }
 
-function formatFS(n: number) {
-  return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
-}
+const formatFS = formatFSValue
 
 const ABSENCE_PERIODS = [
   { key: 'd1'     , label: '1 dia',   color: '#f97316' },
