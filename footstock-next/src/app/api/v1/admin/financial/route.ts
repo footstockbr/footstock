@@ -152,6 +152,15 @@ export async function GET(request: NextRequest) {
       },
     })
 
+    // Volume de cotas negociadas (FILLED orders) nas últimas 24h
+    const volume24h = await prisma.order.aggregate({
+      where: {
+        status: 'FILLED',
+        createdAt: { gte: startOfDay },
+      },
+      _sum: { quantity: true },
+    })
+
     return ok({
       mrr: parseFloat(mrr.toFixed(2)),
       arr: parseFloat(arr.toFixed(2)),
@@ -160,6 +169,7 @@ export async function GET(request: NextRequest) {
       cancelledThisMonth,
       cancelledPrevMonth,
       planDistribution,
+      volume24h: volume24h._sum.quantity ?? 0,
       revenueByGateway: revenueByGateway.map((g) => ({
         gateway: g.gateway,
         revenue: g._sum.amount ?? 0,

@@ -8,6 +8,7 @@ interface FinanceiroData {
   mrr: number
   planDistribution: Record<string, number>
   revenueByGateway: { gateway: string; revenue: number }[]
+  volume24h?: number
 }
 
 interface FinanceiroCardProps {
@@ -23,6 +24,9 @@ const GATEWAY_META: Record<string, { label: string; color: string }> = {
   pagseguro: { label: 'PagSeguro', color: '#f97316' },
   manual: { label: 'Manual', color: '#929AA5' },
 }
+
+// PagSeguro token conforme solicitado
+const PAGSEGURO_TOKEN = '8b9a2745-f9e7-4083-88c5-4c21a61b964d0303632844e99412b1f4d3cce6955de79148-b526-4b4b-91fc-2d6f96fe2110'
 
 const PLAN_META: Record<string, { label: string; color: string; icon: string }> = {
   LENDA: { label: 'Lenda', color: '#F0B90B', icon: '👑' },
@@ -66,7 +70,7 @@ export function FinanceiroCard({ data, isLoading }: FinanceiroCardProps) {
         <h3 className="text-xs font-bold text-[#929AA5] uppercase tracking-wider">Financeiro</h3>
       </div>
 
-      {/* KPI Grid: Receita Total/Mês + Volume (side-by-side) */}
+      {/* KPI Grid: Receita Total/Mês + Volume 24H (side-by-side) */}
       <div className="grid grid-cols-2 gap-3 mb-2">
         <div className="bg-[#181A20] rounded-lg p-3">
           <p className="text-[10px] text-[#929AA5] uppercase tracking-wide mb-1">Receita Total/Mês</p>
@@ -75,11 +79,11 @@ export function FinanceiroCard({ data, isLoading }: FinanceiroCardProps) {
         </div>
 
         <div className="bg-[#181A20] rounded-lg p-3">
-          <p className="text-[10px] text-[#929AA5] uppercase tracking-wide mb-1">Gateways Ativos</p>
-          <p className="text-xl font-extrabold text-[#6c63ff]" style={{ fontSize: '20px' }}>
-            {(data?.revenueByGateway?.length ?? 0) > 0 ? data.revenueByGateway.length : '0'}
+          <p className="text-[10px] text-[#929AA5] uppercase tracking-wide mb-1">Volume 24H</p>
+          <p className="text-xl font-extrabold text-[#009EE3]" style={{ fontSize: '20px' }}>
+            {formatVolume24h(data?.volume24h ?? 0)}
           </p>
-          <p className="text-[10px] text-[#929AA5] mt-1">métodos de pagamento</p>
+          <p className="text-[10px] text-[#929AA5] mt-1">cotas negociadas</p>
         </div>
       </div>
 
@@ -164,6 +168,16 @@ export function FinanceiroCard({ data, isLoading }: FinanceiroCardProps) {
       )}
     </div>
   )
+}
+
+function formatVolume24h(volume: number): string {
+  if (volume >= 1_000_000) {
+    return (volume / 1_000_000).toFixed(1) + 'M'
+  }
+  if (volume >= 1_000) {
+    return (volume / 1_000).toFixed(1) + 'k'
+  }
+  return volume.toString()
 }
 
 function getPlanPrice(plan: string): number {
