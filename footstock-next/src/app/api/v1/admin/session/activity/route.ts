@@ -4,13 +4,13 @@
 // Rastreabilidade: INT-087, TASK-1/ST006
 // ============================================================================
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 import { prisma } from '@/lib/prisma'
 import { adminSessionService } from '@/lib/admin/AdminSessionService'
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
     const cookieStore = await cookies()
 
@@ -33,9 +33,11 @@ export async function POST() {
 
     const { data: { user } } = await supabase.auth.getUser()
     const devAuthEmail =
-      process.env.NODE_ENV !== 'production' ? cookieStore.get('fs_dev_auth')?.value : null
+      process.env.NODE_ENV !== 'production' ? request.cookies.get('fs_dev_auth')?.value : null
+    const devAdminRole =
+      process.env.NODE_ENV !== 'production' ? request.cookies.get('fs-admin-role')?.value : null
 
-    const dbUser = user
+    let dbUser = user
       ? await prisma.user.findUnique({
           where: { id: user.id },
           select: { id: true, adminRole: true },
@@ -46,6 +48,11 @@ export async function POST() {
           select: { id: true, adminRole: true },
         })
       : null
+
+    // Dev mode: fallback to fs-admin-role cookie if no Supabase user
+    if (!dbUser && devAdminRole) {
+      dbUser = { id: 'dev-user', adminRole: devAdminRole }
+    }
 
     if (!dbUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

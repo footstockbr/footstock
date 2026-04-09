@@ -1,6 +1,8 @@
+import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
+import type { User, AdminRole } from '@/types'
 
 // Preços por plano em BRL (canônicos — sincronizados com LLD)
 const PLAN_PRICES: Record<string, number> = {
@@ -11,8 +13,37 @@ const PLAN_PRICES: Record<string, number> = {
 
 // GET /api/v1/admin/financial — ADMIN+
 // Retorna: MRR, ARR, churn, novas assinaturas 24h, receita por gateway, histórico MRR 30d, distribuição por plano
-export async function GET() {
-  const auth = await getAuthUser()
+export async function GET(request: NextRequest) {
+  let auth = await getAuthUser()
+
+  // Dev mode fallback: accept fs-admin-role cookie
+  if (!auth && process.env.NODE_ENV === 'development') {
+    const adminRole = request.cookies.get('fs-admin-role')?.value
+    if (adminRole) {
+      // Create dummy user for dev
+      const dummyUser: User = {
+        id: 'dev-user',
+        email: 'dev@foot-stock.test',
+        name: 'Dev User',
+        phone: null,
+        birthDate: '',
+        favoriteClub: '',
+        favoriteClubDisplayName: null,
+        userType: 'INVESTIDOR',
+        investorProfile: 'INICIANTE',
+        planType: 'JOGADOR',
+        fsBalance: 0,
+        marginBlocked: 0,
+        tourCompleted: false,
+        ageVerificationPending: false,
+        adminRole: adminRole as AdminRole,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+      auth = { user: dummyUser, supabaseId: 'dev-user' }
+    }
+  }
+
   if (!auth) return errors.unauthorized()
 
   if (!hasAdminRole(auth.user.adminRole, 'ADMINISTRADOR')) {

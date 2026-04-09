@@ -6,21 +6,39 @@ import { AdminBreadcrumb } from '@/components/admin/AdminBreadcrumb'
 import { KPICards } from '@/components/admin/KPICards'
 import { NSMProgressBar } from '@/components/admin/NSMProgressBar'
 import { RevenueChart } from '@/components/admin/RevenueChart'
-import type { AdminDashboardDTO, RevenueDayPoint } from '@/lib/types/admin'
+import { UserStatsCard } from '@/components/admin/UserStatsCard'
+import { FinanceiroCard } from '@/components/admin/FinanceiroCard'
+import { EngagementCard } from '@/components/admin/EngagementCard'
+import type { AdminDashboardDTO, RevenueDayPoint, EngagementMetricsDTO } from '@/lib/types/admin'
 
 async function fetchDashboard(): Promise<AdminDashboardDTO> {
-  const res = await fetch('/api/v1/admin/dashboard')
+  const res = await fetch('/api/v1/admin/dashboard', { credentials: 'include' })
   if (!res.ok) throw new Error('Failed')
   const { data } = await res.json()
   return data
 }
 
 async function fetchRevenue(): Promise<RevenueDayPoint[]> {
-  const res = await fetch('/api/v1/admin/revenue-history?days=30')
+  const res = await fetch('/api/v1/admin/revenue-history?days=30', { credentials: 'include' })
   if (!res.ok) throw new Error('Failed')
   const { data } = await res.json()
   return data
 }
+
+async function fetchFinancial() {
+  const res = await fetch('/api/v1/admin/financial', { credentials: 'include' })
+  if (!res.ok) throw new Error('Failed')
+  const { data } = await res.json()
+  return data
+}
+
+async function fetchEngagement(): Promise<EngagementMetricsDTO> {
+  const res = await fetch('/api/v1/admin/engagement', { credentials: 'include' })
+  if (!res.ok) throw new Error('Failed')
+  const { data } = await res.json()
+  return data
+}
+
 
 export default function AdminDashboardPage() {
   const {
@@ -39,6 +57,18 @@ export default function AdminDashboardPage() {
     queryKey: ['revenue-history'],
     queryFn: fetchRevenue,
     staleTime: 300_000,
+  })
+
+  const { data: financial, isLoading: loadingFinancial } = useQuery({
+    queryKey: ['admin-financial'],
+    queryFn: fetchFinancial,
+    staleTime: 120_000,
+  })
+
+  const { data: engagement, isLoading: loadingEngagement } = useQuery({
+    queryKey: ['admin-engagement'],
+    queryFn: fetchEngagement,
+    staleTime: 120_000,
   })
 
   const lastUpdated = dataUpdatedAt
@@ -113,6 +143,21 @@ export default function AdminDashboardPage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Dashboard Cards Section */}
+      <div className="space-y-4">
+        {/* User Stats Panel */}
+        <UserStatsCard data={dashboard ?? null} isLoading={loadingDash} />
+
+        {/* Financeiro Card */}
+        <FinanceiroCard
+          data={financial}
+          isLoading={loadingFinancial}
+        />
+
+        {/* Engajamento Card */}
+        <EngagementCard data={engagement ?? null} isLoading={loadingEngagement} />
       </div>
     </div>
   )

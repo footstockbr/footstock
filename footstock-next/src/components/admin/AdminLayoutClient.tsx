@@ -47,6 +47,7 @@ export function AdminLayoutClient({
       await fetch("/api/v1/admin/session/activity", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ userId }),
       });
     } catch {
