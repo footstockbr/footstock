@@ -42,7 +42,8 @@ export const ROUTES = {
   PERFIL: "/perfil",
   PERFIL_CONSENTIMENTOS: "/perfil/consentimentos",
 
-  // Checkout
+  // Assinatura & Checkout
+  ASSINATURA: "/assinatura",
   CHECKOUT: "/checkout",
 
   // Dashboard (alias mercado)

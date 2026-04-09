@@ -47,7 +47,7 @@ export function FinanceiroCard({ data, isLoading }: FinanceiroCardProps) {
         <Skeleton className="h-4 w-32" />
         <div className="space-y-2">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-6 rounded" />
+            <Skeleton key={i} className="h-7 rounded" />
           ))}
         </div>
       </div>

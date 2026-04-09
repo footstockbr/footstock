@@ -3,6 +3,7 @@ import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
 import type { RevenueDayPoint } from '@/lib/types/admin'
+import type { User, AdminRole } from '@/types'
 
 const PLAN_PRICE: Record<string, number> = { CRAQUE: 19.9, LENDA: 39.9, JOGADOR: 0 }
 
@@ -12,7 +13,36 @@ function toDateStr(d: Date) {
 
 // GET /api/v1/admin/revenue-history?days=30 — Monitor+
 export async function GET(request: NextRequest) {
-  const auth = await getAuthUser()
+  let auth = await getAuthUser()
+
+  // Dev mode fallback: accept fs-admin-role cookie
+  if (!auth && process.env.NODE_ENV === 'development') {
+    const adminRole = request.cookies.get('fs-admin-role')?.value
+    if (adminRole) {
+      // Create dummy user for dev
+      const dummyUser: User = {
+        id: 'dev-user',
+        email: 'dev@foot-stock.test',
+        name: 'Dev User',
+        phone: null,
+        birthDate: '',
+        favoriteClub: '',
+        favoriteClubDisplayName: null,
+        userType: 'INVESTIDOR',
+        investorProfile: 'INICIANTE',
+        planType: 'JOGADOR',
+        fsBalance: 0,
+        marginBlocked: 0,
+        tourCompleted: false,
+        ageVerificationPending: false,
+        adminRole: adminRole as AdminRole,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+      auth = { user: dummyUser, supabaseId: 'dev-user' }
+    }
+  }
+
   if (!auth) return errors.unauthorized()
   if (!hasAdminRole(auth.user.adminRole, 'MONITOR')) {
     return NextResponse.json(

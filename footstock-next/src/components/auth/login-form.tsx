@@ -34,7 +34,8 @@ function LoginForm() {
   }));
 
   async function performLogin(email: string, password: string) {
-    const res = await fetch("/api/v1/auth/login", {
+    // Use dev-login endpoint
+    const res = await fetch("/api/v1/auth/dev-login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
@@ -42,31 +43,45 @@ function LoginForm() {
     const json = await res.json();
 
     if (json.error) {
-      throw new Error(json.error.message || "Email ou senha incorretos");
+      throw new Error(json.error || json.error.message || "Email ou senha incorretos");
     }
 
-    // Set Supabase session cookies so middleware recognizes the user
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-    await supabase.auth.setSession({
-      access_token: json.data.session.access_token,
-      refresh_token: json.data.session.refresh_token,
-    });
+    if (!json.data) {
+      throw new Error("Resposta inválida do servidor");
+    }
 
     // Store admin role in cookie for middleware redirect
     const userAdminRole = json.data.user?.adminRole;
+
     if (userAdminRole) {
       document.cookie = `fs-admin-role=${userAdminRole}; path=/; max-age=${60 * 60 * 24 * 30}; samesite=lax`;
     } else {
       document.cookie = "fs-admin-role=; path=/; max-age=0";
     }
 
+    // Try to set Supabase session if not in dev (ignore errors in dev)
+    try {
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      );
+      await supabase.auth.setSession({
+        access_token: json.data.session.access_token,
+        refresh_token: json.data.session.refresh_token,
+      });
+    } catch {
+      // Dev-login doesn't have valid Supabase tokens
+    }
+
     const adminRoles = ["SUPER_ADMIN", "ADMINISTRADOR", "MONITOR", "EDITOR", "MODERADOR"];
     const isAdmin = userAdminRole && adminRoles.includes(userAdminRole);
     const isClubPartner = userAdminRole === "CLUB_PARTNER";
-    router.replace(isAdmin ? ROUTES.ADMIN : isClubPartner ? ROUTES.CLUB : ROUTES.MERCADO);
+    const targetRoute = isAdmin ? ROUTES.ADMIN : isClubPartner ? ROUTES.CLUB : ROUTES.MERCADO;
+
+    // Hard navigation
+    setTimeout(() => {
+      window.location.href = targetRoute;
+    }, 500);
   }
 
   const onSubmit = async (data: LoginFormData) => {

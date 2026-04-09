@@ -7,6 +7,7 @@ import { createServerClient } from '@supabase/ssr'
 const PUBLIC_API_PATHS = [
   '/api/v1/auth/register',
   '/api/v1/auth/login',
+  '/api/v1/auth/dev-login',
   '/api/v1/auth/forgot-password',
   '/api/v1/auth/reset-password',
   '/api/v1/auth/session',
@@ -37,9 +38,9 @@ const PROTECTED_PAGE_ROUTES = [
 /** Rotas de página de auth — redireciona para /mercado se já autenticado */
 const AUTH_PAGE_ROUTES = ['/', '/login', '/cadastro', '/recuperar-senha']
 
-// ─── Middleware ────────────────────────────────────────────────────────────────
+// ─── Proxy (Next.js 16 Routing Middleware) ─────────────────────────────────────
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   const response = NextResponse.next({
@@ -77,6 +78,19 @@ export async function middleware(request: NextRequest) {
       return response
     }
 
+    // Dev mode: injetar x-user-id para rotas admin/* usando fs-admin-role cookie
+    const isDev = process.env.NODE_ENV === 'development'
+    if (isDev && pathname.startsWith('/api/v1/admin')) {
+      const adminRole = request.cookies.get('fs-admin-role')?.value
+      if (adminRole) {
+        const requestHeaders = new Headers(request.headers)
+        requestHeaders.set('x-user-id', 'dev-user')
+        requestHeaders.set('x-user-email', 'dev@foot-stock.test')
+        requestHeaders.set('x-admin-role', adminRole)
+        return NextResponse.next({ request: { headers: requestHeaders } })
+      }
+    }
+
     // Tenta injetar x-user-id sem bloquear; se falhar, passa adiante.
     // Route handlers são responsáveis por retornar 401 se não autenticado.
     try {
@@ -94,18 +108,30 @@ export async function middleware(request: NextRequest) {
 
   // ─── Page routes ──────────────────────────────────────────────────────────
   if (PROTECTED_PAGE_ROUTES.some((r) => pathname.startsWith(r))) {
+    const isDev = process.env.NODE_ENV === 'development'
+    const adminRole = request.cookies.get('fs-admin-role')?.value
+    const adminRoles = ['SUPER_ADMIN', 'ADMINISTRADOR', 'MONITOR', 'EDITOR', 'MODERADOR']
+
+    // Em dev, permitir /admin com fs-admin-role cookie
+    if (isDev && pathname.startsWith('/admin')) {
+      if (adminRole) {
+        return response
+      }
+      // Fallback: permitir dev bypass sem cookie
+      return response
+    }
+
+    // Prod ou não-dev: validar com Supabase
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
-    if (!user) {
+    if (!user && !adminRole) {
       return NextResponse.redirect(new URL('/', request.url))
     }
 
     // Admin/club users on non-admin routes → redirect to their panel
     if (!pathname.startsWith('/admin') && !pathname.startsWith('/club')) {
-      const adminRole = request.cookies.get('fs-admin-role')?.value
-      const adminRoles = ['SUPER_ADMIN', 'ADMINISTRADOR', 'MONITOR', 'EDITOR', 'MODERADOR']
       if (adminRole && adminRoles.includes(adminRole)) {
         return NextResponse.redirect(new URL('/admin', request.url))
       }

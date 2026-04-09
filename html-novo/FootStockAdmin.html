@@ -1,0 +1,1506 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>FootStock ADMIN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #080b12;
+    --surface: #0e1219;
+    --card: #121820;
+    --border: #1e2636;
+    --accent: #6c63ff;
+    --accent2: #38bdf8;
+    --red: #f43f5e;
+    --gold: #f59e0b;
+    --green: #22c55e;
+    --orange: #f97316;
+    --text: #e8eaf0;
+    --muted: #7a8ba8;
+    --sans: 'Space Grotesk', sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+    --grad: linear-gradient(135deg,#6c63ff,#38bdf8);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
+  body { background: #000; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px 0; font-family: var(--sans); }
+
+  /* ── PHONE SHELL ── */
+  .phone {
+    width: 390px; height: 844px; border-radius: 50px;
+    background: var(--bg); border: 10px solid #10141d;
+    position: relative; overflow: hidden;
+    display: flex; flex-direction: column;
+    box-shadow: 0 0 0 1px #1e2636, 0 40px 100px rgba(0,0,0,.95), 0 0 80px rgba(108,99,255,.06), inset 0 0 0 1px rgba(255,255,255,.04);
+  }
+
+  /* ── STATUS BAR ── */
+  .status-bar {
+    height: 44px; display: flex; align-items: center;
+    justify-content: space-between; padding: 0 24px; flex-shrink: 0;
+  }
+  .status-time { font-size: 13px; font-weight: 700; color: #fff; }
+  .status-notch { width: 120px; height: 34px; border-radius: 17px; background: #000; border: 2px solid #1a1a1a; }
+  .status-icons { display: flex; align-items: center; gap: 5px; }
+
+  /* ── MAIN LAYOUT ── */
+  .app { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .header { padding: 6px 14px 0; position: relative; z-index: 20; flex-shrink: 0; }
+  .header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .logo-wrap { display: flex; align-items: center; gap: 7px; }
+  .logo-icon {
+    width: 32px; height: 32px; border-radius: 9px;
+    background: linear-gradient(145deg,#141c2e,#0e1219);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 0 1px rgba(108,99,255,.2), 0 4px 16px rgba(108,99,255,.12);
+  }
+  .logo-text { font-size: 14px; font-weight: 700; color: #fff; letter-spacing: -0.3px; line-height: 1; display: flex; align-items: baseline; gap: 4px; }
+  .logo-badge { font-size: 8px; font-weight: 900; color: var(--gold); letter-spacing: 2px; }
+  .role-sub { font-size: 7px; font-weight: 700; letter-spacing: 2px; margin-top: 1px; opacity: .85; }
+  .header-right { display: flex; align-items: center; gap: 6px; }
+  .session-pill {
+    border-radius: 20px; padding: 3px 9px;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .session-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+  .session-label { font-size: 7px; font-weight: 900; letter-spacing: 0.5px; }
+  .role-pill { border-radius: 20px; padding: 3px 9px; font-size: 7px; font-weight: 900; }
+  .btn-logout {
+    background: rgba(244,63,94,.08); border: 1px solid rgba(244,63,94,.2);
+    color: var(--red); border-radius: 8px; padding: 4px 9px;
+    font-size: 9px; cursor: pointer; font-family: var(--sans); font-weight: 700;
+  }
+
+  /* ── NAV ── */
+  .nav {
+    display: flex; gap: 1px; background: rgba(255,255,255,.04);
+    border-radius: 10px; padding: 3px; margin-bottom: 2px;
+    border: 1px solid var(--border);
+  }
+  .nav-btn {
+    flex: 1; padding: 6px 2px; border-radius: 8px; border: none; cursor: pointer;
+    font-size: 9px; font-weight: 500; background: transparent; color: var(--muted);
+    font-family: var(--sans); transition: all .15s;
+    display: flex; flex-direction: column; align-items: center; gap: 2px; position: relative;
+  }
+  .nav-btn.active { background: rgba(108,99,255,.15); color: var(--accent); font-weight: 700; }
+  .nav-btn .nav-icon { font-size: 12px; line-height: 1; }
+  .nav-badge {
+    position: absolute; top: 1px; right: 2px; width: 14px; height: 14px;
+    border-radius: 50%; background: var(--red);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 7px; font-weight: 900; color: #fff;
+  }
+
+  /* ── CONTENT ── */
+  .content { flex: 1; overflow-y: auto; padding: 10px 14px; position: relative; z-index: 1; }
+  .content::-webkit-scrollbar { width: 0; }
+
+  /* ── HOME BAR ── */
+  .home-bar { height: 30px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .home-indicator { width: 120px; height: 5px; background: rgba(255,255,255,.2); border-radius: 3px; }
+
+  /* ── SECTION HEADER ── */
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .section-title { font-size: 16px; font-weight: 800; color: #fff; }
+  .section-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* ── CARD ── */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; }
+  .card-title { font-size: 9px; color: var(--muted); font-weight: 700; letter-spacing: 0.8px; margin-bottom: 12px; text-transform: uppercase; }
+
+  /* ── KPI GRID ── */
+  .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+  .kpi { background: var(--surface); border-radius: 10px; padding: 10px; }
+  .kpi-label { font-size: 8px; color: var(--muted); margin-bottom: 3px; text-transform: uppercase; }
+  .kpi-value { font-size: 22px; font-weight: 800; font-family: var(--mono); line-height: 1; }
+  .kpi-sub { font-size: 9px; color: var(--muted); margin-top: 3px; }
+
+  /* ── PLAN BAR ── */
+  .plan-row { margin-bottom: 8px; }
+  .plan-row-header { display: flex; justify-content: space-between; margin-bottom: 3px; }
+  .plan-name { font-size: 11px; font-weight: 700; }
+  .plan-count { font-size: 11px; font-family: var(--mono); font-weight: 700; }
+  .bar-track { height: 5px; border-radius: 3px; background: var(--border); overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; transition: width .5s; }
+
+  /* ── ABSENCE ── */
+  .absence-grid { display: flex; gap: 5px; }
+  .absence-cell { flex: 1; background: var(--surface); border-radius: 8px; padding: 7px 4px; text-align: center; }
+  .absence-val { font-size: 18px; font-weight: 800; font-family: var(--mono); line-height: 1; }
+  .absence-lbl { font-size: 8px; color: var(--muted); margin-top: 3px; line-height: 1.3; }
+
+  /* ── FINANCEIRO ── */
+  .locked-block {
+    background: var(--card); border: 1px solid rgba(249,115,22,.2);
+    border-radius: 14px; padding: 14px 16px; margin-bottom: 12px;
+    display: flex; align-items: center; gap: 12;
+  }
+  .lock-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: rgba(249,115,22,.1); border: 1px solid rgba(249,115,22,.25);
+    display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;
+  }
+
+  /* ── GATEWAY ROW ── */
+  .gw-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border); }
+
+  /* ── ENGAGEMENT ── */
+  .eng-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .eng-cell { background: var(--surface); border-radius: 10px; padding: 10px; }
+
+  /* ── TABS ── */
+  .sub-tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+  .sub-tab {
+    padding: 6px 14px; border-radius: 10px; border: none; cursor: pointer;
+    background: var(--surface); color: #fff; font-size: 10px; font-weight: 800;
+    font-family: var(--sans); transition: all .15s;
+  }
+  .sub-tab.active { background: var(--accent); color: var(--bg); }
+
+  /* ── MOTOR ITEMS ── */
+  .ticker-row {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 10px 13px; margin-bottom: 5px;
+    display: flex; align-items: center; gap: 8;
+  }
+  .ticker-row.cb { border-color: rgba(244,63,94,.4); }
+  .ticker-chip {
+    width: 32px; height: 32px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 8px; font-weight: 900; flex-shrink: 0;
+  }
+  .ticker-info { flex: 1; }
+  .ticker-name { font-size: 11px; font-weight: 800; color: #fff; margin-bottom: 2px; display: flex; align-items: center; gap: 6px; }
+  .ticker-stats { display: flex; gap: 10px; flex-wrap: wrap; }
+  .ticker-stat { font-size: 9px; color: var(--muted); font-family: var(--mono); }
+  .ticker-actions { display: flex; gap: 5px; flex-shrink: 0; }
+
+  /* ── BADGES ── */
+  .badge {
+    background: rgba(255,255,255,.08); color: var(--muted);
+    border-radius: 6px; padding: 2px 8px; font-size: 10px; font-weight: 700; flex-shrink: 0;
+  }
+
+  /* ── USERS ── */
+  .user-row {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 10px 13px; cursor: pointer; display: flex; align-items: center; gap: 10px;
+    margin-bottom: 5px; transition: border-color .15s;
+  }
+  .user-row:hover { border-color: rgba(108,99,255,.3); }
+  .user-row.suspended { border-color: rgba(244,63,94,.3); }
+  .user-avatar {
+    width: 32px; height: 32px; border-radius: 10px;
+    background: var(--grad); display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 800; color: #fff; flex-shrink: 0;
+  }
+  .user-name { font-size: 11px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+  .user-email { font-size: 9px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .online-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+  .user-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex-shrink: 0; }
+
+  /* ── POSTS ── */
+  .post-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px 13px; margin-bottom: 8px;
+  }
+  .post-card.flagged { border-color: rgba(249,115,22,.3); }
+  .post-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
+  .post-author { font-size: 11px; font-weight: 700; color: #fff; margin-bottom: 2px; }
+  .post-meta { font-size: 9px; color: var(--muted); }
+  .post-text { font-size: 11px; color: var(--text); line-height: 1.5; margin-bottom: 10px; }
+  .post-actions { display: flex; gap: 6px; }
+
+  /* ── BUTTONS ── */
+  .btn {
+    border-radius: 12px; padding: 9px 16px; cursor: pointer; font-size: 12px;
+    font-weight: 800; font-family: var(--sans); transition: opacity .15s; white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .btn-solid { color: var(--bg); }
+  .btn-outline { background: transparent; }
+  .btn-sm { border-radius: 8px; padding: 5px 12px; font-size: 10px; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* ── NEWS ── */
+  .news-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 14px; margin-bottom: 10px;
+  }
+  .news-card.published { border-color: rgba(34,197,94,.25); }
+  .news-badges { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; flex-wrap: wrap; }
+  .news-title { font-size: 12px; font-weight: 700; color: #fff; line-height: 1.4; }
+  .news-author { font-size: 9px; color: var(--muted); margin-top: 4px; }
+  .news-actions { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 10px; }
+
+  /* ── SPONSORS ── */
+  .banner-card {
+    background: var(--card); border-radius: 14px; padding: 14px; margin-bottom: 10px;
+    border: 1.5px solid var(--border);
+  }
+  .banner-preview {
+    width: 100%; border-radius: 10px; display: flex; align-items: center;
+    justify-content: space-between; padding: 0 14px; box-sizing: border-box; overflow: hidden;
+    margin-bottom: 10px;
+  }
+
+  /* ── LOGIN SCREEN ── */
+  .login-screen { flex: 1; display: flex; flex-direction: column; background: #07090f; overflow: hidden; }
+  .login-hero {
+    position: relative; overflow: hidden;
+    background: linear-gradient(160deg,#0d1228 0%,#0e1219 55%,#080b12 100%);
+    padding: 28px 20px 26px; flex-shrink: 0;
+  }
+  .login-glow1 { position: absolute; top: -50px; right: -40px; width: 200px; height: 200px; background: radial-gradient(circle,rgba(244,63,94,.15) 0%,transparent 65%); border-radius: 50%; pointer-events: none; }
+  .login-glow2 { position: absolute; bottom: -30px; left: -20px; width: 150px; height: 150px; background: radial-gradient(circle,rgba(249,115,22,.08) 0%,transparent 65%); border-radius: 50%; pointer-events: none; }
+  .login-grid { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .05; pointer-events: none; }
+  .login-logo-row { display: flex; align-items: center; gap: 11px; margin-bottom: 22px; }
+  .login-logo-icon {
+    width: 46px; height: 46px; border-radius: 15px;
+    background: linear-gradient(135deg,rgba(108,99,255,.18),rgba(56,189,248,.12));
+    border: 1px solid rgba(108,99,255,.3);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 28px rgba(108,99,255,.2);
+  }
+  .login-title { font-size: 19px; font-weight: 700; color: #fff; letter-spacing: -0.5px; line-height: 1; display: flex; align-items: baseline; gap: 5px; }
+  .login-subtitle { font-size: 8px; color: rgba(108,99,255,.9); font-weight: 700; letter-spacing: 3px; margin-top: 3px; }
+  .login-headline { font-size: 8px; color: rgba(255,255,255,.55); margin-bottom: 5px; }
+  .login-big { font-size: 26px; font-weight: 900; color: #fff; letter-spacing: -1.2px; line-height: 1.05; }
+  .login-body { flex: 1; overflow-y: auto; padding: 22px 20px 32px; }
+  .field-label { font-size: 9px; color: rgba(255,255,255,.45); font-weight: 600; letter-spacing: 0.8px; margin-bottom: 5px; text-transform: uppercase; }
+  .field-input {
+    width: 100%; background: rgba(255,255,255,.05); border: 1.5px solid rgba(255,255,255,.08);
+    border-radius: 12px; padding: 13px 16px; color: #fff; font-size: 13px;
+    font-family: var(--sans); outline: none; box-sizing: border-box; caret-color: var(--accent);
+    transition: border-color .2s; margin-bottom: 16px;
+  }
+  .field-input:focus { border-color: rgba(108,99,255,.5); }
+  .field-input.error { border-color: rgba(244,63,94,.5); }
+  .login-error {
+    font-size: 10px; color: #f87171; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(244,63,94,.09); border: 1px solid rgba(244,63,94,.22);
+    border-radius: 11px; padding: 8px 13px;
+  }
+  .login-btn {
+    width: 100%; padding: 15px; border-radius: 14px; border: none; cursor: pointer;
+    background: var(--grad); color: #fff; font-size: 14px; font-weight: 800;
+    font-family: var(--sans); box-shadow: 0 6px 24px rgba(108,99,255,.35);
+    margin-bottom: 14px; transition: opacity .2s;
+  }
+  .login-btn:hover { opacity: .9; }
+  .creds-hint {
+    background: rgba(255,255,255,.04); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 14px; margin-bottom: 16px;
+  }
+  .creds-title { font-size: 10px; color: var(--muted); font-weight: 700; margin-bottom: 8px; }
+  .cred-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,.05); cursor: pointer; }
+  .cred-row:last-child { border-bottom: none; }
+  .cred-role { font-size: 10px; font-weight: 700; }
+  .cred-email { font-size: 10px; color: var(--muted); font-family: var(--mono); }
+
+  /* ── FILTER BAR ── */
+  .filter-bar { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 12px; }
+  .filter-btn {
+    padding: 4px 10px; border-radius: 8px; border: none; cursor: pointer;
+    background: var(--surface); color: var(--muted); font-size: 9px; font-weight: 800;
+    font-family: var(--sans); transition: all .15s;
+  }
+  .filter-btn.active { background: var(--accent); color: var(--bg); }
+
+  /* ── SEARCH ── */
+  .search-input {
+    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 9px 13px; color: var(--text); font-size: 12px;
+    font-family: var(--sans); outline: none; box-sizing: border-box; margin-bottom: 8px;
+  }
+
+  /* ── RANGE SLIDER ── */
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 300;
+    display: flex; align-items: center; justify-content: center; padding: 0 20px;
+  }
+  .modal {
+    background: var(--card); border: 1px solid var(--border); border-radius: 20px;
+    padding: 24px; max-width: 360px; width: 100%;
+  }
+  .modal-title { font-size: 14px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+  .modal-body { font-size: 12px; color: var(--muted); margin-bottom: 20px; }
+  .modal-actions { display: flex; gap: 8px; }
+
+  /* ── BLOCKED SECTION ── */
+  .blocked {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; height: 60vh; gap: 16px; text-align: center;
+  }
+  .blocked-icon {
+    width: 64px; height: 64px; border-radius: 20px;
+    background: rgba(249,115,22,.1); border: 1px solid rgba(249,115,22,.25);
+    display: flex; align-items: center; justify-content: center; font-size: 28px;
+  }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+  .fade-in { animation: fadeIn .25s ease forwards; }
+  .pulse { animation: pulse 2s ease infinite; }
+
+  /* ── MODERAÇÃO ── */
+  .word-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: rgba(244,63,94,.12); border: 1px solid rgba(244,63,94,.25);
+    border-radius: 20px; padding: 3px 10px 3px 10px; font-size: 10px;
+    color: var(--red); font-weight: 700; margin: 3px;
+  }
+  .word-chip button { background: none; border: none; cursor: pointer; color: var(--red); font-size: 10px; line-height: 1; padding: 0; }
+
+  /* ── FINANCIAL SUB-TABS ── */
+  .pay-tabs { display: flex; gap: 4px; background: rgba(255,255,255,.04); border-radius: 10px; padding: 3px; margin-bottom: 14px; border: 1px solid var(--border); }
+  .pay-tab { flex: 1; padding: 6px 4px; border-radius: 7px; border: none; cursor: pointer; font-size: 9px; font-weight: 700; background: transparent; color: var(--muted); font-family: var(--sans); text-align: center; transition: all .15s; }
+  .pay-tab.active { background: var(--accent); color: var(--bg); }
+
+  /* ── INPUT ── */
+  .field { margin-bottom: 12px; }
+  .field-lbl { font-size: 10px; color: var(--muted); font-weight: 700; margin-bottom: 5px; letter-spacing: 0.5px; text-transform: uppercase; }
+  .field-inp {
+    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 9px 13px; color: var(--text); font-size: 12px;
+    font-family: var(--mono); outline: none; box-sizing: border-box;
+  }
+  select.field-inp { cursor: pointer; }
+
+  /* ── LIGA CARD ── */
+  .liga-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 10px; }
+  .liga-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }
+  .liga-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 10px; }
+  .liga-stat { background: var(--surface); border-radius: 8px; padding: 6px 8px; text-align: center; }
+  .liga-stat-l { font-size: 8px; color: var(--muted); }
+  .liga-stat-v { font-size: 12px; font-weight: 800; font-family: var(--mono); color: #fff; }
+</style>
+</head>
+<body>
+
+<div class="phone" id="phone">
+  <div class="status-bar">
+    <span class="status-time" id="clock">--:--</span>
+    <div class="status-notch"></div>
+    <div class="status-icons">
+      <svg width="16" height="11" viewBox="0 0 16 11"><rect x="0" y="4" width="3" height="7" fill="white" rx="0.5"/><rect x="4" y="2.5" width="3" height="8.5" fill="white" rx="0.5"/><rect x="8" y="1" width="3" height="10" fill="white" rx="0.5"/><rect x="12" y="0" width="3" height="11" fill="white" rx="0.5"/></svg>
+      <div style="display:flex;align-items:center;gap:1px">
+        <div style="width:20px;height:10px;border:1.5px solid white;border-radius:2px;padding:1px;display:flex;align-items:center">
+          <div style="width:75%;height:100%;background:white;border-radius:1px"></div>
+        </div>
+        <div style="width:2px;height:5px;background:white;border-radius:0 1px 1px 0"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOGIN SCREEN -->
+  <div class="login-screen" id="login-screen">
+    <div class="login-hero">
+      <div class="login-glow1"></div>
+      <div class="login-glow2"></div>
+      <svg class="login-grid" viewBox="0 0 390 200" preserveAspectRatio="none">
+        <line x1="0" y1="40" x2="390" y2="40" stroke="#6c63ff" stroke-width="0.6"/>
+        <line x1="0" y1="80" x2="390" y2="80" stroke="#6c63ff" stroke-width="0.6"/>
+        <line x1="0" y1="120" x2="390" y2="120" stroke="#6c63ff" stroke-width="0.6"/>
+        <line x1="0" y1="160" x2="390" y2="160" stroke="#6c63ff" stroke-width="0.6"/>
+        <line x1="78" y1="0" x2="78" y2="200" stroke="#6c63ff" stroke-width="0.6"/>
+        <line x1="156" y1="0" x2="156" y2="200" stroke="#6c63ff" stroke-width="0.6"/>
+        <line x1="234" y1="0" x2="234" y2="200" stroke="#6c63ff" stroke-width="0.6"/>
+        <line x1="312" y1="0" x2="312" y2="200" stroke="#6c63ff" stroke-width="0.6"/>
+      </svg>
+      <div class="login-logo-row">
+        <div class="login-logo-icon">
+          <svg width="30" height="30" viewBox="0 0 100 100">
+            <defs>
+              <radialGradient id="lg" cx="30%" cy="25%" r="75%">
+                <stop offset="0%" stop-color="#1a2540"/>
+                <stop offset="100%" stop-color="#0d1120"/>
+              </radialGradient>
+            </defs>
+            <rect width="100" height="100" rx="22" fill="url(#lg)"/>
+            <polyline points="6,75 18,52 28,64 42,38" stroke="#1e2535" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <line x1="42" y1="38" x2="70" y2="10" stroke="#1e2535" stroke-width="5" stroke-linecap="round"/>
+            <polyline points="6,75 18,52 28,64 42,38" stroke="#5dfc00" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <line x1="42" y1="38" x2="70" y2="10" stroke="#5dfc00" stroke-width="4" stroke-linecap="round"/>
+            <circle cx="70" cy="20" r="5.5" fill="#5dfc00"/>
+            <line x1="70" y1="26" x2="65" y2="48" stroke="#5dfc00" stroke-width="4" stroke-linecap="round"/>
+            <line x1="65" y1="48" x2="54" y2="60" stroke="#5dfc00" stroke-width="3.8" stroke-linecap="round"/>
+            <line x1="65" y1="48" x2="74" y2="57" stroke="#5dfc00" stroke-width="3.8" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div>
+          <div class="login-title">FootStock <span style="font-size:9px;font-weight:900;color:var(--gold);letter-spacing:2px">ADMIN</span></div>
+          <div class="login-subtitle">PAINEL ADMINISTRATIVO</div>
+        </div>
+      </div>
+      <div>
+        <div class="login-headline">Acesso restrito</div>
+        <div class="login-big">Bem-vindo,<br/><span style="background:linear-gradient(90deg,#6c63ff,#38bdf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent">admin</span></div>
+      </div>
+    </div>
+
+    <div class="login-body">
+      <div class="creds-hint">
+        <div class="creds-title">CREDENCIAIS DE ACESSO</div>
+        <div class="cred-row" onclick="fillCred('sa@footstock.com','Rc@0509bf*19')">
+          <span class="cred-role" style="color:var(--gold)">⚡ Super Admin</span>
+          <span class="cred-email">sa@footstock.com</span>
+        </div>
+        <div class="cred-row" onclick="fillCred('admin@footstock.com','Master')">
+          <span class="cred-role" style="color:var(--red)">👑 Admin</span>
+          <span class="cred-email">admin@footstock.com</span>
+        </div>
+        <div class="cred-row" onclick="fillCred('rodrigo@footstock.com','Lima')">
+          <span class="cred-role" style="color:var(--orange)">🔭 Monitor</span>
+          <span class="cred-email">rodrigo@footstock.com</span>
+        </div>
+        <div class="cred-row" onclick="fillCred('ana@footstock.com','AnaC')">
+          <span class="cred-role" style="color:var(--accent)">✏️ Editor</span>
+          <span class="cred-email">ana@footstock.com</span>
+        </div>
+        <div class="cred-row" onclick="fillCred('marcos@footstock.com','Marcos')">
+          <span class="cred-role" style="color:var(--accent2)">🛡 Moderador</span>
+          <span class="cred-email">marcos@footstock.com</span>
+        </div>
+      </div>
+      <div class="field-label">E-MAIL</div>
+      <input class="field-input" id="login-email" type="email" placeholder="admin@footstock.com" autocomplete="off"/>
+      <div class="field-label">SENHA</div>
+      <input class="field-input" id="login-pass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"/>
+      <div class="login-error" id="login-error" style="display:none"></div>
+      <button class="login-btn" onclick="doLogin()" id="login-btn">Entrar →</button>
+    </div>
+  </div>
+
+  <!-- MAIN APP (hidden until login) -->
+  <div class="app fade-in" id="main-app" style="display:none">
+    <div class="header">
+      <div class="header-row">
+        <div class="logo-wrap">
+          <div class="logo-icon">
+            <svg width="26" height="26" viewBox="0 0 100 100">
+              <defs>
+                <radialGradient id="lg2" cx="30%" cy="25%" r="75%">
+                  <stop offset="0%" stop-color="#1a2540"/>
+                  <stop offset="100%" stop-color="#0d1120"/>
+                </radialGradient>
+              </defs>
+              <rect width="100" height="100" rx="22" fill="url(#lg2)"/>
+              <polyline points="6,75 18,52 28,64 42,38" stroke="#5dfc00" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+              <line x1="42" y1="38" x2="70" y2="10" stroke="#5dfc00" stroke-width="5" stroke-linecap="round"/>
+              <circle cx="70" cy="20" r="5" fill="#5dfc00"/>
+            </svg>
+          </div>
+          <div>
+            <div class="logo-text">FootStock <span class="logo-badge">ADMIN</span></div>
+            <div class="role-sub" id="role-sub-label" style="color:var(--gold)">SUPER ADMIN</div>
+          </div>
+        </div>
+        <div class="header-right">
+          <div class="session-pill" id="session-pill" style="background:rgba(108,99,255,.12);border:1px solid rgba(108,99,255,.3)">
+            <div class="session-dot pulse" id="session-dot" style="background:var(--accent)"></div>
+            <span class="session-label" id="session-label" style="color:var(--accent)">ABERTO</span>
+          </div>
+          <div class="role-pill" id="role-pill" style="background:rgba(255,215,0,.15);border:1px solid rgba(255,215,0,.3);color:var(--gold)">⚡ SUPER ADMIN</div>
+          <button class="btn-logout" onclick="doLogout()">Sair</button>
+        </div>
+      </div>
+      <div class="nav" id="nav-bar"></div>
+    </div>
+
+    <div class="content" id="main-content"></div>
+    <div class="home-bar"><div class="home-indicator"></div></div>
+  </div>
+</div>
+
+<script>
+// ── DATA ──────────────────────────────────────────────────────────────────────
+const ADMIN_USERS = [
+  {id:'__sa__', name:'Super Admin', email:'sa@footstock.com', password:'Rc@0509bf*19', role:'superadmin', plan:'Lenda', since:'Jan 2026'},
+  {id:'admin',  name:'Admin',       email:'admin@footstock.com', password:'Master', role:'admin', plan:'Lenda', since:'Jan 2026'},
+  {id:'rodrigo',name:'Rodrigo Lima',email:'rodrigo@footstock.com', password:'Lima', role:'monitor', plan:'Craque', since:'Fev 2026'},
+  {id:'ana',    name:'Ana Costa',   email:'ana@footstock.com', password:'AnaC', role:'editor', plan:'Craque', since:'Mar 2026'},
+  {id:'marcos', name:'Marcos Viana',email:'marcos@footstock.com', password:'Marcos', role:'moderador', plan:'Jogador', since:'Mar 2026'},
+];
+
+const MOCK_USERS = [
+  {id:'u001',name:'Carlos Henrique', email:'carlos@email.com',  plan:'Lenda',  role:'user',     balance:38420.50, invested:12800, pnl:1840.20,  txCount:47, online:true,  suspended:false, since:'Jan 2026', lastAccess:'agora'},
+  {id:'u002',name:'Ana Paula',       email:'ana@email.com',     plan:'Craque', role:'user',     balance:7230.10,  invested:3200,  pnl:420.80,   txCount:23, online:true,  suspended:false, since:'Fev 2026', lastAccess:'há 5min'},
+  {id:'u003',name:'Pedro Vasconcelos',email:'pedro@email.com',  plan:'Jogador',role:'user',     balance:1450.00,  invested:550,   pnl:-88.30,   txCount:8,  online:false, suspended:false, since:'Mar 2026', lastAccess:'há 2h'},
+  {id:'u004',name:'Fernanda Melo',   email:'fmelo@email.com',   plan:'Lenda',  role:'user',     balance:24110.00, invested:8900,  pnl:1100.00,  txCount:61, online:true,  suspended:false, since:'Jan 2026', lastAccess:'há 1min'},
+  {id:'u005',name:'Rodrigo Falcão',  email:'rfalcao@email.com', plan:'Craque', role:'monitor',  balance:9800.00,  invested:4200,  pnl:780.50,   txCount:34, online:false, suspended:false, since:'Fev 2026', lastAccess:'há 3h'},
+  {id:'u006',name:'Juliana Torres',  email:'jtorres@email.com', plan:'Jogador',role:'user',     balance:800.00,   invested:1200,  pnl:-200.00,  txCount:4,  online:false, suspended:true,  since:'Mar 2026', lastAccess:'há 1d'},
+  {id:'u007',name:'Marcos Lima',     email:'mlima@email.com',   plan:'Craque', role:'user',     balance:5100.00,  invested:2800,  pnl:310.00,   txCount:19, online:true,  suspended:false, since:'Fev 2026', lastAccess:'agora'},
+  {id:'u008',name:'Beatriz Campos',  email:'bcampos@email.com', plan:'Lenda',  role:'admin',    balance:0,        invested:0,     pnl:0,        txCount:0,  online:true,  suspended:false, since:'Jan 2026', lastAccess:'agora'},
+  {id:'u009',name:'Thiago Nunes',    email:'tnunes@email.com',  plan:'Jogador',role:'user',     balance:1980.00,  invested:20,    pnl:2.40,     txCount:2,  online:false, suspended:false, since:'Mar 2026', lastAccess:'há 6h'},
+  {id:'u010',name:'Camila Ramos',    email:'cramos@email.com',  plan:'Craque', role:'user',     balance:6700.00,  invested:3100,  pnl:-190.00,  txCount:15, online:false, suspended:false, since:'Fev 2026', lastAccess:'há 4h'},
+];
+
+const MOCK_POSTS = [
+  {id:'p001',author:'Carlos Henrique', plan:'Lenda',  ticker:'URU3', text:'URU3 vai explodir essa semana! Rumores de patrocínio master confirmado. Tô long pesado.',     status:'ok',      flags:0, ts: Date.now()-8*60000},
+  {id:'p002',author:'Pedro Vasconcelos',plan:'Jogador',ticker:'TIM3',text:'Esse app é uma merda, perdi tudo por causa de um bug no short selling!!',                   status:'flagged', flags:2, ts: Date.now()-22*60000},
+  {id:'p003',author:'Fernanda Melo',   plan:'Lenda',  ticker:'POR4', text:'POR4 sólida como sempre. Dividendos chegando e preço subindo. Holding.',                     status:'ok',      flags:0, ts: Date.now()-45*60000},
+  {id:'p004',author:'Ana Paula',       plan:'Craque', ticker:'FOG3', text:'Alguém sabe o CPF do admin desse app? Quero contato direto.',                                 status:'flagged', flags:3, ts: Date.now()-70*60000},
+  {id:'p005',author:'Marcos Lima',     plan:'Craque', ticker:'GAL3', text:'GAL3 vai despencar com essa notícia. Short nela agora!',                                       status:'ok',      flags:0, ts: Date.now()-90*60000},
+  {id:'p006',author:'Juliana Torres',  plan:'Jogador',ticker:'MAL4', text:'Invista em MAL4 e ganhe 300% em 1 semana. DM para estratégia exclusiva.',                    status:'flagged', flags:4, ts: Date.now()-120*60000},
+];
+
+const CLUBS_SAMPLE = [
+  {ticker:'URU3',name:'Urubu da Gávea FC',    realName:'Flamengo',         div:'A',color:'#E32B28',c2:'#fff',price:38.42,fv:36.10,vol24:48200,garch:0.0000065,imb:0.142,cb:false},
+  {ticker:'POR4',name:'Porco do Parque FC',   realName:'Palmeiras',        div:'A',color:'#006432',c2:'#fff',price:31.50,fv:33.20,vol24:32100,garch:0.0000042,imb:-0.08,cb:false},
+  {ticker:'TIM3',name:'Timão do São Jorge FC',realName:'Corinthians',      div:'A',color:'#444',   c2:'#fff',price:18.20,fv:17.40,vol24:21500,garch:0.0000071,imb:0.31,cb:false},
+  {ticker:'FOG3',name:'Estrela do General SC',realName:'Botafogo',         div:'A',color:'#111',   c2:'#d4af37',price:22.80,fv:24.50,vol24:19800,garch:0.0000055,imb:-0.22,cb:false},
+  {ticker:'GAL3',name:'Galo da Lagoinha FC',  realName:'Atlético Mineiro', div:'A',color:'#222',   c2:'#fff',price:19.50,fv:20.10,vol24:15400,garch:0.0000038,imb:0.09,cb:false},
+  {ticker:'TRI4',name:'Tricolor do Morumbi',  realName:'São Paulo FC',     div:'A',color:'#C40A0A',c2:'#fff',price:14.20,fv:13.80,vol24:12300,garch:0.0000044,imb:-0.05,cb:false},
+  {ticker:'COL3',name:'Colorado do Beira-Rio',realName:'Internacional',    div:'A',color:'#CC0000',c2:'#fff',price:11.40,fv:11.90,vol24:9800, garch:0.0000049,imb:0.18,cb:false},
+  {ticker:'IMO3',name:'Imortal da Arena FC',  realName:'Grêmio',           div:'A',color:'#003DA5',c2:'#fff',price:9.80, fv:10.20,vol24:8700, garch:0.0000052,imb:-0.12,cb:false},
+  {ticker:'LEP4',name:'Leão do Pici FC',      realName:'Fortaleza',        div:'B',color:'#0033A0',c2:'#fff',price:6.20, fv:5.90, vol24:5100, garch:0.0000088,imb:0.24,cb:false},
+  {ticker:'VOZ3',name:'Vovô do Castelão FC',  realName:'Ceará SC',         div:'B',color:'#000',   c2:'#fff',price:4.80, fv:5.10, vol24:4200, garch:0.0000094,imb:-0.19,cb:false},
+];
+
+const NOTICIAS = [
+  {id:'n001',titulo:'URU3 anuncia patrocínio master com banco digital',ticker:'URU3',categoria:'Esportiva Maior',sentimento:0.8,status:'publicada',autor:'admin',criadoEm:'2026-03-10',cliques:1420},
+  {id:'n002',titulo:'POR4 reforça elenco com contratações milionárias', ticker:'POR4',categoria:'Esportiva Menor',sentimento:0.6,status:'publicada',autor:'ana',  criadoEm:'2026-03-12',cliques:840},
+  {id:'n003',titulo:'TIM3 sofre rebaixamento para Série B',             ticker:'TIM3',categoria:'Esportiva Maior',sentimento:-0.9,status:'publicada',autor:'admin',criadoEm:'2026-03-14',cliques:3200},
+  {id:'n004',titulo:'FOG3 envolto em polêmica financeira',              ticker:'FOG3',categoria:'Financeira Crítica',sentimento:-0.7,status:'rascunho',autor:'ana',criadoEm:'2026-03-16',cliques:0},
+  {id:'n005',titulo:'BAL4 promovida à Série A após campanha histórica', ticker:'BAL4',categoria:'Esportiva Maior',sentimento:0.95,status:'rascunho',autor:'marcos',criadoEm:'2026-03-17',cliques:0},
+];
+
+const BANNERS = [
+  {id:'b001',titulo:'Mercado Pago — Pague em dia',patrocinador:'Mercado Pago',posicao:'home_top',ativo:true, cliques:1240,impressoes:18400,cor:'#00B1EA',cta:'Saiba mais'},
+  {id:'b002',titulo:'Red Bull te dá asas',        patrocinador:'Red Bull',    posicao:'market_top',ativo:true, cliques:890, impressoes:12300,cor:'#CC0000',cta:'Conheça'},
+  {id:'b003',titulo:'PagSeguro — Segurança total', patrocinador:'PagSeguro',  posicao:'cart_top',  ativo:false,cliques:320, impressoes:5100, cor:'#f97316',cta:'Ver oferta'},
+];
+
+const BLOCKED_WORDS = ['merda','idiota','burro','lixo','fraude','golpe','cpf','senha','whatsapp','telegram','pix','300%','500%','garantido'];
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let currentUser = null;
+let currentTab = 'dashboard';
+let marketPrices = {};
+let marketInterval = null;
+let clockInterval = null;
+let users = MOCK_USERS.map(u=>({...u}));
+let posts = MOCK_POSTS.map(p=>({...p}));
+let noticias = NOTICIAS.map(n=>({...n}));
+let banners = BANNERS.map(b=>({...b}));
+let blockedWords = [...BLOCKED_WORDS];
+let clubs = CLUBS_SAMPLE.map(c=>({...c}));
+
+// init market prices
+clubs.forEach(c => {
+  marketPrices[c.ticker] = {price: c.price, fv: c.fv, vol24: c.vol24, garch: c.garch, imb: c.imb, cb: c.cb};
+});
+
+// ── PERMISSIONS ───────────────────────────────────────────────────────────────
+const ROLE_TABS = {
+  superadmin: new Set(['dashboard','motor','usuarios','financeiro','engajamento','moderacao','noticias','patrocinadores']),
+  admin:      new Set(['dashboard','motor','usuarios','financeiro','engajamento','moderacao','noticias','patrocinadores']),
+  monitor:    new Set(['dashboard','usuarios','engajamento','moderacao']),
+  editor:     new Set(['dashboard','usuarios','moderacao','noticias']),
+  moderador:  new Set(['noticias','moderacao']),
+};
+const ROLE_META = {
+  superadmin:{color:'#ffd700',icon:'⚡',label:'SUPER ADMIN'},
+  admin:     {color:'#f43f5e',icon:'👑',label:'ADMIN'},
+  monitor:   {color:'#f97316',icon:'🔭',label:'MONITOR'},
+  editor:    {color:'#6c63ff',icon:'✏️', label:'EDITOR'},
+  moderador: {color:'#38bdf8',icon:'🛡',label:'MODERADOR'},
+};
+const ROLE_DEFAULT = {superadmin:'dashboard',admin:'dashboard',monitor:'dashboard',editor:'dashboard',moderador:'moderacao'};
+const canAccess = (role, tab) => ROLE_TABS[role]?.has(tab) ?? false;
+
+// ── CLOCK ─────────────────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  const h = now.getHours().toString().padStart(2,'0');
+  const m = now.getMinutes().toString().padStart(2,'0');
+  document.getElementById('clock').textContent = h+':'+m;
+}
+updateClock();
+setInterval(updateClock, 10000);
+
+function getSessionInfo() {
+  const now = new Date();
+  const utc = now.getTime() + now.getTimezoneOffset()*60000;
+  const brt = new Date(utc - 3*3600000);
+  const h = brt.getHours(), mi = brt.getMinutes();
+  const total = (h<2?h+24:h)*60+mi;
+  if(total>=645&&total<660)  return {label:'Pré-abertura',short:'PRÉ',    color:'#f5a623',bg:'rgba(245,166,35,.12)',border:'rgba(245,166,35,.3)'};
+  if(total>=660&&total<1485) return {label:'Negociação',  short:'ABERTO', color:'#6c63ff',bg:'rgba(108,99,255,.12)',border:'rgba(108,99,255,.3)'};
+  if(total>=1485&&total<1500)return {label:'Leilão Fech.',short:'LEILÃO', color:'#38bdf8',bg:'rgba(14,165,233,.12)',border:'rgba(14,165,233,.3)'};
+  if(total>=1500&&total<1530)return {label:'After-Market',short:'AFTER',  color:'#8b5cf6',bg:'rgba(139,92,246,.12)',border:'rgba(139,92,246,.3)'};
+  return {label:'Mercado Fechado',short:'FECHADO',color:'#f43f5e',bg:'rgba(244,63,94,.1)',border:'rgba(244,63,94,.3)'};
+}
+
+// ── MARKET SIM ────────────────────────────────────────────────────────────────
+function startMarket() {
+  if(marketInterval) return;
+  marketInterval = setInterval(()=>{
+    clubs.forEach(c=>{
+      const s = marketPrices[c.ticker];
+      if(s.cb) return;
+      const drift = (s.fv - s.price)/s.price * 0.08;
+      const shock = (Math.random()-.5)*0.006;
+      s.price = Math.max(0.01, +(s.price*(1+drift+shock)).toFixed(2));
+      s.garch = +(0.000002+0.12*shock*shock+0.85*s.garch).toFixed(8);
+      s.imb   = +(s.imb*0.95+(Math.random()-.5)*0.04).toFixed(3);
+    });
+    if(currentTab==='motor') renderContent();
+  }, 2500);
+}
+
+// ── AUTH ──────────────────────────────────────────────────────────────────────
+function fillCred(email, pass) {
+  document.getElementById('login-email').value = email;
+  document.getElementById('login-pass').value  = pass;
+  document.getElementById('login-error').style.display = 'none';
+}
+
+function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass  = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+
+  const found = ADMIN_USERS.find(u=>u.email.toLowerCase()===email.toLowerCase()&&u.password===pass);
+  if(!found) { errEl.textContent='⚠ E-mail ou senha inválidos.'; errEl.style.display='flex'; return; }
+
+  currentUser = found;
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('main-app').style.display='flex';
+
+  // set role UI
+  const meta = ROLE_META[found.role]||{color:'#7a8ba8',icon:'👤',label:'USER'};
+  document.getElementById('role-sub-label').textContent = meta.label;
+  document.getElementById('role-sub-label').style.color = meta.color;
+  document.getElementById('role-pill').textContent = meta.icon+' '+meta.label;
+  document.getElementById('role-pill').style.color = meta.color;
+  document.getElementById('role-pill').style.background = meta.color+'22';
+  document.getElementById('role-pill').style.border = '1px solid '+meta.color+'44';
+
+  currentTab = ROLE_DEFAULT[found.role]||'dashboard';
+  buildNav();
+  updateSession();
+  setInterval(updateSession, 30000);
+  startMarket();
+  renderContent();
+}
+
+function doLogout() {
+  currentUser = null;
+  currentTab = 'dashboard';
+  if(marketInterval){clearInterval(marketInterval);marketInterval=null;}
+  document.getElementById('main-app').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('login-email').value='';
+  document.getElementById('login-pass').value='';
+  document.getElementById('login-error').style.display='none';
+}
+
+// ── SESSION ───────────────────────────────────────────────────────────────────
+function updateSession() {
+  const s = getSessionInfo();
+  const pill = document.getElementById('session-pill');
+  const dot  = document.getElementById('session-dot');
+  const lbl  = document.getElementById('session-label');
+  pill.style.background = s.bg;
+  pill.style.border = '1px solid '+s.border;
+  dot.style.background  = s.color;
+  dot.style.boxShadow   = s.id!=='closed' ? '0 0 8px '+s.color+'90' : 'none';
+  lbl.textContent = s.short;
+  lbl.style.color = s.color;
+}
+
+// ── NAV ───────────────────────────────────────────────────────────────────────
+const NAV_ITEMS = [
+  {id:'dashboard',     icon:'📊',label:'Dash'},
+  {id:'motor',         icon:'⚙️', label:'Motor'},
+  {id:'usuarios',      icon:'👥',label:'Usuários'},
+  {id:'financeiro',    icon:'💳',label:'Financeiro'},
+  {id:'engajamento',   icon:'📈',label:'Engaj.'},
+  {id:'moderacao',     icon:'🛡',label:'Moderação'},
+  {id:'noticias',      icon:'📰',label:'Notícias'},
+  {id:'patrocinadores',icon:'🤝',label:'Patroc.'},
+];
+
+function buildNav() {
+  const nav = document.getElementById('nav-bar');
+  const flaggedCount = posts.filter(p=>p.status==='flagged').length;
+  const cbCount = Object.values(marketPrices).filter(s=>s.cb).length;
+  nav.innerHTML = NAV_ITEMS.map(n=>{
+    const blocked = !canAccess(currentUser.role, n.id);
+    const badge = (n.id==='motor'&&cbCount>0)?cbCount:(n.id==='moderacao'&&flaggedCount>0)?flaggedCount:0;
+    return `<button class="nav-btn${currentTab===n.id?' active':''}" 
+      onclick="${blocked?'':'setTab(\''+n.id+'\')'}" 
+      style="${blocked?'opacity:.3;cursor:not-allowed':''}"
+      title="${blocked?n.label+' — sem acesso':n.label}">
+      <span class="nav-icon">${n.icon}</span>
+      <span>${blocked?'🔒':n.label}</span>
+      ${!blocked&&badge?`<div class="nav-badge">${badge}</div>`:''}
+    </button>`;
+  }).join('');
+}
+
+function setTab(id) {
+  if(!canAccess(currentUser.role,id)) return;
+  currentTab = id;
+  buildNav();
+  renderContent();
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+const c = (col,opacity=1) => col;
+function fmtBRL(n){return n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fmtNum(n){return n.toLocaleString('pt-BR');}
+function avatar(name){return name.split(' ').slice(0,2).map(w=>w[0]).join('');}
+function sentColor(s){return parseFloat(s)>=0?'var(--green)':'var(--red)';}
+function btn(label,color,variant='solid',small=false,onclick='',disabled=false){
+  const isOutline=variant==='outline';
+  return `<button ${onclick?'onclick="'+onclick+'"':''} ${disabled?'disabled':''} 
+    class="btn${small?' btn-sm':''} btn-${variant}"
+    style="background:${isOutline?'transparent':color};color:${isOutline?color:'var(--bg)'};border-color:${isOutline?color:'transparent'}"
+    >${label}</button>`;
+}
+function badge(text,color='var(--muted)',bg='rgba(255,255,255,.08)'){
+  return `<span class="badge" style="color:${color};background:${bg}">${text}</span>`;
+}
+function planColor(p){return p==='Lenda'?'var(--gold)':p==='Craque'?'var(--accent)':'var(--muted)';}
+function roleColor(r){const m={superadmin:'var(--gold)',admin:'var(--red)',monitor:'var(--orange)',editor:'var(--accent)',moderador:'var(--accent2)',user:'var(--muted)'};return m[r]||'var(--muted)';}
+
+// ── RENDER ROUTER ─────────────────────────────────────────────────────────────
+function renderContent() {
+  const el = document.getElementById('main-content');
+  if(!canAccess(currentUser.role,currentTab)) {el.innerHTML=renderBlocked(currentTab);return;}
+  const renders = {
+    dashboard: renderDashboard,
+    motor:     renderMotor,
+    usuarios:  renderUsers,
+    financeiro:renderFinanceiro,
+    engajamento:renderEngajamento,
+    moderacao: renderModeracao,
+    noticias:  renderNoticias,
+    patrocinadores:renderPatrocinadores,
+  };
+  el.innerHTML = '<div class="fade-in">'+(renders[currentTab]?renders[currentTab]():'')+'</div>';
+}
+
+function renderBlocked(label){
+  return `<div class="blocked">
+    <div class="blocked-icon">🔒</div>
+    <div>
+      <div style="font-size:16px;font-weight:800;color:#fff;margin-bottom:6px">${label}</div>
+      <div style="font-size:12px;color:var(--muted);max-width:280px;line-height:1.6">
+        Esta seção não está disponível para o perfil <span style="color:var(--orange);font-weight:700">${(ROLE_META[currentUser.role]||{}).label||currentUser.role.toUpperCase()}</span>.
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────────────────────
+function renderDashboard() {
+  const totalUsers   = users.length;
+  const onlineUsers  = users.filter(u=>u.online).length;
+  const suspended    = users.filter(u=>u.suspended).length;
+  const flagged      = posts.filter(p=>p.status==='flagged').length;
+  const byPlan       = {Jogador:0,Craque:0,Lenda:0};
+  users.forEach(u=>byPlan[u.plan]=(byPlan[u.plan]||0)+1);
+  const totalVol     = Object.values(marketPrices).reduce((s,m)=>s+m.vol24,0);
+  const receitaCraque= byPlan.Craque*19.90;
+  const receitaLenda = byPlan.Lenda*49.90;
+  const receitaTotal = receitaCraque+receitaLenda;
+  const ausencia     = {d1:2,d7:3,d15:1,d30:2,acima:1};
+  const totalInat    = Object.values(ausencia).reduce((s,v)=>s+v,0);
+  const sess         = getSessionInfo();
+
+  const payments = [
+    {name:'Mercado Pago',pct:54,color:'#00B1EA',icon:'🟦'},
+    {name:'PayPal',      pct:29,color:'#003087',icon:'🅿'},
+    {name:'PagSeguro',   pct:17,color:'#f97316',icon:'🟧'},
+  ];
+
+  const canFin = canAccess(currentUser.role,'financeiro');
+
+  return `
+  <div class="section-header">
+    <div>
+      <div class="section-title">Dashboard</div>
+      <div class="section-sub">Mercado: ${sess.label} · ${new Date().toLocaleString('pt-BR',{weekday:'short',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+    </div>
+  </div>
+
+  <!-- USUÁRIOS -->
+  <div class="card">
+    <div class="card-title">USUÁRIOS</div>
+    <div class="kpi-grid">
+      <div class="kpi"><div class="kpi-label">TOTAL CADASTRADOS</div><div class="kpi-value" style="color:#fff">${totalUsers}</div><div class="kpi-sub" style="color:var(--green)">● ${onlineUsers} online agora</div></div>
+      <div class="kpi"><div class="kpi-label">INATIVOS × TOTAL</div><div class="kpi-value" style="color:var(--orange)">${totalInat}</div><div class="kpi-sub">de ${totalUsers} (${Math.round(totalInat/Math.max(1,totalUsers)*100)}% do total)</div></div>
+      <div class="kpi"><div class="kpi-label">SUSPENSOS</div><div class="kpi-value" style="color:${suspended>0?'var(--red)':'var(--green)'}">${suspended}</div><div class="kpi-sub">contas bloqueadas</div></div>
+      <div class="kpi"><div class="kpi-label">POSTS SUSPEITOS</div><div class="kpi-value" style="color:${flagged>0?'var(--orange)':'var(--green)'}">${flagged}</div><div class="kpi-sub">aguardando moderação</div></div>
+    </div>
+    <div class="card-title" style="margin-bottom:10px">DISTRIBUIÇÃO DE PLANOS</div>
+    ${[{plan:'Lenda',color:'var(--gold)',icon:'👑'},{plan:'Craque',color:'var(--accent)',icon:'⭐'},{plan:'Jogador',color:'var(--muted)',icon:'⚡'}].map(({plan,color,icon})=>{
+      const count=byPlan[plan]||0;
+      const pct=totalUsers>0?Math.round(count/totalUsers*100):0;
+      return `<div class="plan-row">
+        <div class="plan-row-header">
+          <span class="plan-name" style="color:${color}">${icon} ${plan}</span>
+          <span class="plan-count" style="color:${color}">${count} (${pct}%)</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      </div>`;
+    }).join('')}
+    <div class="card-title" style="margin-top:14px;margin-bottom:8px">AUSÊNCIA POR PERÍODO</div>
+    <div class="absence-grid">
+      ${[['1 dia',ausencia.d1,'var(--orange)'],['7 dias',ausencia.d7,'var(--orange)'],['15 dias',ausencia.d15,'var(--red)'],['30 dias',ausencia.d30,'var(--red)'],['+30d',ausencia.acima,'rgba(244,63,94,.5)']].map(([l,v,c])=>`
+      <div class="absence-cell">
+        <div class="absence-val" style="color:${c}">${v}</div>
+        <div class="absence-lbl">${l}</div>
+      </div>`).join('')}
+    </div>
+  </div>
+
+  <!-- FINANCEIRO -->
+  ${canFin?`
+  <div class="card">
+    <div class="card-title">FINANCEIRO</div>
+    <div class="kpi-grid" style="margin-bottom:14px">
+      <div class="kpi"><div class="kpi-label">RECEITA TOTAL/MÊS</div><div class="kpi-value" style="color:var(--green);font-size:20px">R$${fmtBRL(receitaTotal)}</div><div class="kpi-sub">${byPlan.Craque+byPlan.Lenda} assinantes pagos</div></div>
+      <div class="kpi"><div class="kpi-label">VOLUME 24H</div><div class="kpi-value" style="color:var(--accent2);font-size:20px">${(totalVol/1000).toFixed(1)}k</div><div class="kpi-sub">cotas negociadas</div></div>
+    </div>
+    ${[{plan:'Lenda',color:'var(--gold)',mrr:receitaLenda,count:byPlan.Lenda},{plan:'Craque',color:'var(--accent)',mrr:receitaCraque,count:byPlan.Craque}].map(d=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:6px">
+        <div style="width:6px;height:6px;border-radius:50%;background:${d.color}"></div>
+        <span style="font-size:11px;font-weight:700;color:${d.color}">${d.plan}</span>
+        <span style="font-size:9px;color:var(--muted)">${d.count} assinantes</span>
+      </div>
+      <span style="font-size:12px;font-weight:800;color:#fff;font-family:var(--mono)">R$${fmtBRL(d.mrr)}/mês</span>
+    </div>`).join('')}
+    <div class="card-title" style="margin-top:14px;margin-bottom:10px">MÉTODOS DE PAGAMENTO</div>
+    ${payments.map(p=>`
+    <div style="margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <div style="width:20px;height:20px;border-radius:6px;background:${p.color}22;border:1px solid ${p.color}55;display:flex;align-items:center;justify-content:center;font-size:10px">${p.icon}</div>
+          <span style="font-size:11px;color:#fff;font-weight:600">${p.name}</span>
+        </div>
+        <div>
+          <span style="font-size:11px;font-weight:800;color:${p.color};font-family:var(--mono)">${p.pct}%</span>
+          <span style="font-size:9px;color:var(--muted);font-family:var(--mono);margin-left:6px">R$${fmtBRL(receitaTotal*p.pct/100)}</span>
+        </div>
+      </div>
+      <div class="bar-track"><div class="bar-fill" style="width:${p.pct}%;background:${p.color}"></div></div>
+    </div>`).join('')}
+  </div>`:`
+  <div style="background:var(--card);border:1px solid rgba(249,115,22,.2);border-radius:14px;padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;gap:12px">
+    <div class="lock-icon">🔒</div>
+    <div>
+      <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.5)">FINANCEIRO</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px">Dados financeiros disponíveis apenas para <span style="color:var(--orange);font-weight:700">Administradores</span></div>
+    </div>
+  </div>`}
+
+  <!-- ENGAJAMENTO -->
+  <div class="card">
+    <div class="card-title">ENGAJAMENTO</div>
+    <div class="eng-grid">
+      ${[['ACESSOS/MÊS','312','sessões únicas','#fff'],['TEMPO MÉDIO','8min 20s','por acesso','#fff'],['RECORRÊNCIA','68%','>1 sessão/dia','var(--accent)'],['ACESSOS/USUÁRIO','31.2×','média no mês','var(--accent2)']].map(([l,v,s,c])=>`
+      <div class="eng-cell">
+        <div class="kpi-label">${l}</div>
+        <div style="font-size:16px;font-weight:800;color:${c};font-family:var(--mono);line-height:1">${v}</div>
+        <div class="kpi-sub">${s}</div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+// ── MOTOR ─────────────────────────────────────────────────────────────────────
+let motorSubTab = 'estado';
+let filterDiv   = 'Todos';
+let motorPaused = false;
+
+function renderMotor() {
+  const cbCount   = Object.values(marketPrices).filter(s=>s.cb).length;
+  const totalPnl  = users.reduce((s,u)=>s+u.pnl,0);
+  const filtered  = filterDiv==='Todos'?clubs:clubs.filter(c=>c.div===filterDiv);
+  const CATS      = ['Financeira Crítica','Esportiva Majoritária','Mercado de Ativos','Integridade/Saúde','Institucional','Esportiva Menor'];
+
+  return `
+  <div class="section-header">
+    <div><div class="section-title">Motor de Mercado</div><div class="section-sub">Controles, estado ao vivo e configuração</div></div>
+  </div>
+  <div class="kpi-grid">
+    <div class="kpi"><div class="kpi-label">P&L AGREGADO</div><div class="kpi-value" style="font-size:16px;color:${totalPnl>=0?'var(--green)':'var(--red)'}">FS$${fmtBRL(totalPnl)}</div><div class="kpi-sub">soma de todas as carteiras</div></div>
+    <div class="kpi" style="border-color:${cbCount>0?'rgba(244,63,94,.4)':'var(--border)'}">
+      <div style="display:flex;justify-content:space-between"><div class="kpi-label">CIRCUIT BREAKERS</div><span>🔒</span></div>
+      <div class="kpi-value" style="font-size:22px;color:${cbCount>0?'var(--red)':'var(--green)'}">${cbCount}</div>
+      <div class="kpi-sub">${cbCount>0?Object.entries(marketPrices).filter(([,s])=>s.cb).map(([t])=>t).join(', '):'nenhum ativo'}</div>
+    </div>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+    <div class="sub-tabs" style="margin:0">
+      ${['estado','noticias','matriz'].map(t=>`<button class="sub-tab${motorSubTab===t?' active':''}" onclick="setMotorTab('${t}')">${t==='estado'?'Estado Ao Vivo':t==='noticias'?'Disparar Notícia':'Matriz de Impacto'}</button>`).join('')}
+    </div>
+    ${btn(motorPaused?'▶ Retomar Motor':'⏸ Pausar Motor',motorPaused?'var(--green)':'var(--red)','outline',true,'toggleMotor()')}
+  </div>
+
+  ${motorSubTab==='estado'?`
+  <div style="display:flex;gap:6px;margin-bottom:12px">
+    ${['Todos','A','B'].map(d=>`<button class="filter-btn${filterDiv===d?' active':''}" onclick="setMotorDiv('${d}')">${d==='Todos'?'Todos':'Série '+d}</button>`).join('')}
+  </div>
+  <div>
+    ${filtered.map(c=>{
+      const s=marketPrices[c.ticker]||{};
+      const pct=s.fv>0?((s.price-s.fv)/s.fv*100):0;
+      const imbAbs=Math.abs(s.imb||0);
+      return `<div class="ticker-row${s.cb?' cb':''}" style="${s.cb?'border-color:rgba(244,63,94,.4)':''}">
+        <div class="ticker-chip" style="background:linear-gradient(145deg,${c.color},${c.color}99)">
+          <span style="font-size:8px;font-weight:900;color:${c.c2}">${c.ticker.replace(/\d/g,'')}</span>
+        </div>
+        <div class="ticker-info">
+          <div class="ticker-name">
+            <span>${c.ticker}</span>
+            ${badge('Série '+c.div,c.div==='A'?'var(--accent2)':'var(--gold)')}
+            ${s.cb?badge('⚠ CB','var(--red)','rgba(244,63,94,.15)'):''}
+          </div>
+          <div class="ticker-stats">
+            <span class="ticker-stat">Spot:<span style="color:#fff"> FS$${s.price?.toFixed(2)}</span></span>
+            <span class="ticker-stat">FV:<span style="color:${pct>0?'var(--green)':'var(--red)'};"> FS$${s.fv?.toFixed(2)} (${pct>=0?'+':''}${pct.toFixed(1)}%)</span></span>
+            <span class="ticker-stat">GARCH:<span style="color:var(--accent2)"> ${((s.garch||0)*1e6).toFixed(2)}μ</span></span>
+            <span class="ticker-stat">OFI:<span style="color:${imbAbs>0.4?'var(--orange)':'#fff'};"> ${(s.imb||0).toFixed(3)}</span></span>
+          </div>
+        </div>
+        <div class="ticker-actions">
+          ${s.cb
+            ? btn('🔓 Liberar','var(--green)','outline',true,`clearCB('${c.ticker}')`)
+            : btn('🔒 CB','var(--red)','outline',true,`forceCB('${c.ticker}')`)}
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`:''}
+
+  ${motorSubTab==='noticias'?`
+  <div class="card">
+    <div style="font-size:11px;font-weight:800;color:#fff;margin-bottom:14px">Nova Notícia Manual</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="field"><div class="field-lbl">TICKER</div><input class="field-inp" id="news-ticker" placeholder="ex: URU3" style="text-transform:uppercase"/></div>
+      <div class="field"><div class="field-lbl">CATEGORIA</div>
+        <select class="field-inp" id="news-cat">
+          ${CATS.map(c=>`<option>${c}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <div class="field-lbl">SENTIMENTO <span id="news-sent-val" style="color:var(--green)">+0.50</span></div>
+      <input type="range" min="-1" max="1" step="0.05" value="0.5" id="news-sent" oninput="updateSentVal()" style="width:100%"/>
+      <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted);margin-top:2px"><span>−1.0 negativo</span><span>0</span><span>+1.0 positivo</span></div>
+    </div>
+    <div class="field"><div class="field-lbl">HEADLINE</div><input class="field-inp" id="news-headline" placeholder="Digite o texto da notícia..."/></div>
+    ${btn('📡 Disparar Notícia','var(--green)','solid',false,'fireNews()')}
+  </div>
+  <div id="fired-news"></div>`:''}
+
+  ${motorSubTab==='matriz'?`
+  <div class="card">
+    <div style="font-size:11px;font-weight:800;color:#fff;margin-bottom:4px">IMPACT_MATRIX</div>
+    <div style="font-size:9px;color:var(--muted);margin-bottom:14px">Impacto spot máximo por categoria (cap ±2.5%)</div>
+    ${[['Financeira Crítica',0.05],['Esportiva Majoritária',0.03],['Mercado de Ativos',0.02],['Integridade/Saúde',0.015],['Institucional',0.01],['Esportiva Menor',0.005]].map(([cat,val])=>`
+    <div style="margin-bottom:10px">
+      <div style="font-size:9px;color:var(--muted);font-weight:700;margin-bottom:4px">${cat}</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <input type="range" min="0" max="0.10" step="0.001" value="${val}" style="flex:1" oninput="this.nextElementSibling.textContent=(parseFloat(this.value)*100).toFixed(1)+'%'"/>
+        <span style="font-size:11px;font-weight:800;color:var(--accent);font-family:var(--mono);min-width:50px;text-align:right">${(val*100).toFixed(1)}%</span>
+      </div>
+    </div>`).join('')}
+    ${btn('💾 Salvar Matriz','var(--green)','solid',false,'alert("Matriz salva!")')}
+  </div>`:''}
+  `;
+}
+
+function setMotorTab(t){motorSubTab=t;renderContent();}
+function setMotorDiv(d){filterDiv=d;renderContent();}
+function toggleMotor(){motorPaused=!motorPaused;if(motorPaused){clearInterval(marketInterval);marketInterval=null;}else{startMarket();}renderContent();}
+function forceCB(ticker){marketPrices[ticker].cb=true;setTimeout(()=>{marketPrices[ticker].cb=false;if(currentTab==='motor')renderContent();},10000);renderContent();}
+function clearCB(ticker){marketPrices[ticker].cb=false;renderContent();}
+function updateSentVal(){
+  const v=parseFloat(document.getElementById('news-sent')?.value||0);
+  const el=document.getElementById('news-sent-val');
+  if(el){el.textContent=(v>=0?'+':'')+v.toFixed(2);el.style.color=v>=0?'var(--green)':'var(--red)';}
+}
+let firedNews=[];
+function fireNews(){
+  const ticker=(document.getElementById('news-ticker')?.value||'').toUpperCase();
+  const cat=document.getElementById('news-cat')?.value||'';
+  const sent=parseFloat(document.getElementById('news-sent')?.value||0);
+  const headline=document.getElementById('news-headline')?.value||'';
+  if(!ticker||!headline){alert('Preencha ticker e headline.');return;}
+  firedNews.unshift({ticker,cat,sent,headline,ts:Date.now()});
+  const el=document.getElementById('fired-news');
+  if(el)el.innerHTML=firedNews.map(n=>`
+    <div class="ticker-row">
+      <div style="width:8px;height:8px;border-radius:50%;background:${n.sent>=0?'var(--green)':'var(--red)'}"></div>
+      <div style="flex:1"><div style="font-size:11px;font-weight:700;color:#fff">${n.ticker} · ${n.cat}</div><div style="font-size:9px;color:var(--muted)">${n.headline}</div></div>
+      <span style="font-size:10px;font-weight:800;color:${n.sent>=0?'var(--green)':'var(--red)'};font-family:var(--mono)">${n.sent>=0?'+':''}${n.sent.toFixed(2)}</span>
+    </div>`).join('');
+  document.getElementById('news-ticker').value='';
+  document.getElementById('news-headline').value='';
+  document.getElementById('news-sent').value='0.5';
+  updateSentVal();
+}
+
+// ── USERS ─────────────────────────────────────────────────────────────────────
+let selectedUser = null;
+let userSearch   = '';
+let filterPlan   = 'Todos';
+let filterRole2  = 'Todos';
+let filterOnline = false;
+
+function renderUsers() {
+  if(selectedUser) return renderUserDetail();
+  const filtered = users.filter(u=>{
+    if(filterPlan!=='Todos'&&u.plan!==filterPlan) return false;
+    if(filterRole2!=='Todos'&&u.role!==filterRole2) return false;
+    if(filterOnline&&!u.online) return false;
+    if(userSearch&&!u.name.toLowerCase().includes(userSearch.toLowerCase())&&!u.email.toLowerCase().includes(userSearch.toLowerCase())) return false;
+    return true;
+  });
+  return `
+  <div class="section-header">
+    <div><div class="section-title">Usuários</div><div class="section-sub">${users.length} cadastrados · ${users.filter(u=>u.online).length} online agora</div></div>
+  </div>
+  <input class="search-input" placeholder="Buscar por nome ou email..." value="${userSearch}" oninput="userSearch=this.value;renderContent()"/>
+  <div class="filter-bar">
+    ${['Todos','Jogador','Craque','Lenda'].map(p=>`<button class="filter-btn${filterPlan===p?' active':''}" onclick="filterPlan='${p}';renderContent()">${p}</button>`).join('')}
+    ${['Todos','user','monitor','admin'].map(r=>`<button class="filter-btn${filterRole2===r?' active':''}" onclick="filterRole2='${r}';renderContent()" style="${filterRole2===r?'':'border:1px solid transparent'}">${r==='Todos'?'Todos os roles':r}</button>`).join('')}
+    <button class="filter-btn${filterOnline?' active':''}" onclick="filterOnline=!filterOnline;renderContent()" style="${filterOnline?'background:rgba(34,197,94,.08);border-color:var(--green);color:var(--green)':''}">● Online</button>
+  </div>
+  <div>
+    ${filtered.length===0?'<div style="text-align:center;padding:32px 0;color:var(--muted);font-size:12px">Nenhum usuário encontrado</div>':
+    filtered.map(u=>`
+    <div class="user-row${u.suspended?' suspended':''}" onclick="selectUser('${u.id}')">
+      <div class="user-avatar">${avatar(u.name)}</div>
+      <div style="flex:1;min-width:0">
+        <div class="user-name">${u.name}${u.online?'<div class="online-dot"></div>':''}${u.suspended?badge('SUSPENSO','var(--red)','rgba(244,63,94,.1)'):''}
+        </div>
+        <div class="user-email">${u.email}</div>
+      </div>
+      <div class="user-meta">
+        ${badge(u.plan,planColor(u.plan))}
+        <span style="font-size:9px;font-family:var(--mono);color:${u.pnl>=0?'var(--green)':'var(--red)'}">${u.pnl>=0?'+':''}FS$${u.pnl.toFixed(0)}</span>
+      </div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function selectUser(id){selectedUser=users.find(u=>u.id===id)||null;renderContent();}
+
+function renderUserDetail() {
+  const u = selectedUser;
+  if(!u) return renderUsers();
+  return `
+  <button onclick="selectedUser=null;renderContent()" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;font-weight:700;margin-bottom:14px;padding:0">← Voltar</button>
+  <div class="card" style="border-radius:16px;padding:18px;margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+      <div class="user-avatar" style="width:44px;height:44px;border-radius:14px;font-size:16px">${avatar(u.name)}</div>
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:800;color:#fff">${u.name}</div>
+        <div style="font-size:10px;color:var(--muted)">${u.email} · desde ${u.since}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+        ${badge(u.plan,planColor(u.plan))}
+        ${badge(u.role.toUpperCase(),roleColor(u.role))}
+        ${u.online?badge('● ONLINE','var(--green)','rgba(34,197,94,.12)'):''}
+        ${u.suspended?badge('SUSPENSO','var(--red)','rgba(244,63,94,.12)'):''}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
+      ${[['SALDO','FS$'+fmtBRL(u.balance),'#fff'],['P&L',(u.pnl>=0?'+':'')+'FS$'+Math.abs(u.pnl).toFixed(2),u.pnl>=0?'var(--green)':'var(--red)'],['OPERAÇÕES',u.txCount,'var(--accent2)']].map(([l,v,c])=>`
+      <div class="kpi"><div class="kpi-label">${l}</div><div style="font-size:14px;font-weight:800;color:${c};font-family:var(--mono)">${v}</div></div>`).join('')}
+    </div>
+    <div style="font-size:9px;color:var(--muted);margin-bottom:14px">Último acesso: ${u.lastAccess}</div>
+    <div style="font-size:9px;color:var(--muted);font-weight:700;letter-spacing:0.8px;margin-bottom:8px">AÇÕES</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      ${!u.suspended ? btn('🚫 Suspender','var(--red)','outline',true,`suspendUser('${u.id}')`) : btn('✅ Reativar','var(--green)','outline',true,`unsuspendUser('${u.id}')`)}
+      ${btn('👑 Lenda','var(--gold)','outline',true,`promoteUser('${u.id}','plan','Lenda')`)}
+      ${btn('⭐ Craque','var(--accent)','outline',true,`promoteUser('${u.id}','plan','Craque')`)}
+    </div>
+  </div>`;
+}
+
+function suspendUser(id){const u=users.find(u=>u.id===id);if(u){u.suspended=true;u.online=false;if(selectedUser?.id===id)selectedUser={...u};}renderContent();}
+function unsuspendUser(id){const u=users.find(u=>u.id===id);if(u){u.suspended=false;if(selectedUser?.id===id)selectedUser={...u};}renderContent();}
+function promoteUser(id,field,val){const u=users.find(u=>u.id===id);if(u){u[field]=val;if(selectedUser?.id===id)selectedUser={...u};}renderContent();}
+
+// ── FINANCEIRO ────────────────────────────────────────────────────────────────
+let finTab = 'resumo';
+function renderFinanceiro() {
+  const byPlan = {Jogador:0,Craque:0,Lenda:0};
+  users.forEach(u=>byPlan[u.plan]=(byPlan[u.plan]||0)+1);
+  const mrr = {Craque:byPlan.Craque*19.90, Lenda:byPlan.Lenda*49.90};
+  const totalMrr = mrr.Craque+mrr.Lenda;
+  const totalVol = Object.values(marketPrices).reduce((s,m)=>s+m.vol24,0);
+
+  const gateways = [
+    {id:'mp', nome:'Mercado Pago',icon:'🟦',cor:'#00B1EA',ativo:true,pct:54},
+    {id:'pp', nome:'PayPal',      icon:'🅿', cor:'#003087',ativo:true,pct:29},
+    {id:'pag',nome:'PagSeguro',   icon:'🟧',cor:'#f97316',ativo:false,pct:17},
+  ];
+
+  return `
+  <div class="section-header">
+    <div><div class="section-title">Financeiro</div><div class="section-sub">Receita, assinaturas e gateways de pagamento</div></div>
+  </div>
+  <div class="pay-tabs">
+    ${['resumo','assinaturas','pagamentos'].map(t=>`<button class="pay-tab${finTab===t?' active':''}" onclick="finTab='${t}';renderContent()">${t.charAt(0).toUpperCase()+t.slice(1)}</button>`).join('')}
+  </div>
+
+  ${finTab==='resumo'?`
+  <div class="card">
+    <div class="card-title">RECEITA RECORRENTE</div>
+    <div style="font-size:30px;font-weight:900;color:var(--green);font-family:var(--mono)">R$${fmtBRL(totalMrr)}</div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:16px">ARR estimado: R$${fmtBRL(totalMrr*12)}</div>
+    ${[{plan:'Lenda',color:'var(--gold)',mrr:mrr.Lenda,count:byPlan.Lenda},{plan:'Craque',color:'var(--accent)',mrr:mrr.Craque,count:byPlan.Craque}].map(d=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-top:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:6px"><div style="width:6px;height:6px;border-radius:50%;background:${d.color}"></div><span style="font-size:11px;font-weight:700;color:${d.color}">${d.plan}</span><span style="font-size:9px;color:var(--muted)">${d.count} assinantes</span></div>
+      <span style="font-size:12px;font-weight:800;color:#fff;font-family:var(--mono)">R$${fmtBRL(d.mrr)}/mês</span>
+    </div>`).join('')}
+  </div>
+  <div class="card">
+    <div class="card-title">GATEWAYS ATIVOS</div>
+    ${gateways.filter(g=>g.ativo).map(g=>`
+    <div class="gw-row">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:24px;height:24px;border-radius:7px;background:${g.cor}22;border:1px solid ${g.cor}44;display:flex;align-items:center;justify-content:center;font-size:11px">${g.icon}</div>
+        <span style="font-size:11px;font-weight:700;color:#fff">${g.nome}</span>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:12px;font-weight:800;color:${g.cor};font-family:var(--mono)">${g.pct}%</div>
+        <div style="font-size:9px;color:var(--muted)">R$${fmtBRL(totalMrr*g.pct/100)}/mês</div>
+      </div>
+    </div>`).join('')}
+  </div>`:''}
+
+  ${finTab==='assinaturas'?`
+  <div class="card">
+    <div class="card-title">MRR POR PLANO</div>
+    ${[{plan:'Lenda',color:'var(--gold)',mrr:mrr.Lenda,count:byPlan.Lenda,churn:2},{plan:'Craque',color:'var(--accent)',mrr:mrr.Craque,count:byPlan.Craque,churn:5}].map(d=>`
+    <div style="background:var(--surface);border-radius:12px;padding:12px 14px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+        <div><div style="font-size:13px;font-weight:800;color:${d.color}">${d.plan}</div><div style="font-size:9px;color:var(--muted)">${d.count} assinantes</div></div>
+        <div style="text-align:right"><div style="font-size:14px;font-weight:800;color:#fff;font-family:var(--mono)">R$${fmtBRL(d.mrr)}/mês</div><div style="font-size:9px;color:var(--muted)">R$${fmtBRL(d.mrr*12)}/ano</div></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <div style="flex:1;background:var(--border);border-radius:8px;padding:6px;text-align:center"><div style="font-size:8px;color:var(--muted)">Churn</div><div style="font-size:13px;font-weight:800;color:${d.churn>5?'var(--orange)':'var(--green)'};font-family:var(--mono)">${d.churn}%</div></div>
+        <div style="flex:1;background:var(--border);border-radius:8px;padding:6px;text-align:center"><div style="font-size:8px;color:var(--muted)">Ticket Médio</div><div style="font-size:13px;font-weight:800;color:#fff;font-family:var(--mono)">R$${d.count>0?(d.mrr/d.count).toFixed(2):'0.00'}</div></div>
+        <div style="flex:1;background:var(--border);border-radius:8px;padding:6px;text-align:center"><div style="font-size:8px;color:var(--muted)">MRR</div><div style="font-size:13px;font-weight:800;color:var(--green);font-family:var(--mono)">R$${fmtBRL(d.mrr)}</div></div>
+      </div>
+    </div>`).join('')}
+  </div>`:''}
+
+  ${finTab==='pagamentos'?`
+  ${gateways.map(g=>`
+  <div class="card" style="border-color:${g.ativo?g.cor+'55':'var(--border)'}">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <div style="width:40px;height:40px;border-radius:12px;background:${g.cor}22;border:1px solid ${g.cor}44;display:flex;align-items:center;justify-content:center;font-size:18px">${g.icon}</div>
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+          <span style="font-size:13px;font-weight:800;color:#fff">${g.nome}</span>
+          ${badge(g.ativo?'● ATIVO':'INATIVO',g.ativo?'var(--green)':'var(--muted)')}
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+      <div class="kpi" style="padding:7px;text-align:center"><div class="kpi-label">PARTICIPAÇÃO</div><div style="font-size:12px;font-weight:800;color:${g.cor};font-family:var(--mono)">${g.pct}%</div></div>
+      <div class="kpi" style="padding:7px;text-align:center"><div class="kpi-label">RECEITA/MÊS</div><div style="font-size:12px;font-weight:800;color:#fff;font-family:var(--mono)">R$${fmtBRL(totalMrr*g.pct/100)}</div></div>
+    </div>
+    <div class="bar-track" style="margin-bottom:10px"><div class="bar-fill" style="width:${g.pct}%;background:${g.cor}"></div></div>
+    <div style="display:flex;gap:5px">
+      ${btn('⚙ Configurar','var(--accent)','outline',true)}
+      ${btn(g.ativo?'Desativar':'Ativar',g.ativo?'var(--orange)':'var(--green)','outline',true)}
+    </div>
+  </div>`).join('')}`:''}
+  `;
+}
+
+// ── ENGAJAMENTO ───────────────────────────────────────────────────────────────
+function renderEngajamento() {
+  const eng = {acessosMes:312,tempoMedio:'8min 20s',recorrencia:68,acessosPorUsuario:31.2,dau:7,mau:10,retencao30d:72,topHorario:'19h–22h',ausencia:{d1:2,d7:3,d15:1,d30:2,acima:1}};
+  const fs  = {compras:142800,vendas:138400,dividendos:2760.70,taxas:1840.50,topAtivo:{ticker:'URU3',vol:48200},maisPnl:{nome:'Carlos H.',pnl:1840.20}};
+  return `
+  <div class="section-header"><div><div class="section-title">Engajamento</div><div class="section-sub">Acessos, permanência e movimentação FS$</div></div></div>
+  <div class="card">
+    <div class="card-title">ACESSOS & SESSÕES</div>
+    <div class="eng-grid" style="margin-bottom:14px">
+      ${[['ACESSOS/MÊS',eng.acessosMes,'sessões únicas','#fff'],['TEMPO MÉDIO',eng.tempoMedio,'por acesso','#fff'],['TAXA RECORRÊNCIA',eng.recorrencia+'%','>1 sessão/dia','var(--accent)'],['ACESSOS/USUÁRIO',eng.acessosPorUsuario+'×','média no mês','var(--accent2)'],['DAU',eng.dau,'usuários/dia','#fff'],['MAU',eng.mau,'usuários/mês','#fff'],['RETENÇÃO 30d',eng.retencao30d+'%','voltaram no mês','var(--green)'],['PICO DE ACESSO',eng.topHorario,'horário mais ativo','#fff']].map(([l,v,s,c])=>`
+      <div class="eng-cell"><div class="kpi-label">${l}</div><div style="font-size:16px;font-weight:800;color:${c};font-family:var(--mono);line-height:1">${v}</div><div class="kpi-sub">${s}</div></div>`).join('')}
+    </div>
+    <div class="card-title" style="margin-bottom:8px">AUSÊNCIA POR PERÍODO</div>
+    <div class="absence-grid">
+      ${[['1 dia',eng.ausencia.d1,'var(--orange)'],['7 dias',eng.ausencia.d7,'var(--orange)'],['15 dias',eng.ausencia.d15,'var(--red)'],['30 dias',eng.ausencia.d30,'var(--red)'],['+30d',eng.ausencia.acima,'rgba(244,63,94,.5)']].map(([l,v,c])=>`
+      <div class="absence-cell"><div class="absence-val" style="color:${c}">${v}</div><div class="absence-lbl">${l}</div></div>`).join('')}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">FS$ MOVIMENTADOS NO MÊS</div>
+    <div class="eng-grid" style="margin-bottom:12px">
+      ${[['COMPRAS','FS$'+fmtNum(fs.compras),'var(--accent)'],['VENDAS','FS$'+fmtNum(fs.vendas),'var(--red)'],['DIVIDENDOS','FS$'+fs.dividendos.toFixed(2),'var(--green)'],['TAXAS','FS$'+fs.taxas.toFixed(2),'var(--orange)']].map(([l,v,c])=>`
+      <div class="eng-cell"><div class="kpi-label">${l}</div><div style="font-size:13px;font-weight:800;color:${c};font-family:var(--mono)">${v}</div></div>`).join('')}
+    </div>
+    <div style="display:flex;gap:8px">
+      <div class="eng-cell" style="flex:1"><div class="kpi-label">ATIVO MAIS NEGOCIADO</div><div style="font-size:14px;font-weight:800;color:#fff">${fs.topAtivo.ticker}</div><div style="font-size:9px;color:var(--muted);font-family:var(--mono)">${fmtNum(fs.topAtivo.vol)} cotas</div></div>
+      <div class="eng-cell" style="flex:1"><div class="kpi-label">MAIOR P&L DO MÊS</div><div style="font-size:14px;font-weight:800;color:#fff">${fs.maisPnl.nome}</div><div style="font-size:9px;color:var(--green);font-family:var(--mono)">+FS$${fs.maisPnl.pnl.toFixed(2)}</div></div>
+    </div>
+  </div>`;
+}
+
+// ── MODERAÇÃO ─────────────────────────────────────────────────────────────────
+let modSubTab = 'fila';
+let modFilter = 'flagged';
+let newWord   = '';
+
+function renderModeracao() {
+  const filtered = modFilter==='todos'?posts:posts.filter(p=>p.status===modFilter);
+  const flaggedCount = posts.filter(p=>p.status==='flagged').length;
+  const timeAgo = ts => { const m=Math.floor((Date.now()-ts)/60000); return m<60?m+'min atrás':Math.floor(m/60)+'h atrás'; };
+
+  return `
+  <div class="section-header"><div><div class="section-title">Moderação</div><div class="section-sub">${flaggedCount} posts aguardando revisão</div></div></div>
+  <div class="sub-tabs">
+    ${['fila','palavras'].map(t=>`<button class="sub-tab${modSubTab===t?' active':''}" onclick="modSubTab='${t}';renderContent()">${t==='fila'?'Fila de Posts':'Palavras Bloqueadas'}</button>`).join('')}
+  </div>
+
+  ${modSubTab==='fila'?`
+  <div class="filter-bar">
+    ${['flagged','ok','todos'].map(f=>`<button class="filter-btn${modFilter===f?' active':''}" onclick="modFilter='${f}';renderContent()">${f==='flagged'?'🚨 Suspeitos':f==='ok'?'✅ Aprovados':'Todos'}</button>`).join('')}
+  </div>
+  ${filtered.length===0?'<div style="text-align:center;padding:32px 0;color:var(--muted);font-size:12px">Nenhum post neste filtro</div>':
+  filtered.map(p=>`
+  <div class="post-card${p.status==='flagged'?' flagged':''}">
+    <div class="post-header">
+      <div>
+        <div class="post-author">${p.author} ${badge(p.plan,planColor(p.plan))}</div>
+        <div class="post-meta">${p.ticker} · ${timeAgo(p.ts)}${p.flags>0?` · <span style="color:var(--orange)">⚑ ${p.flags} denúncias</span>`:''}</div>
+      </div>
+      ${badge(p.status==='flagged'?'⚠ SUSPEITO':'✓ OK',p.status==='flagged'?'var(--orange)':'var(--green)',p.status==='flagged'?'rgba(249,115,22,.12)':'rgba(34,197,94,.12)')}
+    </div>
+    <div class="post-text">"${p.text}"</div>
+    <div class="post-actions">
+      ${p.status==='flagged'?btn('✓ Aprovar','var(--green)','outline',true,`approvePost('${p.id}')`):''}
+      ${btn('🗑 Remover','var(--red)','outline',true,`removePost('${p.id}')`)}
+    </div>
+  </div>`).join('')}`:''}
+
+  ${modSubTab==='palavras'?`
+  <div class="card">
+    <div class="card-title">PALAVRAS BLOQUEADAS (${blockedWords.length})</div>
+    <div style="margin-bottom:12px">${blockedWords.map(w=>`<span class="word-chip">${w}<button onclick="removeWord('${w}')">✕</button></span>`).join('')}</div>
+    <div style="display:flex;gap:8px">
+      <input class="field-inp" id="new-word-inp" placeholder="Nova palavra..." value="${newWord}" oninput="newWord=this.value" onkeydown="if(event.key==='Enter')addWord()" style="flex:1"/>
+      ${btn('+ Adicionar','var(--accent)','solid',true,'addWord()')}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">AUTO-DETECÇÃO</div>
+    <div style="font-size:11px;color:var(--text);line-height:1.6">Posts contendo palavras da lista são automaticamente marcados como <span style="color:var(--orange);font-weight:700">suspeitos</span> e adicionados à fila de revisão. Moderadores são notificados em tempo real.</div>
+  </div>`:''}
+  `;
+}
+
+function approvePost(id){const p=posts.find(p=>p.id===id);if(p){p.status='ok';p.flags=0;}buildNav();renderContent();}
+function removePost(id){posts=posts.filter(p=>p.id!==id);buildNav();renderContent();}
+function addWord(){const w=(document.getElementById('new-word-inp')?.value||newWord).trim().toLowerCase();if(w&&!blockedWords.includes(w)){blockedWords.push(w);}newWord='';renderContent();}
+function removeWord(w){blockedWords=blockedWords.filter(x=>x!==w);renderContent();}
+
+// ── NOTÍCIAS ──────────────────────────────────────────────────────────────────
+let noticiasFilter = 'todas';
+let editingNoticia = null;
+
+function renderNoticias() {
+  const canEdit = ['admin','superadmin','editor'].includes(currentUser.role);
+  if(editingNoticia!==null) return renderNoticiaForm();
+  const filtered = noticiasFilter==='todas'?noticias:noticias.filter(n=>n.status===noticiasFilter);
+  const statusColor = {publicada:'var(--green)',rascunho:'var(--muted)',arquivada:'rgba(255,255,255,.25)'};
+
+  return `
+  <div class="section-header">
+    <div><div class="section-title">Notícias</div><div class="section-sub">${noticias.filter(n=>n.status==='publicada').length} publicadas · ${noticias.filter(n=>n.status==='rascunho').length} rascunhos</div></div>
+    ${canEdit?btn('+ Nova','var(--accent)','solid',true,'editNoticia("new")'):''}
+  </div>
+  <div class="filter-bar">
+    ${['todas','publicada','rascunho','arquivada'].map(s=>`<button class="filter-btn${noticiasFilter===s?' active':''}" onclick="noticiasFilter='${s}';renderContent()">${s==='todas'?'Todas':s.charAt(0).toUpperCase()+s.slice(1)+'s'}</button>`).join('')}
+  </div>
+  ${filtered.length===0?'<div style="text-align:center;padding:32px 0;color:var(--muted);font-size:12px">Nenhuma notícia neste filtro</div>':
+  filtered.map(n=>`
+  <div class="news-card${n.status==='publicada'?' published':''}">
+    <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px">
+      <div style="flex:1">
+        <div class="news-badges">${badge(n.ticker,'var(--accent2)')} ${badge(n.categoria,'var(--muted)')} ${badge(n.status.toUpperCase(),statusColor[n.status])}</div>
+        <div class="news-title">${n.titulo}</div>
+        <div class="news-author">Por ${n.autor} · ${n.criadoEm}${n.cliques>0?' · '+fmtNum(n.cliques)+' cliques':''}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
+        <div style="width:8px;height:8px;border-radius:50%;background:${sentColor(n.sentimento)}"></div>
+        <span style="font-size:10px;font-weight:700;color:${sentColor(n.sentimento)};font-family:var(--mono)">${n.sentimento>=0?'+':''}${n.sentimento.toFixed(2)}</span>
+      </div>
+    </div>
+    <div class="news-actions">
+      ${n.status!=='arquivada'?btn(n.status==='publicada'?'Despublicar':'Publicar',n.status==='publicada'?'var(--muted)':'var(--green)','outline',true,`toggleNoticia('${n.id}')`):''}
+      ${canEdit&&n.status!=='arquivada'?btn('✎ Editar','var(--accent)','outline',true,`editNoticia('${n.id}')`):''}
+      ${n.status!=='arquivada'?btn('📦 Arquivar','var(--muted)','outline',true,`arquivarNoticia('${n.id}')`):''}
+      ${btn('🗑','var(--red)','outline',true,`deletarNoticia('${n.id}')`)}
+    </div>
+  </div>`).join('')}
+  `;
+}
+
+let noticiaForm = {titulo:'',ticker:'',categoria:'Esportiva Maior',sentimento:'0.5',texto:'',status:'rascunho'};
+function editNoticia(id){
+  if(id==='new'){noticiaForm={titulo:'',ticker:'',categoria:'Esportiva Maior',sentimento:'0.5',texto:'',status:'rascunho'};}
+  else{const n=noticias.find(n=>n.id===id);if(n)noticiaForm={...n,sentimento:String(n.sentimento)};}
+  editingNoticia=id;renderContent();
+}
+
+function renderNoticiaForm() {
+  const isNew = editingNoticia==='new';
+  const CATS = ['Esportiva Maior','Esportiva Menor','Financeira Crítica','Mercado de Ativos','Integridade/Saúde','Institucional'];
+  const sv = parseFloat(noticiaForm.sentimento||0);
+  return `
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <span style="font-size:13px;font-weight:800;color:#fff">${isNew?'Nova Notícia':'Editar Notícia'}</span>
+    ${btn('✕ Cancelar','var(--muted)','outline',true,'editingNoticia=null;renderContent()')}
+  </div>
+  <div class="card">
+    <div class="field"><div class="field-lbl">TÍTULO</div><input class="field-inp" value="${noticiaForm.titulo||''}" oninput="noticiaForm.titulo=this.value" placeholder="Título da notícia..."/></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="field"><div class="field-lbl">TICKER</div><input class="field-inp" value="${noticiaForm.ticker||''}" oninput="noticiaForm.ticker=this.value.toUpperCase()" placeholder="ex: URU3"/></div>
+      <div class="field"><div class="field-lbl">CATEGORIA</div>
+        <select class="field-inp" onchange="noticiaForm.categoria=this.value">
+          ${CATS.map(c=>`<option${noticiaForm.categoria===c?' selected':''}>${c}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <div class="field-lbl">SENTIMENTO: <span style="color:${sv>=0?'var(--green)':'var(--red)'}">${sv>=0?'+':''}${sv.toFixed(2)}</span></div>
+      <input type="range" min="-1" max="1" step="0.05" value="${noticiaForm.sentimento}" oninput="noticiaForm.sentimento=this.value;renderContent()" style="width:100%"/>
+      <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted)"><span>−1.0</span><span>0</span><span>+1.0</span></div>
+    </div>
+    <div class="field"><div class="field-lbl">STATUS</div>
+      <div style="display:flex;gap:6px">
+        ${['rascunho','publicada'].map(s=>`<button onclick="noticiaForm.status='${s}';renderContent()" style="flex:1;padding:8px;border-radius:9px;border:1px solid ${noticiaForm.status===s?(s==='publicada'?'var(--green)':'var(--muted)'):'var(--border)'};cursor:pointer;background:${noticiaForm.status===s?(s==='publicada'?'rgba(34,197,94,.12)':'rgba(255,255,255,.05)'):'transparent'};color:${noticiaForm.status===s?(s==='publicada'?'var(--green)':'#fff'):'var(--muted)'};font-size:11px;font-weight:700;font-family:var(--sans)">${s==='publicada'?'● Publicada':'○ Rascunho'}</button>`).join('')}
+      </div>
+    </div>
+    ${btn('💾 '+(isNew?'Criar Notícia':'Salvar'),'var(--green)','solid',false,'saveNoticia()')}
+  </div>`;
+}
+
+function saveNoticia(){
+  if(!noticiaForm.titulo||!noticiaForm.ticker){alert('Preencha título e ticker.');return;}
+  if(editingNoticia==='new'){
+    noticias.unshift({...noticiaForm,id:'n'+Date.now(),sentimento:parseFloat(noticiaForm.sentimento)||0,autor:currentUser.role,criadoEm:new Date().toISOString().slice(0,10),cliques:0});
+  } else {
+    noticias=noticias.map(n=>n.id===editingNoticia?{...n,...noticiaForm,sentimento:parseFloat(noticiaForm.sentimento)||n.sentimento}:n);
+  }
+  editingNoticia=null;renderContent();
+}
+
+function toggleNoticia(id){noticias=noticias.map(n=>n.id===id?{...n,status:n.status==='publicada'?'rascunho':'publicada'}:n);renderContent();}
+function arquivarNoticia(id){noticias=noticias.map(n=>n.id===id?{...n,status:'arquivada'}:n);renderContent();}
+function deletarNoticia(id){if(confirm('Excluir esta notícia?')){noticias=noticias.filter(n=>n.id!==id);renderContent();}}
+
+// ── PATROCINADORES ────────────────────────────────────────────────────────────
+let patrTab = 'banners';
+const BANNER_POS = [{id:'home_top',label:'Home Top',h:80},{id:'market_top',label:'Market Top',h:60},{id:'cart_top',label:'Cart Top',h:60}];
+const LIGAS = [
+  {id:'l001',nome:'Liga FootStock Março 2026',patrocinador:'Mercado Pago',premio:'FS$10.000',inicio:'2026-03-01',fim:'2026-03-31',maxJogadores:50,inscritos:43,status:'ativa',  planoMinimo:'Craque',cor:'#00B1EA'},
+  {id:'l002',nome:'Desafio Red Bull',          patrocinador:'Red Bull',    premio:'FS$5.000', inicio:'2026-03-15',fim:'2026-03-31',maxJogadores:30,inscritos:28,status:'encerrada',planoMinimo:'Jogador',cor:'#CC0000'},
+  {id:'l003',nome:'Liga Lenda Exclusiva',       patrocinador:'PagSeguro',  premio:'FS$25.000',inicio:'2026-05-01',fim:'2026-05-31',maxJogadores:20,inscritos:7, status:'agendada', planoMinimo:'Lenda',  cor:'#f59e0b'},
+];
+
+function renderPatrocinadores() {
+  const statusColor = {ativa:'var(--green)',encerrada:'var(--muted)',agendada:'var(--accent2)'};
+  const planColor2  = {Jogador:'var(--muted)',Craque:'var(--accent)',Lenda:'var(--gold)'};
+  return `
+  <div class="section-header"><div><div class="section-title">Patrocinadores</div><div class="section-sub">Banners de publicidade e ligas patrocinadas</div></div></div>
+  <div class="sub-tabs">
+    ${[{id:'banners',label:'Banners'},{id:'ligas',label:'Ligas Patrocinadas'}].map(t=>`<button class="sub-tab${patrTab===t.id?' active':''}" onclick="patrTab='${t.id}';renderContent()">${t.label}</button>`).join('')}
+  </div>
+
+  ${patrTab==='banners'?`
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <div style="font-size:11px;color:var(--muted)">${banners.length} banners · ${banners.filter(b=>b.ativo).length} ativos</div>
+    ${btn('+ Novo Banner','var(--accent)','solid',true)}
+  </div>
+  ${banners.map(b=>{
+    const pos = BANNER_POS.find(p=>p.id===b.posicao)||BANNER_POS[0];
+    return `<div class="banner-card" style="border-color:${b.ativo?b.cor+'55':'var(--border)'}">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+            <span style="font-size:13px;font-weight:800;color:#fff">${b.titulo}</span>
+            ${badge(b.ativo?'● ATIVO':'INATIVO',b.ativo?'var(--green)':'var(--muted)')}
+          </div>
+          <div style="font-size:9px;color:var(--muted)">${b.patrocinador} · ${pos.label}</div>
+        </div>
+      </div>
+      <div class="banner-preview" style="height:${pos.h}px;background:linear-gradient(135deg,${b.cor}22,${b.cor}11);border:1.5px solid ${b.cor}55">
+        <div>
+          <div style="font-size:11px;font-weight:800;color:#fff">${b.titulo}</div>
+          ${pos.h>=80?`<div style="font-size:9px;color:rgba(255,255,255,.6);margin-top:2px">${b.patrocinador}</div>`:''}
+        </div>
+        <div style="background:${b.cor};border-radius:8px;padding:5px 12px;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">${b.cta}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+        <div class="kpi" style="padding:7px;text-align:center"><div class="kpi-label">CLIQUES</div><div style="font-size:14px;font-weight:800;color:var(--accent);font-family:var(--mono)">${fmtNum(b.cliques)}</div></div>
+        <div class="kpi" style="padding:7px;text-align:center"><div class="kpi-label">IMPRESSÕES</div><div style="font-size:14px;font-weight:800;color:#fff;font-family:var(--mono)">${fmtNum(b.impressoes)}</div></div>
+      </div>
+      <div style="display:flex;gap:5px">
+        ${btn('✎ Editar','var(--accent)','outline',true)}
+        ${btn(b.ativo?'Desativar':'Ativar',b.ativo?'var(--orange)':'var(--green)','outline',true,`toggleBanner('${b.id}')`)}
+        ${btn('🗑','var(--red)','outline',true,`deleteBanner('${b.id}')`)}
+      </div>
+    </div>`;
+  }).join('')}`:''}
+
+  ${patrTab==='ligas'?`
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <div style="font-size:11px;color:var(--muted)">${LIGAS.length} ligas</div>
+    ${btn('+ Nova Liga','var(--accent)','solid',true)}
+  </div>
+  ${LIGAS.map(l=>`
+  <div class="liga-card" style="border-left:3px solid ${l.cor}">
+    <div class="liga-header">
+      <div>
+        <div style="font-size:12px;font-weight:800;color:#fff;margin-bottom:2px">${l.nome}</div>
+        <div style="font-size:9px;color:var(--muted)">${l.patrocinador}</div>
+      </div>
+      ${badge(l.status.toUpperCase(),statusColor[l.status])}
+    </div>
+    <div class="liga-stats">
+      <div class="liga-stat"><div class="liga-stat-l">PRÊMIO</div><div class="liga-stat-v" style="color:var(--gold)">${l.premio}</div></div>
+      <div class="liga-stat"><div class="liga-stat-l">INSCRITOS</div><div class="liga-stat-v">${l.inscritos}/${l.maxJogadores}</div></div>
+      <div class="liga-stat"><div class="liga-stat-l">PLANO MÍN.</div><div class="liga-stat-v" style="color:${planColor2[l.planoMinimo]}">${l.planoMinimo}</div></div>
+    </div>
+    <div class="bar-track" style="margin-bottom:10px"><div class="bar-fill" style="width:${Math.round(l.inscritos/l.maxJogadores*100)}%;background:${l.cor}"></div></div>
+    <div style="font-size:9px;color:var(--muted);margin-bottom:8px">${l.inicio} → ${l.fim}</div>
+    <div style="display:flex;gap:5px">
+      ${btn('✎ Editar','var(--accent)','outline',true)}
+      ${btn('🗑','var(--red)','outline',true)}
+    </div>
+  </div>`).join('')}`:''}
+  `;
+}
+
+function toggleBanner(id){banners=banners.map(b=>b.id===id?{...b,ativo:!b.ativo}:b);renderContent();}
+function deleteBanner(id){if(confirm('Excluir banner?')){banners=banners.filter(b=>b.id!==id);renderContent();}}
+</script>
+</body>
+</html>

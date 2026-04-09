@@ -5,6 +5,7 @@
 // ============================================================================
 
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { getAuthUser } from "@/lib/auth";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { AdminLayoutClient } from "@/components/admin/AdminLayoutClient";
@@ -24,11 +25,38 @@ export default async function AdminLayout({
 }) {
   const auth = await getAuthUser();
 
-  if (!auth || !auth.user.adminRole) {
-    redirect(ROUTES.LOGIN);
+  // Em dev, aceita fs-admin-role cookie como fallback
+  let user = auth?.user;
+  if (!user && process.env.NODE_ENV === 'development') {
+    const cookieStore = await cookies();
+    const adminRole = cookieStore.get('fs-admin-role')?.value;
+    if (adminRole) {
+      // Dummy user object para dev
+      user = {
+        id: 'dev-user',
+        email: 'dev@foot-stock.test',
+        name: 'Dev User',
+        phone: null,
+        birthDate: '',
+        favoriteClub: '',
+        favoriteClubDisplayName: null,
+        userType: 'INVESTIDOR',
+        investorProfile: 'INICIANTE',
+        planType: 'JOGADOR',
+        fsBalance: 0,
+        marginBlocked: 0,
+        tourCompleted: false,
+        ageVerificationPending: false,
+        adminRole: adminRole as AdminRole,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
   }
 
-  const { user } = auth;
+  if (!user || !user.adminRole) {
+    redirect(ROUTES.LOGIN);
+  }
 
   return (
     // flex-col mobile: header acima do conteúdo. md:flex-row: sidebar ao lado.

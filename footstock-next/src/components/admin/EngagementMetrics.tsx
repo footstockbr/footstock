@@ -9,7 +9,7 @@ import {
   Tooltip,
   CartesianGrid,
 } from 'recharts'
-import { Users, Activity, Zap, Clock, TrendingUp } from 'lucide-react'
+import { Users, Activity, Zap, Clock, TrendingUp, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { StatCard } from '@/components/ui/stat-card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { EngagementMetricsDTO, EngagementDayPoint } from '@/lib/types/admin'
@@ -25,10 +25,19 @@ function formatDate(iso: string) {
   return `${d}/${m}`
 }
 
-export function EngagementMetrics({ data, history, isLoading }: EngagementMetricsProps) {
-  const formatBRL = (n: number) =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n)
+function formatFS(n: number) {
+  return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
+}
 
+const ABSENCE_PERIODS = [
+  { key: 'd1'     , label: '1 dia',   color: '#f97316' },
+  { key: 'd7'     , label: '7 dias',  color: '#f97316' },
+  { key: 'd15'    , label: '15 dias', color: '#F6465D' },
+  { key: 'd30'    , label: '30 dias', color: '#F6465D' },
+  { key: 'd30plus', label: '+30d',    color: 'rgba(246,70,93,.55)' },
+] as const
+
+export function EngagementMetrics({ data, history, isLoading }: EngagementMetricsProps) {
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -44,6 +53,9 @@ export function EngagementMetrics({ data, history, isLoading }: EngagementMetric
       </div>
     )
   }
+
+  const inactiveByPeriod = data?.inactiveByPeriod
+  const fsBreakdown = data?.fsBreakdown
 
   return (
     <div className="space-y-4">
@@ -75,11 +87,17 @@ export function EngagementMetrics({ data, history, isLoading }: EngagementMetric
         />
       </div>
 
-      {/* Stats row 2 — FS$ e Sessão */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Stats row 2 — Retenção / FS$ movimentados / Duração */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <StatCard
+          label="Retenção WAU"
+          value={data?.retentionRate != null ? `${data.retentionRate}%` : 'N/D'}
+          subValue="semana-sobre-semana"
+          icon={<TrendingUp className="h-4 w-4" />}
+        />
         <StatCard
           label="FS$ Movimentados"
-          value={formatBRL(data?.totalFsMovimentados24h ?? 0)}
+          value={`FS$${formatFS(data?.totalFsMovimentados24h ?? 0)}`}
           subValue="últimas 24h"
           icon={<TrendingUp className="h-4 w-4" />}
         />
@@ -94,6 +112,71 @@ export function EngagementMetrics({ data, history, isLoading }: EngagementMetric
           icon={<Clock className="h-4 w-4" />}
         />
       </div>
+
+      {/* FS$ Breakdown (30 dias) + Top Ativo */}
+      {fsBreakdown && (
+        <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
+          <h3 className="text-xs font-bold text-[#929AA5] uppercase tracking-wider mb-3">
+            FS$ Movimentados no Mês
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+            {[
+              { label: 'Compras',    value: fsBreakdown.compras,    color: '#6c63ff', icon: <ArrowUpRight className="h-3 w-3" /> },
+              { label: 'Vendas',     value: fsBreakdown.vendas,     color: '#F6465D', icon: <ArrowDownRight className="h-3 w-3" /> },
+              { label: 'Dividendos', value: fsBreakdown.dividendos, color: '#2EBD85', icon: <TrendingUp className="h-3 w-3" /> },
+              { label: 'Taxas',      value: fsBreakdown.taxas,      color: '#f97316', icon: <Activity className="h-3 w-3" /> },
+            ].map(({ label, value, color, icon }) => (
+              <div key={label} className="bg-[#181A20] rounded-lg p-3">
+                <p className="text-[10px] text-[#929AA5] uppercase tracking-wide mb-1">{label}</p>
+                <p className="text-sm font-extrabold font-mono leading-none" style={{ color }}>
+                  <span className="inline-flex items-center gap-0.5">
+                    {icon}
+                    FS${formatFS(value)}
+                  </span>
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {/* Top ativo + Top P&L */}
+          {data?.topAsset && (
+            <div className="flex gap-2">
+              <div className="flex-1 bg-[#181A20] rounded-lg p-3">
+                <p className="text-[10px] text-[#929AA5] uppercase tracking-wide mb-1">Ativo Mais Negociado</p>
+                <p className="text-base font-extrabold text-white">{data.topAsset.ticker}</p>
+                <p className="text-[10px] text-[#929AA5] font-mono mt-0.5">
+                  {data.topAsset.volume.toLocaleString('pt-BR')} ordens
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Ausência por período */}
+      {inactiveByPeriod && (
+        <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
+          <h3 className="text-xs font-bold text-[#929AA5] uppercase tracking-wider mb-3">
+            Ausência por Período
+          </h3>
+          <div className="flex gap-1.5">
+            {ABSENCE_PERIODS.map(({ key, label, color }) => {
+              const value = inactiveByPeriod[key]
+              return (
+                <div
+                  key={key}
+                  className="flex-1 bg-[#181A20] rounded-lg py-2.5 px-1 text-center"
+                >
+                  <p className="text-lg font-extrabold font-mono leading-none" style={{ color }}>
+                    {value.toLocaleString('pt-BR')}
+                  </p>
+                  <p className="text-[9px] text-[#929AA5] mt-1 leading-tight">{label}</p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Badge de métricas aproximadas */}
       {data?._approximated && (

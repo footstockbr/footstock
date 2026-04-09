@@ -18,6 +18,24 @@ export interface AdminDashboardDTO {
   }
   motorStatus: MotorStatus
   topAssets: { ticker: string; volume: number; priceChange: number }[]
+  // User stats panel
+  userStats: {
+    online: number
+    suspended: number
+    postsPendingModeration: number
+    inactiveByPeriod: {
+      d1: number
+      d7: number
+      d15: number
+      d30: number
+      d30plus: number
+    }
+    planDistribution: {
+      plan: string
+      count: number
+      pct: number
+    }[]
+  }
   _cacheHit?: boolean
 }
 
@@ -30,6 +48,22 @@ export interface EngagementMetricsDTO {
   totalFsMovimentados24h: number
   avgSessionDuration: number | null // segundos, null se não disponível
   topFeatures: string[]
+  // Campos adicionais para o painel de engajamento completo
+  fsBreakdown: {
+    compras: number
+    vendas: number
+    dividendos: number
+    taxas: number
+  }
+  topAsset: { ticker: string; volume: number } | null
+  inactiveByPeriod: {
+    d1: number
+    d7: number
+    d15: number
+    d30: number
+    d30plus: number
+  }
+  totalUsers: number
   _approximated?: boolean
 }
 

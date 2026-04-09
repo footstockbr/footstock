@@ -6,6 +6,7 @@ import { PlanType } from "@/lib/constants/plans";
 import Link from "next/link";
 import { ROUTES } from "@/lib/constants/routes";
 import { getAuthUser } from "@/lib/auth";
+import { CheckoutButton } from "@/components/payments/CheckoutButton";
 
 export const metadata: Metadata = {
   title: "Planos — Foot Stock",
