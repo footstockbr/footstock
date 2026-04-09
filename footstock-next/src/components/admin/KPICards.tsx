@@ -1,6 +1,5 @@
-import { Users, TrendingUp, CreditCard, Activity, Server, UserPlus } from 'lucide-react'
+import { Activity, Server, UserPlus } from 'lucide-react'
 import { StatCard } from '@/components/ui/stat-card'
-import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import type { AdminDashboardDTO } from '@/lib/types/admin'
 
@@ -24,18 +23,13 @@ function MotorBadge({ status }: { status: 'ONLINE' | 'OFFLINE' | 'DEGRADED' }) {
 }
 
 export function KPICards({ data, isLoading }: KPICardsProps) {
-  const formatBRL = (n: number) =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 }).format(n)
-
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-      <StatCard
-        label="Usuários Totais"
-        value={isLoading ? '—' : String(data?.totalUsers ?? 0)}
-        icon={<Users className="h-4 w-4" />}
-        isLoading={isLoading}
-        aria-label="Total de usuários cadastrados"
-      />
+      {/* Removed: Usuários Totais (duplicated in UserStatsCard) */}
+      {/* Removed: Planos Ativos (duplicated in UserStatsCard distribution) */}
+      {/* Removed: MRR (duplicated in FinanceiroCard) */}
+
+      {/* Keep: Novos Hoje */}
       <StatCard
         label="Novos Hoje"
         value={isLoading ? '—' : String(data?.newUsers24h ?? 0)}
@@ -43,20 +37,8 @@ export function KPICards({ data, isLoading }: KPICardsProps) {
         isLoading={isLoading}
         aria-label="Novos usuários nas últimas 24 horas"
       />
-      <StatCard
-        label="Planos Ativos"
-        value={isLoading ? '—' : String(data?.activeSubscriptions ?? 0)}
-        icon={<CreditCard className="h-4 w-4" />}
-        isLoading={isLoading}
-        aria-label="Assinaturas ativas"
-      />
-      <StatCard
-        label="MRR"
-        value={isLoading ? '—' : formatBRL(data?.MRR ?? 0)}
-        icon={<TrendingUp className="h-4 w-4" />}
-        isLoading={isLoading}
-        aria-label="Receita Recorrente Mensal"
-      />
+
+      {/* Keep: Ordens Hoje */}
       <StatCard
         label="Ordens Hoje"
         value={isLoading ? '—' : String(data?.totalOrders24h ?? 0)}
@@ -64,7 +46,8 @@ export function KPICards({ data, isLoading }: KPICardsProps) {
         isLoading={isLoading}
         aria-label="Ordens executadas nas últimas 24 horas"
       />
-      {/* Motor status */}
+
+      {/* Keep: Motor status */}
       <div
         className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4 flex flex-col gap-2"
         aria-label={`Estado do motor: ${data?.motorStatus ?? 'desconhecido'}`}
