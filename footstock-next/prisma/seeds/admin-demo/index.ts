@@ -9,11 +9,21 @@
  */
 
 import { PrismaClient } from '@prisma/client'
-import { seedAdminDemoUsers } from './users.seed'
-import { seedAdminDemoNews } from './news.seed'
-import { seedAdminDemoFinancial } from './financial.seed'
+import { PrismaPg } from '@prisma/adapter-pg'
+import { seedAdminDemoUsers } from './users.seed.ts'
+import { seedAdminDemoAssets } from './assets.seed.ts'
+import { seedAdminDemoNews } from './news.seed.ts'
+import { seedAdminDemoFinancial } from './financial.seed.ts'
+import { seedAdminDemoEngagement } from './engagement.seed.ts'
+import { seedAdminDemoModeration } from './moderation.seed.ts'
 
-const prisma = new PrismaClient()
+const connectionString = process.env.DATABASE_URL!
+const adapter = new PrismaPg({ connectionString })
+
+const prisma = new PrismaClient({
+  adapter,
+  log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+})
 
 async function main() {
   if (process.env.NODE_ENV === 'production') {
@@ -23,11 +33,28 @@ async function main() {
   console.log('\n🌱 Admin Demo Seed — Foot Stock')
   console.log('================================\n')
 
-  await seedAdminDemoUsers(prisma)
+  // Skip users/news/financial if running just engagement seed
+  const skipInitial = process.argv.includes('--engagement-only')
+
+  if (!skipInitial) {
+    await seedAdminDemoUsers(prisma)
+    console.log()
+  }
+
+  // Assets são sempre necessários para engajamento
+  await seedAdminDemoAssets(prisma)
   console.log()
-  await seedAdminDemoNews(prisma)
+
+  if (!skipInitial) {
+    await seedAdminDemoNews(prisma)
+    console.log()
+    await seedAdminDemoFinancial(prisma)
+    console.log()
+  }
+
+  await seedAdminDemoEngagement(prisma)
   console.log()
-  await seedAdminDemoFinancial(prisma)
+  await seedAdminDemoModeration(prisma)
 
   console.log('\n✅ Seed de demonstração concluído com sucesso!')
   console.log('   Acesse /admin com as credenciais em DEV-CREDENTIALS.md\n')
