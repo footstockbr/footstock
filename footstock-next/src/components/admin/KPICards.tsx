@@ -1,4 +1,4 @@
-import { Activity, Server, UserPlus } from 'lucide-react'
+import { Server, UserPlus } from 'lucide-react'
 import { StatCard } from '@/components/ui/stat-card'
 import { cn } from '@/lib/utils'
 import type { AdminDashboardDTO } from '@/lib/types/admin'
@@ -24,12 +24,13 @@ function MotorBadge({ status }: { status: 'ONLINE' | 'OFFLINE' | 'DEGRADED' }) {
 
 export function KPICards({ data, isLoading }: KPICardsProps) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+    <div className="grid grid-cols-2 gap-3">
       {/* Removed: Usuários Totais (duplicated in UserStatsCard) */}
       {/* Removed: Planos Ativos (duplicated in UserStatsCard distribution) */}
       {/* Removed: MRR (duplicated in FinanceiroCard) */}
+      {/* Removed: Ordens Hoje */}
 
-      {/* Keep: Novos Hoje */}
+      {/* Novos Hoje */}
       <StatCard
         label="Novos Hoje"
         value={isLoading ? '—' : String(data?.newUsers24h ?? 0)}
@@ -38,16 +39,7 @@ export function KPICards({ data, isLoading }: KPICardsProps) {
         aria-label="Novos usuários nas últimas 24 horas"
       />
 
-      {/* Keep: Ordens Hoje */}
-      <StatCard
-        label="Ordens Hoje"
-        value={isLoading ? '—' : String(data?.totalOrders24h ?? 0)}
-        icon={<Activity className="h-4 w-4" />}
-        isLoading={isLoading}
-        aria-label="Ordens executadas nas últimas 24 horas"
-      />
-
-      {/* Keep: Motor status */}
+      {/* Motor status */}
       <div
         className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4 flex flex-col gap-2"
         aria-label={`Estado do motor: ${data?.motorStatus ?? 'desconhecido'}`}
