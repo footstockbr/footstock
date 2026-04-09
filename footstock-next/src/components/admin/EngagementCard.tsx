@@ -2,6 +2,7 @@
 
 import { TrendingUp } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
+import { formatBRL } from '@/lib/utils/format'
 import type { EngagementMetricsDTO } from '@/lib/types/admin'
 
 interface EngagementCardProps {
@@ -34,33 +35,6 @@ export function EngagementCard({ data, isLoading }: EngagementCardProps) {
     return `${mins}m ${secs}s`
   }
 
-  const engagementMetrics = [
-    {
-      label: 'ACESSOS/MÊS',
-      value: (data?.MAU ?? 0).toLocaleString('pt-BR'),
-      sub: 'usuários únicos',
-      color: '#fff',
-    },
-    {
-      label: 'TEMPO MÉDIO',
-      value: formatDuration(data?.avgSessionDuration ?? null),
-      sub: 'por acesso',
-      color: '#fff',
-    },
-    {
-      label: 'RECORRÊNCIA',
-      value: `${(data?.retentionRate ?? 0).toFixed(0)}%`,
-      sub: 'semana-sobre-semana',
-      color: 'var(--accent)',
-    },
-    {
-      label: 'PICO CONCORRENTE',
-      value: (data?.peakConcurrentUsers ?? 0).toLocaleString('pt-BR'),
-      sub: 'usuários simultâneos',
-      color: 'var(--accent2)',
-    },
-  ]
-
   return (
     <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4 space-y-5">
       {/* Header */}
@@ -69,23 +43,42 @@ export function EngagementCard({ data, isLoading }: EngagementCardProps) {
         <h3 className="text-xs font-bold text-[#929AA5] uppercase tracking-wider">Engajamento</h3>
       </div>
 
-      {/* Metrics Grid */}
+      {/* 4 KPIs Grid - como no HTML do cliente */}
       <div className="grid grid-cols-2 gap-3">
-        {engagementMetrics.map((metric) => (
-          <div key={metric.label} className="bg-[#181A20] rounded-lg p-3">
-            <p className="text-[10px] text-[#929AA5] uppercase tracking-wide mb-1.5">{metric.label}</p>
-            <p
-              className="text-lg font-extrabold font-mono leading-none"
-              style={{ color: metric.color }}
-            >
-              {metric.value}
-            </p>
-            <p className="text-[10px] text-[#929AA5] mt-1">{metric.sub}</p>
-          </div>
-        ))}
+        <div className="bg-[#181A20] rounded-lg p-3">
+          <p className="text-[10px] text-[#929AA5] uppercase tracking-wide mb-1.5">ACESSOS/MÊS</p>
+          <p style={{ fontSize: '16px', fontWeight: 800, color: '#fff', fontFamily: 'monospace', lineHeight: 1 }}>
+            {(data?.MAU ?? 0).toLocaleString('pt-BR')}
+          </p>
+          <p className="text-[10px] text-[#929AA5] mt-1">sessões únicas</p>
+        </div>
+
+        <div className="bg-[#181A20] rounded-lg p-3">
+          <p className="text-[10px] text-[#929AA5] uppercase tracking-wide mb-1.5">TEMPO MÉDIO</p>
+          <p style={{ fontSize: '16px', fontWeight: 800, color: '#fff', fontFamily: 'monospace', lineHeight: 1 }}>
+            {formatDuration(data?.avgSessionDuration ?? null)}
+          </p>
+          <p className="text-[10px] text-[#929AA5] mt-1">por acesso</p>
+        </div>
+
+        <div className="bg-[#181A20] rounded-lg p-3">
+          <p className="text-[10px] text-[#929AA5] uppercase tracking-wide mb-1.5">RECORRÊNCIA</p>
+          <p style={{ fontSize: '16px', fontWeight: 800, color: '#6c63ff', fontFamily: 'monospace', lineHeight: 1 }}>
+            {(data?.retentionRate ?? 0).toFixed(0)}%
+          </p>
+          <p className="text-[10px] text-[#929AA5] mt-1">&gt;1 sessão/dia</p>
+        </div>
+
+        <div className="bg-[#181A20] rounded-lg p-3">
+          <p className="text-[10px] text-[#929AA5] uppercase tracking-wide mb-1.5">ACESSOS/USUÁRIO</p>
+          <p style={{ fontSize: '16px', fontWeight: 800, color: '#009EE3', fontFamily: 'monospace', lineHeight: 1 }}>
+            {data && data.totalUsers > 0 ? (data.MAU / data.totalUsers).toFixed(1) : '0'}×
+          </p>
+          <p className="text-[10px] text-[#929AA5] mt-1">média no mês</p>
+        </div>
       </div>
 
-      {/* Additional Stats */}
+      {/* DAU/WAU/MAU */}
       <div className="border-t border-[rgba(240,185,11,.08)] pt-4">
         <div className="grid grid-cols-3 gap-2">
           <div className="text-center">
@@ -112,19 +105,19 @@ export function EngagementCard({ data, isLoading }: EngagementCardProps) {
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="bg-[#181A20] rounded p-2">
               <p className="text-[#929AA5]">Compras</p>
-              <p className="font-bold text-[#EAECEF]">{Math.round(data.fsBreakdown.compras).toLocaleString('pt-BR')}</p>
+              <p className="font-bold text-[#EAECEF]">{formatBRL(data.fsBreakdown.compras)}</p>
             </div>
             <div className="bg-[#181A20] rounded p-2">
               <p className="text-[#929AA5]">Vendas</p>
-              <p className="font-bold text-[#EAECEF]">{Math.round(data.fsBreakdown.vendas).toLocaleString('pt-BR')}</p>
+              <p className="font-bold text-[#EAECEF]">{formatBRL(data.fsBreakdown.vendas)}</p>
             </div>
             <div className="bg-[#181A20] rounded p-2">
               <p className="text-[#929AA5]">Dividendos</p>
-              <p className="font-bold text-[#EAECEF]">{Math.round(data.fsBreakdown.dividendos).toLocaleString('pt-BR')}</p>
+              <p className="font-bold text-[#EAECEF]">{formatBRL(data.fsBreakdown.dividendos)}</p>
             </div>
             <div className="bg-[#181A20] rounded p-2">
               <p className="text-[#929AA5]">Taxas</p>
-              <p className="font-bold text-[#EAECEF]">{Math.round(data.fsBreakdown.taxas).toLocaleString('pt-BR')}</p>
+              <p className="font-bold text-[#EAECEF]">{formatBRL(data.fsBreakdown.taxas)}</p>
             </div>
           </div>
         </div>
