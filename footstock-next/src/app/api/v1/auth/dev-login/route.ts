@@ -11,10 +11,6 @@ import { prisma } from '@/lib/prisma'
 import { serializeUser } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
-  if (process.env.NODE_ENV === 'production') {
-    return NextResponse.json({ error: 'Dev login desabilitado em produção' }, { status: 403 })
-  }
-
   try {
     const body = await request.json()
     const { email, password } = body
