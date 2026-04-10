@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
   let auth = await getAuthUser()
 
   // Dev fallback
-  if (!auth) {
+  if (!auth && process.env.NODE_ENV === 'development') {
     const adminRole = request.cookies.get('fs-admin-role')?.value
     if (adminRole) {
       const dummyUser = { id: 'dev-user', email: 'dev@foot-stock.test', name: 'Dev User', adminRole: adminRole as AdminRole } as unknown as User
@@ -79,7 +79,7 @@ export async function PUT(request: NextRequest) {
   let auth = await getAuthUser()
 
   // Dev fallback
-  if (!auth) {
+  if (!auth && process.env.NODE_ENV === 'development') {
     const adminRole = request.cookies.get('fs-admin-role')?.value
     if (adminRole) {
       const dummyUser = { id: 'dev-user', email: 'dev@foot-stock.test', name: 'Dev User', adminRole: adminRole as AdminRole } as unknown as User

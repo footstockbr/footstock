@@ -7,7 +7,7 @@ import type { User, AdminRole } from '@/types'
 export async function GET(request: NextRequest) {
   let auth = await getAuthUser()
 
-  if (!auth) {
+  if (!auth && process.env.NODE_ENV === 'development') {
     const adminRole = request.cookies.get('fs-admin-role')?.value
     if (adminRole) {
       const dummyUser: User = {
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   let auth = await getAuthUser()
 
-  if (!auth) {
+  if (!auth && process.env.NODE_ENV === 'development') {
     const adminRole = request.cookies.get('fs-admin-role')?.value
     if (adminRole) {
       const dummyUser: User = {

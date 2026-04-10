@@ -25,9 +25,9 @@ export default async function AdminLayout({
 }) {
   const auth = await getAuthUser();
 
-  // Aceita fs-admin-role cookie como fallback (dev e produção)
+  // Em dev, aceita fs-admin-role cookie como fallback
   let user = auth?.user;
-  if (!user) {
+  if (!user && process.env.NODE_ENV === 'development') {
     const cookieStore = await cookies();
     const adminRole = cookieStore.get('fs-admin-role')?.value;
     if (adminRole) {

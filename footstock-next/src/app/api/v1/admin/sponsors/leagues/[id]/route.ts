@@ -12,7 +12,7 @@ export async function PATCH(request: NextRequest, { params }: LeagueParams) {
   const { id } = await params
   let auth = await getAuthUser()
 
-  if (!auth) {
+  if (!auth && process.env.NODE_ENV === 'development') {
     const adminRole = request.cookies.get('fs-admin-role')?.value
     if (adminRole) {
       const dummyUser: User = {
@@ -82,7 +82,7 @@ export async function DELETE(request: NextRequest, { params }: LeagueParams) {
   const { id } = await params
   let auth = await getAuthUser()
 
-  if (!auth) {
+  if (!auth && process.env.NODE_ENV === 'development') {
     const adminRole = request.cookies.get('fs-admin-role')?.value
     if (adminRole) {
       const dummyUser: User = {

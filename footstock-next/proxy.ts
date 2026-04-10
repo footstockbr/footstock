@@ -78,8 +78,9 @@ export async function proxy(request: NextRequest) {
       return response
     }
 
-    // Injetar x-user-id para rotas admin/* usando fs-admin-role cookie
-    if (pathname.startsWith('/api/v1/admin')) {
+    // Dev mode: injetar x-user-id para rotas admin/* usando fs-admin-role cookie
+    const isDev = process.env.NODE_ENV === 'development'
+    if (isDev && pathname.startsWith('/api/v1/admin')) {
       const adminRole = request.cookies.get('fs-admin-role')?.value
       if (adminRole) {
         const requestHeaders = new Headers(request.headers)
@@ -143,22 +144,20 @@ export async function proxy(request: NextRequest) {
   }
 
   if (AUTH_PAGE_ROUTES.some((r) => pathname === r)) {
-    const adminRole = request.cookies.get('fs-admin-role')?.value
-    const adminRoles = ['SUPER_ADMIN', 'ADMINISTRADOR', 'MONITOR', 'EDITOR', 'MODERADOR']
-
-    // Cookie de admin presente → redirecionar sem precisar de sessão Supabase
-    if (adminRole && adminRoles.includes(adminRole)) {
-      return NextResponse.redirect(new URL('/admin', request.url))
-    }
-    if (adminRole === 'CLUB_PARTNER') {
-      return NextResponse.redirect(new URL('/club', request.url))
-    }
-
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
     if (user) {
+      // Admin users go to /admin, club partners to /club, others to /mercado
+      const adminRole = request.cookies.get('fs-admin-role')?.value
+      const adminRoles = ['SUPER_ADMIN', 'ADMINISTRADOR', 'MONITOR', 'EDITOR', 'MODERADOR']
+      if (adminRole && adminRoles.includes(adminRole)) {
+        return NextResponse.redirect(new URL('/admin', request.url))
+      }
+      if (adminRole === 'CLUB_PARTNER') {
+        return NextResponse.redirect(new URL('/club', request.url))
+      }
       return NextResponse.redirect(new URL('/mercado', request.url))
     }
   }

@@ -1,7 +1,6 @@
 import 'server-only'
 
 import { jwtVerify, createRemoteJWKSet } from 'jose'
-import { headers } from 'next/headers'
 import { createSupabaseServerClient } from '@/lib/supabase'
 import { prisma } from '@/lib/prisma'
 import type { User, AdminRole } from '@/types'
@@ -26,10 +25,7 @@ export async function getAuthUser(): Promise<{ user: User; supabaseId: string } 
     // 1. Ler sessão do cookie — sem chamada de rede ao Supabase Auth
     const supabase = await createSupabaseServerClient()
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.access_token) {
-      // Fallback: headers injetados pelo proxy a partir do cookie fs-admin-role
-      return await getAuthUserFromProxyHeaders()
-    }
+    if (!session?.access_token) return null
 
     // 2. Verificar JWT via JWKS (ES256) — sem chamada de rede após o primeiro fetch
     const { payload } = await jwtVerify(session.access_token, SUPABASE_JWKS)
@@ -45,41 +41,6 @@ export async function getAuthUser(): Promise<{ user: User; supabaseId: string } 
       supabaseId: payload.sub,
       user: serializeUser(dbUser),
     }
-  } catch {
-    return await getAuthUserFromProxyHeaders()
-  }
-}
-
-// Fallback: aceita x-admin-role injetado pelo proxy (cookie fs-admin-role)
-// Retorna usuário sintético — sem DB, funciona mesmo com banco indisponível
-async function getAuthUserFromProxyHeaders(): Promise<{ user: User; supabaseId: string } | null> {
-  try {
-    const h = await headers()
-    const adminRole = h.get('x-admin-role')
-    const userId = h.get('x-user-id')
-    if (!adminRole || !userId) return null
-
-    const syntheticUser: User = {
-      id: userId,
-      email: 'admin@foot-stock.internal',
-      name: 'Admin',
-      phone: null,
-      birthDate: '',
-      favoriteClub: '',
-      favoriteClubDisplayName: null,
-      userType: 'NORMAL',
-      investorProfile: 'AVANCADO',
-      planType: 'LENDA',
-      fsBalance: 0,
-      marginBlocked: 0,
-      tourCompleted: true,
-      ageVerificationPending: false,
-      adminRole: adminRole as AdminRole,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }
-
-    return { supabaseId: userId, user: syntheticUser }
   } catch {
     return null
   }
