@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { IMPACT_CATEGORY_LABELS, IMPACT_CATEGORY_OPTIONS, SENTIMENT_HEX_COLORS, SENTIMENT_OPTIONS } from '@/lib/constants/admin-ui'
+import { CLUBS } from '@/lib/constants/clubs'
 
 interface NewsItem {
   id: string
@@ -9,6 +10,7 @@ interface NewsItem {
   content: string
   impact: string
   sentiment: string
+  ticker: string
   assetIds: string[]
   source?: string
   isPublished: boolean
@@ -31,7 +33,7 @@ const EMPTY_CREATE = {
   content: '',
   impact: 'ESPORTIVA_MAJORITARIA',
   sentiment: 'NEUTRAL',
-  assetIds: '',
+  ticker: '',
   source: '',
   isPublished: false,
 }
@@ -44,7 +46,7 @@ export default function NoticiasPage() {
 
   // Edit modal
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState({ title: '', content: '', impact: 'ESPORTIVA_MAJORITARIA', sentiment: 'NEUTRAL' })
+  const [editForm, setEditForm] = useState({ title: '', content: '', impact: 'ESPORTIVA_MAJORITARIA', sentiment: 'NEUTRAL', ticker: '' })
   const [savingEdit, setSavingEdit] = useState(false)
 
   // Create modal
@@ -129,7 +131,7 @@ export default function NoticiasPage() {
 
   const openEditModal = (item: NewsItem) => {
     setEditingId(item.id)
-    setEditForm({ title: item.title, content: item.content, impact: item.impact, sentiment: item.sentiment })
+    setEditForm({ title: item.title, content: item.content, impact: item.impact, sentiment: item.sentiment, ticker: item.ticker ?? '' })
   }
 
   const saveEdit = async () => {
@@ -140,7 +142,7 @@ export default function NoticiasPage() {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify({ title: editForm.title, content: editForm.content, impact: editForm.impact, sentiment: editForm.sentiment, ticker: editForm.ticker }),
       })
       if (!res.ok) throw new Error('Erro ao salvar')
       fetchNews()
@@ -159,11 +161,6 @@ export default function NoticiasPage() {
     }
     setSavingCreate(true)
     try {
-      const assetIds = createForm.assetIds
-        .split(',')
-        .map((s) => s.trim().toLowerCase())
-        .filter(Boolean)
-
       const res = await fetch('/api/v1/admin/news', {
         method: 'POST',
         credentials: 'include',
@@ -173,7 +170,7 @@ export default function NoticiasPage() {
           content: createForm.content,
           impact: createForm.impact,
           sentiment: createForm.sentiment,
-          assetIds,
+          ticker: createForm.ticker,
           source: createForm.source || null,
           isPublished: createForm.isPublished,
         }),
@@ -283,7 +280,7 @@ export default function NoticiasPage() {
                 <div style={{ flex: 1 }}>
                   <div className="news-badges">
                     <span className="badge" style={{ color: 'var(--accent2)' }}>
-                      {item.assetIds[0]?.toUpperCase() || 'N/A'}
+                      {item.ticker || 'N/A'}
                     </span>
                     <span className="badge" style={{ color: 'var(--muted)' }}>
                       {IMPACT_CATEGORY_LABELS[item.impact] ?? item.impact}
@@ -364,6 +361,16 @@ export default function NoticiasPage() {
               />
             </div>
 
+            <div style={{ marginBottom: '16px' }}>
+              <label style={labelStyle}>Time</label>
+              <select value={editForm.ticker} onChange={(e) => setEditForm({ ...editForm, ticker: e.target.value })} style={inputStyle}>
+                <option value="">Selecionar time...</option>
+                {CLUBS.map((c) => (
+                  <option key={c.ticker} value={c.ticker}>{c.ticker} — {c.name}</option>
+                ))}
+              </select>
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
               <div>
                 <label style={labelStyle}>Impacto</label>
@@ -428,14 +435,13 @@ export default function NoticiasPage() {
             </div>
 
             <div style={{ marginBottom: '16px' }}>
-              <label style={labelStyle}>Assets Relacionados (separados por vírgula)</label>
-              <input
-                type="text"
-                value={createForm.assetIds}
-                onChange={(e) => setCreateForm({ ...createForm, assetIds: e.target.value })}
-                style={inputStyle}
-                placeholder="Ex: uru3, por4"
-              />
+              <label style={labelStyle}>Time</label>
+              <select value={createForm.ticker} onChange={(e) => setCreateForm({ ...createForm, ticker: e.target.value })} style={inputStyle}>
+                <option value="">Selecionar time...</option>
+                {CLUBS.map((c) => (
+                  <option key={c.ticker} value={c.ticker}>{c.ticker} — {c.name}</option>
+                ))}
+              </select>
             </div>
 
             <div style={{ marginBottom: '16px' }}>
