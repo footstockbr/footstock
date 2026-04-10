@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { jwtVerify, createRemoteJWKSet } from 'jose'
+import { headers } from 'next/headers'
 import { createSupabaseServerClient } from '@/lib/supabase'
 import { prisma } from '@/lib/prisma'
 import type { User, AdminRole } from '@/types'
@@ -25,7 +26,10 @@ export async function getAuthUser(): Promise<{ user: User; supabaseId: string } 
     // 1. Ler sessão do cookie — sem chamada de rede ao Supabase Auth
     const supabase = await createSupabaseServerClient()
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.access_token) return null
+    if (!session?.access_token) {
+      // Fallback: headers injetados pelo proxy a partir do cookie fs-admin-role
+      return await getAuthUserFromProxyHeaders()
+    }
 
     // 2. Verificar JWT via JWKS (ES256) — sem chamada de rede após o primeiro fetch
     const { payload } = await jwtVerify(session.access_token, SUPABASE_JWKS)
@@ -39,6 +43,29 @@ export async function getAuthUser(): Promise<{ user: User; supabaseId: string } 
 
     return {
       supabaseId: payload.sub,
+      user: serializeUser(dbUser),
+    }
+  } catch {
+    return await getAuthUserFromProxyHeaders()
+  }
+}
+
+// Fallback: aceita x-admin-role injetado pelo proxy (cookie fs-admin-role)
+// Usado quando não há sessão Supabase (dev-login / admin sem Supabase auth)
+async function getAuthUserFromProxyHeaders(): Promise<{ user: User; supabaseId: string } | null> {
+  try {
+    const h = await headers()
+    const adminRole = h.get('x-admin-role')
+    if (!adminRole) return null
+
+    // Buscar primeiro usuário com esse adminRole no banco
+    const dbUser = await prisma.user.findFirst({
+      where: { adminRole: adminRole as never },
+    })
+    if (!dbUser) return null
+
+    return {
+      supabaseId: dbUser.id,
       user: serializeUser(dbUser),
     }
   } catch {
