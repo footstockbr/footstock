@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Loader2 } from 'lucide-react'
 import type { AdminNewsFormItem } from '@/lib/types/admin'
+import { CLUBS } from '@/lib/constants/clubs'
 
 const newsFormSchema = z.object({
   title: z.string().min(1, 'Título é obrigatório').max(200, 'Máximo 200 caracteres'),
@@ -114,17 +115,23 @@ export function NewsForm({ news, onSave, onCancel }: NewsFormProps) {
         )}
       </div>
 
-      {/* Ticker */}
+      {/* Time / Ativo */}
       <div>
-        <label htmlFor="news-ticker" className="block text-xs font-medium text-[#929AA5] mb-1.5">Ticker</label>
-        <input
+        <label htmlFor="news-ticker" className="block text-xs font-medium text-[#929AA5] mb-1.5">Time</label>
+        <select
           id="news-ticker"
           {...register('ticker')}
           disabled={isSubmitting}
           aria-describedby={errors.ticker ? 'ticker-error' : undefined}
-          className={inputClass}
-          placeholder="Ex: URU3"
-        />
+          className={selectClass}
+        >
+          <option value="">Selecionar time...</option>
+          {CLUBS.map((c) => (
+            <option key={c.ticker} value={c.ticker}>
+              {c.ticker} — {c.name}
+            </option>
+          ))}
+        </select>
         {errors.ticker && (
           <span id="ticker-error" className="mt-1 text-xs text-[#F6465D]" role="alert">
             {errors.ticker.message}

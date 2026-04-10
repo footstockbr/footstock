@@ -49,13 +49,21 @@ export async function PATCH(request: NextRequest, { params }: NewsParams) {
 
   try {
     const body = await request.json()
-    const { title, content, impact, sentiment, isPublished, isArchived } = body
+    const { title, content, impact, sentiment, ticker, isPublished, isArchived } = body
 
     const updateData: Record<string, unknown> = {}
     if (title !== undefined) updateData.title = title
     if (content !== undefined) updateData.content = content
     if (impact !== undefined) updateData.impact = impact
     if (sentiment !== undefined) updateData.sentiment = sentiment
+    if (ticker !== undefined) {
+      if (ticker === '') {
+        updateData.assetIds = []
+      } else {
+        const asset = await prisma.asset.findUnique({ where: { ticker }, select: { id: true } })
+        updateData.assetIds = asset ? [asset.id] : []
+      }
+    }
     if (isArchived !== undefined) {
       updateData.isArchived = isArchived
       if (isArchived) updateData.archivedAt = new Date()

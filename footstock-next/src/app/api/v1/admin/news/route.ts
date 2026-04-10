@@ -48,7 +48,19 @@ export async function GET(request: NextRequest) {
       take: 100,
     })
 
-    return ok(news)
+    // Resolve assetIds → ticker para exibição no painel
+    const allAssetIds = [...new Set(news.flatMap((n) => n.assetIds))]
+    const assets = allAssetIds.length
+      ? await prisma.asset.findMany({ where: { id: { in: allAssetIds } }, select: { id: true, ticker: true } })
+      : []
+    const assetMap = Object.fromEntries(assets.map((a) => [a.id, a.ticker]))
+
+    const items = news.map((n) => ({
+      ...n,
+      ticker: n.assetIds.map((id) => assetMap[id] ?? id).join(', '),
+    }))
+
+    return ok(items)
   } catch (error) {
     console.error('[news] Error:', error)
     return errors.server()
@@ -95,7 +107,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { title, content, impact, sentiment, assetIds, source, isPublished } = body
+    const { title, content, impact, sentiment, ticker, source, isPublished } = body
+
+    // Resolve ticker → assetId
+    let resolvedAssetIds: string[] = []
+    if (ticker) {
+      const asset = await prisma.asset.findUnique({ where: { ticker }, select: { id: true } })
+      if (asset) resolvedAssetIds = [asset.id]
+    }
 
     const news = await prisma.news.create({
       data: {
@@ -103,7 +122,7 @@ export async function POST(request: NextRequest) {
         content,
         impact,
         sentiment,
-        assetIds,
+        assetIds: resolvedAssetIds,
         source,
         isPublished,
         publishedAt: isPublished ? new Date() : null,
