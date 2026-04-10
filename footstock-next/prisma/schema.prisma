@@ -480,6 +480,7 @@ model News {
   content     String         @db.Text
   impact      ImpactCategory
   sentiment   Sentiment
+  ticker      String?        // ticker do ativo vinculado (ex: "URU3")
   // Array de IDs de ativos relacionados (suporte nativo PostgreSQL)
   assetIds    String[]       @map("asset_ids")
   source      String?

@@ -57,12 +57,7 @@ export async function PATCH(request: NextRequest, { params }: NewsParams) {
     if (impact !== undefined) updateData.impact = impact
     if (sentiment !== undefined) updateData.sentiment = sentiment
     if (ticker !== undefined) {
-      if (ticker === '') {
-        updateData.assetIds = []
-      } else {
-        const asset = await prisma.asset.findUnique({ where: { ticker }, select: { id: true } })
-        updateData.assetIds = asset ? [asset.id] : []
-      }
+      updateData.ticker = ticker || null
     }
     if (isArchived !== undefined) {
       updateData.isArchived = isArchived
