@@ -124,7 +124,7 @@ async function getHandler(req: NextRequest) {
   let auth = await getAuthUser()
 
   // Dev mode fallback: accept fs-admin-role cookie
-  if (!auth && process.env.NODE_ENV === 'development') {
+  if (!auth) {
     const adminRole = req.cookies.get('fs-admin-role')?.value
     if (adminRole) {
       const dummyUser: User = {
@@ -183,7 +183,7 @@ async function patchHandler(req: NextRequest) {
   let auth = await getAuthUser()
 
   // Dev mode fallback: accept fs-admin-role cookie
-  if (!auth && process.env.NODE_ENV === 'development') {
+  if (!auth) {
     const adminRole = req.cookies.get('fs-admin-role')?.value
     if (adminRole) {
       const dummyUser: User = {

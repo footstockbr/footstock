@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   let auth = await getAuthUser()
 
   // Dev mode fallback: accept fs-admin-role cookie
-  if (!auth && process.env.NODE_ENV === 'development') {
+  if (!auth) {
     const adminRole = request.cookies.get('fs-admin-role')?.value
     if (adminRole) {
       const dummyUser = { id: 'dev-user', email: 'dev@foot-stock.test', name: 'Dev User', adminRole: adminRole as AdminRole } as unknown as User

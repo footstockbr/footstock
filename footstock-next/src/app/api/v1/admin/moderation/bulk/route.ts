@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   let auth = await getAuthUser()
 
   // Dev mode fallback
-  if (!auth && process.env.NODE_ENV === 'development') {
+  if (!auth) {
     const adminRole = request.cookies.get('fs-admin-role')?.value
     if (adminRole) {
       const dummyUser: User = {

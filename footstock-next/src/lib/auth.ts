@@ -51,23 +51,35 @@ export async function getAuthUser(): Promise<{ user: User; supabaseId: string } 
 }
 
 // Fallback: aceita x-admin-role injetado pelo proxy (cookie fs-admin-role)
-// Usado quando não há sessão Supabase (dev-login / admin sem Supabase auth)
+// Retorna usuário sintético — sem DB, funciona mesmo com banco indisponível
 async function getAuthUserFromProxyHeaders(): Promise<{ user: User; supabaseId: string } | null> {
   try {
     const h = await headers()
     const adminRole = h.get('x-admin-role')
-    if (!adminRole) return null
+    const userId = h.get('x-user-id')
+    if (!adminRole || !userId) return null
 
-    // Buscar primeiro usuário com esse adminRole no banco
-    const dbUser = await prisma.user.findFirst({
-      where: { adminRole: adminRole as never },
-    })
-    if (!dbUser) return null
-
-    return {
-      supabaseId: dbUser.id,
-      user: serializeUser(dbUser),
+    const syntheticUser: User = {
+      id: userId,
+      email: 'admin@foot-stock.internal',
+      name: 'Admin',
+      phone: null,
+      birthDate: '',
+      favoriteClub: '',
+      favoriteClubDisplayName: null,
+      userType: 'NORMAL',
+      investorProfile: 'AVANCADO',
+      planType: 'LENDA',
+      fsBalance: 0,
+      marginBlocked: 0,
+      tourCompleted: true,
+      ageVerificationPending: false,
+      adminRole: adminRole as AdminRole,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     }
+
+    return { supabaseId: userId, user: syntheticUser }
   } catch {
     return null
   }

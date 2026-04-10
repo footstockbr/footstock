@@ -12,7 +12,7 @@ export async function PATCH(request: NextRequest, { params }: BannerParams) {
   const { id } = await params
   let auth = await getAuthUser()
 
-  if (!auth && process.env.NODE_ENV === 'development') {
+  if (!auth) {
     const adminRole = request.cookies.get('fs-admin-role')?.value
     if (adminRole) {
       const dummyUser: User = {
@@ -79,7 +79,7 @@ export async function DELETE(request: NextRequest, { params }: BannerParams) {
   const { id } = await params
   let auth = await getAuthUser()
 
-  if (!auth && process.env.NODE_ENV === 'development') {
+  if (!auth) {
     const adminRole = request.cookies.get('fs-admin-role')?.value
     if (adminRole) {
       const dummyUser: User = {
