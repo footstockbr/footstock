@@ -78,9 +78,8 @@ export async function proxy(request: NextRequest) {
       return response
     }
 
-    // Dev mode: injetar x-user-id para rotas admin/* usando fs-admin-role cookie
-    const isDev = process.env.NODE_ENV === 'development'
-    if (isDev && pathname.startsWith('/api/v1/admin')) {
+    // Injetar x-user-id para rotas admin/* usando fs-admin-role cookie
+    if (pathname.startsWith('/api/v1/admin')) {
       const adminRole = request.cookies.get('fs-admin-role')?.value
       if (adminRole) {
         const requestHeaders = new Headers(request.headers)
