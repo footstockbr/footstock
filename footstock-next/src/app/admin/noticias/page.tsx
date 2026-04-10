@@ -279,9 +279,15 @@ export default function NoticiasPage() {
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '8px' }}>
                 <div style={{ flex: 1 }}>
                   <div className="news-badges">
-                    <span className="badge" style={{ color: 'var(--accent2)' }}>
-                      {item.ticker || 'N/A'}
-                    </span>
+                    {item.ticker ? (
+                      <span className="badge" style={{ color: 'var(--accent2)' }}>
+                        {item.ticker}
+                      </span>
+                    ) : (
+                      <span className="badge" style={{ color: 'var(--muted)', opacity: 0.5 }} title="Sem time vinculado">
+                        Sem time
+                      </span>
+                    )}
                     <span className="badge" style={{ color: 'var(--muted)' }}>
                       {IMPACT_CATEGORY_LABELS[item.impact] ?? item.impact}
                     </span>
