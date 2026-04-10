@@ -64,7 +64,7 @@ export default async function AdminLayout({
       <AdminSidebar adminRole={user.adminRole as AdminRole} />
 
       <AdminLayoutClient userId={user.id}>
-        <main className="flex-1 overflow-y-auto pb-[calc(56px+env(safe-area-inset-bottom))] md:pb-0">
+        <main className="flex-1 min-w-0 overflow-y-auto pb-[calc(56px+env(safe-area-inset-bottom))] md:pb-0">
           {children}
         </main>
       </AdminLayoutClient>
