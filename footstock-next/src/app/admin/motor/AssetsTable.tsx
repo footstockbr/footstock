@@ -1,8 +1,12 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { ShieldBan, ShieldCheck, Zap } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { hasAdminRole } from '@/lib/utils/admin-roles'
+import type { AdminRole } from '@/types'
 
 interface AssetRow {
   id: string
@@ -32,17 +36,67 @@ const SENTIMENT_LABEL: Record<string, { label: string; color: string }> = {
   NEUTRAL: { label: 'Neutro', color: '#929AA5' },
 }
 
-/**
- * AssetsTable — tabela com todos os 40 ativos do motor.
- * Colunas: ticker, preço atual, desvio FV%, OFI, volume 24h, sentimento, halt status.
- * Atualiza a cada 15s (spec §Módulo 2 — "atualiza em tempo real").
- */
-export function AssetsTable() {
+interface AssetsTableProps {
+  adminRole: AdminRole
+}
+
+export function AssetsTable({ adminRole }: AssetsTableProps) {
+  const queryClient = useQueryClient()
+  const canHalt = hasAdminRole(adminRole, 'ADMINISTRADOR')
+  const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
+  const [confirmAction, setConfirmAction] = useState<{
+    ticker: string
+    action: 'FORCE' | 'RELEASE'
+  } | null>(null)
+
   const { data: assets, isLoading, error } = useQuery({
     queryKey: ['admin-assets-full'],
     queryFn: fetchAllAssets,
     staleTime: 15_000,
     refetchInterval: 15_000,
+  })
+
+  const showToast = (msg: string, type: 'ok' | 'err' = 'ok') => {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 3000)
+  }
+
+  const haltMutation = useMutation({
+    mutationFn: async (ticker: string) => {
+      const res = await fetch(`/api/v1/admin/assets/${ticker}/halt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'FORCE_CIRCUIT_BREAKER — admin manual' }),
+        credentials: 'include',
+      })
+      if (!res.ok) throw new Error('Erro ao forçar circuit breaker')
+      return res.json()
+    },
+    onSuccess: (_, ticker) => {
+      showToast(`Circuit breaker forçado em ${ticker}`)
+      queryClient.invalidateQueries({ queryKey: ['admin-assets-full'] })
+      queryClient.invalidateQueries({ queryKey: ['motor-kpis'] })
+      setConfirmAction(null)
+    },
+    onError: (_, ticker) => showToast(`Erro ao forçar CB em ${ticker}`, 'err'),
+  })
+
+  const releaseMutation = useMutation({
+    mutationFn: async (ticker: string) => {
+      const res = await fetch(`/api/v1/admin/assets/${ticker}/halt`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+      if (!res.ok) throw new Error('Erro ao liberar halt')
+      return res.json()
+    },
+    onSuccess: (_, ticker) => {
+      showToast(`Halt liberado: ${ticker}`)
+      queryClient.invalidateQueries({ queryKey: ['admin-assets-full'] })
+      queryClient.invalidateQueries({ queryKey: ['motor-kpis'] })
+      setConfirmAction(null)
+    },
+    onError: (_, ticker) => showToast(`Erro ao liberar ${ticker}`, 'err'),
   })
 
   if (isLoading) {
@@ -69,7 +123,65 @@ export function AssetsTable() {
   const halted = (assets ?? []).filter((a) => a.isHalted).length
 
   return (
-    <div data-testid="admin-motor-assets-table" className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
+    <div data-testid="admin-motor-assets-table" className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4 relative">
+      {/* Toast */}
+      {toast && (
+        <div className={cn(
+          'absolute top-3 right-3 z-10 text-xs px-3 py-1.5 rounded-lg font-medium',
+          toast.type === 'ok' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+        )}>
+          {toast.msg}
+        </div>
+      )}
+
+      {/* Modal de confirmacao */}
+      {confirmAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-[#1a1816] rounded-xl border border-[rgba(240,185,11,.15)] p-6 max-w-sm w-full mx-4">
+            <h4 className="text-base font-semibold text-[#EAECEF] mb-2">
+              {confirmAction.action === 'FORCE'
+                ? `Forçar circuit breaker em ${confirmAction.ticker}`
+                : `Liberar halt de ${confirmAction.ticker}`}
+            </h4>
+            <p className="text-sm text-[#929AA5] mb-5">
+              {confirmAction.action === 'FORCE'
+                ? `Isso irá suspender imediatamente todas as negociações de ${confirmAction.ticker}.`
+                : `Isso irá retomar imediatamente as negociações de ${confirmAction.ticker}.`}
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmAction(null)}
+                className="flex-1 px-3 py-1.5 text-xs text-[#929AA5] border border-[rgba(240,185,11,.1)] rounded hover:bg-[#1E2329] transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  if (confirmAction.action === 'FORCE') {
+                    haltMutation.mutate(confirmAction.ticker)
+                  } else {
+                    releaseMutation.mutate(confirmAction.ticker)
+                  }
+                }}
+                disabled={haltMutation.isPending || releaseMutation.isPending}
+                className={cn(
+                  'flex-1 px-3 py-1.5 text-xs font-medium rounded disabled:opacity-40 transition-colors',
+                  confirmAction.action === 'FORCE'
+                    ? 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
+                    : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30'
+                )}
+              >
+                {haltMutation.isPending || releaseMutation.isPending
+                  ? 'Aguarde...'
+                  : confirmAction.action === 'FORCE'
+                  ? 'Confirmar'
+                  : 'Liberar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-[#EAECEF]">
           Ativos — visão geral
@@ -85,16 +197,16 @@ export function AssetsTable() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-xs min-w-[640px]" aria-label="Todos os ativos">
+        <table className="w-full text-xs min-w-[700px]" aria-label="Todos os ativos">
           <thead>
             <tr className="border-b border-[rgba(240,185,11,.08)] text-[#929AA5]">
               <th className="text-left py-2 px-2 font-medium">Ticker</th>
-              <th className="text-right py-2 px-2 font-medium">Preço atual</th>
+              <th className="text-right py-2 px-2 font-medium">Preco atual</th>
               <th className="text-right py-2 px-2 font-medium">Desvio FV%</th>
-              <th className="text-right py-2 px-2 font-medium">OFI</th>
               <th className="text-right py-2 px-2 font-medium">Volume 24h</th>
               <th className="text-center py-2 px-2 font-medium">Sentimento</th>
               <th className="text-center py-2 px-2 font-medium">Status</th>
+              {canHalt && <th className="text-center py-2 px-2 font-medium w-[80px]">Acao</th>}
             </tr>
           </thead>
           <tbody>
@@ -121,9 +233,6 @@ export function AssetsTable() {
                     {asset.priceChange > 0 ? '+' : ''}{asset.priceChange.toFixed(2)}%
                   </td>
                   <td className="py-2 px-2 text-right text-[#929AA5]">
-                    —
-                  </td>
-                  <td className="py-2 px-2 text-right text-[#929AA5]">
                     {asset.volume24h.toLocaleString('pt-BR')}
                   </td>
                   <td className="py-2 px-2 text-center">
@@ -142,6 +251,29 @@ export function AssetsTable() {
                       </span>
                     )}
                   </td>
+                  {canHalt && (
+                    <td className="py-2 px-2 text-center">
+                      {asset.isHalted ? (
+                        <button
+                          onClick={() => setConfirmAction({ ticker: asset.ticker, action: 'RELEASE' })}
+                          disabled={releaseMutation.isPending}
+                          className="inline-flex items-center gap-1 px-1.5 py-1 text-[10px] text-emerald-400 border border-emerald-500/30 rounded hover:bg-emerald-500/10 disabled:opacity-40 transition-colors"
+                          title={`Liberar halt de ${asset.ticker}`}
+                        >
+                          <ShieldCheck className="h-3 w-3" />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmAction({ ticker: asset.ticker, action: 'FORCE' })}
+                          disabled={haltMutation.isPending}
+                          className="inline-flex items-center gap-1 px-1.5 py-1 text-[10px] text-red-400/50 border border-red-500/15 rounded hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 disabled:opacity-40 transition-colors"
+                          title={`Forçar circuit breaker em ${asset.ticker}`}
+                        >
+                          <Zap className="h-3 w-3" />
+                        </button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               )
             })}

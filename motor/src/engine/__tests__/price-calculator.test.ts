@@ -24,6 +24,7 @@ const baseState = (): AssetState => ({
   ofiState: 0,
   dailyVolAccum: 0,
   dailySigmaMultiplier: 1.0,
+  volatilityMultiplier: 1.0,
 })
 
 const baseParams = (): ClusterParams => ({

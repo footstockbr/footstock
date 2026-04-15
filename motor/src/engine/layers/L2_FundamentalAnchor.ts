@@ -30,9 +30,12 @@ export class L2_FundamentalAnchor implements QuantLayer {
     }
 
     const theta = params.theta ?? 0.05
+    // volatilityMultiplier: sessão (CLOSED=0, TRADING=1.0, etc.)
+    // Congela mean-reversion durante sessões inativas (mercado fechado = sem movimento)
+    const sessionMul = state.volatilityMultiplier ?? 1.0
 
-    // Componente determinística: θ × (FV − P) × dt
-    const raw = theta * (fv - state.currentPrice) * DT
+    // Componente determinística: θ × (FV − P) × dt × sessionMul
+    const raw = theta * (fv - state.currentPrice) * DT * sessionMul
 
     // Cap: máximo 0.3% do preço atual por tick em direção ao FV
     const maxDelta = state.currentPrice * MAX_ANCHOR_PERCENT
@@ -50,6 +53,7 @@ export class L2_FundamentalAnchor implements QuantLayer {
         rawDelta: raw,
         cappedAt: MAX_ANCHOR_PERCENT,
         capped,
+        volatilityMultiplier: sessionMul,
       },
     }
   }

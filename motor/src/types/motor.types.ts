@@ -82,6 +82,8 @@ export interface AssetState {
   dailyVolAccum: number
   // L9 — DailyVolTarget: multiplicador de sigma aplicado em L1/L3 (1.0 = normal, 0.0 = freeze)
   dailySigmaMultiplier: number
+  // Multiplicador de volatilidade por sessão (SessionManager): CLOSED=0, PRE_OPENING=0.3, TRADING=1.0, etc.
+  volatilityMultiplier: number
 }
 
 // ─── Correlação Inter-Ativos ─────────────────────────────────────────────────

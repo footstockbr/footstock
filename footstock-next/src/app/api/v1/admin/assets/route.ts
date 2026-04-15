@@ -24,6 +24,7 @@ export async function GET() {
         division: true,
         currentPrice: true,
         fairValue: true,
+        openPrice: true,
         volume: true,
         isHalted: true,
         haltReason: true,
@@ -34,28 +35,36 @@ export async function GET() {
     })
 
     return ok(
-      assets.map((a) => ({
-        id: a.id,
-        ticker: a.ticker,
-        displayName: a.displayName,
-        realName: a.realName ?? null,
-        division: a.division,
-        currentPrice: a.currentPrice.toNumber(),
-        fairValue: a.fairValue.toNumber(),
-        volume24h: Number(a.volume),
-        priceChange:
-          a.fairValue.toNumber() > 0
-            ? Math.round(
-                ((a.currentPrice.toNumber() - a.fairValue.toNumber()) /
-                  a.fairValue.toNumber()) *
-                  10000
-              ) / 100
-            : 0,
-        isHalted: a.isHalted,
-        haltReason: a.haltReason ?? null,
-        sentiment: a.sentiment,
-        updatedAt: a.updatedAt.toISOString(),
-      }))
+      assets.map((a) => {
+        const current = a.currentPrice.toNumber()
+        const fv = a.fairValue.toNumber()
+        const open = a.openPrice ? a.openPrice.toNumber() : current
+
+        return {
+          id: a.id,
+          ticker: a.ticker,
+          displayName: a.displayName,
+          realName: a.realName ?? null,
+          division: a.division,
+          currentPrice: current,
+          fairValue: fv,
+          volume24h: Number(a.volume),
+          // Desvio do Fair Value (mantido para compatibilidade)
+          priceChange:
+            fv > 0
+              ? Math.round(((current - fv) / fv) * 10000) / 100
+              : 0,
+          // Variação temporal real (current vs open do dia)
+          priceChange24h:
+            open > 0
+              ? Math.round(((current - open) / open) * 10000) / 100
+              : 0,
+          isHalted: a.isHalted,
+          haltReason: a.haltReason ?? null,
+          sentiment: a.sentiment,
+          updatedAt: a.updatedAt.toISOString(),
+        }
+      })
     )
   } catch {
     return errors.server()

@@ -123,13 +123,21 @@ export class MarketEngine {
         ofiState: 0,               // L4_OFI: OFI_t inicial (sem acumulação)
         dailyVolAccum: 0,          // L9_DailyVolTarget: acumulador diário de variação
         dailySigmaMultiplier: 1.0, // L9_DailyVolTarget: multiplicador sigma (1.0 = normal)
+        volatilityMultiplier: 1.0, // SessionManager: multiplicador por sessão (setado a cada tick)
       }
 
       this.assetStates.set(asset.id, state)
       this.orderBooks.set(asset.id, new OrderBook())
 
-      // Inicializar agentes para este ativo conforme seu cluster
-      const cluster = state.cluster === 'A_TOP' ? AssetCluster.A_TOP : AssetCluster.B_ILLIQ
+      // Inicializar agentes para este ativo conforme seu cluster real
+      const clusterMap: Record<string, AssetCluster> = {
+        A_TOP: AssetCluster.A_TOP,
+        A_MID: AssetCluster.A_MID,
+        A_SMALL: AssetCluster.A_SMALL,
+        B_LIQUID: AssetCluster.B_LIQUID,
+        B_ILLIQ: AssetCluster.B_ILLIQ,
+      }
+      const cluster = clusterMap[state.cluster] ?? AssetCluster.B_ILLIQ
       agentOrchestrator.initAsset(asset.id, cluster)
     }
 
@@ -155,13 +163,14 @@ export class MarketEngine {
       for (const state of this.assetStates.values()) {
         state.closePrice = state.currentPrice
       }
-      // Reset do DailyVolTarget ao iniciar o dia de negociação (L9)
+      // Reset do DailyVolTarget e volume acumulado ao iniciar o dia de negociação
       if (sessionType === 'PRE_OPENING') {
         for (const s of this.assetStates.values()) {
           this.calculator.resetDailyVolTarget(s)
+          s.volume = 0  // Reset volume 24h (evita acumulação ilimitada de volume sintético)
         }
         this.calculator.resetDailyVolCap()  // compatibilidade retroativa
-        logger.info('[engine] DailyVolTarget resetado para nova sessão PRE_OPENING')
+        logger.info('[engine] DailyVolTarget e volume resetados para nova sessão PRE_OPENING')
       }
     }
     this.previousSessionType = sessionType
@@ -186,6 +195,9 @@ export class MarketEngine {
 
         // Gerar ruído gaussiano (Box-Muller)
         const noise = this.gaussianNoise()
+
+        // Propagar multiplicador de sessão para o estado (L1/L3 leem de state)
+        state.volatilityMultiplier = volatilityMultiplier
 
         // Calcular novo preço via 10 camadas (L1-L10) + Correlação
         const calcResult = this.calculator.calculate(state, params, noise, this.previousTickDeltas)
@@ -232,8 +244,11 @@ export class MarketEngine {
           session: sessionType,
           volatilityMultiplier,
         }
-        const agentImpact = agentOrchestrator.tickAsset(assetId, agentCtx)
+        const { impact: agentImpact, syntheticVolume } = agentOrchestrator.tickAsset(assetId, agentCtx)
         const finalPrice = newPrice * (1 + agentImpact)
+
+        // Acumular volume sintético dos agentes (sem isso, volume 24h fica zero)
+        state.volume += syntheticVolume
 
         // Match de ordens pendentes
         const fills = orderBook.matchOrders(finalPrice)

@@ -117,10 +117,15 @@ export class LiquidityAgents {
   ): void {
     const cfg = { ...DEFAULT_AGENT_CONFIG[cluster], ...config }
     this.agentConfigs.set(assetId, cfg)
-    // Mapear para enum do AgentOrchestrator (suporta A_TOP e B_ILLIQ como clusters principais)
-    const agentCluster = cluster === 'A_TOP'
-      ? AgentCluster.A_TOP
-      : AgentCluster.B_ILLIQ
+    // Mapear para enum do AgentOrchestrator (suporta todos os 5 clusters)
+    const clusterMap: Record<string, AgentCluster> = {
+      A_TOP: AgentCluster.A_TOP,
+      A_MID: AgentCluster.A_MID,
+      A_SMALL: AgentCluster.A_SMALL,
+      B_LIQUID: AgentCluster.B_LIQUID,
+      B_ILLIQ: AgentCluster.B_ILLIQ,
+    }
+    const agentCluster = clusterMap[cluster] ?? AgentCluster.B_ILLIQ
     this.orchestrator.initAsset(assetId, agentCluster)
   }
 
@@ -129,7 +134,8 @@ export class LiquidityAgents {
    * Capped em ±2% por tick (via AgentOrchestrator).
    */
   tickAsset(assetId: string, ctx: MarketContext): number {
-    return this.orchestrator.tickAsset(assetId, ctx)
+    const { impact } = this.orchestrator.tickAsset(assetId, ctx)
+    return impact
   }
 
   /**

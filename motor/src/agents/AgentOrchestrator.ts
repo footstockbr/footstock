@@ -15,6 +15,9 @@ import { logger } from '../utils/logger'
 
 export enum AssetCluster {
   A_TOP = 'A_TOP',
+  A_MID = 'A_MID',
+  A_SMALL = 'A_SMALL',
+  B_LIQUID = 'B_LIQUID',
   B_ILLIQ = 'B_ILLIQ',
 }
 
@@ -23,29 +26,55 @@ export const MAX_AGGREGATE_IMPACT = 0.02
 
 /**
  * Cria a lista de agentes para o cluster especificado.
- * A_TOP: 40% MarketMaker + 30% ValueInvestor + 20% Momentum + 10% Random
- * B_ILLIQ: 50% MarketMaker + 50% Random
+ * A_TOP:     40% MM + 30% Value + 20% Momentum + 10% mix (Contrarian/Random/Panic)
+ * A_MID:     35% MM + 25% Value + 20% Momentum + 10% Contrarian + 10% Random
+ * A_SMALL:   30% MM + 20% Value + 15% Momentum + 15% Random + 10% Contrarian + 10% Panic
+ * B_LIQUID:  40% MM + 30% Random + 15% Momentum + 15% Panic
+ * B_ILLIQ:   50% MM + 50% Random
  */
 export function createAgents(cluster: AssetCluster): BaseAgent[] {
-  if (cluster === AssetCluster.A_TOP) {
-    return [
-      new MarketMakerAgent(4),
-      new ValueInvestorAgent(3),
-      new MomentumAgent(2),
-      new ContrarianAgent(1),
-      new RandomTraderAgent(1),
-      new PanicSellerAgent(1),
-    ]
+  switch (cluster) {
+    case AssetCluster.A_TOP:
+      return [
+        new MarketMakerAgent(4),
+        new ValueInvestorAgent(3),
+        new MomentumAgent(2),
+        new ContrarianAgent(1),
+        new RandomTraderAgent(1),
+        new PanicSellerAgent(1),
+      ]
+    case AssetCluster.A_MID:
+      return [
+        new MarketMakerAgent(4),
+        new ValueInvestorAgent(3),
+        new MomentumAgent(2),
+        new ContrarianAgent(1),
+        new RandomTraderAgent(1),
+      ]
+    case AssetCluster.A_SMALL:
+      return [
+        new MarketMakerAgent(3),
+        new ValueInvestorAgent(2),
+        new MomentumAgent(2),
+        new RandomTraderAgent(2),
+        new ContrarianAgent(1),
+        new PanicSellerAgent(1),
+      ]
+    case AssetCluster.B_LIQUID:
+      return [
+        new MarketMakerAgent(4),
+        new RandomTraderAgent(3),
+        new MomentumAgent(2),
+        new PanicSellerAgent(1),
+      ]
+    case AssetCluster.B_ILLIQ:
+      return [
+        new MarketMakerAgent(5),
+        new RandomTraderAgent(5),
+      ]
+    default:
+      throw new TypeError(`AssetCluster inválido: ${cluster}`)
   }
-
-  if (cluster === AssetCluster.B_ILLIQ) {
-    return [
-      new MarketMakerAgent(5),
-      new RandomTraderAgent(5),
-    ]
-  }
-
-  throw new TypeError(`AssetCluster inválido: ${cluster}`)
 }
 
 /**
@@ -102,6 +131,11 @@ export function aggregateImpact(decisions: AgentDecision[]): number {
   return capped
 }
 
+export interface TickResult {
+  impact: number
+  syntheticVolume: number
+}
+
 export class AgentOrchestrator {
   private agents: Map<string, BaseAgent[]> = new Map()
 
@@ -113,14 +147,16 @@ export class AgentOrchestrator {
   }
 
   /**
-   * Executa tick para um ativo e retorna o impacto agregado.
+   * Executa tick para um ativo e retorna impacto agregado + volume sintético.
    */
-  tickAsset(assetId: string, ctx: MarketContext): number {
+  tickAsset(assetId: string, ctx: MarketContext): TickResult {
     const agents = this.agents.get(assetId)
-    if (!agents) return 0
+    if (!agents) return { impact: 0, syntheticVolume: 0 }
 
     const decisions = runTick(agents, ctx)
-    return aggregateImpact(decisions)
+    const impact = aggregateImpact(decisions)
+    const syntheticVolume = decisions.reduce((sum, d) => sum + d.quantity, 0)
+    return { impact, syntheticVolume }
   }
 
   /**

@@ -48,7 +48,10 @@ export class L3_GARCHLite implements QuantLayer {
 
     const sigma = Math.sqrt(newVariance)
     // dailySigmaMultiplier: 1.0 normal, 0..1 exaustão, 0.0 freeze
-    const sigmaEff = sigma * (state.dailySigmaMultiplier ?? 1.0)
+    // volatilityMultiplier: sessão (CLOSED=0, PRE_OPENING=0.3, TRADING=1.0, etc.)
+    const dailyMul = state.dailySigmaMultiplier ?? 1.0
+    const sessionMul = state.volatilityMultiplier ?? 1.0
+    const sigmaEff = sigma * dailyMul * sessionMul
 
     const deltaPrice = sigmaEff * noise * state.currentPrice
 
@@ -58,7 +61,8 @@ export class L3_GARCHLite implements QuantLayer {
       metadata: {
         sigma,
         sigmaEff,
-        sigmaMultiplier: state.dailySigmaMultiplier ?? 1.0,
+        dailySigmaMultiplier: dailyMul,
+        volatilityMultiplier: sessionMul,
         variance: newVariance,
         lastReturn,
         capped: newVariance >= MAX_VARIANCE ? 1 : 0,

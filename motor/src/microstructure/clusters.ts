@@ -10,7 +10,7 @@ export const CLUSTER_PARAMS: Record<AssetCluster, ClusterParams> = {
     baseVolume: 50_000,
     drift: 0.0,
     theta: 0.12,              // INTAKE: OU reversion speed
-    sigma: 0.0005,            // INTAKE: OU volatility (ex: URU3) — reduzido para L2 não soterrar CB
+    sigma: 0.0018,            // INTAKE canônico: OU volatility (ex: URU3)
     garchAlpha: 0.12,         // INTAKE canônico
     garchBeta: 0.85,          // INTAKE canônico
     lambdaKyle: 0.0001,
@@ -24,7 +24,7 @@ export const CLUSTER_PARAMS: Record<AssetCluster, ClusterParams> = {
     baseVolume: 20_000,
     drift: 0.0,
     theta: 0.18,              // INTAKE canônico: 0.18
-    sigma: 0.0008,            // INTAKE canônico: 0.0025 → reduzido para equilibrar com GARCH
+    sigma: 0.0025,            // INTAKE canônico: 0.0025
     garchAlpha: 0.12,
     garchBeta: 0.85,
     lambdaKyle: 0.0002,
@@ -38,7 +38,7 @@ export const CLUSTER_PARAMS: Record<AssetCluster, ClusterParams> = {
     baseVolume: 8_000,
     drift: 0.0,
     theta: 0.08,
-    sigma: 0.0010,
+    sigma: 0.0032,            // INTAKE canônico: 0.0032
     garchAlpha: 0.12,
     garchBeta: 0.85,
     lambdaKyle: 0.0005,

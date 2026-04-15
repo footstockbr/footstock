@@ -29,7 +29,10 @@ export class L1_OrnsteinUhlenbeck implements QuantLayer {
 
     const sigma = params.sigma ?? 0.001
     // dailySigmaMultiplier é setado por L9 no tick anterior (default 1.0)
-    const sigmaEff = sigma * (state.dailySigmaMultiplier ?? 1.0)
+    // volatilityMultiplier é setado por SessionManager a cada tick (CLOSED=0, TRADING=1.0, etc.)
+    const sessionMul = state.volatilityMultiplier ?? 1.0
+    const dailyMul = state.dailySigmaMultiplier ?? 1.0
+    const sigmaEff = sigma * dailyMul * sessionMul
 
     // Componente estocástica: σ_eff × √dt × N(0,1) × P
     const deltaPrice = sigmaEff * Math.sqrt(DT) * noise * state.currentPrice
@@ -40,7 +43,8 @@ export class L1_OrnsteinUhlenbeck implements QuantLayer {
       metadata: {
         sigma,
         sigmaEff,
-        sigmaMultiplier: state.dailySigmaMultiplier ?? 1.0,
+        dailySigmaMultiplier: dailyMul,
+        volatilityMultiplier: sessionMul,
         noise,
         dt: DT,
       },
