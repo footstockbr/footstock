@@ -73,7 +73,7 @@ export default function AdminLigasProPage() {
 
   async function fetchSponsors() {
     try {
-      const res = await fetch('/api/v1/admin/league-sponsors')
+      const res = await fetch('/api/v1/admin/league-sponsors', { credentials: 'include' })
       if (!res.ok) return
       const json = await res.json()
       // Endpoint já filtra inativos por padrão; isActive=true em todos
@@ -83,7 +83,7 @@ export default function AdminLigasProPage() {
 
   async function fetchBanners() {
     try {
-      const res = await fetch('/api/v1/admin/sponsors/banners')
+      const res = await fetch('/api/v1/admin/sponsors/banners', { credentials: 'include' })
       if (!res.ok) return
       const json = await res.json()
       setBanners((json.data ?? []).filter((b: SponsorBanner) => b.isActive))

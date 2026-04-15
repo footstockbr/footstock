@@ -1,7 +1,6 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getRedisClient } from '@/lib/redis'
-import { getAuthUser, hasAdminRole } from '@/lib/auth'
-import { ok, errors } from '@/lib/api'
+import { withAdmin } from '@/app/api/middleware'
 
 function calcUptime(startedAt: string | null): string | null {
   if (!startedAt) return null
@@ -13,24 +12,17 @@ function calcUptime(startedAt: string | null): string | null {
 }
 
 // GET /api/v1/admin/motor/status — Monitor+
-export async function GET() {
-  const auth = await getAuthUser()
-  if (!auth) return errors.unauthorized()
-  if (!hasAdminRole(auth.user.adminRole, 'MONITOR')) {
-    return NextResponse.json(
-      { error: { code: 'ADMIN-050', message: 'Permissão insuficiente para esta ação administrativa.' } },
-      { status: 403 }
-    )
-  }
-
+export const GET = withAdmin('motor:read')(async (_request: NextRequest) => {
   const redis = getRedisClient()
   if (!redis) {
-    return ok({
-      status: 'DEGRADED',
-      leader: 'unknown',
-      lastTick: null,
-      uptime: null,
-      haltedTickers: [],
+    return NextResponse.json({
+      data: {
+        status: 'DEGRADED',
+        leader: 'unknown',
+        lastTick: null,
+        uptime: null,
+        haltedTickers: [],
+      },
     })
   }
 
@@ -51,27 +43,31 @@ export async function GET() {
       cursor = nextCursor
     } while (cursor !== '0')
 
-    const status: 'ONLINE' | 'OFFLINE' | 'DEGRADED' =
+    const statusValue: 'ONLINE' | 'OFFLINE' | 'DEGRADED' =
       statusRaw === 'ONLINE' || statusRaw === 'OFFLINE' || statusRaw === 'DEGRADED'
         ? statusRaw
         : 'DEGRADED'
 
     const haltedTickers = haltKeys.map((k) => k.replace('motor:halt:', ''))
 
-    return ok({
-      status,
-      leader: leader ?? 'unknown',
-      lastTick: lastTick ?? null,
-      uptime: calcUptime(startedAt ?? null),
-      haltedTickers,
+    return NextResponse.json({
+      data: {
+        status: statusValue,
+        leader: leader ?? 'unknown',
+        lastTick: lastTick ?? null,
+        uptime: calcUptime(startedAt ?? null),
+        haltedTickers,
+      },
     })
   } catch {
-    return ok({
-      status: 'DEGRADED',
-      leader: 'unknown',
-      lastTick: null,
-      uptime: null,
-      haltedTickers: [],
+    return NextResponse.json({
+      data: {
+        status: 'DEGRADED',
+        leader: 'unknown',
+        lastTick: null,
+        uptime: null,
+        haltedTickers: [],
+      },
     })
   }
-}
+})

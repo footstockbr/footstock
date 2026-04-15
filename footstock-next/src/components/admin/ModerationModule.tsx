@@ -83,7 +83,7 @@ export function ModerationModule() {
     setIsLoadingPosts(true)
     setPostsError(null)
     try {
-      const res = await fetch(`/api/v1/admin/moderation?filter=${filter.toLowerCase()}`)
+      const res = await fetch(`/api/v1/admin/moderation?filter=${filter.toLowerCase()}`, { credentials: 'include' })
       if (!res.ok) throw new Error('Erro ao carregar posts.')
       const data = await res.json()
       const items: ModerationPost[] = (data.data ?? []).map((p: Record<string, unknown>) => ({
@@ -112,7 +112,7 @@ export function ModerationModule() {
   // ─── Carregar count de FLAGGED para badge ───────────────────────────────
   const loadPendingCount = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/admin/moderation/stats')
+      const res = await fetch('/api/v1/admin/moderation/stats', { credentials: 'include' })
       if (!res.ok) return
       const data = await res.json()
       setPendingCount(data.data?.flagged ?? 0)
@@ -125,7 +125,7 @@ export function ModerationModule() {
   const loadRules = useCallback(async () => {
     setIsLoadingRules(true)
     try {
-      const res = await fetch('/api/v1/admin/moderation/content-rules')
+      const res = await fetch('/api/v1/admin/moderation/content-rules', { credentials: 'include' })
       if (!res.ok) return
       const data = await res.json()
       setRules(data.data ?? [])

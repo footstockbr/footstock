@@ -7,14 +7,14 @@ import { RetentionTable } from '@/components/admin/RetentionTable'
 import type { EngagementMetricsDTO, CohortWeek } from '@/lib/types/admin'
 
 async function fetchEngagement(): Promise<EngagementMetricsDTO> {
-  const res = await fetch('/api/v1/admin/engagement')
+  const res = await fetch('/api/v1/admin/engagement', { credentials: 'include' })
   if (!res.ok) throw new Error('Failed')
   const { data } = await res.json()
   return data
 }
 
 async function fetchCohort(): Promise<CohortWeek[]> {
-  const res = await fetch('/api/v1/admin/engagement/cohort')
+  const res = await fetch('/api/v1/admin/engagement/cohort', { credentials: 'include' })
   if (!res.ok) throw new Error('Failed')
   const { data } = await res.json()
   return data

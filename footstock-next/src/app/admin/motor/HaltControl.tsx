@@ -18,7 +18,7 @@ interface AssetHaltItem {
 }
 
 async function fetchAssets(): Promise<AssetHaltItem[]> {
-  const res = await fetch('/api/v1/admin/assets')
+  const res = await fetch('/api/v1/admin/assets', { credentials: 'include' })
   if (!res.ok) throw new Error('Failed')
   const { data } = await res.json()
   return data

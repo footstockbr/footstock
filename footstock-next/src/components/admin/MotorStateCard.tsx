@@ -14,7 +14,7 @@ interface MotorStatusData {
 }
 
 async function fetchMotorStatus(): Promise<MotorStatusData> {
-  const res = await fetch('/api/v1/admin/motor/status')
+  const res = await fetch('/api/v1/admin/motor/status', { credentials: 'include' })
   if (!res.ok) throw new Error('Failed')
   const { data } = await res.json()
   return data

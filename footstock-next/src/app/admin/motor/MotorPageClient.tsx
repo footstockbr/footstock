@@ -22,7 +22,7 @@ interface MotorKpis {
 }
 
 async function fetchAuditLog(): Promise<AdminMarketActionLog[]> {
-  const res = await fetch('/api/v1/admin/audit?limit=20')
+  const res = await fetch('/api/v1/admin/audit?limit=20', { credentials: 'include' })
   if (!res.ok) throw new Error('Failed')
   const { data } = await res.json()
   return data
