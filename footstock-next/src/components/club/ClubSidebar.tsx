@@ -73,14 +73,15 @@ export function ClubSidebar() {
     if (isLoggingOut) return;
     setIsLoggingOut(true);
     try {
-      // Logout via API para registrar no ClubAccessLog antes de invalidar sessão
+      // Logout via API: registra ClubAccessLog, invalida sessão Supabase e limpa cookies HttpOnly
       await fetch('/api/v1/club/auth/logout', { method: 'POST', credentials: 'include' });
-      // Fallback: também limpar via Supabase no cliente
+      // Limpar sessão Supabase no cliente (fallback)
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       );
       await supabase.auth.signOut();
+      // fs-admin-role é não-httpOnly — pode ser limpo no cliente como reforço
       document.cookie = "fs-admin-role=; path=/; max-age=0";
       router.replace('/club/login');
     } catch {

@@ -251,9 +251,9 @@ describe('AIAdvisorService.fetchContext', () => {
     })
 
     const ctx = await service.fetchContext(TICKER, USER_ID)
-    const prompt = service.buildPrompt(TICKER, ctx)
+    const prompt = service.buildUserPrompt(TICKER, ctx)
 
-    expect(prompt).toContain('Posição SHORT')
+    expect(prompt).toContain('SHORT')
     expect(ctx.userPosition?.qty).toBe(-5)
   })
 

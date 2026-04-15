@@ -36,6 +36,7 @@ export const ROUTES = {
   ADMIN_AFILIADOS: "/admin/afiliados",
   ADMIN_LGPD: "/admin/lgpd",
   ADMIN_CONFIGURACOES: "/admin/configuracoes",
+  ADMIN_PROMPT_IA: "/admin/prompt-ia",
 
   // Club Portal
   CLUB: "/club",

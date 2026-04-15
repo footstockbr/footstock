@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { serializeUser } from '@/lib/auth'
+import { DEV_TEST_USERS } from '@/lib/constants/dev-test-users'
 
 export async function POST(request: NextRequest) {
   if (process.env.NODE_ENV === 'production') {
@@ -71,6 +72,21 @@ export async function POST(request: NextRequest) {
         sameSite: 'lax',
         secure: false,
       })
+    }
+
+    // Set fs_dev_club_id for CLUB_PARTNER dev bypass in withClubAuth()
+    if (user.adminRole === 'CLUB_PARTNER') {
+      const devProfile = DEV_TEST_USERS[email as keyof typeof DEV_TEST_USERS]
+      const clubId = devProfile?.clubId
+      if (clubId) {
+        response.cookies.set('fs_dev_club_id', clubId, {
+          path: '/',
+          maxAge: 60 * 60 * 24 * 30,
+          sameSite: 'lax',
+          httpOnly: true,
+          secure: false,
+        })
+      }
     }
 
     return response

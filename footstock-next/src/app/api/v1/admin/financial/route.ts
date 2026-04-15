@@ -3,6 +3,7 @@ import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
 import type { User, AdminRole } from '@/types'
+import { GatewayType } from '@/lib/gateways/IGateway'
 
 // Preços por plano em BRL (canônicos — sincronizados com LLD)
 const PLAN_PRICES: Record<string, number> = {
@@ -171,10 +172,10 @@ export async function GET(request: NextRequest) {
       cancelledPrevMonth,
       planDistribution,
       volume24h: volume24h._sum.quantity ?? 0,
-      revenueByGateway: revenueByGateway.map((g) => ({
-        gateway: g.gateway,
-        revenue: g._sum.amount ?? 0,
-      })),
+      revenueByGateway: Object.values(GatewayType).map((gw) => {
+        const found = revenueByGateway.find((g) => g.gateway === gw)
+        return { gateway: gw, revenue: found?._sum.amount ?? 0 }
+      }),
       gatewayStatus: gatewayActivity.map((g) => ({
         gateway: g.gateway,
         lastActivity: g._max.createdAt?.toISOString() ?? null,

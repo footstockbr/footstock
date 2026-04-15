@@ -30,7 +30,7 @@ export interface AssetRow {
 interface FullAsset {
   id: string
   ticker: string
-  name: string
+  displayName: string
   division: string
   colorPrimary: string
   colorSecondary: string
@@ -114,7 +114,7 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
       const full = data as FullAsset
       const fin = full.financials ?? {}
       setEditForm({
-        name: full.name,
+        name: full.displayName,
         division: full.division as 'SERIE_A' | 'SERIE_B',
         colorPrimary: full.colorPrimary,
         colorSecondary: full.colorSecondary,
@@ -147,7 +147,7 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
     setFieldErrors({})
     try {
       const body: Record<string, unknown> = {
-        name: editForm.name,
+        displayName: editForm.name,
         division: editForm.division,
         colorPrimary: editForm.colorPrimary,
         colorSecondary: editForm.colorSecondary,
@@ -340,12 +340,12 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
                     style={inputStyle}
                     value={editForm.name}
                     onChange={(e) => set('name', e.target.value)}
-                    placeholder="Ex: Urubu da Gavea FC"
+                    placeholder="Nome fictício do clube"
                     data-testid="modal-clube-name-input"
                   />
-                  {fieldErrors.name && (
+                  {fieldErrors.displayName && (
                     <p style={{ fontSize: '11px', color: '#F6465D', marginTop: '3px' }}>
-                      {fieldErrors.name[0]}
+                      {fieldErrors.displayName[0]}
                     </p>
                   )}
                 </div>
@@ -374,7 +374,7 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
                       min={1}
                       value={editForm.totalShares}
                       onChange={(e) => set('totalShares', e.target.value)}
-                      placeholder="Ex: 1000000"
+                      placeholder="Quantidade total de ações"
                       data-testid="modal-clube-total-shares-input"
                     />
                     {fieldErrors.totalShares && (
@@ -392,7 +392,7 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
                       min={0.01}
                       value={editForm.ipoPrice}
                       onChange={(e) => set('ipoPrice', e.target.value)}
-                      placeholder="Ex: 25.00"
+                      placeholder="Valor em FS$"
                       data-testid="modal-clube-ipo-price-input"
                     />
                     {fieldErrors.ipoPrice && (
@@ -413,7 +413,7 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
                     min={0.01}
                     value={editForm.fairValue}
                     onChange={(e) => set('fairValue', e.target.value)}
-                    placeholder="Ex: 25.00"
+                    placeholder="Valor em FS$"
                     data-testid="modal-clube-fair-value-input"
                   />
                   {fieldErrors.fairValue && (
@@ -439,7 +439,7 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
                         style={{ ...inputStyle, flex: 1, minWidth: 0 }}
                         value={editForm.colorPrimary}
                         onChange={(e) => set('colorPrimary', e.target.value)}
-                        placeholder="#F0B90B"
+                        placeholder="#RRGGBB"
                         data-testid="modal-clube-color-primary-hex"
                       />
                     </div>
@@ -463,7 +463,7 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
                         style={{ ...inputStyle, flex: 1, minWidth: 0 }}
                         value={editForm.colorSecondary}
                         onChange={(e) => set('colorSecondary', e.target.value)}
-                        placeholder="#1E2329"
+                        placeholder="#RRGGBB"
                         data-testid="modal-clube-color-secondary-hex"
                       />
                     </div>
@@ -483,7 +483,7 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
                     type="url"
                     value={editForm.logoUrl}
                     onChange={(e) => set('logoUrl', e.target.value)}
-                    placeholder="https://cdn.footstock.app/logos/uru3.png"
+                    placeholder="https://cdn.exemplo.com/logo.png"
                     data-testid="modal-clube-logo-url-input"
                   />
                   {fieldErrors.logoUrl && (
@@ -521,7 +521,7 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
                     }}
                     value={editForm.searchText}
                     onChange={(e) => set('searchText', e.target.value)}
-                    placeholder="flamengo, fla, rubro-negro, urubu"
+                    placeholder="nome-real, apelido, abreviação"
                     data-testid="modal-clube-search-text-input"
                   />
                   <p style={{ fontSize: '10px', color: '#555d6c', marginTop: '3px' }}>

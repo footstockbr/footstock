@@ -18,7 +18,7 @@ interface AccessLog {
   id: string; userId: string; accessedBy: string; dataType: string;
   endpoint: string; reason: string; ipAddress: string | null; createdAt: string
 }
-interface DeletionRecord { id: string; email: string; deletedAt: string; reason: string }
+interface DeletionRecord { id: string; email: string; deletedAt: string; reason: string; type?: 'lgpd_deletion' | 'suspended' | 'banned' }
 
 interface DashboardData {
   consents: ConsentStats
@@ -73,6 +73,34 @@ export default function AdminLgpdPage() {
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('overview')
   const [refreshing, setRefreshing] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+
+  const downloadReport = useCallback(async () => {
+    setDownloading(true)
+    try {
+      const res = await fetch('/api/v1/admin/lgpd/export-report', {
+        method: 'POST',
+        credentials: 'include',
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const blob = await res.blob()
+      const disposition = res.headers.get('Content-Disposition') ?? ''
+      const filenameMatch = disposition.match(/filename="?([^"]+)"?/)
+      const filename = filenameMatch?.[1] ?? `lgpd-report-${new Date().toISOString().slice(0, 10)}.json`
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch {
+      alert('Erro ao gerar relatório LGPD.')
+    } finally {
+      setDownloading(false)
+    }
+  }, [])
 
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -120,28 +148,48 @@ export default function AdminLgpdPage() {
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => fetchData(true)}
-          disabled={refreshing}
-          aria-label="Atualizar dados"
-          style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            padding: '8px 12px', background: 'rgba(240,185,11,.08)',
-            border: '1px solid rgba(240,185,11,.2)', borderRadius: '6px',
-            color: '#F0B90B', fontSize: '12px', cursor: refreshing ? 'not-allowed' : 'pointer',
-            opacity: refreshing ? 0.6 : 1,
-          }}
-        >
-          <RefreshCw size={13} style={{ animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }} />
-          Atualizar
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={downloadReport}
+            disabled={downloading}
+            aria-label="Exportar relatório LGPD"
+            data-testid="lgpd-export-report-btn"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '8px 12px', background: 'rgba(46,189,133,.08)',
+              border: '1px solid rgba(46,189,133,.3)', borderRadius: '6px',
+              color: '#2EBD85', fontSize: '12px', cursor: downloading ? 'not-allowed' : 'pointer',
+              opacity: downloading ? 0.6 : 1, fontWeight: 600,
+            }}
+          >
+            <Download size={13} />
+            {downloading ? 'Gerando...' : 'Exportar Relatório LGPD'}
+          </button>
+          <button
+            type="button"
+            onClick={() => fetchData(true)}
+            disabled={refreshing}
+            aria-label="Atualizar dados"
+            data-testid="lgpd-refresh-btn"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '8px 12px', background: 'rgba(240,185,11,.08)',
+              border: '1px solid rgba(240,185,11,.2)', borderRadius: '6px',
+              color: '#F0B90B', fontSize: '12px', cursor: refreshing ? 'not-allowed' : 'pointer',
+              opacity: refreshing ? 0.6 : 1,
+            }}
+          >
+            <RefreshCw size={13} style={{ animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }} />
+            Atualizar
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '6px', marginBottom: '20px', flexWrap: 'wrap' }}>
         {TABS.map((t) => (
-          <button key={t.id} type="button" style={tabStyle(tab === t.id)} onClick={() => setTab(t.id)}>
+          <button key={t.id} type="button" style={tabStyle(tab === t.id)} onClick={() => setTab(t.id)} data-testid={`lgpd-tab-${t.id}`}>
             {t.label}
           </button>
         ))}
@@ -212,7 +260,7 @@ export default function AdminLgpdPage() {
 
           {/* Access logs tab */}
           {tab === 'access-logs' && (
-            <div style={{ background: '#1E2329', border: '1px solid rgba(240,185,11,.12)', borderRadius: '12px', overflow: 'hidden' }}>
+            <div style={{ background: '#1E2329', border: '1px solid rgba(240,185,11,.12)', borderRadius: '12px', overflow: 'hidden' }} data-testid="lgpd-access-logs-table">
               <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(240,185,11,.08)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <FileText size={14} color="#F0B90B" />
                 <span style={{ fontSize: '13px', fontWeight: 600, color: '#EAECEF' }}>
@@ -257,18 +305,18 @@ export default function AdminLgpdPage() {
 
           {/* Deletions tab */}
           {tab === 'deletions' && (
-            <div style={{ background: '#1E2329', border: '1px solid rgba(240,185,11,.12)', borderRadius: '12px', overflow: 'hidden' }}>
+            <div style={{ background: '#1E2329', border: '1px solid rgba(240,185,11,.12)', borderRadius: '12px', overflow: 'hidden' }} data-testid="lgpd-deletions-table">
               <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(240,185,11,.08)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Users size={14} color="#F0B90B" />
                 <span style={{ fontSize: '13px', fontWeight: 600, color: '#EAECEF' }}>
-                  Contas suspentas / banidas ({data.deletions.length})
+                  Exclusoes LGPD e contas suspensas/banidas ({data.deletions.length})
                 </span>
               </div>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                   <thead>
                     <tr style={{ background: 'rgba(240,185,11,.04)' }}>
-                      {['Email', 'Motivo', 'Data'].map((h) => (
+                      {['Tipo', 'Email / ID', 'Motivo', 'Data'].map((h) => (
                         <th key={h} style={{ padding: '10px 14px', textAlign: 'left', color: '#929AA5', fontWeight: 600 }}>
                           {h}
                         </th>
@@ -276,20 +324,35 @@ export default function AdminLgpdPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.deletions.map((d) => (
-                      <tr key={d.id} style={{ borderTop: '1px solid rgba(240,185,11,.04)' }}>
-                        <td style={{ padding: '10px 14px', color: '#EAECEF', fontFamily: 'monospace', fontSize: '11px' }}>{d.email}</td>
-                        <td style={{ padding: '10px 14px', color: '#F6465D' }}>{d.reason}</td>
-                        <td style={{ padding: '10px 14px', color: '#707A8A', whiteSpace: 'nowrap' }}>
-                          {formatDate(d.deletedAt)}
-                        </td>
-                      </tr>
-                    ))}
+                    {data.deletions.map((d) => {
+                      const isLgpd = d.type === 'lgpd_deletion'
+                      const badgeColor = isLgpd ? '#2EBD85' : '#F6465D'
+                      const badgeLabel = isLgpd ? 'Art. 18' : d.type === 'banned' ? 'Banido' : 'Suspenso'
+                      return (
+                        <tr key={d.id} style={{ borderTop: '1px solid rgba(240,185,11,.04)' }}>
+                          <td style={{ padding: '10px 14px' }}>
+                            <span style={{
+                              fontSize: '10px', fontWeight: 700, color: badgeColor,
+                              background: `${badgeColor}18`, padding: '2px 6px', borderRadius: '3px',
+                            }}>
+                              {badgeLabel}
+                            </span>
+                          </td>
+                          <td style={{ padding: '10px 14px', color: isLgpd ? '#707A8A' : '#EAECEF', fontFamily: 'monospace', fontSize: '11px' }}>
+                            {d.email}
+                          </td>
+                          <td style={{ padding: '10px 14px', color: '#929AA5' }}>{d.reason}</td>
+                          <td style={{ padding: '10px 14px', color: '#707A8A', whiteSpace: 'nowrap' }}>
+                            {formatDate(d.deletedAt)}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
                 {data.deletions.length === 0 && (
                   <p style={{ color: '#707A8A', fontSize: '13px', textAlign: 'center', padding: '32px 0' }}>
-                    Nenhuma conta neste status.
+                    Nenhuma exclusao ou suspensao registrada.
                   </p>
                 )}
               </div>

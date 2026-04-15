@@ -95,11 +95,32 @@ export const POST = withAdmin('financial:write')(async (request: NextRequest) =>
   }
 
   const existing = await prisma.affiliateCode.findFirst({ where: { userId: user.id } })
+
+  // Se o usuário já tem um código (criado no cadastro como tipo USER), promove-o
+  // para o tipo solicitado (INFLUENCIADOR ou TIME_PARCEIRO) em vez de criar outro.
+  // Todo usuário recebe um AffiliateCode no cadastro — a promoção admin é o fluxo correto.
   if (existing) {
-    return NextResponse.json({ success: false, error: { code: 'AFF_001', message: 'Usuário já possui código de afiliado' } }, { status: 409 })
+    const promoted = await prisma.affiliateCode.update({
+      where: { id: existing.id },
+      data: {
+        affiliateType:        parsed.data.affiliateType as string,
+        commissionPercentage: parsed.data.commissionPercentage,
+        bankData:             parsed.data.bankData ? parsed.data.bankData : (existing.bankData ?? undefined),
+        active:               true,
+      },
+      select: { id: true, code: true, affiliateType: true, commissionPercentage: true, active: true, createdAt: true },
+    })
+
+    mixpanelServer.trackAffiliateCodeGenerated(user.id, {
+      affiliateType: parsed.data.affiliateType,
+      code: promoted.code,
+      commissionPercentage: parsed.data.commissionPercentage,
+    })
+
+    return NextResponse.json({ success: true, data: promoted, promoted: true }, { status: 200 })
   }
 
-  // Gerar código único: prefixo do nome + random
+  // Usuário sem código (edge case: criado antes da regra de auto-criação)
   const baseCode = parsed.data.email.split('@')[0]!.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
   const code = `${baseCode}${Math.random().toString(36).slice(2, 6).toUpperCase()}`
 

@@ -124,11 +124,13 @@ function LayerCard({ badge, name, description, color, expanded, onToggle, onRese
         borderColor: expanded ? `${color}55` : 'rgba(240,185,11,.08)',
       }}
     >
-      <button
-        className="w-full flex items-center gap-3 px-4 py-3 text-left"
+      <div
+        className="w-full flex items-center gap-3 px-4 py-3 text-left cursor-pointer"
         onClick={onToggle}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle() } }}
+        role="button"
+        tabIndex={0}
         data-testid={`${testid}-toggle`}
-        type="button"
       >
         <div
           className="w-8 h-8 rounded-lg flex items-center justify-center text-[11px] font-bold font-mono shrink-0"
@@ -158,7 +160,7 @@ function LayerCard({ badge, name, description, color, expanded, onToggle, onRese
           )}
           <span className="text-[#52585F] text-[10px]">{expanded ? '▲' : '▼'}</span>
         </div>
-      </button>
+      </div>
       {expanded && (
         <div
           className="px-4 pb-4 pt-2 border-t"

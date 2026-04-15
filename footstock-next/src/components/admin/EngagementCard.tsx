@@ -36,7 +36,7 @@ export function EngagementCard({ data, isLoading }: EngagementCardProps) {
   }
 
   return (
-    <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4 space-y-5">
+    <div data-testid="section-engajamento" className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4 space-y-5">
       {/* Header */}
       <div className="flex items-center gap-2">
         <TrendingUp className="h-4 w-4 text-[#F0B90B]" />

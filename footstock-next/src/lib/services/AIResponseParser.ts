@@ -6,12 +6,21 @@
 import { AIAnalysisSchema, type AIAnalysis } from '@/lib/types/ai'
 
 // Regex para extrair JSON de blocos markdown ```json ... ```
-const MARKDOWN_JSON_RE = /```(?:json)?\s*(\{[\s\S]*?\})\s*```/
+// Greedy match para capturar o JSON completo (inclui } internos de arrays/objetos)
+const MARKDOWN_JSON_RE = /```(?:json)?\s*(\{[\s\S]*\})\s*```/
 
 // Regex para encontrar qualquer bloco { ... } na resposta
 const RAW_JSON_BLOCK_RE = /(\{[\s\S]*\})/
 
 export class AIResponseParser {
+  /**
+   * Remove tags <cite> e </cite> do web_search que poluem o JSON.
+   * Ex: <cite index="26-2">texto</cite> → texto
+   */
+  private _stripCitations(text: string): string {
+    return text.replace(/<\/?cite[^>]*>/g, '')
+  }
+
   /**
    * Tenta parsear a resposta do Claude em AIAnalysis.
    * Nunca propaga exceção — sempre retorna um AIAnalysis (real ou fallback).
@@ -23,9 +32,11 @@ export class AIResponseParser {
    *  4. Fallback genérico
    */
   parse(rawResponse: string, ticker: string): AIAnalysis {
+    // Pré-processamento: remover tags <cite> do web_search
+    const cleanResponse = this._stripCitations(rawResponse)
     // Estratégia 1: JSON puro direto
     try {
-      const parsed = JSON.parse(rawResponse)
+      const parsed = JSON.parse(cleanResponse)
       const result = AIAnalysisSchema.safeParse(parsed)
       if (result.success) return this._toAIAnalysis(result.data, ticker, false)
     } catch {
@@ -33,7 +44,7 @@ export class AIResponseParser {
     }
 
     // Estratégia 2: extrair de bloco markdown
-    const markdownMatch = rawResponse.match(MARKDOWN_JSON_RE)
+    const markdownMatch = cleanResponse.match(MARKDOWN_JSON_RE)
     if (markdownMatch?.[1]) {
       try {
         const parsed = JSON.parse(markdownMatch[1])
@@ -45,7 +56,7 @@ export class AIResponseParser {
     }
 
     // Estratégia 3: qualquer bloco { ... } no texto
-    const rawMatch = rawResponse.match(RAW_JSON_BLOCK_RE)
+    const rawMatch = cleanResponse.match(RAW_JSON_BLOCK_RE)
     if (rawMatch?.[1]) {
       try {
         const parsed = JSON.parse(rawMatch[1])
@@ -59,7 +70,7 @@ export class AIResponseParser {
     // Estratégia 4: fallback genérico
     console.error(
       '[AIResponseParser] Todas as estratégias falharam. Resposta (200 chars):',
-      rawResponse.slice(0, 200)
+      cleanResponse.slice(0, 200)
     )
     return this._fallback(ticker)
   }

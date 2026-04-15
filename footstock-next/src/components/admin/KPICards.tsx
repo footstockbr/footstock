@@ -24,20 +24,16 @@ function MotorBadge({ status }: { status: 'ONLINE' | 'OFFLINE' | 'DEGRADED' }) {
 
 export function KPICards({ data, isLoading }: KPICardsProps) {
   return (
-    <div data-testid="admin-kpi-cards" className="grid grid-cols-2 gap-3">
-      {/* Removed: Usuários Totais (duplicated in UserStatsCard) */}
-      {/* Removed: Planos Ativos (duplicated in UserStatsCard distribution) */}
-      {/* Removed: MRR (duplicated in FinanceiroCard) */}
-      {/* Removed: Ordens Hoje */}
-
+    <>
       {/* Novos Hoje */}
-      <div data-testid="admin-kpi-card-novos-hoje">
+      <div data-testid="admin-kpi-card-novos-hoje" className="h-full">
         <StatCard
           label="Novos Hoje"
           value={isLoading ? '—' : String(data?.newUsers24h ?? 0)}
           icon={<UserPlus className="h-4 w-4" />}
           isLoading={isLoading}
           aria-label="Novos usuários nas últimas 24 horas"
+          className="h-full"
         />
       </div>
 
@@ -59,6 +55,6 @@ export function KPICards({ data, isLoading }: KPICardsProps) {
           )}
         </div>
       </div>
-    </div>
+    </>
   )
 }

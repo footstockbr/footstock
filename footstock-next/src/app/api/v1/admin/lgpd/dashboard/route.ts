@@ -40,7 +40,15 @@ async function handler(_req: NextRequest) {
     },
   })
 
-  // Contas suspensas/banidas (proxy para exclusao — nao existe soft-delete no schema)
+  // Exclusoes LGPD Art. 18 (anonimizacoes via account-deletion.ts)
+  const lgpdDeletions = await prisma.dataAccessLog.findMany({
+    where: { dataType: 'ACCOUNT_DELETION' },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+    select: { id: true, userId: true, reason: true, createdAt: true },
+  })
+
+  // Contas suspensas/banidas por admin
   const suspendedUsers = await prisma.user.findMany({
     where: { status: { in: [USER_STATUS.SUSPENDED, USER_STATUS.BANNED] } },
     orderBy: { updatedAt: 'desc' },
@@ -48,27 +56,36 @@ async function handler(_req: NextRequest) {
     select: { id: true, email: true, updatedAt: true, status: true },
   })
 
-  const deletions = suspendedUsers.map((u) => ({
-    id: u.id,
-    email: u.email,
-    deletedAt: u.updatedAt.toISOString(),
-    reason: u.status === USER_STATUS.BANNED ? 'Conta banida' : 'Conta suspensa',
-  }))
+  const deletions = [
+    ...lgpdDeletions.map((d) => ({
+      id: d.id,
+      email: 'Anonimizado (Art. 18)',
+      deletedAt: d.createdAt.toISOString(),
+      reason: d.reason ?? 'Solicitacao LGPD Art. 18',
+      type: 'lgpd_deletion' as const,
+    })),
+    ...suspendedUsers.map((u) => ({
+      id: u.id,
+      email: u.email,
+      deletedAt: u.updatedAt.toISOString(),
+      reason: u.status === USER_STATUS.BANNED ? 'Conta banida' : 'Conta suspensa',
+      type: (u.status === USER_STATUS.BANNED ? 'banned' : 'suspended') as 'banned' | 'suspended',
+    })),
+  ].sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime())
 
-  // Indicadores de retencao
+  // Indicadores de retencao (thresholds alinhados com data-retention.ts)
   const now = new Date()
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
   const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
 
-  const [logsOlder30d, exportsOlder90d, inactiveUsers] = await Promise.all([
-    prisma.dataAccessLog.count({ where: { createdAt: { lt: thirtyDaysAgo } } }),
-    prisma.dataExportJob.count({ where: { createdAt: { lt: ninetyDaysAgo }, status: 'COMPLETED' } }),
+  const [logsOlder90d, exportsExpired, inactiveUsers] = await Promise.all([
+    prisma.dataAccessLog.count({ where: { createdAt: { lt: ninetyDaysAgo } } }),
+    prisma.dataExportJob.count({ where: { expiresAt: { lt: now }, status: 'COMPLETED' } }),
     prisma.user.count({ where: { updatedAt: { lt: ninetyDaysAgo }, status: USER_STATUS.ACTIVE } }),
   ])
 
   const retention = [
-    { label: 'Logs de acesso > 30 dias', count: logsOlder30d, policy: 'Recomendado: purgar apos 90 dias' },
-    { label: 'Exports completados > 90 dias', count: exportsOlder90d, policy: 'Recomendado: remover arquivos' },
+    { label: 'Logs de acesso > 90 dias', count: logsOlder90d, policy: 'Politica: purgar automaticamente (LGPD Art. 16)' },
+    { label: 'Exports expirados (> 7 dias)', count: exportsExpired, policy: 'Politica: remover arquivos expirados' },
     { label: 'Usuarios inativos > 90 dias', count: inactiveUsers, policy: 'Recomendado: notificar ou anonimizar' },
   ]
 

@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth, type AuthContext } from '@/app/api/middleware'
-import { aiRateLimiter } from '@/lib/redis/AIRateLimiter'
+import { getAIAnalyzeRateLimit } from '@/lib/ratelimit'
 import { PLAN_TYPE } from '@/lib/enums'
 import type { PlanType } from '@/lib/enums'
 
@@ -18,8 +18,17 @@ async function rateLimitStatusHandler(_req: NextRequest, { user }: AuthContext) 
     return NextResponse.json({ success: true, data: { allowed: false, remaining: 0, resetAt: 0 } })
   }
 
-  const status = await aiRateLimiter.getStatus(user.id)
-  return NextResponse.json({ success: true, data: status })
+  const rateLimiter = getAIAnalyzeRateLimit()
+  const { success, remaining, reset } = await rateLimiter.peek(user.id)
+
+  return NextResponse.json({
+    success: true,
+    data: {
+      allowed: success,
+      remaining,
+      resetAt: reset,
+    },
+  })
 }
 
 export const GET = withAuth(rateLimitStatusHandler)

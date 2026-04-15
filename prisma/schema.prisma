@@ -864,8 +864,9 @@ model AffiliateCode {
   id                   String               @id @default(cuid())
   userId               String               @unique @map("user_id")
   code                 String               @unique @db.VarChar(50)
-  affiliateType        String               @default("INFLUENCER") @map("affiliate_type") @db.VarChar(30)
-  commissionPercentage Decimal              @default(0.10) @map("commission_percentage") @db.Decimal(5, 4)
+  // Valores válidos: USER | INFLUENCIADOR | TIME_PARCEIRO
+  affiliateType        String               @default("USER") @map("affiliate_type") @db.VarChar(30)
+  commissionPercentage Decimal              @default(0.00) @map("commission_percentage") @db.Decimal(5, 4)
   bankData             Json?                @map("bank_data")
   // bankData: { banco, agencia, conta, pixKey, cnpj } — criptografado em repouso
   active               Boolean              @default(true)

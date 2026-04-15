@@ -6,7 +6,7 @@
 // Conectada a GET /api/v1/ai/analyze?ticker=XXX
 // ============================================================================
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Search, Bot, TrendingUp, TrendingDown, Minus, Zap, Globe, Clock, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -99,11 +99,15 @@ export default function AssessorClient({ planType }: AssessorClientProps) {
     fetchRateLimit().then(setRateLimit)
   }, [])
 
-  // Assets filtrados pelo search
-  const filtered = assets.filter(
-    (a) =>
-      a.ticker.toLowerCase().includes(search.toLowerCase()) ||
-      a.displayName.toLowerCase().includes(search.toLowerCase())
+  // Assets filtrados pelo search (memoizado para evitar recálculo a cada render)
+  const filtered = useMemo(
+    () =>
+      assets.filter(
+        (a) =>
+          a.ticker.toLowerCase().includes(search.toLowerCase()) ||
+          a.displayName.toLowerCase().includes(search.toLowerCase())
+      ),
+    [assets, search]
   )
 
   const handleSelect = (ticker: string) => {
@@ -123,8 +127,9 @@ export default function AssessorClient({ planType }: AssessorClientProps) {
       const resetTime = new Date(rateLimit.resetAt).toLocaleTimeString('pt-BR', {
         hour: '2-digit',
         minute: '2-digit',
+        timeZone: 'America/Sao_Paulo',
       })
-      setError(`Limite de análises atingido. Disponível às ${resetTime}.`)
+      setError(`Limite de análises atingido. Disponível às ${resetTime} BRT.`)
       return
     }
 
@@ -192,24 +197,32 @@ export default function AssessorClient({ planType }: AssessorClientProps) {
           />
         </div>
 
-        {showDropdown && search && filtered.length > 0 && (
+        {showDropdown && search && (
           <div
             data-testid="assessor-ticker-dropdown"
+            role="listbox"
             className="absolute top-12 left-0 right-0 z-50 bg-[#1E2329] border border-[rgba(240,185,11,.15)] rounded-lg shadow-xl overflow-hidden max-h-56 overflow-y-auto"
           >
-            {filtered.slice(0, 12).map((a) => (
-              <button
-                key={a.ticker}
-                onMouseDown={() => handleSelect(a.ticker)}
-                className="w-full flex items-center justify-between px-3 py-2.5 text-sm hover:bg-[rgba(240,185,11,.06)] transition-colors text-left"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-[#F0B90B] text-xs font-semibold w-10">{a.ticker}</span>
-                  <span className="text-[#EAECEF]">{a.displayName}</span>
-                </div>
-                <span className="text-[10px] text-[#929AA5]">Série {a.division}</span>
-              </button>
-            ))}
+            {filtered.length > 0 ? (
+              filtered.slice(0, 12).map((a) => (
+                <button
+                  key={a.ticker}
+                  role="option"
+                  onMouseDown={() => handleSelect(a.ticker)}
+                  className="w-full flex items-center justify-between px-3 py-2.5 text-sm hover:bg-[rgba(240,185,11,.06)] transition-colors text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[#F0B90B] text-xs font-semibold w-10">{a.ticker}</span>
+                    <span className="text-[#EAECEF]">{a.displayName}</span>
+                  </div>
+                  <span className="text-[10px] text-[#929AA5]">Série {a.division}</span>
+                </button>
+              ))
+            ) : (
+              <div className="px-3 py-3 text-sm text-[#707A8A] text-center">
+                Nenhum ativo encontrado
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -225,7 +238,7 @@ export default function AssessorClient({ planType }: AssessorClientProps) {
       >
         {loading ? (
           <span className="flex items-center gap-2">
-            <span className="h-4 w-4 rounded-full border-2 border-[#080b12]/40 border-t-[#080b12] animate-spin" />
+            <span className="h-4 w-4 rounded-full border-2 border-[#080b12]/40 border-t-[#080b12] animate-spin" aria-hidden="true" />
             Analisando{isLenda ? ' (pesquisando web)' : ''}...
           </span>
         ) : (
@@ -239,6 +252,7 @@ export default function AssessorClient({ planType }: AssessorClientProps) {
       {/* Error state */}
       {error && (
         <div
+          role="alert"
           data-testid="assessor-error"
           className="flex items-start gap-2 p-3 bg-[rgba(246,70,93,.08)] border border-[rgba(246,70,93,.2)] rounded-lg"
         >
@@ -249,7 +263,7 @@ export default function AssessorClient({ planType }: AssessorClientProps) {
 
       {/* Loading skeleton */}
       {loading && (
-        <div data-testid="assessor-loading" className="space-y-3 animate-pulse">
+        <div data-testid="assessor-loading" aria-busy="true" aria-label="Carregando análise" className="space-y-3 animate-pulse">
           <div className="h-4 bg-[#1E2329] rounded w-3/4" />
           <div className="h-4 bg-[#1E2329] rounded w-full" />
           <div className="h-4 bg-[#1E2329] rounded w-5/6" />

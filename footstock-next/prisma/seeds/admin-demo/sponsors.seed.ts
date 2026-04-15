@@ -10,99 +10,310 @@ const sponsorsSeed = async () => {
   const adapter = new PrismaPg({ connectionString })
   const prisma = new PrismaClient({ adapter })
 
-  console.log('[seed] Sponsors: clearing existing...')
-  await prisma.$executeRawUnsafe('DELETE FROM "sponsored_league_members"')
-  await prisma.$executeRawUnsafe('DELETE FROM "sponsor_banners"')
-  await prisma.$executeRawUnsafe('DELETE FROM "sponsored_leagues"')
-
-  console.log('[seed] Sponsors: creating demo banners...')
-
-  const bannerInserts = [
-    { id: 'b001', title: 'Mercado Pago — Pague em dia', company: 'Mercado Pago', position: 'home_top', isActive: true, clicks: 1240, impressions: 18400, color: '#00B1EA', ctaText: 'Saiba mais', ctaColor: '#00B1EA', linkUrl: 'https://www.mercadopago.com.br' },
-    { id: 'b002', title: 'Red Bull te da asas', company: 'Red Bull', position: 'market_top', isActive: true, clicks: 890, impressions: 12300, color: '#CC0000', ctaText: 'Conheca', ctaColor: '#CC0000', linkUrl: 'https://www.redbull.com/br-pt' },
-    { id: 'b003', title: 'PagSeguro — Seguranca total', company: 'PagSeguro', position: 'cart_top', isActive: false, clicks: 320, impressions: 5100, color: '#f97316', ctaText: 'Ver oferta', ctaColor: '#f97316', linkUrl: 'https://www.pagseguro.com.br' },
+  const sponsors = [
+    {
+      id: 's001',
+      name: 'Mercado Pago',
+      logoUrl: null,
+      contractStart: new Date('2026-01-01T00:00:00.000Z'),
+      contractEnd: new Date('2026-12-31T23:59:59.000Z'),
+      sponsorshipValue: '250000.00',
+      isActive: true,
+      createdBy: 'seed-admin',
+    },
+    {
+      id: 's002',
+      name: 'Red Bull',
+      logoUrl: null,
+      contractStart: new Date('2026-02-01T00:00:00.000Z'),
+      contractEnd: new Date('2026-11-30T23:59:59.000Z'),
+      sponsorshipValue: '180000.00',
+      isActive: true,
+      createdBy: 'seed-admin',
+    },
+    {
+      id: 's003',
+      name: 'PagBank',
+      logoUrl: null,
+      contractStart: new Date('2026-01-15T00:00:00.000Z'),
+      contractEnd: new Date('2026-10-31T23:59:59.000Z'),
+      sponsorshipValue: '140000.00',
+      isActive: true,
+      createdBy: 'seed-admin',
+    },
+    {
+      id: 's004',
+      name: 'Nike',
+      logoUrl: null,
+      contractStart: new Date('2026-03-01T00:00:00.000Z'),
+      contractEnd: new Date('2026-12-15T23:59:59.000Z'),
+      sponsorshipValue: '320000.00',
+      isActive: true,
+      createdBy: 'seed-admin',
+    },
+    {
+      id: 's005',
+      name: 'Spotify',
+      logoUrl: null,
+      contractStart: new Date('2026-04-01T00:00:00.000Z'),
+      contractEnd: new Date('2026-09-30T23:59:59.000Z'),
+      sponsorshipValue: '90000.00',
+      isActive: false,
+      createdBy: 'seed-admin',
+    },
   ]
 
-  for (const b of bannerInserts) {
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO "sponsor_banners" (id, title, company, position, is_active, clicks, impressions, color, cta_text, cta_color, link_url, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())`,
-      b.id, b.title, b.company, b.position, b.isActive, b.clicks, b.impressions, b.color, b.ctaText, b.ctaColor, b.linkUrl
-    )
-  }
-
-  console.log('[seed] Sponsors: creating demo leagues...')
+  const bannerInserts = [
+    {
+      id: 'b001',
+      title: 'Mercado Pago acelera seus aportes',
+      company: 'Mercado Pago',
+      position: 'home_top',
+      imageUrl: null,
+      linkUrl: 'https://www.mercadopago.com.br',
+      width: 1200,
+      height: 320,
+      isActive: true,
+      clicks: 1840,
+      impressions: 28600,
+      color: '#00B1EA',
+      ctaText: 'Abrir conta',
+      ctaColor: '#00B1EA',
+      sponsorId: 's001',
+    },
+    {
+      id: 'b002',
+      title: 'Red Bull Matchday Experience',
+      company: 'Red Bull',
+      position: 'market_top',
+      imageUrl: null,
+      linkUrl: 'https://www.redbull.com/br-pt',
+      width: 1200,
+      height: 320,
+      isActive: true,
+      clicks: 1290,
+      impressions: 17350,
+      color: '#DB0A40',
+      ctaText: 'Conheca',
+      ctaColor: '#DB0A40',
+      sponsorId: 's002',
+    },
+    {
+      id: 'b003',
+      title: 'PagBank Pro Day para traders',
+      company: 'PagBank',
+      position: 'portfolio_top',
+      imageUrl: null,
+      linkUrl: 'https://pagbank.uol.com.br',
+      width: 1200,
+      height: 320,
+      isActive: true,
+      clicks: 760,
+      impressions: 11120,
+      color: '#F5A623',
+      ctaText: 'Ver beneficios',
+      ctaColor: '#F5A623',
+      sponsorId: 's003',
+    },
+    {
+      id: 'b004',
+      title: 'Nike Draft Room Edition',
+      company: 'Nike',
+      position: 'leagues_top',
+      imageUrl: null,
+      linkUrl: 'https://www.nike.com/br',
+      width: 1200,
+      height: 320,
+      isActive: true,
+      clicks: 980,
+      impressions: 14890,
+      color: '#111111',
+      ctaText: 'Explorar drop',
+      ctaColor: '#111111',
+      sponsorId: 's004',
+    },
+    {
+      id: 'b005',
+      title: 'Spotify torcida mix',
+      company: 'Spotify',
+      position: 'home_bottom',
+      imageUrl: null,
+      linkUrl: 'https://www.spotify.com/br',
+      width: 1200,
+      height: 320,
+      isActive: false,
+      clicks: 210,
+      impressions: 4920,
+      color: '#1DB954',
+      ctaText: 'Ouvir agora',
+      ctaColor: '#1DB954',
+      sponsorId: 's005',
+    },
+  ]
 
   const leagueInserts = [
     {
       id: 'l001',
-      name: 'Liga FootStock Marco 2026',
+      name: 'Liga Mercado Pago Turbo Abril',
       company: 'Mercado Pago',
-      prize: '1o: R$5.000 | 2o: R$2.000 | 3o: R$1.000',
+      prize: '1o: R$10.000 | 2o: R$4.000 | 3o: R$2.000',
       prizes: JSON.stringify([
-        { position: 1, label: '1o Lugar', description: 'R$5.000 em dinheiro' },
-        { position: 2, label: '2o Lugar', description: 'R$2.000 em dinheiro' },
-        { position: 3, label: '3o Lugar', description: 'R$1.000 em dinheiro' },
+        { position: 1, label: '1o Lugar', description: 'R$10.000 em conta Mercado Pago' },
+        { position: 2, label: '2o Lugar', description: 'R$4.000 em conta Mercado Pago' },
+        { position: 3, label: '3o Lugar', description: 'R$2.000 em conta Mercado Pago' },
+        { position: 4, label: 'Top 10', description: 'Cashback de 10% por 30 dias' },
       ]),
       sponsorUrl: 'https://www.mercadopago.com.br',
-      participants: 43,
+      participants: 47,
       maxParticipants: 50,
       minPlan: 'CRAQUE',
       status: 'ATIVA',
       borderColor: '#00B1EA',
-      startDate: new Date('2026-03-01'),
-      endDate: new Date('2026-03-31'),
+      startDate: new Date('2026-04-01T00:00:00.000Z'),
+      endDate: new Date('2026-04-30T23:59:59.000Z'),
     },
     {
       id: 'l002',
-      name: 'Desafio Red Bull',
+      name: 'Red Bull Sprint Cup',
       company: 'Red Bull',
-      prize: '1o: PlayStation 5 | 2o: Headset Gamer',
+      prize: '1o: PS5 | 2o: Cadeira gamer | 3o: Kit Red Bull',
       prizes: JSON.stringify([
-        { position: 1, label: '1o Lugar', description: 'PlayStation 5 + 2 jogos' },
-        { position: 2, label: '2o Lugar', description: 'Headset Gamer HyperX' },
-        { position: 3, label: '3o Lugar', description: 'Pack Red Bull 12 latas' },
+        { position: 1, label: '1o Lugar', description: 'PlayStation 5 Slim + FC 26' },
+        { position: 2, label: '2o Lugar', description: 'Cadeira gamer ergonomica' },
+        { position: 3, label: '3o Lugar', description: 'Kit Red Bull com 24 latas' },
       ]),
       sponsorUrl: 'https://www.redbull.com/br-pt',
-      participants: 28,
+      participants: 30,
       maxParticipants: 30,
       minPlan: 'JOGADOR',
       status: 'ENCERRADA',
-      borderColor: '#CC0000',
-      startDate: new Date('2026-03-15'),
-      endDate: new Date('2026-03-31'),
+      borderColor: '#DB0A40',
+      startDate: new Date('2026-03-01T00:00:00.000Z'),
+      endDate: new Date('2026-03-31T23:59:59.000Z'),
     },
     {
       id: 'l003',
-      name: 'Liga Lenda Exclusiva',
-      company: 'PagSeguro',
-      prize: '1o: Viagem para Portugal | 2o: iPhone 16 | 3o: R$3.000',
+      name: 'PagBank Portfolio Masters',
+      company: 'PagBank',
+      prize: '1o: R$15.000 | 2o: iPhone | 3o: R$3.000',
       prizes: JSON.stringify([
-        { position: 1, label: '1o Lugar', description: 'Viagem para Portugal (passagem + 5 noites)' },
-        { position: 2, label: '2o Lugar', description: 'iPhone 16 Pro' },
-        { position: 3, label: '3o Lugar', description: 'R$3.000 em dinheiro' },
-        { position: 4, label: '4o Lugar', description: 'Camisa oficial do clube favorito' },
-        { position: 5, label: '5o Lugar', description: 'Vale-presente R$500' },
+        { position: 1, label: '1o Lugar', description: 'R$15.000 em investimento assistido' },
+        { position: 2, label: '2o Lugar', description: 'iPhone 17 Pro 256GB' },
+        { position: 3, label: '3o Lugar', description: 'R$3.000 em saldo PagBank' },
+        { position: 4, label: '4o Lugar', description: 'Smartwatch premium' },
+        { position: 5, label: '5o Lugar', description: 'Voucher de R$750' },
       ]),
-      sponsorUrl: 'https://www.pagseguro.com.br',
-      participants: 7,
-      maxParticipants: 20,
+      sponsorUrl: 'https://pagbank.uol.com.br',
+      participants: 12,
+      maxParticipants: 40,
       minPlan: 'LENDA',
       status: 'AGENDADA',
-      borderColor: '#f59e0b',
-      startDate: new Date('2026-05-01'),
-      endDate: new Date('2026-05-31'),
+      borderColor: '#F5A623',
+      startDate: new Date('2026-05-10T00:00:00.000Z'),
+      endDate: new Date('2026-06-10T23:59:59.000Z'),
+    },
+    {
+      id: 'l004',
+      name: 'Nike Elite Draft Series',
+      company: 'Nike',
+      prize: '1o: Viagem + camarote | 2o: Kit Nike | 3o: R$5.000',
+      prizes: JSON.stringify([
+        { position: 1, label: '1o Lugar', description: 'Viagem para final continental + camarote' },
+        { position: 2, label: '2o Lugar', description: 'Kit Nike elite com chuteira, camisa e mochila' },
+        { position: 3, label: '3o Lugar', description: 'R$5.000 em credito' },
+      ]),
+      sponsorUrl: 'https://www.nike.com/br',
+      participants: 18,
+      maxParticipants: 24,
+      minPlan: 'CRAQUE',
+      status: 'ATIVA',
+      borderColor: '#111111',
+      startDate: new Date('2026-04-10T00:00:00.000Z'),
+      endDate: new Date('2026-05-05T23:59:59.000Z'),
     },
   ]
 
-  for (const l of leagueInserts) {
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO "sponsored_leagues" (id, name, company, prize, prizes, sponsor_url, participants, max_participants, min_plan, status, border_color, start_date, end_date, created_at, updated_at) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())`,
-      l.id, l.name, l.company, l.prize, l.prizes, l.sponsorUrl, l.participants, l.maxParticipants, l.minPlan, l.status, l.borderColor, l.startDate, l.endDate
-    )
-  }
+  try {
+    console.log('[seed] Sponsors: clearing existing...')
+    await prisma.$executeRawUnsafe('DELETE FROM "sponsored_league_members"')
+    await prisma.$executeRawUnsafe('DELETE FROM "sponsor_banners"')
+    await prisma.$executeRawUnsafe('DELETE FROM "sponsored_leagues"')
+    await prisma.$executeRawUnsafe('DELETE FROM "sponsors"')
 
-  console.log(`[seed] Sponsors: created ${bannerInserts.length} banners and ${leagueInserts.length} leagues`)
-  await prisma.$disconnect()
+    console.log('[seed] Sponsors: creating demo sponsors...')
+    for (const sponsor of sponsors) {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "sponsors" (
+          id, name, logo_url, contract_start, contract_end,
+          sponsorship_value, is_active, created_by, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6::decimal, $7, $8, NOW())`,
+        sponsor.id,
+        sponsor.name,
+        sponsor.logoUrl,
+        sponsor.contractStart,
+        sponsor.contractEnd,
+        sponsor.sponsorshipValue,
+        sponsor.isActive,
+        sponsor.createdBy
+      )
+    }
+
+    console.log('[seed] Sponsors: creating demo banners...')
+    for (const banner of bannerInserts) {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "sponsor_banners" (
+          id, title, company, position, image_url, link_url,
+          width, height, is_active, clicks, impressions,
+          color, cta_text, cta_color, sponsor_id, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW())`,
+        banner.id,
+        banner.title,
+        banner.company,
+        banner.position,
+        banner.imageUrl,
+        banner.linkUrl,
+        banner.width,
+        banner.height,
+        banner.isActive,
+        banner.clicks,
+        banner.impressions,
+        banner.color,
+        banner.ctaText,
+        banner.ctaColor,
+        banner.sponsorId
+      )
+    }
+
+    console.log('[seed] Sponsors: creating demo leagues...')
+    for (const league of leagueInserts) {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "sponsored_leagues" (
+          id, name, company, prize, prizes, sponsor_url,
+          participants, max_participants, min_plan, status,
+          border_color, start_date, end_date, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())`,
+        league.id,
+        league.name,
+        league.company,
+        league.prize,
+        league.prizes,
+        league.sponsorUrl,
+        league.participants,
+        league.maxParticipants,
+        league.minPlan,
+        league.status,
+        league.borderColor,
+        league.startDate,
+        league.endDate
+      )
+    }
+
+    console.log(
+      `[seed] Sponsors: created ${sponsors.length} sponsors, ${bannerInserts.length} banners and ${leagueInserts.length} leagues`
+    )
+  } finally {
+    await prisma.$disconnect()
+  }
 }
 
 sponsorsSeed().catch((err) => {

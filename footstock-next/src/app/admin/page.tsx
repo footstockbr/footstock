@@ -98,46 +98,46 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* KPIs */}
-      <KPICards data={dashboard ?? null} isLoading={loadingDash} />
-
-      {/* Chart + Top Assets */}
-      <div data-testid="admin-dashboard-chart-grid" className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-        <div className="lg:col-span-3">
-          <RevenueChart data={revenue} isLoading={loadingRevenue} />
-        </div>
-        <div className="lg:col-span-2">
-          {/* Top Assets */}
-          {dashboard?.topAssets && dashboard.topAssets.length > 0 && (
-            <div data-testid="admin-dashboard-top-assets" className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
-              <h3 className="text-xs font-semibold text-[#929AA5] uppercase tracking-wider mb-3">
-                Top Ativos (24h)
-              </h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs min-w-[240px]">
-                  <thead>
-                    <tr className="text-[#929AA5] border-b border-[rgba(240,185,11,.08)]">
-                      <th className="text-left py-1.5 font-medium">Ticker</th>
-                      <th className="text-right py-1.5 font-medium">Volume</th>
-                      <th className="text-right py-1.5 font-medium">Var%</th>
+      {/* KPIs + Top Assets — 3 colunas iguais */}
+      <div data-testid="admin-kpi-cards" className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <KPICards data={dashboard ?? null} isLoading={loadingDash} />
+        {/* Top Assets */}
+        <div data-testid="admin-dashboard-top-assets" className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
+          <h3 className="text-xs font-semibold text-[#929AA5] uppercase tracking-wider mb-3">
+            Top Ativos (24h)
+          </h3>
+          {dashboard?.topAssets && dashboard.topAssets.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs min-w-[240px]">
+                <thead>
+                  <tr className="text-[#929AA5] border-b border-[rgba(240,185,11,.08)]">
+                    <th className="text-left py-1.5 font-medium">Ticker</th>
+                    <th className="text-right py-1.5 font-medium">Volume</th>
+                    <th className="text-right py-1.5 font-medium">Var%</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dashboard.topAssets.map((a) => (
+                    <tr key={a.ticker} className="border-b border-[rgba(240,185,11,.06)] last:border-0">
+                      <td className="py-1.5 font-mono text-[#c5b99a]">{a.ticker}</td>
+                      <td className="py-1.5 text-right text-[#929AA5]">{a.volume}</td>
+                      <td className={`py-1.5 text-right font-medium ${a.priceChange >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {a.priceChange > 0 ? '+' : ''}{a.priceChange.toFixed(2)}%
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {dashboard.topAssets.map((a) => (
-                      <tr key={a.ticker} className="border-b border-[rgba(240,185,11,.06)] last:border-0">
-                        <td className="py-1.5 font-mono text-[#c5b99a]">{a.ticker}</td>
-                        <td className="py-1.5 text-right text-[#929AA5]">{a.volume}</td>
-                        <td className={`py-1.5 text-right font-medium ${a.priceChange >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {a.priceChange > 0 ? '+' : ''}{a.priceChange.toFixed(2)}%
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
             </div>
+          ) : (
+            <p className="text-xs text-[#929AA5]">Sem dados disponíveis</p>
           )}
         </div>
+      </div>
+
+      {/* Chart — largura completa */}
+      <div data-testid="admin-dashboard-chart-grid" className="w-full">
+        <RevenueChart data={revenue} isLoading={loadingRevenue} />
       </div>
 
       {/* Dashboard Cards Section */}

@@ -79,39 +79,65 @@ export default async function AdminAfiliadosPage() {
             </tr>
           </thead>
           <tbody>
-            {affiliates.map((affiliate) => {
-              const conversions = affiliate.transactions.length;
-              const revenue = affiliate.transactions.reduce(
-                (sum, t) => sum + t.amount.toNumber(),
-                0
-              );
+            {affiliates.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="py-8 text-center text-sm text-[#929AA5]">
+                  Nenhum afiliado cadastrado.
+                </td>
+              </tr>
+            ) : (
+              affiliates.map((affiliate) => {
+                const conversions = affiliate.transactions.filter(
+                  (t) => t.status === "PAID" || t.status === "PROCESSING"
+                ).length;
+                const revenue = affiliate.transactions
+                  .filter((t) => t.status === "PAID")
+                  .reduce((sum, t) => sum + t.amount.toNumber(), 0);
 
-              return (
-                <tr key={affiliate.id} className="border-b border-[rgba(240,185,11,.04)]">
-                  <td className="py-2.5 text-sm text-[#c5b99a]">{affiliate.user.name}</td>
-                  <td className="py-2.5">
-                    <div className="flex items-center gap-1.5">
-                      <code className="text-xs font-mono text-[#F0B90B] bg-[rgba(240,185,11,.08)] px-1.5 py-0.5 rounded">
-                        {affiliate.code}
-                      </code>
-                      <CopyCodeButton
-                        code={affiliate.code}
-                        testid={`admin-afiliados-copy-code-${affiliate.code}`}
-                      />
-                    </div>
-                  </td>
-                  <td className="py-2.5 text-right font-mono text-sm text-[#EAECEF]">{conversions}</td>
-                  <td className="py-2.5 text-right font-mono text-sm text-[#4ade80]">
-                    FS$ {revenue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                  <td className="py-2.5 text-right">
-                    <Badge variant={affiliate.active ? "default" : "warning"} size="xs">
-                      {affiliate.active ? "ativo" : "pausado"}
-                    </Badge>
-                  </td>
-                </tr>
-              );
-            })}
+                const typeLabel: Record<string, string> = {
+                  INFLUENCIADOR: "Influenciador",
+                  TIME_PARCEIRO: "Time Parceiro",
+                  USER: "Usuário",
+                };
+                const typeBadgeVariant =
+                  affiliate.affiliateType === "INFLUENCIADOR" || affiliate.affiliateType === "TIME_PARCEIRO"
+                    ? "default"
+                    : "info";
+
+                return (
+                  <tr key={affiliate.id} className="border-b border-[rgba(240,185,11,.04)]">
+                    <td className="py-2.5 text-sm text-[#c5b99a]">
+                      <div>
+                        <span>{affiliate.user?.name ?? '—'}</span>
+                        <Badge variant={typeBadgeVariant} size="xs" className="ml-2">
+                          {typeLabel[affiliate.affiliateType] ?? affiliate.affiliateType}
+                        </Badge>
+                      </div>
+                    </td>
+                    <td className="py-2.5">
+                      <div className="flex items-center gap-1.5">
+                        <code className="text-xs font-mono text-[#F0B90B] bg-[rgba(240,185,11,.08)] px-1.5 py-0.5 rounded">
+                          {affiliate.code}
+                        </code>
+                        <CopyCodeButton
+                          code={affiliate.code}
+                          testid={`admin-afiliados-copy-code-${affiliate.code}`}
+                        />
+                      </div>
+                    </td>
+                    <td className="py-2.5 text-right font-mono text-sm text-[#EAECEF]">{conversions}</td>
+                    <td className="py-2.5 text-right font-mono text-sm text-[#4ade80]">
+                      FS$ {revenue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="py-2.5 text-right">
+                      <Badge variant={affiliate.active ? "default" : "warning"} size="xs">
+                        {affiliate.active ? "ativo" : "pausado"}
+                      </Badge>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>

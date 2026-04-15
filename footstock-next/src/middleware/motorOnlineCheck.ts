@@ -26,6 +26,11 @@ export interface MotorOnlineResult {
  * Fail-safe: em caso de erro Redis, assume offline.
  */
 export async function isMotorOnline(): Promise<MotorOnlineResult> {
+  // Dev mode: motor não roda localmente — assumir online para permitir testes
+  if (process.env.NODE_ENV === 'development') {
+    return { online: true }
+  }
+
   const redis = getRedisClient()
   if (!redis) {
     return { online: false, reason: 'redis_unavailable' }

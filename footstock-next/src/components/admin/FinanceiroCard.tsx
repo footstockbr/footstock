@@ -41,7 +41,7 @@ export function FinanceiroCard({ data, isLoading }: FinanceiroCardProps) {
   const hasPaymentMethods = data?.revenueByGateway && data.revenueByGateway.length > 0
 
   return (
-    <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4 space-y-5">
+    <div data-testid="section-financeiro" className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4 space-y-5">
       {/* Header */}
       <div className="flex items-center gap-2">
         <CreditCard className="h-4 w-4 text-[#F0B90B]" />

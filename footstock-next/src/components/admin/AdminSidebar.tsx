@@ -26,6 +26,7 @@ import {
   Bell,
   FileText,
   Settings,
+  BrainCircuit,
 } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
 import { cn } from "@/lib/utils";
@@ -53,6 +54,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: ROUTES.ADMIN_PATROCINADORES, label: "Patrocinadores", icon: HandshakeIcon, resource: "assets:write" },
   { href: ROUTES.ADMIN_AFILIADOS, label: "Afiliados", icon: Network, resource: "admin:manage" },
   { href: ROUTES.ADMIN_LGPD, label: "LGPD / DPO", icon: FileText, resource: "admin:audit" },
+  { href: ROUTES.ADMIN_PROMPT_IA, label: "Prompt Assessor IA", icon: BrainCircuit, resource: "admin:ai-prompt" },
   { href: ROUTES.ADMIN_CONFIGURACOES, label: "Configurações", icon: Settings, resource: "admin:config" },
 ];
 

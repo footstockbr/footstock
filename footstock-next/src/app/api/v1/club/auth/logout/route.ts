@@ -56,5 +56,10 @@ export async function POST(request: NextRequest) {
 
   await supabase.auth.signOut()
 
-  return NextResponse.json({ success: true, message: 'Sessão encerrada com sucesso.' })
+  // Limpar cookies de sessão do portal do clube (incluindo dev HttpOnly cookies)
+  const res = NextResponse.json({ success: true, message: 'Sessão encerrada com sucesso.' })
+  res.cookies.set('fs_dev_auth', '', { path: '/', maxAge: 0, httpOnly: true })
+  res.cookies.set('fs_dev_club_id', '', { path: '/', maxAge: 0, httpOnly: true })
+  res.cookies.set('fs-admin-role', '', { path: '/', maxAge: 0 })
+  return res
 }

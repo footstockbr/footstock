@@ -156,4 +156,32 @@ export class SlidingWindowRateLimiter {
       return { success: true, remaining: this.limitCount, reset: 0 }
     }
   }
+
+  /** Consulta o status atual sem incrementar o contador. */
+  async peek(identifier: string): Promise<RateLimitResult> {
+    const r = getRedisClient()
+    if (!r) return { success: true, remaining: this.limitCount, reset: 0 }
+
+    const key = `${this.prefix}:${identifier}`
+    const now = Date.now()
+    const windowStart = now - this.windowMs
+
+    try {
+      await r.zremrangebyscore(key, '-inf', String(windowStart))
+      const count = await r.zcard(key)
+      const remaining = Math.max(0, this.limitCount - count)
+
+      if (count >= this.limitCount) {
+        const oldest = await r.zrange(key, 0, 0, 'WITHSCORES')
+        const resetAt = oldest.length >= 2
+          ? Math.ceil(Number(oldest[1]) + this.windowMs)
+          : now + this.windowMs
+        return { success: false, remaining: 0, reset: resetAt }
+      }
+
+      return { success: true, remaining, reset: 0 }
+    } catch {
+      return { success: true, remaining: this.limitCount, reset: 0 }
+    }
+  }
 }
