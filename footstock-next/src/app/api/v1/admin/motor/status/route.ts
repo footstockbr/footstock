@@ -70,6 +70,10 @@ export async function GET() {
 
     const haltedTickers = haltKeys.map((k) => k.replace('motor:halt:', ''))
 
+    // Debug: identificar qual Redis a function instance está usando
+    const redisUrl = process.env.REDIS_CLOUD_URL || process.env.REDIS_URL || ''
+    const hostMatch = redisUrl.match(/@([^/]+)/)
+
     return NextResponse.json({
       data: {
         status: statusValue,
@@ -77,6 +81,7 @@ export async function GET() {
         lastTick: lastTick ?? null,
         uptime: calcUptime(startedAt ?? null),
         haltedTickers,
+        _debug: `raw:${statusRaw}, host:${hostMatch?.[1] ?? 'none'}, ioredis:${redis.status}, env:${process.env.REDIS_CLOUD_URL ? 'CLOUD' : process.env.REDIS_URL ? 'URL' : 'NONE'}`,
       },
     })
   } catch (err) {
