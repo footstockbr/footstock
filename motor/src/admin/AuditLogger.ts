@@ -41,7 +41,7 @@ export class AuditLogger {
       take: limit,
       include: {
         admin: { select: { name: true, email: true, adminRole: true } },
-        asset: { select: { ticker: true, name: true } },
+        asset: { select: { ticker: true, displayName: true } },
       },
     })
   }
