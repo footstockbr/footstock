@@ -36,7 +36,7 @@ export async function GET() {
           redis.keys('motor:*'),
         ])
         // Mask REDIS_URL but show host:port for debugging
-        const urlMatch = (process.env.REDIS_URL ?? '').match(/@([^/]+)/)
+        const urlMatch = (process.env.REDIS_CLOUD_URL || process.env.REDIS_URL || '').match(/@([^/]+)/)
         const redisHost = urlMatch ? urlMatch[1] : 'unknown'
         redisDetail = `motor:${motorStatus ?? 'null'}, marker:${marker ?? 'null'}, keys:[${allKeys.join(',')}], host:${redisHost}, ioredis:${redis.status}`
       } else {
@@ -48,7 +48,7 @@ export async function GET() {
       redisDetail = `${err instanceof Error ? err.message : String(err)}, ioredis:${redis.status}`
     }
   } else {
-    redisDetail = process.env.REDIS_URL ? `url_present_but_client_null,ioredis_status:n/a` : 'REDIS_URL_missing'
+    redisDetail = (process.env.REDIS_CLOUD_URL || process.env.REDIS_URL) ? `url_present_but_client_null,ioredis_status:n/a` : 'REDIS_URL_missing'
   }
 
   const latencyMs = Date.now() - start

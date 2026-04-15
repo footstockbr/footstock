@@ -40,7 +40,10 @@ function isDeadConnection(redis: Redis): boolean {
 }
 
 export function getRedisClient(): Redis | null {
-  if (!process.env.REDIS_URL) return null
+  // REDIS_CLOUD_URL tem prioridade sobre REDIS_URL para evitar override
+  // de integração Upstash no Vercel Marketplace
+  const redisUrl = process.env.REDIS_CLOUD_URL || process.env.REDIS_URL
+  if (!redisUrl) return null
 
   // Se singleton existe mas morreu (retryStrategy esgotou), descarta e recria
   if (_global._redisClientFN && isDeadConnection(_global._redisClientFN)) {
@@ -49,7 +52,7 @@ export function getRedisClient(): Redis | null {
   }
 
   if (!_global._redisClientFN) {
-    _global._redisClientFN = new Redis(process.env.REDIS_URL, buildRedisOptions())
+    _global._redisClientFN = new Redis(redisUrl, buildRedisOptions())
     _global._redisClientFN.on('error', (err: Error) => {
       if (process.env.NODE_ENV !== 'test') {
         console.error('[redis:footstock-next] error:', err.message)
@@ -84,8 +87,9 @@ export const redisPublisher: Redis = getRedisClient() ?? _noopProxy
 
 /** Cria um subscriber Redis dedicado (conexão separada). */
 export function createSubscriber(): Redis | null {
-  if (!process.env.REDIS_URL) return null
-  return new Redis(process.env.REDIS_URL, buildRedisOptions())
+  const redisUrl = process.env.REDIS_CLOUD_URL || process.env.REDIS_URL
+  if (!redisUrl) return null
+  return new Redis(redisUrl, buildRedisOptions())
 }
 
 /** Canais Redis utilizados para pub/sub. */
