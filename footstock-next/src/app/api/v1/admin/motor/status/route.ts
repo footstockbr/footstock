@@ -52,6 +52,11 @@ export const GET = withAdmin('motor:read')(async (_request: NextRequest) => {
 
     const haltedTickers = haltKeys.map((k) => k.replace('motor:halt:', ''))
 
+    // Debug: qual Redis está conectado
+    const redisUrl = process.env.REDIS_CLOUD_URL || process.env.REDIS_URL || ''
+    const hostMatch = redisUrl.match(/@([^/]+)/)
+    const redisHost = hostMatch ? hostMatch[1] : 'unknown'
+
     return NextResponse.json({
       data: {
         status: statusValue,
@@ -59,6 +64,7 @@ export const GET = withAdmin('motor:read')(async (_request: NextRequest) => {
         lastTick: lastTick ?? null,
         uptime: calcUptime(startedAt ?? null),
         haltedTickers,
+        _debug: `raw:${statusRaw}, host:${redisHost}, ioredis:${redis.status}`,
       },
     })
   } catch (err) {
