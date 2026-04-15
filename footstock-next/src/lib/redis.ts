@@ -1,30 +1,68 @@
 // ============================================================================
 // Foot Stock — Redis Client (footstock-next)
 // Substitui @upstash/redis: usa ioredis com conexão persistente.
+// Resiliente a cold starts em ambiente serverless (Vercel).
 // ============================================================================
 
 import Redis from 'ioredis'
 
-// ─── Singleton ────────────────────────────────────────────────────────────────
+// ─── Singleton com detecção de conexão morta ─────────────────────────────────
 
-// Usar globalThis para sobreviver a HMR em dev e evitar múltiplas instâncias.
 const _global = globalThis as unknown as { _redisClientFN: Redis | undefined }
+
+/**
+ * Opções de conexão alinhadas com o motor (Railway).
+ * Diferenças críticas vs. versão anterior:
+ *   - retryStrategy: tenta 10x (~13s) em vez de 2x (matava a conexão permanentemente)
+ *   - enableReadyCheck: true (aguarda PING antes de aceitar comandos)
+ *   - maxRetriesPerRequest: 3 (tolerância a falhas transientes por request)
+ */
+function buildRedisOptions(): Redis['options'] {
+  return {
+    maxRetriesPerRequest: 3,
+    connectTimeout: 5_000,
+    enableReadyCheck: true,
+    lazyConnect: false,
+    retryStrategy: (times) => {
+      if (times > 10) return null // desiste após ~13s de tentativas
+      return Math.min(times * 300, 2_000)
+    },
+  }
+}
+
+/**
+ * Verifica se a instância Redis está em estado terminal (desconectada sem
+ * possibilidade de reconexão). Isso acontece quando retryStrategy retorna null
+ * e o ioredis entra em status 'end'.
+ */
+function isDeadConnection(redis: Redis): boolean {
+  return redis.status === 'end' || redis.status === 'close'
+}
 
 export function getRedisClient(): Redis | null {
   if (!process.env.REDIS_URL) return null
+
+  // Se singleton existe mas morreu (retryStrategy esgotou), descarta e recria
+  if (_global._redisClientFN && isDeadConnection(_global._redisClientFN)) {
+    _global._redisClientFN.disconnect()
+    _global._redisClientFN = undefined
+  }
+
   if (!_global._redisClientFN) {
-    _global._redisClientFN = new Redis(process.env.REDIS_URL, {
-      maxRetriesPerRequest: 1,
-      connectTimeout: 3_000,
-      enableReadyCheck: false,
-      lazyConnect: false,
-      retryStrategy: (times) => (times > 2 ? null : Math.min(times * 300, 1_000)),
-    })
+    _global._redisClientFN = new Redis(process.env.REDIS_URL, buildRedisOptions())
     _global._redisClientFN.on('error', (err: Error) => {
       if (process.env.NODE_ENV !== 'test') {
         console.error('[redis:footstock-next] error:', err.message)
       }
     })
+    if (process.env.NODE_ENV !== 'test') {
+      _global._redisClientFN.on('ready', () => {
+        console.log('[redis:footstock-next] connected')
+      })
+      _global._redisClientFN.on('reconnecting', () => {
+        console.log('[redis:footstock-next] reconnecting...')
+      })
+    }
   }
   return _global._redisClientFN
 }
@@ -47,13 +85,7 @@ export const redisPublisher: Redis = getRedisClient() ?? _noopProxy
 /** Cria um subscriber Redis dedicado (conexão separada). */
 export function createSubscriber(): Redis | null {
   if (!process.env.REDIS_URL) return null
-  return new Redis(process.env.REDIS_URL, {
-    maxRetriesPerRequest: 1,
-    connectTimeout: 3_000,
-    enableReadyCheck: false,
-    lazyConnect: false,
-    retryStrategy: (times) => (times > 2 ? null : Math.min(times * 300, 1_000)),
-  })
+  return new Redis(process.env.REDIS_URL, buildRedisOptions())
 }
 
 /** Canais Redis utilizados para pub/sub. */

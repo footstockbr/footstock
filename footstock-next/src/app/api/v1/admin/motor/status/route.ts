@@ -15,6 +15,7 @@ function calcUptime(startedAt: string | null): string | null {
 export const GET = withAdmin('motor:read')(async (_request: NextRequest) => {
   const redis = getRedisClient()
   if (!redis) {
+    console.warn('[motor/status] Redis client is null — REDIS_URL missing or connection dead')
     return NextResponse.json({
       data: {
         status: 'DEGRADED',
@@ -22,6 +23,7 @@ export const GET = withAdmin('motor:read')(async (_request: NextRequest) => {
         lastTick: null,
         uptime: null,
         haltedTickers: [],
+        _debug: 'redis_null',
       },
     })
   }
@@ -59,7 +61,8 @@ export const GET = withAdmin('motor:read')(async (_request: NextRequest) => {
         haltedTickers,
       },
     })
-  } catch {
+  } catch (err) {
+    console.error('[motor/status] Redis read failed:', err instanceof Error ? err.message : err)
     return NextResponse.json({
       data: {
         status: 'DEGRADED',
@@ -67,6 +70,7 @@ export const GET = withAdmin('motor:read')(async (_request: NextRequest) => {
         lastTick: null,
         uptime: null,
         haltedTickers: [],
+        _debug: 'redis_error',
       },
     })
   }
