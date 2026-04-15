@@ -33,6 +33,8 @@ export class AdminMarketActions {
         return this.handleHaltAll(action)
       case 'RESUME_ALL':
         return this.handleResumeAll(action)
+      case 'FORCE_CIRCUIT_BREAKER':
+        return this.handleForceCircuitBreaker(action)
       default:
         return { success: false, message: `Ação desconhecida: ${(action as AdminAction).type}` }
     }
@@ -41,7 +43,7 @@ export class AdminMarketActions {
   private async handlePauseAsset(action: AdminAction): Promise<{ success: boolean; message: string }> {
     if (!action.assetId) return { success: false, message: 'assetId obrigatório' }
 
-    this.engine.pauseAsset(action.assetId)
+    this.engine.pauseAsset(action.assetId, 'HALT_ASSET')
     await this.auditLogger.log(action)
 
     return { success: true, message: `Ativo ${action.assetId} pausado` }
@@ -117,5 +119,30 @@ export class AdminMarketActions {
     const count = this.engine.resumeAll()
     await this.auditLogger.log(action)
     return { success: true, message: `RESUME_ALL: ${count} ativos retomados` }
+  }
+
+  private async handleForceCircuitBreaker(action: AdminAction): Promise<{ success: boolean; message: string }> {
+    if (!action.assetId) return { success: false, message: 'assetId obrigatório' }
+
+    const asset = await this.prisma.asset.findUnique({
+      where: { id: action.assetId },
+      select: { ticker: true, isHalted: true },
+    })
+
+    if (!asset) return { success: false, message: 'Ativo não encontrado' }
+    if (asset.isHalted) return { success: false, message: `${asset.ticker} já está suspenso` }
+
+    // Pausar no motor (memória com haltReason) e persistir no banco
+    this.engine.pauseAsset(action.assetId, 'FORCE_CIRCUIT_BREAKER')
+
+    await this.prisma.asset.update({
+      where: { id: action.assetId },
+      data: { isHalted: true, haltReason: 'FORCE_CIRCUIT_BREAKER' },
+    })
+
+    await this.auditLogger.log(action)
+
+    logger.info(`[admin-actions] FORCE_CIRCUIT_BREAKER aplicado em ${asset.ticker} por admin ${action.adminId}`)
+    return { success: true, message: `Circuit breaker forçado em ${asset.ticker}` }
   }
 }

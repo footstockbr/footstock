@@ -63,6 +63,48 @@ export function FinanceiroPagamentos({
   const gatewayList = gateways.gateways || []
   const [activeUpdate, setActiveUpdate] = useState<string | null>(null)
 
+  // Config modal state
+  const [configGateway, setConfigGateway] = useState<GatewayConfig | null>(null)
+  const [configForm, setConfigForm] = useState<Partial<GatewayConfig>>({})
+  const [configSaving, setConfigSaving] = useState(false)
+  const [configError, setConfigError] = useState<string | null>(null)
+
+  const openConfig = (gw: GatewayConfig) => {
+    setConfigGateway(gw)
+    setConfigForm({ ...gw })
+    setConfigError(null)
+  }
+
+  const saveConfig = async () => {
+    if (!configGateway) return
+    setConfigSaving(true)
+    setConfigError(null)
+    try {
+      const updatedGateways = gatewayList.map((g) =>
+        g.code === configGateway.code ? { ...g, ...configForm } : g
+      )
+      const res = await fetch('/api/v1/admin/gateways/config', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gateways: updatedGateways }),
+      })
+      if (!res.ok) {
+        const json = await res.json()
+        setConfigError(json?.error?.message ?? 'Erro ao salvar')
+        return
+      }
+      setConfigGateway(null)
+      window.location.reload()
+    } catch {
+      setConfigError('Erro de rede. Tente novamente.')
+    } finally {
+      setConfigSaving(false)
+    }
+  }
+
+  const SETTLEMENTS = ['D+0', 'D+1', 'D+2', 'D+15', 'D+30'] as const
+
   const updateMutation = useMutation({
     mutationFn: ({ code, action }: { code: string; action: 'enable' | 'disable' | 'toggle' }) =>
       updateGateway(code, action),
@@ -154,6 +196,8 @@ export function FinanceiroPagamentos({
                 fullWidth
                 className="text-[10px]"
                 disabled={updateMutation.isPending}
+                onClick={() => openConfig(gateway)}
+                data-testid={`admin-financeiro-gateway-config-${gateway.code}-button`}
               >
                 ⚙ Configurar
               </Button>
@@ -177,6 +221,119 @@ export function FinanceiroPagamentos({
           </div>
         )
       })}
+
+      {/* Gateway Config Modal */}
+      {configGateway && (
+        <div
+          data-testid="admin-financeiro-gateway-config-modal"
+          style={{
+            position: 'fixed', inset: 0,
+            background: 'rgba(0,0,0,0.75)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => setConfigGateway(null)}
+        >
+          <div
+            style={{
+              background: '#1E2329',
+              border: '1px solid rgba(240,185,11,.15)',
+              borderRadius: '12px',
+              padding: '24px',
+              width: '100%',
+              maxWidth: '480px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ color: '#EAECEF', fontSize: '15px', fontWeight: 700, marginBottom: '4px' }}>
+              {configGateway.name}
+            </h2>
+            <p style={{ color: '#929AA5', fontSize: '11px', marginBottom: '20px' }}>
+              Configuração de taxas e webhook
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {/* Split */}
+              <div>
+                <label style={{ fontSize: '10px', color: '#929AA5', display: 'block', marginBottom: '3px' }}>
+                  SPLIT % (participação no volume total)
+                </label>
+                <input
+                  type="number" min={0} max={100} step={0.01}
+                  value={configForm.splitPercent ?? 0}
+                  onChange={(e) => setConfigForm({ ...configForm, splitPercent: parseFloat(e.target.value) || 0 })}
+                  style={{ width: '100%', background: '#181A20', border: '1px solid rgba(240,185,11,.12)', borderRadius: '6px', color: '#EAECEF', padding: '7px 10px', fontSize: '12px', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              {/* Fees grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                {([
+                  { label: 'TAXA CRÉDITO %', feeKey: 'creditFeePercent', setKey: 'creditSettlement', sLabel: 'LIQUIDAÇÃO' },
+                  { label: 'TAXA DÉBITO %',  feeKey: 'debitFeePercent',  setKey: 'debitSettlement',  sLabel: 'LIQUIDAÇÃO' },
+                  { label: 'TAXA PIX %',     feeKey: 'pixFeePercent',    setKey: 'pixSettlement',    sLabel: 'LIQUIDAÇÃO' },
+                ] as const).map(({ label, feeKey, setKey, sLabel }) => (
+                  <div key={feeKey}>
+                    <label style={{ fontSize: '10px', color: '#929AA5', display: 'block', marginBottom: '3px' }}>{label}</label>
+                    <input
+                      type="number" min={0} max={100} step={0.01}
+                      value={(configForm[feeKey] as number) ?? 0}
+                      onChange={(e) => setConfigForm({ ...configForm, [feeKey]: parseFloat(e.target.value) || 0 })}
+                      style={{ width: '100%', background: '#181A20', border: '1px solid rgba(240,185,11,.12)', borderRadius: '6px', color: '#EAECEF', padding: '7px 8px', fontSize: '12px', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                    <label style={{ fontSize: '10px', color: '#929AA5', display: 'block', marginTop: '5px', marginBottom: '3px' }}>{sLabel}</label>
+                    <select
+                      value={(configForm[setKey] as string) ?? 'D+1'}
+                      onChange={(e) => setConfigForm({ ...configForm, [setKey]: e.target.value })}
+                      style={{ width: '100%', background: '#181A20', border: '1px solid rgba(240,185,11,.12)', borderRadius: '6px', color: '#EAECEF', padding: '7px 8px', fontSize: '12px', outline: 'none', boxSizing: 'border-box' }}
+                    >
+                      {SETTLEMENTS.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+
+              {/* Webhook endpoint */}
+              <div>
+                <label style={{ fontSize: '10px', color: '#929AA5', display: 'block', marginBottom: '3px' }}>WEBHOOK ENDPOINT</label>
+                <input
+                  type="url"
+                  value={configForm.webhookEndpoint ?? ''}
+                  onChange={(e) => setConfigForm({ ...configForm, webhookEndpoint: e.target.value })}
+                  placeholder="https://..."
+                  style={{ width: '100%', background: '#181A20', border: '1px solid rgba(240,185,11,.12)', borderRadius: '6px', color: '#EAECEF', padding: '7px 10px', fontSize: '12px', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              {configError && (
+                <p style={{ fontSize: '12px', color: '#F6465D', margin: 0 }}>{configError}</p>
+              )}
+
+              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  data-testid="admin-financeiro-gateway-config-cancel-button"
+                  onClick={() => setConfigGateway(null)}
+                  style={{ flex: 1, padding: '9px', borderRadius: '6px', fontSize: '12px', background: 'transparent', border: '1px solid rgba(240,185,11,.2)', color: '#929AA5', cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  data-testid="admin-financeiro-gateway-config-save-button"
+                  onClick={saveConfig}
+                  disabled={configSaving}
+                  style={{ flex: 1, padding: '9px', borderRadius: '6px', fontSize: '12px', background: configSaving ? 'rgba(240,185,11,.4)' : '#F0B90B', border: 'none', color: '#080B12', fontWeight: 700, cursor: configSaving ? 'not-allowed' : 'pointer' }}
+                >
+                  {configSaving ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

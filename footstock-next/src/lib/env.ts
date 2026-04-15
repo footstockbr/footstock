@@ -66,6 +66,10 @@ const envSchema = z.object({
   // IA (Anthropic Claude)
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
 
+  // FlagCheck — Verificação de maioridade via CPF (T-023)
+  FLAGCHECK_API_URL: z.string().url().optional(),
+  FLAGCHECK_API_KEY: z.string().min(1).optional(),
+
   // Segurança adicional
   ENCRYPTION_KEY: z.string().min(32).optional(),
   INTERNAL_JOBS_SECRET: z.string().min(32).optional(),

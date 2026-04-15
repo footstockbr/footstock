@@ -4,7 +4,8 @@ import type { Division } from '@prisma/client'
 
 interface ClubSeedData {
   ticker: string
-  name: string
+  displayName: string
+  realName: string
   clubSlug: string
   division: Division
   cluster: string
@@ -49,12 +50,13 @@ function getSerieBCluster(index: number): string {
   return index < 6 ? 'B_LIQUID' : 'B_ILLIQ'
 }
 
-function toSerieASeed(index: number, ticker: string, name: string): ClubSeedData {
+function toSerieASeed(index: number, ticker: string, displayName: string, realName: string): ClubSeedData {
   const colors = CLUB_COLORS[ticker] ?? { primary: '#1a1a1a', secondary: '#ffffff' }
   return {
     ticker,
-    name,
-    clubSlug: slugify(name),
+    displayName,
+    realName,
+    clubSlug: slugify(displayName),
     division: 'SERIE_A',
     cluster: getSerieACluster(index),
     colorPrimary: colors.primary,
@@ -65,12 +67,13 @@ function toSerieASeed(index: number, ticker: string, name: string): ClubSeedData
   }
 }
 
-function toSerieBSeed(index: number, ticker: string, name: string): ClubSeedData {
+function toSerieBSeed(index: number, ticker: string, displayName: string, realName: string): ClubSeedData {
   const colors = CLUB_COLORS[ticker] ?? { primary: '#334155', secondary: '#ffffff' }
   return {
     ticker,
-    name,
-    clubSlug: slugify(name),
+    displayName,
+    realName,
+    clubSlug: slugify(displayName),
     division: 'SERIE_B',
     cluster: getSerieBCluster(index),
     colorPrimary: colors.primary,
@@ -83,11 +86,11 @@ function toSerieBSeed(index: number, ticker: string, name: string): ClubSeedData
 
 const SERIE_A_CLUBS: ClubSeedData[] = CLUBS
   .filter((club) => club.division === 'SERIE_A')
-  .map((club, index) => toSerieASeed(index, club.ticker, club.name))
+  .map((club, index) => toSerieASeed(index, club.ticker, club.name, club.realName))
 
 const SERIE_B_CLUBS: ClubSeedData[] = CLUBS
   .filter((club) => club.division === 'SERIE_B')
-  .map((club, index) => toSerieBSeed(index, club.ticker, club.name))
+  .map((club, index) => toSerieBSeed(index, club.ticker, club.name, club.realName))
 
 export async function seedAssets() {
   if (process.env.NODE_ENV === 'production') {
@@ -110,7 +113,8 @@ export async function seedAssets() {
       where: { ticker: club.ticker },
       create: {
         ticker: club.ticker,
-        name: club.name,
+        displayName: club.displayName,
+        realName: club.realName,
         clubSlug: club.clubSlug,
         division: club.division,
         cluster: club.cluster,
@@ -125,7 +129,8 @@ export async function seedAssets() {
         isActive: true,
       },
       update: {
-        name: club.name,
+        displayName: club.displayName,
+        realName: club.realName,
         clubSlug: club.clubSlug,
         division: club.division,
         cluster: club.cluster,

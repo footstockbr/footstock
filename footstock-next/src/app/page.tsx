@@ -54,7 +54,7 @@ export default function RootPage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-dvh bg-[#0B0E11] px-4">
+    <div className="flex items-center justify-center min-h-dvh bg-[#0B0E11] px-4" data-testid="page-home">
       <LoginForm />
     </div>
   );

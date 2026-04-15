@@ -42,6 +42,7 @@ enum FinancialType {
   MARGIN_BLOCKED
   SHORT_CLOSE
   LEVERAGE_INTEREST
+  FEE
 }
 
 enum OrderSide {
@@ -83,11 +84,19 @@ enum LeagueType {
   PRO
 }
 
+enum TrophyType {
+  PRO_LEAGUE_WINNER      // 1o lugar
+  PRO_LEAGUE_RUNNER_UP   // 2o lugar
+  PRO_LEAGUE_THIRD       // 3o lugar
+}
+
 enum NotificationType {
-  // Alinhado com NOTIFICATION-SPEC.md (16 tipos)
+  // Alinhado com NOTIFICATION-SPEC.md (23 tipos — T-014)
   ORDER_EXECUTED
   ORDER_CANCELLED
-  MARGIN_CALL_ALERT
+  // Margin Call: dois thresholds distintos (50% = aviso, 80% = alerta crítico)
+  MARGIN_CALL_WARNING        // 50% — aviso não urgente
+  MARGIN_CALL_ALERT          // 80% — alerta crítico, ignora quiet hours
   CIRCUIT_BREAKER
   NEWS_FAVORITE_CLUB
   PAYMENT_CONFIRMED
@@ -95,11 +104,40 @@ enum NotificationType {
   PLAN_CANCEL_ALERT
   DIVIDEND_CREDITED
   BONUS_CREDITED
+  // Bônus com carência (T-021 / CDC Art. 49)
+  BONUS_SCHEDULED            // bônus agendado — creditado em T+7 dias após upgrade
+  BONUS_CANCELLED            // bônus cancelado — usuário cancelou dentro do período de carência
   LEAGUE_RESULT
   ADMIN_BROADCAST
   // Trava de cancelamento
   CANCELLATION_LOCK_ACTIVE
   CANCELLATION_LOCK_LIQUIDATED
+  // Sistema de afiliados (T-001)
+  AFFILIATE_COMMISSION_EARNED
+  AFFILIATE_INVITE_JOINED
+  // Segurança e conta (T-014)
+  PASSWORD_RESET             // email only, urgente
+  LGPD_EXPORT_READY          // email only
+  ACCOUNT_DELETED            // email only, urgente
+  BRUTE_FORCE_BLOCKED        // email only, urgente
+  // Sistema
+  SYSTEM_MAINTENANCE         // in-app + push
+  REFERRAL_JOINED            // in-app (para quem foi indicado)
+  // Verificação de maioridade (T-023)
+  AGE_VERIFICATION_PENDING   // in-app — FlagCheck indisponível no cadastro
+  AGE_VERIFICATION_COMPLETED // in-app — verificação concluída com sucesso
+  // Saldo e financeiro
+  BALANCE_ZERO               // saldo FS$ zerou (T-019)
+  BALANCE_RESET              // saldo resetado pelo admin (T-019)
+  // Moderação de fórum (T-028)
+  POST_FLAGGED               // in-app para MODERADOR+ — post aguarda revisão
+  POST_REJECTED              // in-app para o autor — post foi rejeitado
+}
+
+enum NotificationChannel {
+  IN_APP
+  PUSH
+  EMAIL
 }
 
 enum ImpactCategory {
@@ -170,6 +208,7 @@ enum SubscriptionPeriod {
 enum SessionType {
   PRE_MARKET
   REGULAR
+  CLOSING_CALL
   AFTER_MARKET
   CLOSED
 }
@@ -180,6 +219,12 @@ enum ConsentPurpose {
   MARKETING
   DATA_TERCEIROS
   AGE_VERIFICATION
+}
+
+enum VerificationMethod {
+  FLAGCHECK
+  AUTODECLARATION
+  ADMIN_OVERRIDE
 }
 
 enum ExportJobStatus {
@@ -203,6 +248,7 @@ model User {
   adminRole       AdminRole?       @map("admin_role")
   investorProfile InvestorProfile? @map("investor_profile")
   tourCompleted          Boolean          @default(false) @map("tour_completed")
+  tourSkippedAt          DateTime?        @map("tour_skipped_at")
   favoriteClub           String?          @map("favorite_club")
   fsBalance              Decimal          @default(10000) @map("fs_balance") @db.Decimal(18, 2)
   marginBlocked          Decimal          @default(0) @map("margin_blocked") @db.Decimal(18, 2)
@@ -213,6 +259,7 @@ model User {
   suspendedAt            DateTime?        @map("suspended_at")
   suspensionReason       String?          @db.VarChar(500) @map("suspension_reason")
   userType               String           @default("NORMAL") @map("user_type")
+  version                Int              @default(0)
   createdAt              DateTime         @default(now()) @map("created_at")
   updatedAt              DateTime         @updatedAt @map("updated_at")
 
@@ -221,8 +268,9 @@ model User {
   transactions      Transaction[]
   subscriptions     Subscription[]
   payments          Payment[]
-  notifications     Notification[]
-  consents          Consent[]
+  notifications              Notification[]
+  notificationPreferences    NotificationPreference[]
+  consents                   Consent[]
   leagueMemberships LeagueMember[]
   forumPosts        ForumPost[]
   globalForumPosts  GlobalForumPost[]
@@ -231,13 +279,20 @@ model User {
   dataExportJobs    DataExportJob[]
   createdLeagues    League[]            @relation("LeagueCreator")
   adminActions         AdminMarketAction[] @relation("AdminActor")
-  dividends            Dividend[]
+  dividends                Dividend[]
+  yieldDifferentialPending YieldDifferentialPending[]
   glossaryInteractions GlossaryInteraction[]
   affiliateCode        AffiliateCode?
   affiliateReferrals   AffiliateTransaction[] @relation("AffiliateReferredUser")
   pushSubscriptions    PushSubscription[]
-  leagueScoreEvents    LeagueScoreEvent[] // RESOLVED: relação para eventos de pontuação de ligas
+  leagueScoreEvents    LeagueScoreEvent[]
+  leagueDailyRanks     LeagueDailyRank[]
+  leagueTrophies       LeagueTrophy[]
   moderationActions    ModerationAction[] @relation("ModerationActions")
+  createdClubUsers     ClubUser[]         @relation("ClubUserCreator")
+  ageVerifications     AgeVerification[]
+  balanceResets        BalanceResetLog[]   @relation("BalanceResetTarget")
+  balanceResetsMade    BalanceResetLog[]   @relation("BalanceResetAdmin")
 
   @@map("users")
 }
@@ -245,7 +300,10 @@ model User {
 model Asset {
   id             String   @id @default(cuid())
   ticker         String   @unique
-  name           String
+  /// Nome fictício exibido na plataforma (ex: "Urubu da Gavea FC"). Mapeado para coluna "name".
+  displayName    String   @map("name")
+  /// Nome real do clube (ex: "Flamengo") — uso server-side e admin APENAS. NUNCA retornar em endpoints públicos.
+  realName       String?  @map("real_name")
   clubSlug       String   @unique @map("club_slug")
   division       Division
   cluster        String // A_TOP | A_MID | A_SMALL | B_LIQUID | B_ILLIQ
@@ -277,8 +335,29 @@ model Asset {
   transactions Transaction[]
   sponsors     Sponsor[]
   adminActions AdminMarketAction[]
+  clubUsers    ClubUser[]
+  aliases      AssetAlias[]
 
   @@map("assets")
+}
+
+/// Tabela de aliases de ticker — mapeia códigos do mundo real (FLA3) para tickers fictícios do sistema (URU3).
+/// Resolução transparente: cliente envia FLA3, servidor responde com dados de URU3.
+model AssetAlias {
+  id          String   @id @default(cuid())
+  /// Alias normalizado em maiúsculas (ex: "FLA3", "FLA4", "FLM3")
+  alias       String   @unique
+  /// Ticker canônico do ativo no sistema (ex: "URU3")
+  assetTicker String   @map("asset_ticker")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  asset Asset @relation(fields: [assetTicker], references: [ticker])
+
+  @@index([alias, isActive])
+  @@index([assetTicker])
+  @@map("asset_aliases")
 }
 
 model Order {
@@ -297,6 +376,7 @@ model Order {
   groupId           String?     @map("group_id")
   leverageMultiplier Int        @default(1) @map("leverage_multiplier")
   executedAt        DateTime?   @map("executed_at")
+  version           Int         @default(0)
   createdAt         DateTime    @default(now()) @map("created_at")
   updatedAt         DateTime    @updatedAt @map("updated_at")
 
@@ -327,6 +407,7 @@ model Position {
   dailyInterestRate  Decimal        @default(0) @map("daily_interest_rate") @db.Decimal(10, 6)
   interestAccrued    Decimal        @default(0) @map("interest_accrued") @db.Decimal(18, 2)
   openedAt           DateTime?      @map("opened_at")
+  version            Int            @default(0)
   createdAt          DateTime       @default(now()) @map("created_at")
   updatedAt          DateTime       @updatedAt @map("updated_at")
 
@@ -339,24 +420,26 @@ model Position {
 }
 
 model Transaction {
-  id             String        @id @default(cuid())
-  userId         String        @map("user_id")
-  assetId        String        @map("asset_id")
-  orderId        String?       @map("order_id")
-  type           OrderType
-  financialType  FinancialType @default(TRADE) @map("financial_type")
-  side           OrderSide
-  quantity       Int
-  price          Decimal       @db.Decimal(18, 8)
-  fee            Decimal       @db.Decimal(18, 8)
-  totalAmount    Decimal       @map("total_amount") @db.Decimal(18, 2)
-  fsAmount       Decimal?      @map("fs_amount") @db.Decimal(18, 2)
-  balanceBefore  Decimal?      @map("balance_before") @db.Decimal(18, 2)
-  balanceAfter   Decimal?      @map("balance_after") @db.Decimal(18, 2)
-  createdAt      DateTime      @default(now()) @map("created_at")
+  id             String         @id @default(cuid())
+  userId         String         @map("user_id")
+  // Nullable para lançamentos sem ativo (BONUS, DIVIDEND, DEPOSIT, WITHDRAWAL)
+  assetId        String?        @map("asset_id")
+  orderId        String?        @map("order_id")
+  // Nullable para lançamentos financeiros sem tipo de ordem (BONUS, etc.)
+  type           OrderType?
+  financialType  FinancialType  @default(TRADE) @map("financial_type")
+  side           OrderSide?
+  quantity       Int?
+  price          Decimal?       @db.Decimal(18, 8)
+  fee            Decimal?       @db.Decimal(18, 8)
+  totalAmount    Decimal        @map("total_amount") @db.Decimal(18, 2)
+  fsAmount       Decimal?       @map("fs_amount") @db.Decimal(18, 2)
+  balanceBefore  Decimal?       @map("balance_before") @db.Decimal(18, 2)
+  balanceAfter   Decimal?       @map("balance_after") @db.Decimal(18, 2)
+  createdAt      DateTime       @default(now()) @map("created_at")
 
   user  User   @relation(fields: [userId], references: [id])
-  asset Asset  @relation(fields: [assetId], references: [id])
+  asset Asset? @relation(fields: [assetId], references: [id])
   order Order? @relation(fields: [orderId], references: [id])
 
   @@index([userId])
@@ -375,11 +458,13 @@ model PriceHistory {
   close       Decimal     @db.Decimal(18, 8)
   volume      BigInt      @default(0)
   sessionType SessionType @map("session_type")
+  source      String      @default("REAL") @map("source") // 'GBM' | 'REAL'
 
   asset Asset @relation(fields: [assetId], references: [id])
 
   @@index([assetId])
   @@index([assetId, timestamp])
+  @@index([assetId, source])
   @@map("price_history")
 }
 
@@ -394,9 +479,13 @@ model Subscription {
   status                    SubscriptionStatus  @default(PENDING)
   startsAt                  DateTime            @map("starts_at")
   expiresAt                 DateTime            @map("expires_at")
-  cancelledAt               DateTime?           @map("cancelled_at")
-  cancellationLockExpiresAt DateTime?           @map("cancellation_lock_expires_at")
-  bonusScheduledAt          DateTime?           @map("bonus_scheduled_at")
+  cancelledAt                  DateTime?           @map("cancelled_at")
+  cancellationLockStartedAt    DateTime?           @map("cancellation_lock_started_at")
+  cancellationLockExpiresAt    DateTime?           @map("cancellation_lock_expires_at") // T+7d: cancelamento final
+  forcedLiquidationAt          DateTime?           @map("forced_liquidation_at")         // T+48h: liquidacao de posicoes restritas
+  forcedLiquidationExecutedAt  DateTime?           @map("forced_liquidation_executed_at") // idempotencia do cron T+48h
+  bonusAmount               Decimal?            @map("bonus_amount") @db.Decimal(18, 2)  // T-021: valor imutável do bônus agendado
+  bonusScheduledAt             DateTime?           @map("bonus_scheduled_at")
   bonusCreditedAt           DateTime?           @map("bonus_credited_at")
   renewalReminderSentAt     DateTime?           @map("renewal_reminder_sent_at") // G-01: lembrete 7 dias antes do vencimento
   refundRequested           Boolean             @default(false) @map("refund_requested")
@@ -410,6 +499,7 @@ model Subscription {
   @@index([userId, status])
   @@index([expiresAt, status])
   @@index([cancellationLockExpiresAt, status])
+  @@index([forcedLiquidationAt, status, forcedLiquidationExecutedAt])
   @@index([renewalReminderSentAt, status])
   @@map("subscriptions")
 }
@@ -512,38 +602,67 @@ model SponsorBanner {
   id          String   @id @default(cuid())
   title       String
   company     String
-  position    String   @default("home-top")
+  position    String   @default("home_top")
+  imageUrl    String?  @map("image_url")
+  linkUrl     String?  @map("link_url")
+  width       Int?
+  height      Int?
   isActive    Boolean  @default(true) @map("is_active")
   clicks      Int      @default(0)
   impressions Int      @default(0)
   color       String   @default("#00B1EA")
   ctaText     String   @default("Saiba mais") @map("cta_text")
   ctaColor    String   @default("#00B1EA") @map("cta_color")
+  sponsorId   String?  @map("sponsor_id")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
+  sponsor     Sponsor? @relation(fields: [sponsorId], references: [id], onDelete: SetNull)
+  leagues     League[]
+
   @@index([isActive])
+  @@index([position, isActive])
   @@map("sponsor_banners")
 }
 
 model SponsoredLeague {
-  id            String   @id @default(cuid())
-  name          String
-  company       String
-  prize         String   @default("FS$0") // prêmio em texto (FS$X.000)
-  participants  Int      @default(0)
-  maxParticipants Int    @default(50) @map("max_participants")
-  minPlan       String   @default("JOGADOR") @map("min_plan") // JOGADOR, CRAQUE, LENDA
-  status        String   @default("AGENDADA") // ATIVA, ENCERRADA, AGENDADA
-  borderColor   String   @default("#f59e0b") @map("border_color") // cor da borda esquerda
-  startDate     DateTime @map("start_date")
-  endDate       DateTime @map("end_date")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(cuid())
+  name            String
+  company         String
+  prize           String   @default("FS$0") // legacy - prêmio resumo
+  prizes          Json     @default("[]") // [{position:1,label:"1o Lugar",description:"..."}]
+  sponsorUrl      String?  @map("sponsor_url") // link para site do patrocinador
+  participants    Int      @default(0)
+  maxParticipants Int      @default(50) @map("max_participants")
+  minPlan         String   @default("JOGADOR") @map("min_plan") // JOGADOR, CRAQUE, LENDA
+  status          String   @default("AGENDADA") // ATIVA, ENCERRADA, AGENDADA
+  borderColor     String   @default("#f59e0b") @map("border_color")
+  startDate       DateTime @map("start_date")
+  endDate         DateTime @map("end_date")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  members         SponsoredLeagueMember[]
 
   @@index([status])
   @@index([startDate])
   @@map("sponsored_leagues")
+}
+
+model SponsoredLeagueMember {
+  id                  String   @id @default(cuid())
+  sponsoredLeagueId   String   @map("sponsored_league_id")
+  userId              String   @map("user_id")
+  joinedAt            DateTime @default(now()) @map("joined_at")
+  score               Decimal  @default(0) @db.Decimal(18, 2)
+  rank                Int      @default(0)
+
+  sponsoredLeague     SponsoredLeague @relation(fields: [sponsoredLeagueId], references: [id], onDelete: Cascade)
+
+  @@unique([sponsoredLeagueId, userId])
+  @@index([sponsoredLeagueId, score(sort: Desc)])
+  @@index([userId])
+  @@map("sponsored_league_members")
 }
 
 model RssFeed {
@@ -572,15 +691,20 @@ model League {
   createdBy  String     @map("created_by")
   sponsorId  String?    @map("sponsor_id")
   emblemUrl  String?    @map("emblem_url")
-  inviteCode String?    @unique @map("invite_code")
-  createdAt  DateTime   @default(now()) @map("created_at")
-  updatedAt  DateTime   @updatedAt @map("updated_at")
+  inviteCode         String?    @unique @map("invite_code")
+  permiteAlavancagem Boolean    @default(false) @map("permite_alavancagem")
+  bannerId           String?    @map("banner_id")
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime   @updatedAt @map("updated_at")
 
   creator     User               @relation("LeagueCreator", fields: [createdBy], references: [id])
   sponsor     Sponsor?           @relation(fields: [sponsorId], references: [id])
+  banner      SponsorBanner?     @relation(fields: [bannerId], references: [id], onDelete: SetNull)
   members     LeagueMember[]
   forumPosts  ForumPost[]
-  scoreEvents LeagueScoreEvent[] // RESOLVED: relação inversa para eventos de pontuação
+  scoreEvents LeagueScoreEvent[]
+  dailyRanks  LeagueDailyRank[]
+  trophies    LeagueTrophy[]
 
   @@index([createdBy])
   @@index([type, status])
@@ -622,10 +746,51 @@ model LeagueScoreEvent {
   league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([leagueId, userId, eventType, period]) // deduplicação: 1 evento por dia por liga por usuário
+  // period semântica:
+  //   eventos diários       → "YYYY-MM-DD"  (dedup por dia)
+  //   SHORT_PROFITABLE_CLOSED → ISO timestamp  (sem dedup — N ocorrências/dia)
+  //   únicos por liga       → "league"        (1× por liga)
+  @@unique([leagueId, userId, eventType, period])
   @@index([leagueId, userId])
   @@index([leagueId, period])
   @@map("league_score_events")
+}
+
+// Snapshot diário de posições no ranking — alimenta P4 (Consistency)
+model LeagueDailyRank {
+  id        String   @id @default(cuid())
+  leagueId  String   @map("league_id")
+  userId    String   @map("user_id")
+  date      DateTime @map("date") // dia do snapshot (00:00:00 UTC)
+  rank      Int
+  score     Decimal  @db.Decimal(18, 2)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, userId, date])
+  @@index([leagueId, date])
+  @@index([userId])
+  @@map("league_daily_ranks")
+}
+
+model LeagueTrophy {
+  id         String      @id @default(cuid())
+  userId     String      @map("user_id")
+  leagueId   String      @map("league_id")
+  trophyType TrophyType  @map("trophy_type")
+  position   Int
+  awardedAt  DateTime    @default(now()) @map("awarded_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  // Um usuário pode ter no máximo um troféu por liga (empate = mesma posição compartilhada)
+  @@unique([userId, leagueId, trophyType])
+  @@index([userId, awardedAt(sort: Desc)])
+  @@index([leagueId])
+  @@map("league_trophies")
 }
 
 model ForumPost {
@@ -646,20 +811,41 @@ model ForumPost {
 }
 
 model Notification {
-  id        String           @id @default(cuid())
-  userId    String           @map("user_id")
-  type      NotificationType
-  title     String
-  body      String
-  data      Json?
-  isRead    Boolean          @default(false) @map("is_read")
-  createdAt DateTime         @default(now()) @map("created_at")
+  id         String           @id @default(cuid())
+  userId     String           @map("user_id")
+  type       NotificationType
+  title      String
+  body       String
+  data       Json?
+  isRead     Boolean          @default(false) @map("is_read")
+  isArchived Boolean          @default(false) @map("is_archived")
+  createdAt  DateTime         @default(now()) @map("created_at")
+  expiresAt  DateTime?        @map("expires_at")
 
   user User @relation(fields: [userId], references: [id])
 
   @@index([userId])
-  @@index([userId, isRead])
+  @@index([userId, isRead, createdAt(sort: Desc)])
+  @@index([userId, type])
+  @@index([expiresAt])
   @@map("notifications")
+}
+
+model NotificationPreference {
+  id               String   @id @default(cuid())
+  userId           String   @map("user_id")
+  notificationType String   @map("notification_type")
+  inAppEnabled     Boolean  @default(true) @map("in_app_enabled")
+  pushEnabled      Boolean  @default(true) @map("push_enabled")
+  emailEnabled     Boolean  @default(true) @map("email_enabled")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, notificationType])
+  @@index([userId])
+  @@map("notification_preferences")
 }
 
 model Consent {
@@ -706,10 +892,13 @@ model Sponsor {
   contractStart    DateTime @map("contract_start")
   contractEnd      DateTime @map("contract_end")
   sponsorshipValue Decimal  @map("sponsorship_value") @db.Decimal(18, 2)
+  isActive         Boolean  @default(true) @map("is_active")
+  createdBy        String?  @map("created_by")
   createdAt        DateTime @default(now()) @map("created_at")
 
   asset            Asset?   @relation(fields: [assetId], references: [id])
   sponsoredLeagues League[]
+  banners          SponsorBanner[]
 
   @@map("sponsors")
 }
@@ -779,37 +968,78 @@ model Dividend {
   userId         String    @map("user_id")
   ticker         String
   clubName       String    @map("club_name")
-  type           String    // DividendType: ESPORTIVO | FINANCEIRO
+  // DividendType: ESPORTIVO | FINANCEIRO (legado) | SPORTING_RESULT | FINANCIAL_PERIODIC | YIELD_DIFFERENTIAL
+  type           String
   amount         Decimal   @db.Decimal(18, 8)
   yieldPercent   Float     @map("yield_percent")
-  status         String    @default("PENDING") // DividendStatus: CREDITED | PENDING | EXPIRADO
+  // DividendStatus: CREDITED | PENDING | EXPIRADO | BLOCKED_PLAN
+  status         String    @default("PENDING")
   processedMonth String?   @map("processed_month") // "YYYY-MM" — idempotência do job mensal
   scheduledFor   DateTime? @map("scheduled_for")   // prazo PENDING (createdAt + 7 dias)
-  triggerEvent   String?   @map("trigger_event")   // VITORIA | TITULO (apenas ESPORTIVO)
+  triggerEvent   String?   @map("trigger_event")   // VITORIA | TITULO | CAMPEONATO (apenas SPORTING_RESULT)
+  snapshotDate   DateTime? @map("snapshot_date")   // data de corte de acionistas (quem detinha nessa data recebe)
+  sharesSnapshot Decimal?  @db.Decimal(18, 8) @map("shares_snapshot") // qtd de ações na snapshotDate
+  pricePerShare  Decimal?  @db.Decimal(18, 8) @map("price_per_share") // valor por ação distribuído
   createdAt      DateTime  @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id])
+  user                  User                    @relation(fields: [userId], references: [id])
+  yieldDifferentialPending YieldDifferentialPending[]
 
   @@index([userId])
   @@index([ticker])
   @@index([processedMonth])
   @@index([status, scheduledFor]) // job de crédito
   @@index([status, createdAt])    // job de expiração
+  @@index([userId, type])         // filtro por tipo na listagem
   @@map("dividends")
+}
+
+/// Accrual pendente de yield para usuários JOGADOR.
+/// JOGADOR não recebe crédito direto; o yield acumula aqui e é realizado na venda da posição.
+model YieldDifferentialPending {
+  id                    String    @id @default(cuid())
+  userId                String    @map("user_id")
+  ticker                String
+  /// Tipo fonte: SPORTING_RESULT | FINANCIAL_PERIODIC
+  sourceType            String    @map("source_type")
+  /// FK para `dividends.id` que gerou este pendente (para rastreabilidade)
+  sourceDividendId      String?   @map("source_dividend_id")
+  snapshotDate          DateTime  @map("snapshot_date")
+  /// Qtd de ações na snapshotDate (para cálculo proporcional em venda parcial)
+  sharesSnapshot        Decimal   @db.Decimal(18, 8) @map("shares_snapshot")
+  /// Yield acumulado ainda não realizado
+  pendingAmount         Decimal   @db.Decimal(18, 8) @map("pending_amount")
+  /// PENDING | REALIZED | UPGRADED (migrado por upgrade de plano)
+  status                String    @default("PENDING")
+  realizedAt            DateTime? @map("realized_at")
+  realizedTransactionId String?   @map("realized_transaction_id")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  user           User      @relation(fields: [userId], references: [id])
+  sourceDividend Dividend? @relation(fields: [sourceDividendId], references: [id])
+
+  @@unique([userId, sourceDividendId]) // evita duplicação por evento
+  @@index([userId, status])
+  @@index([userId, ticker])
+  @@map("yield_differential_pending")
 }
 
 // ─── module-18: Forum Global & Glossário ─────────────────────────────────────
 
 model GlobalForumPost {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  content   String   @db.VarChar(280)
-  ticker    String?
-  isFlagged Boolean  @default(false) @map("is_flagged")
-  flagCount Int      @default(0) @map("flag_count")
-  isDeleted Boolean  @default(false) @map("is_deleted")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id         String               @id @default(cuid())
+  userId     String               @map("user_id")
+  content    String               @db.VarChar(280)
+  contentRaw String?              @db.Text @map("content_raw") // PII original — LGPD: prazo de retencao 90 dias
+  ticker     String?
+  isFlagged  Boolean              @default(false) @map("is_flagged") // legado — preferir status
+  flagCount  Int                  @default(0) @map("flag_count")
+  isDeleted  Boolean              @default(false) @map("is_deleted")
+  status     PostModerationStatus @default(PUBLISHED) @map("moderation_status")
+  flaggedBy  Json                 @default("[]") @map("flagged_by") // IDs das regras de conteúdo que fizeram match
+  createdAt  DateTime             @default(now()) @map("created_at")
+  updatedAt  DateTime             @updatedAt @map("updated_at")
 
   user              User                 @relation(fields: [userId], references: [id])
   likes             ForumLike[]
@@ -818,7 +1048,16 @@ model GlobalForumPost {
   @@index([userId])
   @@index([ticker])
   @@index([createdAt])
+  @@index([isDeleted, updatedAt])
+  @@index([status, createdAt])
   @@map("global_forum_posts")
+}
+
+enum PostModerationStatus {
+  PUBLISHED
+  FLAGGED
+  APPROVED
+  REJECTED
 }
 
 model ForumLike {
@@ -873,7 +1112,7 @@ model ModerationAction {
   @@map("moderation_actions")
 }
 
-// Regras de auto-moderação — source of truth: Redis (moderation:rules)
+// Regras de auto-moderação comportamentais — source of truth: Redis (moderation:rules)
 // Este modelo serve como fallback persistente quando Redis está indisponível.
 model ModerationRule {
   id          Int      @id
@@ -884,6 +1123,21 @@ model ModerationRule {
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("moderation_rules")
+}
+
+// Regras de moderação de conteúdo configuráveis (T-028)
+// 5 regras pré-seeded com isEnabled=false. Regex aplicada ao conteúdo sanitizado.
+// LGPD: contentRaw dos posts gerados tem prazo de retenção de 90 dias.
+model ContentModerationRule {
+  id          String   @id @default(cuid())
+  name        String   @unique @db.VarChar(50)
+  description String   @db.Text
+  pattern     String   @db.Text // regex aplicada ao conteúdo
+  isEnabled   Boolean  @default(false) @map("is_enabled")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("content_moderation_rules")
 }
 
 // Patrocinadores publicitários com banners em posições configuráveis.
@@ -910,6 +1164,7 @@ enum AffiliateStatus {
   PENDING
   PROCESSING
   PAID
+  VOIDED    // Anulado por refund/chargeback — não será pago
 }
 
 model AffiliateCode {
@@ -931,17 +1186,21 @@ model AffiliateCode {
 }
 
 model AffiliateTransaction {
-  id               String          @id @default(cuid())
-  affiliateCodeId  String          @map("affiliate_code_id")
-  referredUserId   String          @map("referred_user_id")
-  subscriptionId   String?         @map("subscription_id")
-  transactionType  String          @default("SIGNUP") @map("transaction_type") @db.VarChar(30)
-  // transactionType: SIGNUP | CONVERSION | RENEWAL
-  amount           Decimal         @default(0) @db.Decimal(14, 8)
+  id                           String          @id @default(cuid())
+  affiliateCodeId              String          @map("affiliate_code_id")
+  referredUserId               String          @map("referred_user_id")
+  subscriptionId               String?         @map("subscription_id")
+  gatewayTransactionId         String?         @unique @map("gateway_transaction_id") @db.VarChar(255)
+  // gatewayTransactionId: chave de idempotência — 1 comissão por evento de pagamento
+  transactionType              String          @default("SIGNUP") @map("transaction_type") @db.VarChar(30)
+  // transactionType: SIGNUP | SUBSCRIPTION_RENEWAL | CONVERSION
+  amount                       Decimal         @default(0) @db.Decimal(14, 8)
   // amount em FS$ (tokens da plataforma)
-  status           AffiliateStatus @default(PENDING)
-  paidAt           DateTime?       @map("paid_at")
-  createdAt        DateTime        @default(now()) @map("created_at")
+  commissionPercentageAtTime   Decimal?        @map("commission_percentage_at_time") @db.Decimal(5, 4)
+  // snapshot da taxa no momento da transação — preserva histórico mesmo se admin editar %
+  status                       AffiliateStatus @default(PENDING)
+  paidAt                       DateTime?       @map("paid_at")
+  createdAt                    DateTime        @default(now()) @map("created_at")
 
   affiliateCode  AffiliateCode @relation(fields: [affiliateCodeId], references: [id], onDelete: Cascade)
   referredUser   User          @relation("AffiliateReferredUser", fields: [referredUserId], references: [id])
@@ -1005,4 +1264,99 @@ model ImpactMatrixConfig {
   updatedBy String?  @map("updated_by")
 
   @@map("impact_matrix_configs")
+}
+
+// ─── Auditoria de transições de sessão de mercado ─────────────────────────────
+// Rastreabilidade: T-008 (cron/session-transition)
+// Usa String para fromSession/toSession pois os valores vêm do enum MarketSession
+// (PRE_OPENING, TRADING, CLOSING_CALL, AFTER_MARKET, CLOSED) — distinto do SessionType do Prisma.
+
+model MarketSessionLog {
+  id           String   @id @default(cuid())
+  fromSession  String   @map("from_session")
+  toSession    String   @map("to_session")
+  transitionAt DateTime @map("transition_at")
+
+  @@index([transitionAt])
+  @@map("market_session_logs")
+}
+
+// ─── Portal do Clube — ClubUser (credenciais separadas) ─────────────────────
+// Rastreabilidade: US-025, TASK-015, MILESTONE-9
+
+model ClubUser {
+  id           String    @id @default(cuid())
+  clubTicker   String    @map("club_ticker")
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  name         String
+  role         String    @default("VIEWER") @db.VarChar(20) // VIEWER only
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdBy    String    @map("created_by")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  asset   Asset @relation(fields: [clubTicker], references: [ticker])
+  creator User  @relation("ClubUserCreator", fields: [createdBy], references: [id])
+
+  accessLogs ClubAccessLog[]
+
+  @@index([clubTicker])
+  @@index([email])
+  @@map("club_users")
+}
+
+model ClubAccessLog {
+  id         String   @id @default(cuid())
+  clubUserId String   @map("club_user_id")
+  action     String   @db.VarChar(50) // LOGIN, LOGOUT, VIEW_DASHBOARD, VIEW_HISTORY
+  ipAddress  String?  @map("ip_address") @db.VarChar(45)
+  userAgent  String?  @map("user_agent") @db.VarChar(500)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  clubUser ClubUser @relation(fields: [clubUserId], references: [id], onDelete: Cascade)
+
+  @@index([clubUserId])
+  @@index([createdAt])
+  @@map("club_access_logs")
+}
+
+// ─── Verificacao de Maioridade via CPF (T-023) ──────────────────────────────
+// Historico completo de tentativas de verificacao de idade.
+// CPF armazenado APENAS como hash SHA-256/HMAC — nunca em texto claro.
+
+model AgeVerification {
+  id         String             @id @default(cuid())
+  userId     String             @map("user_id")
+  cpfHash    String             @map("cpf_hash") @db.VarChar(64)
+  isAdult    Boolean            @map("is_adult")
+  method     VerificationMethod
+  verifiedAt DateTime?          @map("verified_at")
+  createdAt  DateTime           @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([cpfHash])
+  @@map("age_verifications")
+}
+
+// T-019: Log de reset de saldo pelo admin (auditoria)
+model BalanceResetLog {
+  id              String   @id @default(cuid())
+  userId          String   @map("user_id")
+  adminId         String   @map("admin_id")
+  previousBalance Decimal  @map("previous_balance") @db.Decimal(18, 8)
+  newBalance      Decimal  @map("new_balance") @db.Decimal(18, 8)
+  planType        PlanType @map("plan_type")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  user  User @relation("BalanceResetTarget", fields: [userId], references: [id])
+  admin User @relation("BalanceResetAdmin", fields: [adminId], references: [id])
+
+  @@index([userId])
+  @@index([adminId])
+  @@index([createdAt])
+  @@map("balance_reset_logs")
 }

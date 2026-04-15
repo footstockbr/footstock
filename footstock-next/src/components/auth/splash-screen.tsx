@@ -31,6 +31,7 @@ function SplashScreen({ onComplete }: SplashScreenProps) {
   return (
     <div
       ref={containerRef}
+      data-testid="splash-screen"
       className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B0E11]"
       role="status"
       aria-label="Carregando Foot Stock"

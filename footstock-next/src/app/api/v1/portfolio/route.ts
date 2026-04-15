@@ -16,7 +16,7 @@ export async function GET() {
         where: { userId: auth.user.id, status: 'OPEN' },
         include: {
           asset: {
-            select: { currentPrice: true, ticker: true, name: true },
+            select: { currentPrice: true, ticker: true, displayName: true },
           },
         },
       }),
@@ -52,7 +52,7 @@ export async function GET() {
       todayTransactionsCount: todayTransactions.length,
       positions: positions.map((p) => ({
         ticker: p.asset.ticker,
-        name: p.asset.name,
+        displayName: p.asset.displayName,
         quantity: p.quantity,
         avgPrice: p.avgPrice.toNumber(),
         currentPrice: p.asset.currentPrice.toNumber(),

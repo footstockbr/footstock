@@ -10,6 +10,7 @@ import { ChevronLeft, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ROUTES } from "@/lib/constants/routes";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 const schema = z.object({
   email: z.string().email("Informe um email válido"),
@@ -18,12 +19,15 @@ const schema = z.object({
 export default function RecuperarSenhaPage() {
   const [sent, setSent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const { track } = useAnalytics();
   const { register, handleSubmit, formState: { errors }, getValues } = useForm({
     resolver: zodResolver(schema),
   });
 
   const onSubmit = async ({ email }: { email: string }) => {
     setIsLoading(true);
+    // EVT-006: Redefinicao de Senha Solicitada
+    track('password_reset_requested', {} as Record<string, never>);
     try {
       await fetch("/api/v1/auth/forgot-password", {
         method: "POST",
@@ -58,7 +62,7 @@ export default function RecuperarSenhaPage() {
   }
 
   return (
-    <div className="w-full max-w-sm">
+    <div data-testid="page-recuperar-senha" className="w-full max-w-sm">
       <Link
         href={ROUTES.HOME}
         className="flex items-center gap-1 text-sm text-[#929AA5] hover:text-[#EAECEF] transition-colors mb-6"
@@ -72,8 +76,9 @@ export default function RecuperarSenhaPage() {
         Informe seu email e enviaremos as instruções para redefinir sua senha.
       </p>
 
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
+      <form data-testid="form-recuperar-senha" onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
         <Input
+          data-testid="form-recuperar-senha-email-input"
           label="Email"
           type="email"
           autoFocus
@@ -81,7 +86,7 @@ export default function RecuperarSenhaPage() {
           error={errors.email?.message}
           {...register("email")}
         />
-        <Button type="submit" variant="primary" size="lg" fullWidth isLoading={isLoading}>
+        <Button data-testid="form-recuperar-senha-submit-button" type="submit" variant="primary" size="lg" fullWidth isLoading={isLoading}>
           Enviar instruções
         </Button>
       </form>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
+import { invalidateBlockedWordsCache } from '@/lib/moderation'
 import type { User, AdminRole } from '@/types'
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ word: string }> }) {
@@ -28,6 +29,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
         tourCompleted: false,
         ageVerificationPending: false,
         adminRole: adminRole as AdminRole,
+        version: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
@@ -50,6 +52,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
       where: { word: decodedWord },
     })
 
+    invalidateBlockedWordsCache()
     return ok({ message: 'Palavra removida da lista bloqueada', word: deleted.word })
   } catch (error) {
     if ((error as { code?: string }).code === 'P2025') {

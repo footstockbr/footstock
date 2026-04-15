@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
         tourCompleted: false,
         ageVerificationPending: false,
         adminRole: adminRole as AdminRole,
+        version: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
@@ -86,6 +87,9 @@ export async function GET(request: NextRequest) {
       activeIn7d,
       activeIn15d,
       activeIn30d,
+      // T-013: Tour analytics
+      tourCompletedCount,
+      tourSkippedCount,
       // Top PnL user (30 dias)
       topPnlUserRaw,
     ] = await Promise.all([
@@ -164,6 +168,9 @@ export async function GET(request: NextRequest) {
         select: { userId: true },
         distinct: ['userId'],
       }),
+      // T-013: Tour completion rate
+      prisma.user.count({ where: { tourCompleted: true } }),
+      prisma.user.count({ where: { tourSkippedAt: { not: null } } }),
       // Top PnL user (30 dias) — calcula via transações realizadas
       prisma.$queryRaw<Array<{ userId: string; name: string; totalPnl: number }>>`
         SELECT
@@ -245,6 +252,11 @@ export async function GET(request: NextRequest) {
       d30plus: Math.max(0, totalUsers - activeIn30d.length),
     }
 
+    // T-013: Tour completion rate — % de usuários com tourCompleted=true
+    const tourCompletionRate = totalUsers > 0
+      ? Math.round((tourCompletedCount / totalUsers) * 1000) / 10
+      : 0
+
     const dto: EngagementMetricsDTO = {
       DAU,
       WAU,
@@ -265,6 +277,8 @@ export async function GET(request: NextRequest) {
       peakHourRange,
       inactiveByPeriod,
       totalUsers,
+      tourCompletionRate,
+      tourSkippedCount,
       _approximated: true,
     }
 

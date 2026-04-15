@@ -48,8 +48,8 @@ export default function AdminDashboardPage() {
   } = useQuery({
     queryKey: ['admin-dashboard'],
     queryFn: fetchDashboard,
-    staleTime: 60_000,
-    refetchInterval: 60_000,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
   })
 
   const { data: revenue = [], isLoading: loadingRevenue } = useQuery({
@@ -75,10 +75,10 @@ export default function AdminDashboardPage() {
     : null
 
   return (
-    <div className="p-4 md:p-6 space-y-5">
+    <div data-testid="page-admin-dashboard" className="p-4 md:p-6 space-y-5">
       <AdminBreadcrumb />
 
-      <div className="flex items-center justify-between">
+      <div data-testid="admin-dashboard-header" className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-[#EAECEF]">Dashboard</h1>
           <p className="text-xs text-[#929AA5] mt-0.5">Visão geral do sistema em tempo real</p>
@@ -88,6 +88,7 @@ export default function AdminDashboardPage() {
             <span className="text-xs text-[#929AA5]">Atualizado às {lastUpdated}</span>
           )}
           <button
+            data-testid="admin-dashboard-refresh-button"
             onClick={() => refetch()}
             className="h-8 w-8 flex items-center justify-center rounded-lg text-[#929AA5] hover:text-[#F0B90B] hover:bg-[rgba(240,185,11,.08)] transition-colors"
             title="Atualizar"
@@ -101,14 +102,14 @@ export default function AdminDashboardPage() {
       <KPICards data={dashboard ?? null} isLoading={loadingDash} />
 
       {/* Chart + Top Assets */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+      <div data-testid="admin-dashboard-chart-grid" className="grid grid-cols-1 lg:grid-cols-5 gap-4">
         <div className="lg:col-span-3">
           <RevenueChart data={revenue} isLoading={loadingRevenue} />
         </div>
         <div className="lg:col-span-2">
           {/* Top Assets */}
           {dashboard?.topAssets && dashboard.topAssets.length > 0 && (
-            <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
+            <div data-testid="admin-dashboard-top-assets" className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
               <h3 className="text-xs font-semibold text-[#929AA5] uppercase tracking-wider mb-3">
                 Top Ativos (24h)
               </h3>
@@ -140,7 +141,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* Dashboard Cards Section */}
-      <div className="space-y-4">
+      <div data-testid="admin-dashboard-cards" className="space-y-4">
         {/* User Stats Panel */}
         <UserStatsCard data={dashboard ?? null} isLoading={loadingDash} />
 

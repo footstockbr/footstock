@@ -54,13 +54,22 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    // Set fs_dev_auth cookie — email-based identity for dev fallback in withAuth/getAuthUser
+    response.cookies.set('fs_dev_auth', encodeURIComponent(user.email), {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+      sameSite: 'lax',
+      httpOnly: true,
+      secure: false,
+    })
+
     // Set fs-admin-role cookie for middleware to validate dev access
     if (user.adminRole) {
       response.cookies.set('fs-admin-role', user.adminRole, {
         path: '/',
-        maxAge: 60 * 60 * 24 * 30, // 30 days
+        maxAge: 60 * 60 * 24 * 30,
         sameSite: 'lax',
-        secure: false, // dev-only route — never in production
+        secure: false,
       })
     }
 

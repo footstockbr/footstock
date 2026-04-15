@@ -1,55 +1,97 @@
 // ============================================================================
-// Foot Stock — Job: cancellation-lock
-// Cron a cada 30min: processa travas de cancelamento expiradas
-// Executa venda compulsória via ShortService + OrderService
-// Idempotente: verifica status=CANCELLATION_LOCK antes de processar
+// Foot Stock — Job: cancellation-lock (T+48h)
+// Cron a cada hora: liquida posições RESTRITAS (SHORT, OCO, alavancadas)
+// quando forcedLiquidationAt <= now e lock ainda ativo (não cancela assinatura)
+// Idempotente via forcedLiquidationExecutedAt — não reprocessa o mesmo lock
+// Dois crons distintos: este (T+48h) e cancellation-expiry (T+7d)
 // ============================================================================
 
 import { prisma } from '@/lib/prisma'
 import { shortService } from '@/lib/services/ShortService'
 import { orderService } from '@/lib/services/OrderService'
-import { NotificationStub } from '@/lib/notifications/stubs/NotificationStub'
-import type { ProcessResult } from './subscription-expiry'
+import { leverageService } from '@/lib/services/LeverageService'
 
-interface PendingPosition {
-  id: string
-  ativo: string
-  tipo: 'SHORT' | 'LONG'
-  quantidade: number
-  currentPrice: number
+export interface ForcedLiquidationResult {
+  processed: number
+  errors: number
+  details: Array<{ subscriptionId: string; userId: string; action: string; error?: string }>
 }
 
-/** Busca posições SHORT e ordens OCO pendentes que precisam ser liquidadas */
-async function checkPendingPositions(userId: string): Promise<PendingPosition[]> {
+/**
+ * Busca posições restritas que precisam ser liquidadas compulsoriamente:
+ * - SHORTs abertos
+ * - Posições LONG alavancadas (leverageMultiplier > 1)
+ * Ordens OCO/SCHEDULED são canceladas separadamente.
+ */
+async function getRestrictedPositions(userId: string) {
   const positions = await prisma.position.findMany({
-    where: { userId, status: 'OPEN', side: 'SHORT' },
+    where: {
+      userId,
+      status: 'OPEN',
+      OR: [
+        { side: 'SHORT' },
+        { side: 'LONG', leverageMultiplier: { gt: 1 } },
+      ],
+    },
     include: { asset: { select: { ticker: true, currentPrice: true } } },
   })
 
   return positions.map((p) => ({
     id: p.id,
-    ativo: p.asset.ticker,
-    tipo: 'SHORT' as const,
-    quantidade: Number(p.quantity),
+    side: p.side as 'SHORT' | 'LONG',
+    isLeveraged: Number(p.leverageMultiplier) > 1,
+    ticker: p.asset.ticker,
+    quantity: Number(p.quantity),
     currentPrice: Number(p.asset.currentPrice),
   }))
 }
 
-/** Liquida posições SHORT e cancela ordens OCO pendentes */
-async function liquidatePositions(userId: string, positions: PendingPosition[]): Promise<{ totalValue: number }> {
-  let totalValue = 0
+/**
+ * Liquida posições SHORT e alavancadas, cancela ordens OCO/SCHEDULED.
+ * Retorna o valor total liquidado (sem garantia de precisão contábil — ver adminMarketActions).
+ */
+async function liquidateRestrictedPositions(
+  userId: string,
+  subscriptionId: string,
+  positions: Awaited<ReturnType<typeof getRestrictedPositions>>
+): Promise<{ liquidated: number; failed: number }> {
+  let liquidated = 0
+  let failed = 0
 
-  // Fechar todas as posições SHORT
   for (const pos of positions) {
     try {
-      const { pnl } = await shortService.closeShort(userId, pos.id, pos.currentPrice, 'COMPULSORY_LIQUIDATION')
-      totalValue += pos.quantidade * pos.currentPrice + pnl
+      if (pos.side === 'SHORT') {
+        await shortService.closeShort(userId, pos.id, pos.currentPrice, 'COMPULSORY_LIQUIDATION')
+      } else if (pos.isLeveraged) {
+        // Encerramento compulsório de posição alavancada LONG a preço de mercado
+        await leverageService.forceCloseLeveraged(pos.id, pos.currentPrice, 'CANCELLATION_LOCK_FORCED_LIQUIDATION')
+      }
+
+      // Registro de auditoria
+      await prisma.adminMarketAction.create({
+        data: {
+          adminId: userId, // actor = sistema (userId do assinante)
+          action: 'FORCE_SELL',
+          reason: 'CANCELLATION_LOCK_FORCED_LIQUIDATION',
+          details: {
+            subscriptionId,
+            positionId: pos.id,
+            side: pos.side,
+            ticker: pos.ticker,
+            quantity: pos.quantity,
+            priceAtExecution: pos.currentPrice,
+          },
+        },
+      }).catch((err) => console.error('[cancellation-lock] Falha ao registrar auditoria:', err))
+
+      liquidated++
     } catch (err) {
-      console.error(`[cancellation-lock] Falha ao liquidar SHORT ${pos.id}:`, err)
+      console.error(`[cancellation-lock T+48h] Falha ao liquidar posição ${pos.id}:`, err)
+      failed++
     }
   }
 
-  // Cancelar ordens OCO pendentes
+  // Cancelar ordens OCO e SCHEDULED pendentes
   try {
     const pendingOrders = await prisma.order.findMany({
       where: { userId, status: { in: ['OPEN', 'PARTIAL'] }, type: { in: ['OCO', 'SCHEDULED'] } },
@@ -58,89 +100,113 @@ async function liquidatePositions(userId: string, positions: PendingPosition[]):
     for (const order of pendingOrders) {
       try {
         await orderService.cancelOrder(userId, order.id)
+        liquidated++
       } catch (err) {
-        console.error(`[cancellation-lock] Falha ao cancelar ordem ${order.id}:`, err)
+        console.error(`[cancellation-lock T+48h] Falha ao cancelar ordem ${order.id}:`, err)
+        failed++
       }
     }
   } catch (err) {
-    console.error(`[cancellation-lock] Falha ao buscar ordens pendentes:`, err)
+    console.error('[cancellation-lock T+48h] Falha ao buscar ordens OCO/SCHEDULED:', err)
   }
 
-  return { totalValue }
+  return { liquidated, failed }
 }
 
-/** Processa travas de cancelamento expiradas e executa venda compulsória se necessário */
-export async function processCancellationLocks(): Promise<ProcessResult> {
+/**
+ * Processa liquidações forçadas T+48h em locks ativos.
+ * NÃO cancela a assinatura — isso é responsabilidade do job de T+7d.
+ * Idempotente: só processa locks onde forcedLiquidationExecutedAt IS NULL.
+ */
+export async function processForcedLiquidations(): Promise<ForcedLiquidationResult> {
   const now = new Date()
-  const result: ProcessResult = { processed: 0, errors: 0, details: [] }
+  const result: ForcedLiquidationResult = { processed: 0, errors: 0, details: [] }
 
-  const expired = await prisma.subscription.findMany({
+  // Claim atômico: marca forcedLiquidationExecutedAt antes de processar
+  // Previne que múltiplas instâncias do cron processem o mesmo lock (multi-instance safety)
+  const dueForLiquidation = await prisma.subscription.findMany({
     where: {
       status: 'CANCELLATION_LOCK',
-      cancellationLockExpiresAt: { lte: now },
+      forcedLiquidationAt: { lte: now },
+      forcedLiquidationExecutedAt: null, // não processado ainda
     },
-    select: { id: true, userId: true, planType: true, cancellationLockExpiresAt: true },
+    select: { id: true, userId: true, planType: true, forcedLiquidationAt: true },
   })
 
-  for (const sub of expired) {
+  for (const sub of dueForLiquidation) {
+    // Claim row-level com updateMany (compare-and-swap)
+    const claim = await prisma.subscription.updateMany({
+      where: {
+        id: sub.id,
+        status: 'CANCELLATION_LOCK',
+        forcedLiquidationExecutedAt: null, // garantia de idempotência
+      },
+      data: { forcedLiquidationExecutedAt: now },
+    })
+
+    // Outra instância já processou: pular
+    if (claim.count === 0) {
+      result.details.push({ subscriptionId: sub.id, userId: sub.userId, action: 'SKIPPED_ALREADY_CLAIMED' })
+      continue
+    }
+
     try {
-      // Verificar se usuário já liquidou manualmente
-      const pendingPositions = await checkPendingPositions(sub.userId)
-      const hadCompulsoryLiquidation = pendingPositions.length > 0
+      // Revalidar após claim: se usuário reverteu entre findMany e updateMany,
+      // a subscription pode ter voltado para ACTIVE. Verificar status atual.
+      const currentSub = await prisma.subscription.findUnique({
+        where: { id: sub.id },
+        select: { status: true },
+      })
 
-      if (hadCompulsoryLiquidation) {
-        // Notificar usuario ANTES da liquidacao compulsoria
-        await NotificationStub.notify(sub.userId, 'CANCELLATION_LOCK_ACTIVE', {
-          positionsPending: pendingPositions.length,
-          channels: ['in_app', 'push'],
-          urgent: true,
-        })
-
-        // Executar venda compulsória a mercado
-        const { totalValue } = await liquidatePositions(sub.userId, pendingPositions)
-
-        await prisma.$transaction([
-          prisma.subscription.update({ where: { id: sub.id }, data: { status: 'CANCELLED' } }),
-          prisma.user.update({
-            where: { id: sub.userId },
-            data: { planType: 'JOGADOR', fsBalance: 2000 },
-          }),
-        ])
-
-        await NotificationStub.notify(sub.userId, 'CANCELLATION_LOCK_LIQUIDATED', {
-          positionsLiquidated: pendingPositions.length,
-          totalValue,
-          channels: ['in_app', 'push', 'email'],
-          urgent: true,
-        })
-
-        result.details.push({
-          subscriptionId: sub.id,
-          action: `COMPULSORY_LIQUIDATION_${pendingPositions.length}_POSITIONS`,
-        })
-      } else {
-        // Liquidação manual concluída — cancelamento normal
-        await prisma.$transaction([
-          prisma.subscription.update({ where: { id: sub.id }, data: { status: 'CANCELLED' } }),
-          prisma.user.update({
-            where: { id: sub.userId },
-            data: { planType: 'JOGADOR', fsBalance: 2000 },
-          }),
-        ])
-
-        await NotificationStub.notify(sub.userId, 'PLAN_CANCEL_ALERT', {
-          reason: 'manual_liquidation',
-          channels: ['in_app'],
-        })
-
-        result.details.push({ subscriptionId: sub.id, action: 'CANCELLED_AFTER_MANUAL_LIQUIDATION' })
+      if (!currentSub || currentSub.status !== 'CANCELLATION_LOCK') {
+        // Revert aconteceu ou status mudou: não processar
+        result.details.push({ subscriptionId: sub.id, userId: sub.userId, action: 'SKIPPED_STATUS_CHANGED_AFTER_CLAIM' })
+        continue
       }
 
+      const positions = await getRestrictedPositions(sub.userId)
+
+      if (positions.length === 0) {
+        // Usuário já liquidou voluntariamente: nada a fazer
+        result.details.push({ subscriptionId: sub.id, userId: sub.userId, action: 'NO_RESTRICTED_POSITIONS' })
+        result.processed++
+        continue
+      }
+
+      // Notificar ANTES da liquidação
+      await prisma.notification.create({
+        data: {
+          userId: sub.userId,
+          type: 'CANCELLATION_LOCK_ACTIVE',
+          title: 'Liquidação compulsória iniciada',
+          body: `Suas ${positions.length} posição(ões) restrita(s) (short, alavancada, OCO) estão sendo encerradas compulsoriamente conforme comunicado no início do cancelamento.`,
+          isRead: false,
+        },
+      }).catch(() => {})
+
+      const { liquidated, failed } = await liquidateRestrictedPositions(sub.userId, sub.id, positions)
+
+      // Notificar APÓS a liquidação
+      await prisma.notification.create({
+        data: {
+          userId: sub.userId,
+          type: 'CANCELLATION_LOCK_LIQUIDATED',
+          title: 'Posições restritas encerradas',
+          body: `${liquidated} posição(ões) encerrada(s)${failed > 0 ? ` (${failed} com falha — suporte notificado)` : ''}. Sua assinatura ainda pode ser revertida até o prazo de 7 dias.`,
+          isRead: false,
+        },
+      }).catch(() => {})
+
+      result.details.push({
+        subscriptionId: sub.id,
+        userId: sub.userId,
+        action: `FORCED_LIQUIDATION_${liquidated}_POSITIONS${failed > 0 ? `_${failed}_FAILED` : ''}`,
+      })
       result.processed++
     } catch (err) {
-      console.error(`[cancellation-lock] Erro em ${sub.id}:`, err)
+      console.error(`[cancellation-lock T+48h] Erro ao processar ${sub.id}:`, err)
       result.errors++
-      result.details.push({ subscriptionId: sub.id, action: 'ERROR', error: String(err) })
+      result.details.push({ subscriptionId: sub.id, userId: sub.userId, action: 'ERROR', error: String(err) })
     }
   }
 

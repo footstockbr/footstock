@@ -1,6 +1,6 @@
 // ============================================================================
 // Foot Stock — Club Portal Types
-// Rastreabilidade: INT-084, US-025, US-036, module-25-club-portal
+// Rastreabilidade: INT-084, US-025, US-036, TASK-015, module-25-club-portal
 // ============================================================================
 
 export interface FansByPlan {
@@ -29,6 +29,19 @@ export interface ClubMetricsData {
   topPositions: TopPosition[]
   monthlyGrowth: MonthlyGrowthEntry[]
   leagueParticipation: number
+  // TASK-015 KPIs adicionais
+  currentPrice: number
+  priceChange24h: number         // variação percentual nas últimas 24h
+  sentimentScore: number         // -1.0 a +1.0 (mapeado de BULLISH/BEARISH/NEUTRAL)
+  leagueEngagement: number       // torcedores do clube em ligas ativas
+  totalShares: number            // total de ações em circulação
+  topHolderPercentage: number    // percentual do maior holder individual (0-100)
+}
+
+export interface ClubDashboardHistory {
+  period: string
+  fansByPlan: { month: string; jogador: number; craque: number; lenda: number }[]
+  priceHistory: { date: string; price: number }[]
 }
 
 export interface AffiliateConversion {

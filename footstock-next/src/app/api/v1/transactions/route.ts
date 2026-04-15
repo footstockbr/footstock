@@ -4,8 +4,9 @@ import { prisma } from '@/lib/prisma'
 import { list, errors, parsePagination, buildPagination } from '@/lib/api'
 
 // Transaction.type uses OrderType enum; Transaction.financialType uses FinancialType enum
+// BONUS inclui créditos de upgrade (T-021), dividendos futuros, etc.
 const VALID_TYPES = ['MARKET', 'LIMIT', 'STOP_LOSS', 'TAKE_PROFIT', 'OCO', 'SCHEDULED']
-const VALID_FINANCIAL_TYPES = ['TRADE', 'BONUS', 'DEPOSIT', 'WITHDRAWAL', 'SHORT_INTEREST', 'MARGIN_BLOCKED', 'SHORT_CLOSE', 'LEVERAGE_INTEREST']
+const VALID_FINANCIAL_TYPES = ['TRADE', 'BONUS', 'DEPOSIT', 'WITHDRAWAL', 'SHORT_INTEREST', 'MARGIN_BLOCKED', 'SHORT_CLOSE', 'LEVERAGE_INTEREST', 'FEE']
 
 // GET /api/v1/transactions
 export async function GET(request: NextRequest) {
@@ -48,13 +49,13 @@ export async function GET(request: NextRequest) {
       id: t.id,
       userId: t.userId,
       orderId: t.orderId ?? null,
-      assetId: t.assetId,
-      type: t.type,
+      assetId: t.assetId ?? null,    // null para lançamentos sem ativo (BONUS, etc.)
+      type: t.type ?? null,
       financialType: t.financialType,
-      side: t.side,
-      quantity: t.quantity,
-      price: t.price.toNumber(),
-      fee: t.fee.toNumber(),
+      side: t.side ?? null,
+      quantity: t.quantity ?? null,
+      price: t.price?.toNumber() ?? null,
+      fee: t.fee?.toNumber() ?? null,
       totalAmount: t.totalAmount.toNumber(),
       fsAmount: t.fsAmount?.toNumber() ?? null,
       balanceBefore: t.balanceBefore?.toNumber() ?? null,

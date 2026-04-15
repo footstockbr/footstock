@@ -5,6 +5,11 @@ import { prisma } from '@/lib/prisma'
 import { errors } from '@/lib/api'
 import { dataExportService } from '@/lib/services/DataExportService'
 
+// POST /api/v1/users/me/export — Portabilidade LGPD Art. 18 (spec-compliant)
+export async function POST(request: NextRequest) {
+  return GET(request)
+}
+
 // GET /api/v1/users/me/export?format=json|csv — Portabilidade LGPD Art. 18
 export async function GET(request: NextRequest) {
   const auth = await getAuthUser()

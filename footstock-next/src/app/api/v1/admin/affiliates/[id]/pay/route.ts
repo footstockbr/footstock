@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withAdmin } from '@/app/api/middleware'
 import { prisma } from '@/lib/prisma'
+import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
 
 const paySchema = z.object({
   comprovante: z.string().min(1, 'Comprovante obrigatório'),
@@ -45,11 +46,27 @@ export const POST = withAdmin('financial:write')(async (request: NextRequest) =>
 
   const now = new Date()
 
+  // Somar total pendente antes de marcar como PAID (para analytics)
+  const pendingTotal = await prisma.affiliateTransaction.aggregate({
+    where: { affiliateCodeId: affiliateId, status: 'PENDING' },
+    _sum: { amount: true },
+  })
+
   // Marcar todas as transações PENDING como PAID
   const result = await prisma.affiliateTransaction.updateMany({
     where: { affiliateCodeId: affiliateId, status: 'PENDING' },
     data:  { status: 'PAID', paidAt: now },
   })
+
+  // EVT-042: affiliate_payout_initiated
+  if (result.count > 0) {
+    const payoutAmount = pendingTotal._sum.amount?.toNumber() ?? 0
+    mixpanelServer.trackAffiliatePayoutInitiated(affiliate.id, {
+      affiliateId: affiliate.id,
+      amount: payoutAmount.toFixed(2),
+      payoutMethod: 'manual_transfer', // comprovante manual = transferencia
+    })
+  }
 
   return NextResponse.json({
     success: true,

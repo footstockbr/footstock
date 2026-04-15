@@ -7,6 +7,7 @@ import { StatCard } from "@/components/ui/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { AtivoClient } from "./ativo-client";
 import { prisma } from "@/lib/prisma";
+import { SponsorBanner } from "@/components/shared/sponsor-banner";
 
 interface Props {
   params: Promise<{ ticker: string }>;
@@ -65,7 +66,7 @@ export default async function AtivoPage({ params }: Props) {
 
   // Serialize asset data for the client component
   const serializedAsset = {
-    name: asset.name,
+    displayName: asset.displayName,
     division: asset.division as string,
     currentSupply: Number(asset.currentSupply),
     totalShares: Number(asset.totalShares),
@@ -107,7 +108,7 @@ export default async function AtivoPage({ params }: Props) {
             {ticker.slice(0, 3)}
           </div>
           <div>
-            <h1 className="text-lg font-bold text-[#EAECEF]">{asset.name}</h1>
+            <h1 className="text-lg font-bold text-[#EAECEF]">{asset.displayName}</h1>
             <p className="text-sm text-[#929AA5]">{divisionLabel}</p>
           </div>
         </div>
@@ -137,6 +138,11 @@ export default async function AtivoPage({ params }: Props) {
 
       {/* Interactive tabs (client component) */}
       <AtivoClient ticker={ticker} asset={serializedAsset} />
+
+      {/* Banner DETAIL_BOT: 360×80 — rodapé da página de detalhe do ativo */}
+      <div className="flex justify-center px-4 py-4">
+        <SponsorBanner position="detail_bot" />
+      </div>
     </div>
   );
 }

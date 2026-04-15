@@ -33,6 +33,7 @@ export type AdminResource =
   | 'gateway:config'
   | 'club:metrics'
   | 'news:sources'
+  | 'admin:config'   // Seção Configurações — exclusivo SUPER_ADMIN
 
 /** Matriz de permissoes: role -> lista de recursos permitidos */
 const PERMISSIONS: Record<AdminRole, AdminResource[]> = {
@@ -62,6 +63,7 @@ const PERMISSIONS: Record<AdminRole, AdminResource[]> = {
     'admin:manage',
     'gateway:config',
     'news:sources',
+    'admin:config',
   ],
   MONITOR: [
     'admin:dashboard',

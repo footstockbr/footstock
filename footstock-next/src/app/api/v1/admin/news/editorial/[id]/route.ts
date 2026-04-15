@@ -7,7 +7,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withAdmin } from '@/app/api/middleware'
 import { prisma } from '@/lib/prisma'
-import { type Sentiment } from '@/lib/enums'
 import { NEWS_STATUS } from '@/lib/enums'
 
 const patchSchema = z
@@ -65,12 +64,30 @@ async function patchHandler(req: NextRequest) {
   }
 
   const payload = parsed.data
+
+  // Enforce immutability: external-source news cannot have title/content edited
+  if (payload.title !== undefined || payload.content !== undefined) {
+    const existing = await prisma.news.findUnique({
+      where: { id },
+      select: { source: true },
+    })
+    if (!existing) {
+      return NextResponse.json({ success: false, error: 'Noticia nao encontrada.' }, { status: 404 })
+    }
+    if (existing.source) {
+      return NextResponse.json(
+        { success: false, error: 'Noticias de fontes externas nao podem ter titulo ou conteudo editado.' },
+        { status: 403 }
+      )
+    }
+  }
+
   const data: Record<string, unknown> = {}
 
   if (payload.title !== undefined) data.title = payload.title
   if (payload.content !== undefined) data.content = payload.content
-  if (payload.impact !== undefined) data.impactCategory = payload.impact as import('@prisma/client').ImpactCategory
-  if (payload.sentiment !== undefined) data.sentiment = payload.sentiment === 'BULLISH' ? 0.8 : payload.sentiment === 'BEARISH' ? -0.8 : 0
+  if (payload.impact !== undefined) data.impact = payload.impact as import('@prisma/client').ImpactCategory
+  if (payload.sentiment !== undefined) data.sentiment = payload.sentiment as import('@prisma/client').Sentiment
   if (payload.source !== undefined) data.source = payload.source
 
   if (payload.ticker) {
@@ -81,7 +98,7 @@ async function patchHandler(req: NextRequest) {
     if (!asset) {
       return NextResponse.json({ success: false, error: 'Ticker inválido.' }, { status: 422 })
     }
-    data.tickers = [asset.id]
+    data.assetIds = [asset.id]
   }
 
   if (payload.status) {

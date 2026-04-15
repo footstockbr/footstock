@@ -55,7 +55,7 @@ export class SessionManager {
    */
   getVolatilityMultiplier(session?: SessionType): number {
     const s = session ?? this.getCurrentSession()
-    if (s === 'FECHADO') return 0.0
+    if (s === 'CLOSED') return 0.0
     const window = SESSION_SCHEDULE.find(w => w.type === s)
     if (!window) {
       logger.warn(JSON.stringify({ level: 'warn', code: 'VAL_001', session: s, message: 'SessionType desconhecido — retornando 0.0' }))
@@ -86,11 +86,11 @@ export class SessionManager {
 
   /**
    * Retorna true se o mercado está aberto para negociação.
-   * Considera PRE_ABERTURA e NEGOCIACAO como "aberto".
+   * Considera PRE_OPENING, TRADING e CLOSING_CALL como "aberto".
    */
   isMarketOpen(now?: Date): boolean {
     const session = this.getCurrentSession(now)
-    return session === 'NEGOCIACAO' || session === 'PRE_ABERTURA'
+    return session === 'TRADING' || session === 'PRE_OPENING' || session === 'CLOSING_CALL'
   }
 
   // ─── Helpers privados ─────────────────────────────────────────────────────
@@ -108,7 +108,7 @@ export class SessionManager {
         return window.type
       }
     }
-    return 'FECHADO'
+    return 'CLOSED'
   }
 
   private _findNextWindow(hour: number, minute: number): SessionWindow {

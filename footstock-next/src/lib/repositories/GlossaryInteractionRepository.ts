@@ -18,6 +18,19 @@ export class GlossaryInteractionRepository {
       where: { userId, createdAt: { gte: since } },
     })
   }
+
+  async countTotalByUser(userId: string): Promise<number> {
+    return prisma.glossaryInteraction.count({ where: { userId } })
+  }
+
+  async findDistinctSlugsByUser(userId: string): Promise<string[]> {
+    const rows = await prisma.glossaryInteraction.findMany({
+      where: { userId },
+      select: { termSlug: true },
+      distinct: ['termSlug'],
+    })
+    return rows.map((r) => r.termSlug)
+  }
 }
 
 export const glossaryInteractionRepository = new GlossaryInteractionRepository()

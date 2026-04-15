@@ -34,6 +34,8 @@ export const ROUTES = {
   ADMIN_CLUBES: "/admin/clubes",
   ADMIN_PATROCINADORES: "/admin/patrocinadores",
   ADMIN_AFILIADOS: "/admin/afiliados",
+  ADMIN_LGPD: "/admin/lgpd",
+  ADMIN_CONFIGURACOES: "/admin/configuracoes",
 
   // Club Portal
   CLUB: "/club",

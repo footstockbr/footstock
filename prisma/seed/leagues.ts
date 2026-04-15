@@ -26,14 +26,40 @@ export async function seedLeagues() {
   }
 
   const leagues = [
+    // Ligas públicas oficiais por divisão (auto-enrollment)
     {
-      name: 'Liga dos Campeões Teste',
+      name: 'Liga Pública BRONZE',
       type: 'PUBLICA' as const,
       duration: '1M',
-      division: 'ABERTA',
-      maxMembers: 20,
-      inviteCode: 'TEST-PUBLIC-001',
+      division: 'BRONZE',
+      maxMembers: 50,
+      inviteCode: 'SEED-PUBLICA-BRONZE',
     },
+    {
+      name: 'Liga Pública PRATA',
+      type: 'PUBLICA' as const,
+      duration: '1M',
+      division: 'PRATA',
+      maxMembers: 50,
+      inviteCode: 'SEED-PUBLICA-PRATA',
+    },
+    {
+      name: 'Liga Pública OURO',
+      type: 'PUBLICA' as const,
+      duration: '1M',
+      division: 'OURO',
+      maxMembers: 50,
+      inviteCode: 'SEED-PUBLICA-OURO',
+    },
+    {
+      name: 'Liga Pública OPEN',
+      type: 'PUBLICA' as const,
+      duration: '1M',
+      division: 'OPEN',
+      maxMembers: 100,
+      inviteCode: 'SEED-PUBLICA-OPEN',
+    },
+    // Liga de amigos para testes
     {
       name: 'Liga VIP Privada',
       type: 'AMIGOS' as const,

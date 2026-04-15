@@ -1,8 +1,8 @@
 // ============================================================================
 // Foot Stock — GET /api/v1/dividends
 // Histórico paginado de dividendos do usuário autenticado.
-// Suporta filtros por type (ESPORTIVO|FINANCEIRO) e status (CREDITED|PENDING|EXPIRADO).
-// Rastreabilidade: INT-072, INT-073
+// Suporta filtros por type (3 modalidades + legado) e status (incluindo BLOCKED_PLAN).
+// Rastreabilidade: INT-072, INT-073 / T-007
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'

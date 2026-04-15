@@ -3,7 +3,7 @@ import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
 
-// DELETE /api/v1/forum/:id — remover post (MODERADOR+)
+// DELETE /api/v1/forum/:id — remover post (autor OU MODERADOR+)
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -11,16 +11,20 @@ export async function DELETE(
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()
 
-  if (!hasAdminRole(auth.user.adminRole, 'MODERADOR')) {
-    return errors.forbidden('Permissão insuficiente. Requer role MODERADOR ou superior.')
-  }
-
   const { id } = await params
 
   try {
     const post = await prisma.globalForumPost.findUnique({ where: { id } })
 
     if (!post) return errors.notFound('Post não encontrado.')
+
+    // Autor pode deletar o próprio post; MODERADOR+ pode deletar qualquer post
+    const isAuthor = post.userId === auth.user.id
+    const isModerator = hasAdminRole(auth.user.adminRole, 'MODERADOR')
+
+    if (!isAuthor && !isModerator) {
+      return errors.forbidden('Você só pode excluir seus próprios posts.')
+    }
 
     const removed = await prisma.globalForumPost.update({
       where: { id },

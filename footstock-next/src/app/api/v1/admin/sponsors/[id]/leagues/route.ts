@@ -2,17 +2,6 @@ import { NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/auth/server'
 import { prisma } from '@/lib/prisma'
 
-// SponsorLeague model ainda não existe no schema Prisma — acessado via cast tipado
-// TODO: adicionar model SponsorLeague ao schema e gerar migration
-type SponsorLeagueRecord = { id: string; league: { id: string; name: string; type: string } }
-type PrismaWithSponsorLeague = typeof prisma & {
-  sponsorLeague?: {
-    create: (args: { data: { sponsorId: string; leagueId: string } }) => Promise<{ id: string }>
-    findMany: (args: { where: { sponsorId: string }; include: unknown }) => Promise<SponsorLeagueRecord[]>
-  }
-  league?: { findUnique: (args: { where: { id: string } }) => Promise<{ id: string; type: string } | null> }
-}
-
 /** POST /api/v1/admin/sponsors/[id]/leagues — Vincular patrocinador a liga PRO */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await getAuthUser()
@@ -22,41 +11,80 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
   }
 
-  const { id } = await params
+  const { id: sponsorId } = await params
   const { leagueId } = await request.json()
   if (!leagueId) return NextResponse.json({ error: 'leagueId obrigatório' }, { status: 400 })
 
-  const db = prisma as PrismaWithSponsorLeague
   try {
-    const league = await db.league?.findUnique({ where: { id: leagueId } })
-    if (!league) return NextResponse.json({ error: 'Liga não encontrada' }, { status: 404 })
-    if (league.type !== 'PRO') return NextResponse.json({ error: 'Apenas ligas PRO aceitam patrocinadores' }, { status: 400 })
+    // Verifica que o patrocinador existe
+    const sponsor = await prisma.sponsor.findUnique({ where: { id: sponsorId } })
+    if (!sponsor) return NextResponse.json({ error: 'Patrocinador não encontrado' }, { status: 404 })
 
-    const link = await db.sponsorLeague?.create({
-      data: { sponsorId: id, leagueId },
+    // Verifica que a liga existe e é PRO
+    const league = await prisma.league.findUnique({
+      where: { id: leagueId },
+      select: { id: true, type: true, name: true },
+    })
+    if (!league) return NextResponse.json({ error: 'Liga não encontrada' }, { status: 404 })
+    if (league.type !== 'PRO') {
+      return NextResponse.json({ error: 'Apenas ligas PRO aceitam patrocinadores' }, { status: 400 })
+    }
+
+    // Vincula patrocinador à liga via League.sponsorId
+    const updated = await prisma.league.update({
+      where: { id: leagueId },
+      data: { sponsorId },
+      select: { id: true, name: true, type: true, sponsorId: true },
     })
 
-    return NextResponse.json({ success: true, id: link?.id }, { status: 201 })
+    return NextResponse.json({ success: true, league: updated }, { status: 200 })
   } catch (error) {
     console.error('[SponsorLeague POST]', error)
     return NextResponse.json({ error: 'Erro ao vincular patrocinador' }, { status: 500 })
   }
 }
 
-/** GET /api/v1/admin/sponsors/[id]/leagues — Listar ligas vinculadas */
+/** DELETE /api/v1/admin/sponsors/[id]/leagues — Desvincular patrocinador de uma liga */
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await getAuthUser()
+  if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+
+  if (!['SUPER_ADMIN', 'ADMINISTRADOR'].includes(auth.user.adminRole ?? '')) {
+    return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
+  }
+
+  const { id: sponsorId } = await params
+  const { leagueId } = await request.json()
+  if (!leagueId) return NextResponse.json({ error: 'leagueId obrigatório' }, { status: 400 })
+
+  try {
+    // Desvincular: setar sponsorId como null na liga
+    await prisma.league.updateMany({
+      where: { id: leagueId, sponsorId },
+      data: { sponsorId: null },
+    })
+
+    return NextResponse.json({ success: true }, { status: 200 })
+  } catch (error) {
+    console.error('[SponsorLeague DELETE]', error)
+    return NextResponse.json({ error: 'Erro ao desvincular patrocinador' }, { status: 500 })
+  }
+}
+
+/** GET /api/v1/admin/sponsors/[id]/leagues — Listar ligas vinculadas ao patrocinador */
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await getAuthUser()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
-  const { id } = await params
-  const db = prisma as PrismaWithSponsorLeague
+  const { id: sponsorId } = await params
   try {
-    const links = await db.sponsorLeague?.findMany({
-      where: { sponsorId: id },
-      include: { league: { select: { id: true, name: true, type: true } } },
-    }) ?? []
+    const leagues = await prisma.league.findMany({
+      where: { sponsorId },
+      select: { id: true, name: true, type: true, division: true, status: true, startsAt: true, endsAt: true },
+      orderBy: { createdAt: 'desc' },
+    })
 
-    return NextResponse.json({ leagues: links.map(l => l.league) })
+    return NextResponse.json({ leagues })
   } catch (error) {
     console.error('[SponsorLeague GET]', error)
     return NextResponse.json({ error: 'Erro ao buscar ligas' }, { status: 500 })

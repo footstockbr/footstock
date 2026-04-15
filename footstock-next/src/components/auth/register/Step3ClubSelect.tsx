@@ -1,12 +1,19 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { CLUBS } from '@/lib/constants/clubs'
 import { useDebounce } from '@/hooks/useDebounce'
 import type { WizardData } from '../register-wizard'
+
+interface ClubForSelection {
+  ticker: string
+  displayName: string
+  realName: string
+  division: 'SERIE_A' | 'SERIE_B'
+  colors: { primary: string; secondary: string }
+}
 
 interface Step3Props {
   data: WizardData
@@ -17,11 +24,25 @@ export function Step3ClubSelect({ data, onNext }: Step3Props) {
   const [selectedClub, setSelectedClub] = useState<string>(data.favoriteClub ?? '')
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
+  const [clubs, setClubs] = useState<ClubForSelection[]>([])
+  const [loadError, setLoadError] = useState(false)
   const debouncedSearch = useDebounce(search)
 
-  const filteredClubs = CLUBS.filter(
+  // Buscar lista com realName do endpoint dedicado ao cadastro
+  useEffect(() => {
+    fetch('/api/v1/assets/clubs-for-selection')
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed')
+        return res.json()
+      })
+      .then((json: { data: ClubForSelection[] }) => setClubs(json.data))
+      .catch(() => setLoadError(true))
+  }, [])
+
+  const filteredClubs = clubs.filter(
     (c) =>
-      c.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      c.realName.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      c.displayName.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
       c.ticker.toLowerCase().includes(debouncedSearch.toLowerCase())
   )
 
@@ -42,7 +63,7 @@ export function Step3ClubSelect({ data, onNext }: Step3Props) {
       <Input
         label="Buscar clube"
         type="search"
-        placeholder="Ex: Urubu da Gavea FC, URU3..."
+        placeholder="Ex: Flamengo, Palmeiras, Corinthians..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
@@ -50,6 +71,12 @@ export function Step3ClubSelect({ data, onNext }: Step3Props) {
       {error && (
         <p role="alert" className="text-xs text-[#F6465D]">
           {error}
+        </p>
+      )}
+
+      {loadError && (
+        <p role="alert" className="text-xs text-[#F6465D]">
+          Erro ao carregar clubes. Recarregue a página.
         </p>
       )}
 
@@ -90,7 +117,8 @@ export function Step3ClubSelect({ data, onNext }: Step3Props) {
               </span>
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-medium truncate">{club.name}</p>
+              {/* Exibe realName para ajudar identificação — único local onde realName aparece na UI */}
+              <p className="text-xs font-medium truncate">{club.realName}</p>
               <p className="text-[10px] text-[#707A8A]">
                 {club.division === 'SERIE_A' ? 'Série A' : 'Série B'}
               </p>
@@ -99,9 +127,15 @@ export function Step3ClubSelect({ data, onNext }: Step3Props) {
         ))}
       </div>
 
-      {filteredClubs.length === 0 && (
+      {clubs.length > 0 && filteredClubs.length === 0 && (
         <p className="text-sm text-[#929AA5] text-center py-4" role="status">
           Nenhum clube encontrado
+        </p>
+      )}
+
+      {clubs.length === 0 && !loadError && (
+        <p className="text-sm text-[#929AA5] text-center py-4" role="status" aria-live="polite">
+          Carregando clubes...
         </p>
       )}
 
@@ -110,7 +144,7 @@ export function Step3ClubSelect({ data, onNext }: Step3Props) {
         variant="primary"
         size="lg"
         fullWidth
-        disabled={!selectedClub}
+        disabled={!selectedClub || clubs.length === 0}
         onClick={handleNext}
         className="mt-2"
       >

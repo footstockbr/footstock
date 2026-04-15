@@ -7,9 +7,15 @@
 import { prisma } from '@/lib/prisma'
 import { redisPublisher as redis } from '@/lib/redis'
 import { ORDER_STATUS, ORDER_TYPE, PLAN_TYPE, type PlanType } from '@/lib/enums'
-import { calculateFee, DAILY_ORDER_LIMITS_BY_PLAN } from '@/lib/services/plan-order-limits'
+import { calculateFee } from '@/lib/services/plan-order-limits'
+import { incrementDailyCounter, checkDailyOrderLimit } from '@/lib/middleware/checkDailyOrderLimit'
 import { validateTransition } from '@/lib/contracts/order-contract'
 import { validateOrderForPlan, type CreateOrderDTO } from '@/lib/validators/order'
+import { leverageService } from '@/lib/services/LeverageService'
+import { LEVERAGE_MULTIPLIER } from '@/lib/constants/leverage'
+import { leagueEventRecorder } from '@/lib/services/leagues/LeagueEventRecorder'
+import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
+import { AliasService } from '@/services/AliasService'
 import { randomUUID } from 'crypto'
 import type { Order } from '@prisma/client'
 
@@ -64,12 +70,33 @@ export class OrderService {
     const user = await prisma.user.findUnique({ where: { id: userId } })
     if (!user) throw new AppError('AUTH_001', 401)
 
-    // Buscar ativo pelo ticker (assetId)
-    const asset = await prisma.asset.findUnique({ where: { ticker: dto.ticker } })
-    if (!asset) throw new AppError('ASSET_031', 422, { ticker: dto.ticker, message: 'Ativo não encontrado.' })
+    // Resolver alias: FLA3 → URU3 (T-031). Normaliza antes de buscar.
+    const resolvedTicker = await AliasService.resolve(dto.ticker)
+    if (!resolvedTicker) throw new AppError('ASSET_031', 422, { message: 'Ativo não encontrado.' })
+    // Substituir ticker pelo canônico para todo o fluxo downstream
+    dto = { ...dto, ticker: resolvedTicker }
 
-    // === Camada 1 — Validação de Plano ===
-    const planValidation = validateOrderForPlan(dto, user.planType as PlanType)
+    // Buscar ativo pelo ticker canônico
+    const asset = await prisma.asset.findUnique({ where: { ticker: resolvedTicker } })
+    if (!asset) throw new AppError('ASSET_031', 422, { message: 'Ativo não encontrado.' })
+
+    // === Camada 1 — Validação de Alavancagem (tem prioridade de contexto de liga PRO) ===
+    // LeverageService verifica: liga PRO com permiteAlavancagem=true → qualquer plano pode usar 2x;
+    //   liga PRO com permiteAlavancagem=false → bloqueia até LENDA;
+    //   sem liga (ou liga não-PRO) → somente LENDA.
+    // Deve rodar ANTES de validateOrderForPlan para que o resultado de liga PRO
+    // possa sobrescrever a restrição de plano.
+    if (dto.leverage === LEVERAGE_MULTIPLIER) {
+      const levValidation = await leverageService.validateLeverage(userId, dto.leagueId)
+      if (!levValidation.valid) {
+        throw new AppError(levValidation.errorCode ?? 'ORDER_059', 403, {
+          message: levValidation.message,
+        })
+      }
+    }
+
+    // === Camada 1b — Validação de Plano (exceto alavancagem — já validada acima) ===
+    const planValidation = validateOrderForPlan(dto, user.planType as PlanType, { skipLeverageCheck: true })
     if (!planValidation.valid) {
       throw new AppError('ORDER_051', 403, {
         requiredPlan: planValidation.requiredPlan,
@@ -77,16 +104,19 @@ export class OrderService {
       })
     }
 
-    // === Camada 2 — Limite Diário ===
-    if (user.planType !== PLAN_TYPE.LENDA) {
-      await this._checkDailyLimit(userId, user.planType as PlanType)
-    }
+    // === Camada 2 — Limite Diário (defense-in-depth; verificação primária no middleware HTTP) ===
+    await this._checkDailyLimit(userId, user.planType as PlanType, dto.type)
 
     // === Camada 3 — Ativo em Halt (circuit breaker) ===
     // Verificar tanto o flag DB (isHalted) quanto a chave Redis motor:halt:{ticker}
     if (asset.isHalted) {
+      const resumeAt = asset.haltReason === 'CIRCUIT_BREAKER'
+        ? new Date(Date.now() + 300_000).toISOString()  // CB: 5min estimado
+        : null
       throw new AppError('ASSET_030', 423, {
         ticker: dto.ticker,
+        haltReason: asset.haltReason ?? 'CIRCUIT_BREAKER',
+        resumeAt,
         message: 'Ativo temporariamente suspenso por circuit breaker.',
       })
     }
@@ -94,14 +124,18 @@ export class OrderService {
     const haltKey = await redis.get(`motor:halt:${dto.ticker}`).catch(() => null)
     if (haltKey !== null) {
       let haltReason: string | undefined
+      let resumeAt: string | null = null
       try {
-        const parsed = JSON.parse(haltKey) as { reason?: string }
+        const parsed = JSON.parse(haltKey) as { reason?: string; resumeAt?: number }
         haltReason = parsed.reason
+        resumeAt = parsed.resumeAt ? new Date(parsed.resumeAt).toISOString() : null
       } catch {
         // chave malformada — tratar como halt ativo
       }
-      throw new AppError('ASSET_030', 422, {
+      throw new AppError('ASSET_030', 423, {
         ticker: dto.ticker,
+        haltReason: haltReason ?? 'ADMIN_HALT',
+        resumeAt,
         message: haltReason
           ? `Ativo suspenso pelo administrador: ${haltReason}`
           : 'Ativo temporariamente suspenso pelo administrador.',
@@ -120,6 +154,15 @@ export class OrderService {
     let requiredBalance: number
 
     if (dto.side === 'BUY') {
+      // T-019: saldo zero ou negativo bloqueia novas ordens BUY antes de qualquer cálculo
+      const currentBalance = Number(user.fsBalance)
+      if (currentBalance <= 0) {
+        throw new AppError('INSUFFICIENT_BALANCE', 402, {
+          code: 'INSUFFICIENT_BALANCE',
+          message: 'Saldo FS$ zerado. Venda posicoes para negociar novamente.',
+          balance: currentBalance,
+        })
+      }
       const leverageMultiplier = dto.leverage === 2 ? 0.5 : 1
       requiredBalance = operationValue * leverageMultiplier + feeAmount
     } else {
@@ -138,12 +181,21 @@ export class OrderService {
       requiredBalance = 0 // SELL não requer saldo em FS$
     }
 
-    // === Motor Health Check (MARKET apenas) ===
-    if (dto.type === ORDER_TYPE.MARKET) {
-      const motorHealth = await redis.get('motor:health').catch(() => null)
-      if (motorHealth === 'offline') {
-        throw new AppError('MOTOR_090', 503, { message: 'Motor de mercado temporariamente indisponível.' })
-      }
+    // === Motor Health Check (todos os tipos de ordem) ===
+    // Verifica: (1) admin global-halt, (2) tick stale/ausente, (3) Redis indisponível.
+    // Chaves corretas: motor:global-halt + market:tick:latest (motor:health nunca é publicada).
+    const MOTOR_TICK_STALE_S = 10
+    const motorGlobalHalt = await redis.exists('motor:global-halt').catch(() => 0)
+    if (motorGlobalHalt) {
+      throw new AppError('MOTOR_090', 503, { message: 'Motor de mercado pausado pelo administrador. Ordens suspensas temporariamente.' })
+    }
+    const tickRaw = await redis.get('market:tick:latest').catch(() => null)
+    if (!tickRaw) {
+      throw new AppError('MOTOR_090', 503, { message: 'Motor de mercado temporariamente indisponível.' })
+    }
+    const lastTickMs = parseInt(tickRaw, 10)
+    if (isNaN(lastTickMs) || (Date.now() - lastTickMs) / 1_000 > MOTOR_TICK_STALE_S) {
+      throw new AppError('MOTOR_090', 503, { message: 'Motor de mercado temporariamente indisponível.' })
     }
 
     // === Criação da Ordem com Debit Atômico ===
@@ -163,6 +215,7 @@ export class OrderService {
         status: 'OPEN' as import('@prisma/client').OrderStatus,
         quantity: dto.quantity,
         fee: feeAmount,
+        leverageMultiplier,
         scheduledAt: null as Date | null,
       }
 
@@ -198,6 +251,8 @@ export class OrderService {
 
       await this._incrementDailyCounter(userId)
 
+      leagueEventRecorder.recordForAllActiveLeagues(userId, 'OCO_ORDER_USED', { ticker: dto.ticker }).catch(() => {})
+
       // Retornar a primeira perna (stop loss) — ambas compartilham o groupId
       return stopLossLeg
     }
@@ -221,6 +276,7 @@ export class OrderService {
           quantity: dto.quantity,
           price: dto.price ?? null,
           fee: feeAmount,
+          leverageMultiplier,
           scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : null,
         },
       }),
@@ -240,6 +296,12 @@ export class OrderService {
 
     // Incrementar contador diário (Redis com TTL até meia-noite)
     await this._incrementDailyCounter(userId)
+
+    if (dto.type === ORDER_TYPE.LIMIT) {
+      leagueEventRecorder.recordForAllActiveLeagues(userId, 'LIMIT_ORDER_USED', { ticker: dto.ticker }).catch(() => {})
+    } else if (dto.scheduledAt) {
+      leagueEventRecorder.recordForAllActiveLeagues(userId, 'SCHEDULED_ORDER_USED', { ticker: dto.ticker }).catch(() => {})
+    }
 
     return order
   }
@@ -264,12 +326,29 @@ export class OrderService {
 
     validateTransition(order.status as import('@/lib/enums').OrderStatus, ORDER_STATUS.CANCELLED, orderId)
 
-    // Refund atômico: cancelar ordem + devolver saldo/margin
+    // Refund atômico: cancelar ordem + devolver saldo/margin com locking otimista na order
     const cancelled = await prisma.$transaction(async (tx) => {
-      const updated = await tx.order.update({
-        where: { id: orderId },
-        data: { status: 'CANCELLED' },
+      // CAS na order: garante que nenhum outro processo mudou o status entre o findUnique e agora
+      const updateResult = await tx.order.updateMany({
+        where: {
+          id: orderId,
+          version: order.version,
+          status: { in: ['OPEN', 'PARTIAL'] },
+        },
+        data: {
+          status: 'CANCELLED',
+          version: { increment: 1 },
+        },
       })
+
+      if (updateResult.count === 0) {
+        throw new AppError('ORDER_004', 409, {
+          message: 'Atualização concorrente detectada. Recarregue e tente novamente.',
+        })
+      }
+
+      const updated = await tx.order.findUnique({ where: { id: orderId } })
+      if (!updated) throw new AppError('ORDER_080', 404, { message: 'Ordem não encontrada após cancelamento.' })
 
       // Refund de saldo para ordens BUY
       if (order.side === 'BUY' && order.price) {
@@ -291,9 +370,13 @@ export class OrderService {
           })
           if (position && Number(position.marginBlocked) > 0) {
             const marginToRelease = Number(order.quantity) * Number(asset.currentPrice) * 1.5
-            await tx.position.update({
-              where: { id: position.id },
-              data: { marginBlocked: { decrement: Math.min(marginToRelease, Number(position.marginBlocked)) } },
+            // CAS na posição: garante consistência em execuções parciais concorrentes
+            await tx.position.updateMany({
+              where: { id: position.id, version: position.version },
+              data: {
+                marginBlocked: { decrement: Math.min(marginToRelease, Number(position.marginBlocked)) },
+                version: { increment: 1 },
+              },
             })
           }
         }
@@ -301,6 +384,20 @@ export class OrderService {
 
       return updated
     })
+
+    // EVT-014: rastrear cancelamento da ordem
+    // Buscar ticker do ativo para analytics (async, sem bloquear retorno)
+    prisma.asset.findUnique({ where: { id: order.assetId }, select: { ticker: true } })
+      .then((asset) => {
+        if (asset) {
+          mixpanelServer.trackOrderCancelled(userId, {
+            asset_ticker: asset.ticker,
+            order_type: order.type as 'MARKET' | 'LIMIT' | 'SCHEDULED' | 'OCO' | 'SHORT',
+            cancel_reason: 'USER_REQUEST',
+          })
+        }
+      })
+      .catch(() => { /* analytics nunca deve quebrar o backend */ })
 
     // Notificar motor e módulo de notificações
     await Promise.allSettled([
@@ -359,39 +456,18 @@ export class OrderService {
   // Helpers privados
   // ---------------------------------------------------------------------------
 
-  private async _checkDailyLimit(userId: string, planType: PlanType): Promise<void> {
-    const limit = DAILY_ORDER_LIMITS_BY_PLAN[planType]
-    if (limit === Infinity) return
-
-    const today = new Date().toISOString().slice(0, 10)
-    const redisKey = `order:daily:${userId}:${today}`
-
-    let count: number
-    try {
-      const val = await redis.get(redisKey)
-      count = val ? parseInt(val, 10) : 0
-    } catch {
-      // Fallback para banco se Redis indisponível
-      const startOfDay = new Date(`${today}T00:00:00.000Z`)
-      const endOfDay = new Date(`${today}T23:59:59.999Z`)
-      count = await prisma.order.count({
-        where: {
-          userId,
-          createdAt: { gte: startOfDay, lte: endOfDay },
-          status: { not: 'CANCELLED' },
-          type: { not: 'SCHEDULED' },
-        },
-      })
-    }
-
-    if (count >= limit) {
-      const nextMidnight = new Date(`${today}T00:00:00.000Z`)
-      nextMidnight.setDate(nextMidnight.getDate() + 1)
-      throw new AppError('ORDER_052', 429, {
-        limit,
+  /**
+   * Defense-in-depth: verifica limite diário no service layer.
+   * A verificação primária é feita no middleware checkDailyOrderLimit (route layer).
+   */
+  private async _checkDailyLimit(userId: string, planType: PlanType, orderType: string): Promise<void> {
+    const { block } = await checkDailyOrderLimit(userId, planType, orderType)
+    if (block) {
+      // Traduzir a resposta HTTP de volta para AppError para manter consistência de domínio
+      throw new AppError('ORDER_051', 403, {
         planType,
-        resetAt: nextMidnight.toISOString(),
-        message: `Limite diário de ${limit} ordens atingido para o plano ${planType}.`,
+        orderType,
+        message: 'Limite diário de ordens atingido ou tipo de ordem não permitido para este plano.',
       })
     }
   }
@@ -399,10 +475,12 @@ export class OrderService {
   private async _checkMarketSession(): Promise<void> {
     try {
       const session = await redis.get('market:session')
-      if (session && session !== 'REGULAR') {
+      // Sessões abertas para ordens MARKET: TRADING e CLOSING_CALL
+      const openSessions = new Set(['TRADING', 'CLOSING_CALL'])
+      if (session && !openSessions.has(session)) {
         const messages: Record<string, string> = {
           CLOSED: 'Mercado fechado. Ordens MARKET são aceitas apenas durante o pregão.',
-          PRE_MARKET: 'Mercado em pré-abertura. Aguarde o início do pregão.',
+          PRE_OPENING: 'Mercado em pré-abertura. Aguarde o início do pregão.',
           AFTER_MARKET: 'Mercado em after-market. Ordens MARKET não são aceitas nesta sessão.',
         }
         throw new AppError('SESS_040', 422, {
@@ -417,20 +495,7 @@ export class OrderService {
   }
 
   private async _incrementDailyCounter(userId: string): Promise<void> {
-    const today = new Date().toISOString().slice(0, 10)
-    const redisKey = `order:daily:${userId}:${today}`
-    try {
-      const count = await redis.incr(redisKey)
-      if (count === 1) {
-        // Definir TTL até fim do dia (máx 24h)
-        const now = new Date()
-        const endOfDay = new Date(`${today}T23:59:59.000Z`)
-        const ttl = Math.ceil((endOfDay.getTime() - now.getTime()) / 1000)
-        if (ttl > 0) await redis.expire(redisKey, ttl)
-      }
-    } catch {
-      // Falha silenciosa — o fallback do banco será usado na próxima validação
-    }
+    await incrementDailyCounter(userId)
   }
 }
 

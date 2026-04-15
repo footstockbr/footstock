@@ -103,7 +103,7 @@ export function NewsInjector() {
             <option value="">Selecionar ativo...</option>
             {CLUBS.map((c) => (
               <option key={c.ticker} value={c.ticker}>
-                {c.ticker} — {c.name}
+                {c.ticker} — {c.displayName}
               </option>
             ))}
           </select>

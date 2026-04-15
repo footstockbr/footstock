@@ -89,7 +89,7 @@ export function NewsForm({ news, onSave, onCancel }: NewsFormProps) {
   ].join(' ')
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
+    <form data-testid="form-admin-news" onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
       {/* Erro geral do submit */}
       {submitError && (
         <div className="rounded-lg border border-[rgba(239,68,68,.3)] bg-[rgba(239,68,68,.06)] px-3 py-2.5" role="alert">
@@ -102,6 +102,7 @@ export function NewsForm({ news, onSave, onCancel }: NewsFormProps) {
         <label htmlFor="news-title" className="block text-xs font-medium text-[#929AA5] mb-1.5">Título *</label>
         <input
           id="news-title"
+          data-testid="form-admin-news-title-input"
           {...register('title')}
           disabled={isSubmitting}
           aria-describedby={errors.title ? 'title-error' : undefined}
@@ -128,7 +129,7 @@ export function NewsForm({ news, onSave, onCancel }: NewsFormProps) {
           <option value="">Selecionar time...</option>
           {CLUBS.map((c) => (
             <option key={c.ticker} value={c.ticker}>
-              {c.ticker} — {c.name}
+              {c.ticker} — {c.displayName}
             </option>
           ))}
         </select>
@@ -196,6 +197,7 @@ export function NewsForm({ news, onSave, onCancel }: NewsFormProps) {
         </button>
         <button
           type="submit"
+          data-testid="form-admin-news-submit-button"
           disabled={isSubmitting}
           className="h-9 px-4 rounded-lg bg-[#F0B90B] text-sm font-medium text-[#0c0b09] hover:bg-[#b8972f] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 min-w-[44px] min-h-[44px]"
         >

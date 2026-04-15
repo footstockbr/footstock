@@ -29,7 +29,7 @@ function mkCtx(overrides: Partial<MarketContext> = {}): MarketContext {
     bid: 9.98,
     ask: 10.02,
     spread: 0.004,
-    session: 'NEGOCIACAO',
+    session: 'TRADING',
     volatilityMultiplier: 1.0,
     ...overrides,
   }
@@ -74,7 +74,7 @@ describe('MarketMakerAgent', () => {
   })
 
   test('sessão FECHADO → HOLD', () => {
-    const ctx = mkCtx({ session: 'FECHADO' })
+    const ctx = mkCtx({ session: 'CLOSED' })
     expect(agent.decide(ctx).side).toBe('HOLD')
   })
 })
@@ -97,7 +97,7 @@ describe('MomentumAgent', () => {
   })
 
   test('sessão FECHADO → HOLD', () => {
-    expect(agent.decide(mkCtx({ session: 'FECHADO', priceChange24h: 0.05 })).side).toBe('HOLD')
+    expect(agent.decide(mkCtx({ session: 'CLOSED', priceChange24h: 0.05 })).side).toBe('HOLD')
   })
 })
 
@@ -140,7 +140,7 @@ describe('ValueInvestorAgent', () => {
   })
 
   test('sessão PRE_ABERTURA → HOLD (fora das sessões permitidas)', () => {
-    expect(agent.decide(mkCtx({ session: 'PRE_ABERTURA', currentPrice: 8.0, fairValue: 10.0 })).side).toBe('HOLD')
+    expect(agent.decide(mkCtx({ session: 'PRE_OPENING', currentPrice: 8.0, fairValue: 10.0 })).side).toBe('HOLD')
   })
 
   test('sessão AFTER_MARKET permite operar', () => {
@@ -250,7 +250,7 @@ describe('AgentOrchestrator — runTick', () => {
 
   test('sessão FECHADO → todos os agentes retornam HOLD (array vazio após filtro)', () => {
     const agents = createAgents(AssetCluster.A_TOP)
-    const ctx = mkCtx({ session: 'FECHADO' })
+    const ctx = mkCtx({ session: 'CLOSED' })
     const decisions = runTick(agents, ctx)
     expect(decisions.length).toBe(0)
   })

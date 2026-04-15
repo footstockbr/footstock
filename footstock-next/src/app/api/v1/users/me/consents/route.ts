@@ -22,7 +22,10 @@ export async function GET() {
 
     return ok(
       consents.map((c) => ({
-        ...c,
+        id: c.id,
+        purpose: c.purpose,
+        granted: c.granted,
+        revoked: !c.granted,
         grantedAt: c.grantedAt?.toISOString() ?? null,
         revokedAt: c.revokedAt?.toISOString() ?? null,
       }))

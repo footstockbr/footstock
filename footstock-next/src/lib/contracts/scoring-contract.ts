@@ -16,7 +16,7 @@ export interface TradingDataForScoring {
   advancedOrders: number // ordens LIMITADA, OCO ou side SHORT
 
   // Pilar 3 — Diversificação (module-15/positions)
-  positions: { ticker: string; value: number }[]
+  positions: { ticker: string; value: number; division?: string }[]
 
   // Pilar 4 — Consistência (module-14/module-15)
   dailyReturns: number[] // retornos diários no período da liga

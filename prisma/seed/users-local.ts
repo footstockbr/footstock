@@ -91,6 +91,15 @@ const TEST_USERS: TestUser[] = [
     fsBalance: 2000,
     favoriteClub: 'IMO3',
   },
+  {
+    email: 'clube-parceiro@foot-stock.test',
+    name: 'Clube Parceiro FC',
+    cpf: '999.888.777-00',
+    planType: 'JOGADOR',
+    adminRole: 'CLUB_PARTNER' as AdminRole,
+    fsBalance: 2000,
+    favoriteClub: 'COL3',
+  },
 ]
 
 export async function seedUsersLocal() {

@@ -175,4 +175,12 @@ export class PagSeguroGateway implements IGateway {
       rawPayload: payload,
     }
   }
+
+  async cancelAutoRenewal(gatewaySubscriptionId: string): Promise<void> {
+    console.warn(`[PAGSEGURO] cancelAutoRenewal stub — integração pendente. subscriptionId: ${gatewaySubscriptionId}`)
+  }
+
+  async reactivateAutoRenewal(gatewaySubscriptionId: string): Promise<void> {
+    console.warn(`[PAGSEGURO] reactivateAutoRenewal stub — integração pendente. subscriptionId: ${gatewaySubscriptionId}`)
+  }
 }

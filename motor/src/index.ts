@@ -18,16 +18,51 @@ import { PrismaClient } from '@prisma/client'
 
 const MOTOR_ID = `motor-${process.env.RAILWAY_REPLICA_ID ?? 'local'}-${Date.now()}`
 
-// Health check HTTP server para Railway/Docker
+// ─── HTTP Server: health + admin debug endpoints ─────────────────────────────
+// Porta 3001 (Railway/Docker health check + admin endpoints)
 const PORT = parseInt(process.env.PORT ?? '3001', 10)
-const healthServer = http.createServer((req, res) => {
-  if (req.url === '/health') {
+
+let _engineRef: import('./engine/MarketEngine').MarketEngine | null = null
+
+const healthServer = http.createServer(async (req, res) => {
+  const url = req.url ?? ''
+
+  // GET /health — health check padrão Railway/Docker
+  if (url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ status: 'ok', id: MOTOR_ID }))
-  } else {
-    res.writeHead(404)
-    res.end()
+    return
   }
+
+  // GET /api/v1/market/engine/layers-debug — contribuição de cada camada por ticker (admin only)
+  // Requer header: Authorization: Bearer {ADMIN_DEBUG_TOKEN}
+  if (url === '/api/v1/market/engine/layers-debug' || url.startsWith('/api/v1/market/engine/layers-debug?')) {
+    const adminToken = process.env.ADMIN_DEBUG_TOKEN
+    if (adminToken && req.headers.authorization !== `Bearer ${adminToken}`) {
+      res.writeHead(401, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Unauthorized' }))
+      return
+    }
+    const params  = new URL(url, 'http://localhost').searchParams
+    const ticker  = params.get('ticker') ?? undefined
+    const debug   = _engineRef?.getLayersDebug(ticker) ?? {}
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(debug))
+    return
+  }
+
+  // GET /api/v1/assets/:ticker/ofi-history — histórico OFI para sub-chart
+  const ofiMatch = url.match(/^\/api\/v1\/assets\/([A-Z0-9]+)\/ofi-history$/)
+  if (ofiMatch) {
+    const ticker  = ofiMatch[1]
+    const history = await _engineRef?.getOfiHistory(ticker) ?? []
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ticker, history }))
+    return
+  }
+
+  res.writeHead(404)
+  res.end()
 })
 healthServer.listen(PORT, () => {
   logger.info(`[motor] Health server escutando na porta ${PORT}`)
@@ -39,6 +74,7 @@ async function main() {
   const redis = await RedisClientService.getInstance()
   const leader = new LeaderElection(redis, MOTOR_ID)
   const engine = new MarketEngine(redis)
+  _engineRef = engine  // Expõe referência para os endpoints HTTP
   const healthService = MotorHealthService.getInstance(redis)
 
   let adminChannel: AdminChannel | null = null

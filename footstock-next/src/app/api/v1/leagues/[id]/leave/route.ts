@@ -1,41 +1,50 @@
-import { NextResponse } from 'next/server'
-import { getAuthUser } from '@/lib/auth/server'
+import { NextRequest } from 'next/server'
+import { getAuthUser } from '@/lib/auth'
+import { ok, error as apiError, errors } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { LEAGUE_ERRORS } from '@/lib/errors/leagueErrors'
 
 /** DELETE /api/v1/leagues/[id]/leave — Sair de uma liga */
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   const auth = await getAuthUser()
-  if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+  if (!auth) return errors.unauthorized()
 
   const { id } = await params
   const userId = auth.user.id
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const league = await (prisma as any).league?.findUnique({
+    const league = await prisma.league.findUnique({
       where: { id },
-      include: { members: true },
+      select: { id: true, createdBy: true },
     })
 
-    if (!league) return NextResponse.json({ error: 'Liga não encontrada' }, { status: 404 })
+    if (!league) {
+      return apiError(LEAGUE_ERRORS.NOT_FOUND.code, LEAGUE_ERRORS.NOT_FOUND.message, 404)
+    }
 
     if (league.createdBy === userId) {
-      return NextResponse.json({ error: 'Criador não pode sair da liga. Delete a liga para encerrá-la.' }, { status: 400 })
+      return apiError('LEAGUE_090', 'Criador não pode sair da liga. Delete a liga para encerrá-la.', 400)
     }
 
-    const isMember = league.members?.some((m: { userId: string }) => m.userId === userId)
-    if (!isMember) {
-      return NextResponse.json({ error: 'Você não é membro desta liga' }, { status: 400 })
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (prisma as any).leagueMember?.deleteMany({
-      where: { leagueId: id, userId },
+    // Verificar se é membro
+    const membership = await prisma.leagueMember.findUnique({
+      where: { leagueId_userId: { leagueId: id, userId } },
     })
 
-    return NextResponse.json({ success: true, message: 'Você saiu da liga com sucesso' })
-  } catch (error) {
-    console.error('[League Leave]', error)
-    return NextResponse.json({ error: 'Erro ao sair da liga' }, { status: 500 })
+    if (!membership) {
+      return apiError(LEAGUE_ERRORS.NOT_MEMBER.code, LEAGUE_ERRORS.NOT_MEMBER.message, 400)
+    }
+
+    await prisma.leagueMember.delete({
+      where: { leagueId_userId: { leagueId: id, userId } },
+    })
+
+    return ok({ success: true, message: 'Você saiu da liga com sucesso.' })
+  } catch (err) {
+    console.error('[League Leave]', err)
+    return errors.server()
   }
 }

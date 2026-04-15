@@ -9,6 +9,8 @@ const UnsubscribeSchema = z.object({
 })
 
 // DELETE /api/v1/push/unsubscribe
+// @deprecated — usar DELETE /api/v1/push/subscribe (contrato canonico T-002)
+// Alias de compatibilidade — remover quando todos os clients migrarem.
 export async function DELETE(req: NextRequest) {
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()

@@ -5,7 +5,6 @@ import { Bell } from 'lucide-react'
 import { createBrowserClient } from '@supabase/ssr'
 import { cn } from '@/lib/utils'
 import { useNotifications } from '@/hooks/useNotifications'
-import { usePushRegistration } from '@/hooks/usePushRegistration'
 import { NotificationDrawer } from './NotificationDrawer'
 
 interface NotificationBellProps {
@@ -27,7 +26,6 @@ export function NotificationBell({ className }: NotificationBellProps) {
     })
   }, [])
 
-  usePushRegistration(userId)
   const { unreadCount, isBouncing } = useNotifications(userId)
 
   const ariaLabel = unreadCount > 0

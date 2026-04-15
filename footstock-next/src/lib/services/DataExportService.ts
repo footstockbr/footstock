@@ -10,6 +10,7 @@ import fs from 'fs/promises'
 import os from 'os'
 import { prisma } from '@/lib/prisma'
 import { consentService } from '@/lib/services/ConsentService'
+import { notificationService } from '@/lib/services/NotificationService'
 
 // ─── Helper: CSV simples ──────────────────────────────────────────────────────
 
@@ -189,6 +190,16 @@ class DataExportService {
       if (profile?.email) {
         await sendExportEmail(profile.email, downloadUrl, expiresAt)
       }
+
+      // Disparar LGPD_EXPORT_READY — registra o evento no sistema de notificações
+      // (email-only: EmailNotificationService envia; o email direto acima é o template rico)
+      await notificationService.sendNotification({
+        userId: job.userId,
+        type: 'LGPD_EXPORT_READY',
+        title: 'Exportação de dados pronta',
+        body: `Seus dados pessoais estão disponíveis para download até ${expiresAt.toLocaleDateString('pt-BR')}. Verifique seu email.`,
+        metadata: { downloadUrl, expiresAt: expiresAt.toISOString() },
+      })
 
       await prisma.dataExportJob.update({
         where: { id: jobId },

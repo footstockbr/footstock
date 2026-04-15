@@ -36,7 +36,7 @@ export default function InboxPage() {
   } = useNotifications(userId)
 
   return (
-    <div className="px-4 pt-4 max-w-2xl mx-auto">
+    <div className="px-4 pt-4 max-w-2xl mx-auto" data-testid="page-inbox">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-lg font-bold text-[#EAECEF] flex items-center gap-2">
           <Bell className="h-5 w-5 text-[#F0B90B]" aria-hidden="true" />
@@ -80,6 +80,7 @@ export default function InboxPage() {
         <div
           role="list"
           className="flex flex-col rounded-lg overflow-hidden border border-[rgba(240,185,11,.1)]"
+          data-testid="inbox-list"
         >
           {notifications.map((notification, idx) => (
             <div

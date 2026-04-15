@@ -43,7 +43,8 @@ export class ForumRepository {
     const skip = (page - 1) * PAGE_SIZE
 
     const where: Record<string, unknown> = { isDeleted: false }
-    if (!isAdmin) where.isFlagged = false
+    // Posts públicos: apenas PUBLISHED e APPROVED aparecem na listagem
+    if (!isAdmin) where.status = { in: ['PUBLISHED', 'APPROVED'] }
     if (ticker) where.ticker = ticker
 
     const [rawPosts, totalItems] = await Promise.all([

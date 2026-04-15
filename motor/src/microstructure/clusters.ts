@@ -17,6 +17,7 @@ export const CLUSTER_PARAMS: Record<AssetCluster, ClusterParams> = {
     spread: 0.0005,
     maxTickChange: 0.0035,    // INTAKE: 0.35% por tick
     ofiDecay: 0.91,           // INTAKE: decay A_TOP
+    alphaOfi: 0.0003,         // Impacto OFI: baixo (alta liquidez)
   },
   A_MID: {
     cluster: 'A_MID',
@@ -30,6 +31,7 @@ export const CLUSTER_PARAMS: Record<AssetCluster, ClusterParams> = {
     spread: 0.001,
     maxTickChange: 0.0035,
     ofiDecay: 0.93,
+    alphaOfi: 0.0005,         // Impacto OFI: médio
   },
   A_SMALL: {
     cluster: 'A_SMALL',
@@ -43,6 +45,7 @@ export const CLUSTER_PARAMS: Record<AssetCluster, ClusterParams> = {
     spread: 0.002,
     maxTickChange: 0.0035,
     ofiDecay: 0.95,
+    alphaOfi: 0.0008,         // Impacto OFI: médio-alto
   },
   B_LIQUID: {
     cluster: 'B_LIQUID',
@@ -56,6 +59,7 @@ export const CLUSTER_PARAMS: Record<AssetCluster, ClusterParams> = {
     spread: 0.005,
     maxTickChange: 0.0035,
     ofiDecay: 0.96,
+    alphaOfi: 0.0012,         // Impacto OFI: alto
   },
   B_ILLIQ: {
     cluster: 'B_ILLIQ',
@@ -69,6 +73,7 @@ export const CLUSTER_PARAMS: Record<AssetCluster, ClusterParams> = {
     spread: 0.015,
     maxTickChange: 0.0035,
     ofiDecay: 0.97,           // INTAKE: decay B_ILLIQ
+    alphaOfi: 0.0020,         // Impacto OFI: muito alto (ilíquido)
   },
 }
 

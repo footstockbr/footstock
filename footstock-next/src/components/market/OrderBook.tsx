@@ -2,6 +2,7 @@
 
 import useSWR from 'swr'
 import { Info } from 'lucide-react'
+import { GlossaryInfoIcon } from '@/components/ui/glossary-info-icon'
 import { useMarketTickTimeout } from '@/hooks/useMarketTickTimeout'
 
 interface BookRow {
@@ -121,13 +122,7 @@ export function OrderBook({ ticker }: OrderBookProps) {
           <div className="border-y border-[#2B3139] py-2 text-center text-xs text-[#929AA5]">
             <span className="inline-flex items-center gap-1 justify-center">
               Spread indicativo: FS${(bestAsk - bestBid).toFixed(2)} ({((bestAsk - bestBid) / livePrice * 100).toFixed(2)}%)
-              <span
-                title="Spread calculado pelo motor quando não há ordens pendentes"
-                aria-label="Spread indicativo do motor"
-                className="cursor-help"
-              >
-                <Info className="w-3 h-3 text-[#707A8A]" />
-              </span>
+              <GlossaryInfoIcon fieldKey="spread" size={12} />
             </span>
           </div>
         </div>
@@ -198,13 +193,7 @@ export function OrderBook({ ticker }: OrderBookProps) {
               <td colSpan={3} className="text-center text-[#929AA5] text-xs py-1">
                 <span className="inline-flex items-center gap-1 justify-center">
                   Spread: FS${spreadDisplay} ({spreadPct}%)
-                  <span
-                    title="Diferença entre o menor ask e o maior bid — quanto menor, mais líquido"
-                    aria-label="Spread atual"
-                    className="cursor-help"
-                  >
-                    <Info className="w-3 h-3 text-[#707A8A]" />
-                  </span>
+                  <GlossaryInfoIcon fieldKey="spread" size={12} />
                 </span>
               </td>
             </tr>

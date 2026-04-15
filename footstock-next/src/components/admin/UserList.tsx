@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import useSWR from 'swr'
 import { Search, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, Filter } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -20,8 +20,18 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 export function UserList({ currentAdminRole }: { currentAdminRole?: string | null }) {
   const [filters, setFilters] = useState<UserFilters>({ search: '', planType: '', adminRole: '', status: '', userType: '' })
+  const [searchInput, setSearchInput] = useState('') // valor imediato do input
   const [page, setPage] = useState(1)
   const [filtersOpen, setFiltersOpen] = useState(false)
+
+  // Debounce 300ms para busca — spec §Módulo 5
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilters((prev) => ({ ...prev, search: searchInput }))
+      setPage(1)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchInput])
 
   const buildUrl = useCallback(() => {
     const params = new URLSearchParams({ page: String(page) })
@@ -48,16 +58,17 @@ export function UserList({ currentAdminRole }: { currentAdminRole?: string | nul
   const selectClass = 'h-10 min-h-[44px] w-full rounded-lg border border-[rgba(240,185,11,.18)] bg-[#181A20] px-3 text-sm text-[#EAECEF] focus:outline-none focus:border-[#F0B90B]'
 
   return (
-    <div>
+    <div data-testid="admin-user-list">
       {/* Barra de busca */}
       <div className="flex items-center gap-3 mb-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#707A8A] pointer-events-none" />
           <input
             type="search"
+            data-testid="admin-user-search-input"
             placeholder="Buscar por nome ou email..."
-            value={filters.search}
-            onChange={(e) => handleFilterChange('search', e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             aria-label="Buscar usuário"
             className="h-10 min-h-[44px] w-full rounded-lg border border-[rgba(240,185,11,.18)] bg-[#181A20] pl-9 pr-3 text-sm text-[#EAECEF] placeholder:text-[#707A8A] focus:outline-none focus:border-[#F0B90B]"
           />
@@ -154,7 +165,7 @@ export function UserList({ currentAdminRole }: { currentAdminRole?: string | nul
                 </thead>
                 <tbody>
                   {users.map((user) => (
-                    <tr key={user.id} className="border-b border-[rgba(240,185,11,.04)] hover:bg-[rgba(240,185,11,.02)]">
+                    <tr key={user.id} data-testid="admin-user-row" className="border-b border-[rgba(240,185,11,.04)] hover:bg-[rgba(240,185,11,.02)]">
                       <td className="py-3 px-4">
                         <div>
                           <p className="text-sm font-medium text-[#EAECEF]">{user.name}</p>

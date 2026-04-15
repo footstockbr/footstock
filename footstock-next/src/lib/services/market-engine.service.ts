@@ -7,11 +7,13 @@
 
 import { prisma } from '@/lib/prisma'
 import { redisPublisher } from '@/lib/redis'
+import { getCurrentSession as _getCurrentSession } from './session-manager'
+import type { MarketSession } from '@/lib/constants/market'
 
 export interface MarketSnapshot {
   assetId: string
   ticker: string
-  name: string
+  displayName: string
   currentPrice: number
   change: number
   changePercent: number
@@ -50,7 +52,7 @@ export class MarketEngineService {
       return {
         assetId: asset.id,
         ticker: asset.ticker,
-        name: asset.name,
+        displayName: asset.displayName,
         currentPrice: planType === 'JOGADOR' ? closePrice : currentPrice,
         change: planType === 'JOGADOR' ? 0 : change,
         changePercent: planType === 'JOGADOR' ? 0 : changePercent,
@@ -103,23 +105,11 @@ export class MarketEngineService {
   }
 
   /**
-   * Retorna a sessão de mercado atual baseada no horário de Brasília (UTC-3).
+   * Retorna a sessão de mercado atual em BRT via date-fns-tz (inclui DST).
+   * Delega para session-manager.ts — fonte canônica de detecção de sessão.
    */
-  getCurrentSession(): 'PRE_MARKET' | 'REGULAR' | 'AFTER_MARKET' | 'CLOSED' {
-    const now = new Date()
-    const hour = ((now.getUTCHours() - 3) % 24 + 24) % 24
-
-    const minute = ((now.getUTCMinutes()))
-    const totalMin = hour * 60 + minute
-    // PRE_ABERTURA: 10:45 – 11:00
-    if (totalMin >= 10 * 60 + 45 && totalMin < 11 * 60) return 'PRE_MARKET'
-    // NEGOCIACAO: 11:00 – 17:30
-    if (totalMin >= 11 * 60 && totalMin < 17 * 60 + 30) return 'REGULAR'
-    // CALL: 17:30 – 17:45
-    if (totalMin >= 17 * 60 + 30 && totalMin < 17 * 60 + 45) return 'AFTER_MARKET'
-    // AFTER_MARKET: 17:45 – 01:30 (cruza meia-noite)
-    if (totalMin >= 17 * 60 + 45 || totalMin < 1 * 60 + 30) return 'AFTER_MARKET'
-    return 'CLOSED'
+  getCurrentSession(): MarketSession {
+    return _getCurrentSession()
   }
 }
 

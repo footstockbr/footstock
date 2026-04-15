@@ -2,12 +2,12 @@
 
 import type { ReactNode } from "react";
 
-type OnboardingStep = "profile" | "plan" | "tour";
+// T-013: removido step "tour" — agora o tour ocorre no /mercado via OnboardingTour overlay
+type OnboardingStep = "profile" | "plan";
 
 const STEPS: { key: OnboardingStep; label: string }[] = [
   { key: "profile", label: "Perfil" },
   { key: "plan", label: "Plano" },
-  { key: "tour", label: "Tour" },
 ];
 
 interface OnboardingLayoutProps {

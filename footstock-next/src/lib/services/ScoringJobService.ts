@@ -1,15 +1,10 @@
-// module-20: ScoringJobService — Vercel Cron 1h (recálculo de scores de todas as ligas ativas)
+// module-20: ScoringJobService — Vercel Cron diário às 02:00 UTC-3 (05:00 UTC)
+// Schedule: "0 5 * * *" em vercel.json
 
 import { prisma } from '@/lib/prisma'
-import { ScoringEngine } from './ScoringEngine'
+import { leagueScoreService } from './leagues/LeagueScoreService'
 import { notificationService } from './NotificationService'
-
-// Quiet hours BRT (UTC-3): 23h-7h → UTC 02h-10h
-function isQuietHoursBRT(): boolean {
-  const nowUTC = new Date()
-  const brtHour = (nowUTC.getUTCHours() - 3 + 24) % 24
-  return brtHour >= 23 || brtHour < 7
-}
+import { leagueTrophyService } from './LeagueTrophyService'
 
 export interface CronJobResult {
   processed: number
@@ -18,20 +13,15 @@ export interface CronJobResult {
 }
 
 export class ScoringJobService {
-  private engine = new ScoringEngine()
-
   async recalcularTodasLigas(): Promise<CronJobResult> {
     const ligas = await prisma.league.findMany({
       where: { status: 'ACTIVE' },
       select: {
         id: true,
-        division: true,
-        endsAt: true,
+        type: true,
         name: true,
-        createdBy: true,
-        members: {
-          select: { userId: true },
-        },
+        endsAt: true,
+        members: { select: { userId: true } },
       },
     })
 
@@ -43,30 +33,17 @@ export class ScoringJobService {
     let errors = 0
 
     for (const liga of ligas) {
-      // ── Recalcular scores de todos os membros ─────────────────────────────
-      const results = await Promise.allSettled(
-        liga.members.map(async (m) => {
-          const score = await this.engine.calcularScore(m.userId, liga.id)
-          await this.engine.salvarScore(m.userId, liga.id, score)
-        })
-      )
-
-      results.forEach((r) => {
-        if (r.status === 'fulfilled') processed++
-        else {
-          errors++
-          console.error('[ScoringJobService] Falha em membro:', r.reason)
-        }
-      })
-
-      // ── Recalcular ranks após processar todos ─────────────────────────────
+      // Pipeline completo: scores (P1-P5) → ranks → snapshot diário (alimenta P4)
       try {
-        await this.engine.recalcularRanks(liga.id)
+        const result = await leagueScoreService.executarPipelineCompleto(liga.id)
+        processed += result.processed
+        errors += result.errors
       } catch (err) {
-        console.error('[ScoringJobService] Falha ao recalcular ranks:', err)
+        console.error('[ScoringJobService] Falha no pipeline da liga:', liga.id, err)
+        errors++
       }
 
-      // ── Detectar ligas encerradas ─────────────────────────────────────────
+      // Detecta ligas encerradas
       if (liga.endsAt && liga.endsAt < new Date()) {
         try {
           await prisma.league.update({
@@ -74,8 +51,12 @@ export class ScoringJobService {
             data: { status: 'FINISHED' },
           })
 
-          // Enviar LEAGUE_RESULT para cada membro
-          const inQuiet = isQuietHoursBRT()
+          // Conceder troféus para ligas PRO encerradas
+          if (liga.type === 'PRO') {
+            await leagueTrophyService.awardTrophies(liga.id).catch((err) => {
+              console.error('[ScoringJobService] Falha ao conceder troféus:', liga.id, err)
+            })
+          }
 
           await Promise.allSettled(
             liga.members.map(async (m) => {
@@ -83,14 +64,6 @@ export class ScoringJobService {
                 where: { leagueId_userId: { leagueId: liga.id, userId: m.userId } },
                 select: { rank: true },
               })
-
-              if (inQuiet) {
-                // Sinalizar para envio posterior (não envia push durante quiet hours)
-                console.info(
-                  `[ScoringJobService] Quiet hours — LEAGUE_RESULT agendado para ${m.userId}`
-                )
-                return
-              }
 
               await notificationService.sendNotification({
                 userId: m.userId,

@@ -1,27 +1,46 @@
 // lib/services/NotificationService.ts
 // module-19 — Serviço central de notificações (singleton)
-// Uso: import { notificationService } from '@/lib/services/NotificationService'
+// T-014: 23 tipos, quiet hours 23h-7h BRT, preferências por canal, digest DIVIDEND_CREDITED
 
 import { createClient } from '@supabase/supabase-js'
 import { notificationRepository } from '@/lib/repositories/NotificationRepository'
 import { pushService } from '@/lib/services/PushService'
+import { emailNotificationService } from '@/lib/services/EmailNotificationService'
+import { quietHoursService, URGENT_TYPES } from '@/lib/services/QuietHoursService'
+import { notificationQueueService } from '@/lib/services/NotificationQueueService'
+import { digestService } from '@/lib/services/DigestService'
+import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
+import { prisma } from '@/lib/prisma'
 import type { NotificationType, SendNotificationOptions } from '@/types'
+import type { NotificationType as AnalyticsNotificationType, UserPlan } from '@/lib/analytics'
 
 // Tipos que recebem Web Push (além da notificação in-app)
-export const PUSH_ENABLED_TYPES: NotificationType[] = [
+export const PUSH_ENABLED_TYPES = new Set<NotificationType>([
   'ORDER_EXECUTED',
+  'MARGIN_CALL_WARNING',
   'MARGIN_CALL_ALERT',
   'CIRCUIT_BREAKER',
+  'NEWS_FAVORITE_CLUB',
+  'PAYMENT_FAILED',
   'LEAGUE_RESULT',
   'CANCELLATION_LOCK_ACTIVE',
+  'CANCELLATION_LOCK_LIQUIDATED',
   'ADMIN_BROADCAST',
-]
+  'SYSTEM_MAINTENANCE',
+])
 
-// Tipos que requerem badge urgente (vermelho diferenciado)
-export const URGENT_TYPES: NotificationType[] = [
-  'MARGIN_CALL_ALERT',
-  'CANCELLATION_LOCK_ACTIVE',
-]
+// Tipos que só têm canal email (sem in-app)
+const EMAIL_ONLY_TYPES = new Set<NotificationType>([
+  'PASSWORD_RESET',
+  'LGPD_EXPORT_READY',
+  'ACCOUNT_DELETED',
+  'BRUTE_FORCE_BLOCKED',
+])
+
+// Tipos que usam digest (agrupa múltiplas notificações do mesmo dia)
+const DIGEST_TYPES = new Set<NotificationType>([
+  'DIVIDEND_CREDITED',
+])
 
 class NotificationService {
   private supabase = createClient(
@@ -30,40 +49,139 @@ class NotificationService {
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
 
+  /**
+   * Ponto de entrada único para todas as notificações.
+   * Aplica: quiet hours, preferências de canal, digest, push, email.
+   */
   async sendNotification(options: SendNotificationOptions): Promise<void> {
-    // 1. Persistir no banco (obrigatório — lança se falhar)
-    const notification = await notificationRepository.create(options)
+    const { userId, type } = options
 
-    // 2. Broadcast Supabase Realtime (graceful — não bloqueia se falhar)
-    try {
-      await this.supabase
-        .channel(`notifications:${options.userId}`)
-        .send({
-          type: 'broadcast',
-          event: 'NEW_NOTIFICATION',
-          payload: notification,
-        })
-    } catch (err) {
-      console.error('[NotificationService] Erro no broadcast Realtime:', err)
+    // ── Tipos digest: acumular e não enviar individualmente ──────────────────
+    if (DIGEST_TYPES.has(type)) {
+      const metadata = options.metadata ?? {}
+      await digestService.accumulate(
+        userId,
+        String(metadata.ticker ?? ''),
+        Number(metadata.value ?? 0),
+        String(metadata.dividendType ?? '')
+      )
+      return
     }
 
-    // 3. Web Push se tipo habilitado (graceful — não bloqueia se falhar)
-    if (PUSH_ENABLED_TYPES.includes(options.type)) {
+    // ── Email-only: não cria registro in-app ────────────────────────────────
+    if (EMAIL_ONLY_TYPES.has(type)) {
+      await this._sendEmailChannel(options)
+      return
+    }
+
+    // ── Quiet hours: enfileirar para 07:00 BRT ──────────────────────────────
+    if (quietHoursService.isQuietHour(type)) {
+      const scheduledFor = quietHoursService.nextDeliveryAt()
+      await notificationQueueService.enqueue(options, scheduledFor)
+      return
+    }
+
+    // ── Envio imediato ───────────────────────────────────────────────────────
+    await this._dispatchImmediate(options)
+  }
+
+  /**
+   * Despacha notificação imediatamente (usado pelo serviço principal e pelo cron de queue).
+   */
+  async dispatchImmediate(options: SendNotificationOptions): Promise<void> {
+    return this._dispatchImmediate(options)
+  }
+
+  private async _dispatchImmediate(options: SendNotificationOptions): Promise<void> {
+    const { userId, type } = options
+
+    // Carregar preferências do usuário para verificar canais
+    const prefs = await notificationRepository.getPreferences(userId)
+
+    // ── 1. Canal in-app (persiste no banco) ────────────────────────────────
+    const inAppEnabled = await notificationRepository.isChannelEnabled(userId, type, 'inApp', prefs)
+    let notification = null
+    if (inAppEnabled) {
+      notification = await notificationRepository.create(options)
+
+      // EVT-033: notification_received — rastreia notificacao recebida
       try {
-        await pushService.sendToUser(options.userId, {
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { planType: true },
+        })
+        mixpanelServer.trackNotificationReceived(userId, {
+          notification_type: type as AnalyticsNotificationType,
+          channel: 'in-app',
+          plan: (user?.planType ?? 'JOGADOR') as UserPlan,
+        })
+      } catch {
+        // analytics nunca deve quebrar o fluxo de notificacoes
+      }
+
+      // Broadcast Realtime para atualização imediata no frontend
+      try {
+        await this.supabase
+          .channel(`notifications:${userId}`)
+          .send({
+            type: 'broadcast',
+            event: 'NEW_NOTIFICATION',
+            payload: notification,
+          })
+      } catch (err) {
+        console.error('[NotificationService] Erro no broadcast Realtime:', err)
+      }
+    }
+
+    // ── 2. Canal push ──────────────────────────────────────────────────────
+    const pushEnabled = PUSH_ENABLED_TYPES.has(type)
+      && await notificationRepository.isChannelEnabled(userId, type, 'push', prefs)
+
+    if (pushEnabled) {
+      try {
+        await pushService.sendToUser(userId, {
           title: options.title,
           body: options.body,
+          url: '/inbox',
+          tag: type,
         })
       } catch (err) {
         console.error('[NotificationService] Erro no Web Push:', err)
       }
+    }
+
+    // ── 3. Canal email ──────────────────────────────────────────────────────
+    if (emailNotificationService.hasEmailChannel(type)) {
+      const emailEnabled = await notificationRepository.isChannelEnabled(userId, type, 'email', prefs)
+      if (emailEnabled) {
+        await this._sendEmailChannel(options)
+      }
+    }
+  }
+
+  private async _sendEmailChannel(options: SendNotificationOptions): Promise<void> {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: options.userId },
+        select: { email: true, name: true },
+      })
+      if (!user?.email) return
+
+      await emailNotificationService.sendForType(options.type, user.email, {
+        userName: user.name,
+        title: options.title,
+        body: options.body,
+        metadata: options.metadata,
+      })
+    } catch (err) {
+      console.error('[NotificationService] Erro no canal email:', err)
     }
   }
 }
 
 export const notificationService = new NotificationService()
 
-/** Atalho para compatibilidade com código legado que importa a função diretamente. */
+/** Atalho de compatibilidade com código existente que importa a função diretamente. */
 export async function sendNotification(
   userId: string,
   type: NotificationType,
@@ -77,3 +195,5 @@ export async function sendNotification(
     metadata: opts.metadata,
   })
 }
+
+export { URGENT_TYPES }

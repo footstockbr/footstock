@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { sha256 } from '@/lib/utils/crypto'
+import { emailNotificationService } from '@/lib/services/EmailNotificationService'
 
 export interface DeletionResult {
   success: boolean
@@ -31,6 +32,23 @@ export async function deleteAccount(
   const anonymousId = sha256(`${userId}${Date.now()}${Math.random()}`).slice(0, 16)
   const anonymizedEmail = `null@deleted-${anonymousId}.invalid`
   const anonymizedCpfHash = sha256(`deleted-${anonymousId}-not-real`)
+
+  // Enviar email ACCOUNT_DELETED ANTES da anonimização (email ainda válido aqui)
+  try {
+    const profile = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, name: true },
+    })
+    if (profile?.email) {
+      await emailNotificationService.sendForType('ACCOUNT_DELETED', profile.email, {
+        userName: profile.name ?? undefined,
+        title: 'Sua conta foi excluída',
+        body: 'Seus dados pessoais foram anonimizados conforme a LGPD. Registros financeiros foram preservados por obrigação legal (5 anos).',
+      })
+    }
+  } catch (err) {
+    console.error('[account-deletion] Erro ao enviar email ACCOUNT_DELETED:', err)
+  }
 
   await prisma.$transaction(async (tx) => {
     // 1. Anonimizar dados pessoais

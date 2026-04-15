@@ -41,6 +41,18 @@ export function calcBonusAmount(planType: PlanType): number {
   return bonuses[planType]
 }
 
+// ─── 3b. calcUpgradeBonusAmount ─────────────────────────────────────────────
+/**
+ * Bônus diferencial de upgrade (T-021 / CDC Art. 49).
+ * Retorna o diferencial entre o plano novo e o anterior.
+ * Exemplos: JOGADOR→CRAQUE=3000, JOGADOR→LENDA=23000, CRAQUE→LENDA=20000.
+ * Retorna 0 para downgrades ou mesmo plano (não deve ocorrer em fluxo normal).
+ */
+export function calcUpgradeBonusAmount(fromPlan: PlanType, toPlan: PlanType): number {
+  const diff = calcBonusAmount(toPlan) - calcBonusAmount(fromPlan)
+  return Math.max(0, diff)
+}
+
 // ─── 4. calcSubscriptionAmount ──────────────────────────────────────────────
 /** Valor da assinatura em centavos BRL (Int — PCI-DSS) */
 export function calcSubscriptionAmount(planType: PlanType, period: 'monthly' | 'yearly'): number {
@@ -94,10 +106,24 @@ export function shouldEnterCancellationLock(subscription: SubscriptionForLogic, 
 }
 
 // ─── 10. getCancellationLockExpiry ──────────────────────────────────────────
-/** Data de expiração da trava: cancellationRequest + 48h exatos (UTC) */
-export function getCancellationLockExpiry(cancellationRequestDate: Date): Date {
+/**
+ * Data de expiração da trava (T+7d): após este prazo sem revert → CANCELLED.
+ * Todos os cálculos em UTC para evitar bugs de timezone/DST.
+ */
+export function getCancellationLockExpiry(lockStartedAt: Date): Date {
+  const sevenDays = 7 * 24 * 60 * 60 * 1000
+  return new Date(lockStartedAt.getTime() + sevenDays)
+}
+
+// ─── 10b. getForcedLiquidationAt ────────────────────────────────────────────
+/**
+ * Data da liquidação forçada de posições restritas (T+48h).
+ * Shorts, OCO e alavancadas são encerrados compulsoriamente neste momento.
+ * Todos os cálculos em UTC para evitar bugs de timezone/DST.
+ */
+export function getForcedLiquidationAt(lockStartedAt: Date): Date {
   const fortyEightHours = 48 * 60 * 60 * 1000
-  return new Date(cancellationRequestDate.getTime() + fortyEightHours)
+  return new Date(lockStartedAt.getTime() + fortyEightHours)
 }
 
 // ─── 11. getBlockedFeatures ─────────────────────────────────────────────────

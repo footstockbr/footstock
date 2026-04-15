@@ -24,6 +24,8 @@ import {
   MoreHorizontal,
   X,
   Bell,
+  FileText,
+  Settings,
 } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
 import { cn } from "@/lib/utils";
@@ -50,6 +52,8 @@ const NAV_ITEMS: NavItem[] = [
   { href: ROUTES.ADMIN_CLUBES, label: "Clubes", icon: Trophy, resource: "leagues:moderate" },
   { href: ROUTES.ADMIN_PATROCINADORES, label: "Patrocinadores", icon: HandshakeIcon, resource: "assets:write" },
   { href: ROUTES.ADMIN_AFILIADOS, label: "Afiliados", icon: Network, resource: "admin:manage" },
+  { href: ROUTES.ADMIN_LGPD, label: "LGPD / DPO", icon: FileText, resource: "admin:audit" },
+  { href: ROUTES.ADMIN_CONFIGURACOES, label: "Configurações", icon: Settings, resource: "admin:config" },
 ];
 
 // Primeiros 5 hrefs aparecem diretamente no bottom tab bar mobile
@@ -131,7 +135,7 @@ export function AdminSidebar({ adminRole }: AdminSidebarProps) {
   return (
     <>
       {/* Sidebar — desktop */}
-      <aside className="hidden md:flex w-60 flex-shrink-0 flex-col border-r border-[rgba(240,185,11,.1)] bg-[#0a0908] h-dvh sticky top-0">
+      <aside data-testid="admin-sidebar" className="hidden md:flex w-60 flex-shrink-0 flex-col border-r border-[rgba(240,185,11,.1)] bg-[#0a0908] h-dvh sticky top-0">
         <div className="h-14 flex items-center px-4 border-b border-[rgba(240,185,11,.1)] gap-2">
           <Shield className="h-5 w-5 text-[#F0B90B]" />
           <div>
@@ -140,16 +144,22 @@ export function AdminSidebar({ adminRole }: AdminSidebarProps) {
           </div>
         </div>
 
-        <nav className="flex-1 py-2 overflow-y-auto" aria-label="Navegação do painel admin">
+        <nav data-testid="admin-sidebar-nav" className="flex-1 py-2 overflow-y-auto" aria-label="Navegação do painel admin">
           {visibleItems.map((item) => {
             const isActive = item.exact
               ? currentPath === item.href
               : currentPath.startsWith(item.href);
             const Icon = item.icon;
+            const slug = item.label
+              .toLowerCase()
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
+              .replace(/\s+/g, "-");
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                data-testid={`admin-sidebar-nav-item-${slug}`}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
                   "flex items-center gap-3 rounded-md mx-2 px-3 py-2.5 text-sm transition-colors min-h-[44px]",
@@ -168,6 +178,7 @@ export function AdminSidebar({ adminRole }: AdminSidebarProps) {
         <div className="border-t border-[rgba(240,185,11,.1)] p-3">
           <button
             type="button"
+            data-testid="admin-sidebar-logout-button"
             onClick={() => void handleLogout()}
             disabled={isLoggingOut}
             className={cn(

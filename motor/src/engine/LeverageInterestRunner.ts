@@ -8,7 +8,7 @@
 // Liquidação forçada: posição encerrada se saldo insuficiente para cobrir juros.
 // ============================================================================
 
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Prisma } from '@prisma/client'
 import type Redis from 'ioredis'
 import { logger } from '../utils/logger'
 
@@ -71,7 +71,7 @@ export class LeverageInterestRunner {
 
     const dailyInterest = leverageAmount * DAILY_INTEREST_RATE
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const user = await tx.user.findUniqueOrThrow({ where: { id: position.userId } })
       const currentBalance = Number(user.fsBalance)
 

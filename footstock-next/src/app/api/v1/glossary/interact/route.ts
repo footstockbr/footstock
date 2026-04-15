@@ -7,8 +7,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withAuth, type AuthContext } from '@/app/api/middleware'
-import { getTermBySlug } from '@/lib/data/glossary'
+import { getTermBySlug, GLOSSARY_TERMS } from '@/lib/data/glossary'
 import { glossaryInteractionRepository } from '@/lib/repositories/GlossaryInteractionRepository'
+import { leagueEventRecorder } from '@/lib/services/leagues/LeagueEventRecorder'
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -53,6 +54,31 @@ async function interactHandler(req: NextRequest, { user }: AuthContext) {
   }
 
   await glossaryInteractionRepository.record(user.id, termSlug)
+
+  // Verificar milestones de glossário (fire-and-forget, erros não bloqueiam resposta)
+  void (async () => {
+    try {
+      const [total, slugs] = await Promise.all([
+        glossaryInteractionRepository.countTotalByUser(user.id),
+        glossaryInteractionRepository.findDistinctSlugsByUser(user.id),
+      ])
+
+      if (total >= 5) {
+        await leagueEventRecorder.recordForAllActiveLeagues(user.id, 'GLOSSARY_5_TERMS', { total }).catch(() => {})
+      }
+
+      const categorySet = new Set(
+        slugs
+          .map((s) => GLOSSARY_TERMS.find((t) => t.slug === s)?.category)
+          .filter(Boolean)
+      )
+      if (categorySet.size >= 3) {
+        await leagueEventRecorder.recordForAllActiveLeagues(user.id, 'GLOSSARY_3_CATEGORIES', { categories: categorySet.size }).catch(() => {})
+      }
+    } catch {
+      // ignora silenciosamente
+    }
+  })()
 
   return NextResponse.json({ success: true, data: { ok: true } }, { status: 201 })
 }

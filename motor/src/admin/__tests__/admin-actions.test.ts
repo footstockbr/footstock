@@ -48,7 +48,7 @@ describe('AdminMarketActions', () => {
 
     const result = await actions.handle(action)
     expect(result.success).toBe(true)
-    expect(mockEngine.pauseAsset).toHaveBeenCalledWith('asset_001')
+    expect(mockEngine.pauseAsset).toHaveBeenCalledWith('asset_001', 'HALT_ASSET')
     expect(mockLogger.log).toHaveBeenCalledWith(action)
   })
 

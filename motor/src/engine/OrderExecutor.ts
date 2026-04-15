@@ -4,7 +4,7 @@
 // Rastreabilidade: INT-011 / TASK-2/ST001
 // ============================================================================
 
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Prisma } from '@prisma/client'
 import type Redis from 'ioredis'
 import { logger } from '../utils/logger'
 import { validateTransition } from './order-contract'
@@ -34,7 +34,14 @@ export class OrderExecutor {
     if (orders.length === 0) return
 
     const results = await Promise.allSettled(
-      orders.map(async (order: PrismaOrder & { asset: { ticker: string; currentPrice: PrismaDecimal } }) => {
+      orders.map(async (order: PrismaOrder & { asset: { ticker: string; currentPrice: PrismaDecimal; isHalted: boolean } }) => {
+        // Rejeitar ordens MARKET em ativos suspensos por circuit breaker / halt admin
+        if (order.asset.isHalted) {
+          logger.warn(`[OrderExecutor] ASSET_HALTED: cancelando MARKET ordem ${order.id} para ${order.asset.ticker}`)
+          await this._cancelHaltedMarketOrder(order)
+          return
+        }
+
         const price = currentPrices[order.asset.ticker]
         if (price === undefined || price <= 0) {
           logger.warn(`[OrderExecutor] skip: ticker sem preço no tick: ${order.asset.ticker}`)
@@ -57,7 +64,7 @@ export class OrderExecutor {
   ): Promise<void> {
     try {
       // Executar atomicamente via Prisma transaction inline
-      await this.prisma.$transaction(async (tx) => {
+      await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const user = await tx.user.findUniqueOrThrow({ where: { id: order.userId } })
 
         // Cálculos de taxa (INTAKE canônico: taxa fixa por faixa de valor)
@@ -128,7 +135,7 @@ export class OrderExecutor {
           }
         }
 
-        // Transaction record
+        // Transaction TRADE — registra a operação principal
         await tx.transaction.create({
           data: {
             userId: order.userId, assetId: order.assetId, orderId: order.id,
@@ -140,6 +147,33 @@ export class OrderExecutor {
             balanceAfter: newBalance,
           },
         })
+
+        // Transaction FEE — linha separada no extrato para rastreabilidade da taxa
+        // Idempotência: ignora se já existe FEE para esta ordem (proteção contra retry)
+        const existingFee = await tx.transaction.findFirst({
+          where: { orderId: order.id, financialType: 'FEE' },
+          select: { id: true },
+        })
+        if (!existingFee) {
+          await tx.transaction.create({
+            data: {
+              userId: order.userId, assetId: order.assetId, orderId: order.id,
+              type: order.type, financialType: 'FEE', side: order.side,
+              quantity: order.quantity, price, fee: feeAmount,
+              totalAmount: feeAmount,
+              fsAmount: -feeAmount,
+              balanceBefore: null,
+              balanceAfter: null,
+            },
+          })
+        }
+
+        // Log de auditoria estruturado — rastreabilidade da taxa cobrada
+        logger.info(
+          `[OrderExecutor] FEE orderId=${order.id} userId=${order.userId} ` +
+          `ticker=${order.asset.ticker} executedPrice=${price} ` +
+          `operationValue=${operationValue} feeAmount=${feeAmount} side=${order.side}`
+        )
       })
 
       // Notificar via Redis
@@ -163,6 +197,44 @@ export class OrderExecutor {
     } catch (err) {
       logger.error(`[OrderExecutor] FAIL orderId=${order.id}: ${String(err)}`)
       throw err
+    }
+  }
+
+  /**
+   * Cancela uma ordem MARKET para ativo suspenso e reembolsa saldo do usuário.
+   * Usa currentPrice do ativo como aproximação do valor bloqueado na criação.
+   */
+  private async _cancelHaltedMarketOrder(
+    order: PrismaOrder & { asset: { ticker: string; currentPrice: PrismaDecimal; isHalted: boolean } }
+  ): Promise<void> {
+    try {
+      await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        await tx.order.update({
+          where: { id: order.id },
+          data: { status: 'CANCELLED' },
+        })
+
+        // Reembolso para ordens BUY: valor bloqueado ≈ quantity × currentPrice + fee
+        if (order.side === 'BUY') {
+          const approxPrice = Number(order.asset.currentPrice)
+          const operationValue = order.quantity * approxPrice
+          const leverageDiv = order.leverageMultiplier === 2 ? 2 : 1
+          const refundAmount = (operationValue / leverageDiv) + Number(order.fee)
+          await tx.user.update({
+            where: { id: order.userId },
+            data: { fsBalance: { increment: refundAmount } },
+          })
+        }
+      })
+
+      await this.redis.publish(
+        `orders:cancelled:${order.userId}`,
+        JSON.stringify({ orderId: order.id, ticker: order.asset.ticker, motivo: 'ASSET_HALTED' })
+      )
+
+      logger.info(`[OrderExecutor] MARKET ordem ${order.id} cancelada por ASSET_HALTED (${order.asset.ticker}) + reembolso aplicado`)
+    } catch (err) {
+      logger.error(`[OrderExecutor] Falha ao cancelar ordem ${order.id} por halt: ${String(err)}`)
     }
   }
 }

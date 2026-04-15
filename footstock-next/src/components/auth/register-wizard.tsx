@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft } from 'lucide-react'
+import { useAnalytics } from '@/hooks/useAnalytics'
 import { Step1PersonalData } from './register/Step1PersonalData'
 import { Step2AgeConfirmation } from './register/Step2AgeConfirmation'
 import { Step2Access as Step3Access } from './register/Step2Access'
@@ -22,6 +23,7 @@ export interface WizardData {
   phone?: string
   birthDate?: string
   cpf?: string
+  referredByCode?: string
   // Step 2
   email?: string
   password?: string
@@ -37,14 +39,41 @@ export interface WizardData {
   }
 }
 
+interface RegisterWizardProps {
+  initialReferredByCode?: string
+}
+
 /**
  * Orquestrador do wizard de registro de 5 etapas.
  * Estado mantido localmente — sem persistência em URL.
+ * initialReferredByCode: código pré-preenchido vindo de /ref/[code] via page.tsx (server component)
  */
-export function RegisterWizard() {
+const STEP_NAMES = ['personal_data', 'age_confirmation', 'access', 'favorite_club', 'terms']
+
+export function RegisterWizard({ initialReferredByCode = '' }: RegisterWizardProps) {
   const router = useRouter()
+  const { track } = useAnalytics()
   const [currentStep, setCurrentStep] = useState<WizardStep>(1)
-  const [wizardData, setWizardData] = useState<WizardData>({})
+  const [wizardData, setWizardData] = useState<WizardData>({ referredByCode: initialReferredByCode })
+
+  // EVT-001: Cadastro Iniciado — ao montar o wizard
+  useEffect(() => {
+    track('signup_started', {
+      referrer: typeof document !== 'undefined' ? document.referrer || 'direct' : 'direct',
+      device_type: typeof window !== 'undefined' && window.innerWidth < 768 ? 'mobile' : 'desktop',
+    })
+  }, [track])
+
+  // EVT-039: affiliate_link_clicked — quando ref code e detectado via query param ou cookie
+  useEffect(() => {
+    if (initialReferredByCode) {
+      track('affiliate_link_clicked', {
+        affiliateCode: initialReferredByCode,
+        affiliateType: 'unknown', // tipo so e resolvido no servidor
+        source: typeof document !== 'undefined' ? document.referrer || 'direct' : 'direct',
+      })
+    }
+  }, [initialReferredByCode, track])
 
   const updateData = useCallback((data: Partial<WizardData>) => {
     setWizardData((prev) => ({ ...prev, ...data }))
@@ -61,10 +90,15 @@ export function RegisterWizard() {
 
   const handleStepNext = useCallback(
     (data: Partial<WizardData>) => {
+      // EVT-002: Etapa do Cadastro Concluida
+      track('signup_step_completed', {
+        step: currentStep as 1 | 2 | 3 | 4,
+        step_name: STEP_NAMES[currentStep - 1],
+      })
       updateData(data)
       goNext()
     },
-    [updateData, goNext]
+    [updateData, goNext, track, currentStep]
   )
 
   const handleComplete = useCallback(

@@ -80,6 +80,7 @@ export function SuspendDialog({ userId: _userId, userName, onConfirm, onCancel }
   return (
     <div
       role="dialog"
+      data-testid="modal-suspend-user"
       aria-modal="true"
       aria-labelledby="suspend-dialog-title"
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
@@ -107,6 +108,7 @@ export function SuspendDialog({ userId: _userId, userName, onConfirm, onCancel }
           <textarea
             ref={textareaRef}
             id="suspend-reason"
+            data-testid="modal-suspend-reason-input"
             value={reason}
             onChange={(e) => {
               setReason(e.target.value)
@@ -133,6 +135,7 @@ export function SuspendDialog({ userId: _userId, userName, onConfirm, onCancel }
           <button
             ref={cancelBtnRef}
             type="button"
+            data-testid="modal-suspend-cancel-button"
             onClick={onCancel}
             disabled={loading}
             className="flex-1 sm:flex-none h-10 px-4 rounded-lg border border-[rgba(240,185,11,.18)] text-sm text-[#929AA5] hover:text-[#EAECEF] disabled:opacity-50 min-h-[44px]"
@@ -142,6 +145,7 @@ export function SuspendDialog({ userId: _userId, userName, onConfirm, onCancel }
           <button
             ref={confirmBtnRef}
             type="button"
+            data-testid="modal-suspend-confirm-button"
             onClick={handleConfirm}
             disabled={loading || !reason.trim()}
             className="flex-1 sm:flex-none h-10 px-4 rounded-lg bg-[#F6465D] text-sm font-medium text-white hover:bg-[#dc2626] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 min-h-[44px]"

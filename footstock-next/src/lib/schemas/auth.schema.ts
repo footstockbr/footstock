@@ -45,6 +45,7 @@ export const step1Schema = registerBase.pick({
   phone: true,
   birthDate: true,
   cpf: true,
+  referredByCode: true,
 })
 export type Step1Data = z.infer<typeof step1Schema>
 

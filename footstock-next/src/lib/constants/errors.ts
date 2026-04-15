@@ -11,6 +11,8 @@ export const ERROR_CODES = {
   AUTH_007: 'AUTH-007',
   AUTH_009: 'AUTH-009',
   AUTH_010: 'AUTH-010',
+  AUTH_011: 'AUTH-011',
+  AUTH_012: 'AUTH-012',
   // Validação
   VAL_001: 'VAL-001',
   VAL_002: 'VAL-002',
@@ -39,6 +41,8 @@ export const ERROR_MESSAGES: Record<string, string> = {
   'AUTH-007': 'Senha não atende aos requisitos mínimos.',
   'AUTH-009': 'Muitas tentativas. Tente novamente em 1 hora.',
   'AUTH-010': 'Sessão inválida. Faça login novamente.',
+  'AUTH-011': 'CPF identificado como menor de idade. Cadastro não permitido.',
+  'AUTH-012': 'Sua verificação de idade está pendente. Aguarde a conclusão.',
   'VAL-001': 'Dados inválidos. Verifique os campos e tente novamente.',
   'VAL-002': 'Você deve ter ao menos 18 anos para se cadastrar (ECA Digital).',
   'VAL-003': 'Valor fora do intervalo permitido.',

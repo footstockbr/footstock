@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { toast } from 'sonner'
 import { MoreVertical, UserX, UserCheck, RefreshCw, Shield } from 'lucide-react'
 import { SuspendDialog } from './SuspendDialog'
 import { PromoteDialog } from './PromoteDialog'
+import { ResetBalanceDialog } from './ResetBalanceDialog'
 import type { AdminUserActionItem } from '@/lib/types/admin'
 
 interface UserActionsProps {
@@ -16,6 +18,7 @@ export function UserActions({ user, currentAdminRole, onActionComplete }: UserAc
   const [open, setOpen] = useState(false)
   const [showSuspendDialog, setShowSuspendDialog] = useState(false)
   const [showPromoteDialog, setShowPromoteDialog] = useState(false)
+  const [showResetDialog, setShowResetDialog] = useState(false)
   const [loading, setLoading] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -74,28 +77,28 @@ export function UserActions({ user, currentAdminRole, onActionComplete }: UserAc
     }
   }, [open])
 
-  async function handleResetBalance() {
-    setOpen(false)
-
-    const confirmed = window.confirm(
-      `Tem certeza que deseja resetar o saldo de ${user.name}? Esta ação não pode ser desfeita.`
-    )
-    if (!confirmed) return
-
+  async function executeResetBalance() {
     setLoading(true)
     try {
       const res = await fetch(`/api/v1/admin/users/${user.id}/reset-balance`, { method: 'POST' })
       if (!res.ok) {
         const body = await res.json().catch(() => null)
-        const message = body?.message ?? `Erro ao resetar saldo (${res.status})`
-        window.alert(message)
+        toast.error(body?.message ?? `Erro ao resetar saldo (${res.status})`)
         return
       }
+      const body = await res.json().catch(() => null)
+      const newBalance = body?.data?.fsBalance ?? body?.fsBalance
+      toast.success(
+        newBalance !== undefined
+          ? `Saldo de ${user.name} resetado para FS$ ${Number(newBalance).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+          : `Saldo de ${user.name} resetado com sucesso.`
+      )
       onActionComplete()
     } catch {
-      window.alert('Erro de conexão ao resetar saldo. Tente novamente.')
+      toast.error('Erro de conexão ao resetar saldo. Tente novamente.')
     } finally {
       setLoading(false)
+      setShowResetDialog(false)
     }
   }
 
@@ -139,7 +142,7 @@ export function UserActions({ user, currentAdminRole, onActionComplete }: UserAc
   }
 
   return (
-    <div className="relative" ref={menuRef}>
+    <div data-testid="admin-user-actions" className="relative" ref={menuRef}>
       <button
         onClick={() => setOpen((v) => !v)}
         disabled={loading}
@@ -159,7 +162,7 @@ export function UserActions({ user, currentAdminRole, onActionComplete }: UserAc
           {/* Reset balance */}
           <button
             role="menuitem"
-            onClick={handleResetBalance}
+            onClick={() => { setOpen(false); setShowResetDialog(true) }}
             className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-[#c5b99a] hover:bg-[rgba(240,185,11,.06)] min-h-[44px]"
           >
             <RefreshCw className="h-4 w-4 text-[#F0B90B]" />
@@ -179,6 +182,7 @@ export function UserActions({ user, currentAdminRole, onActionComplete }: UserAc
           ) : (
             <button
               role="menuitem"
+              data-testid="admin-user-suspend-button"
               onClick={() => { setOpen(false); setShowSuspendDialog(true) }}
               className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-[#F6465D] hover:bg-[rgba(239,68,68,.06)] min-h-[44px]"
             >
@@ -191,6 +195,7 @@ export function UserActions({ user, currentAdminRole, onActionComplete }: UserAc
           {isSuperAdmin && (
             <button
               role="menuitem"
+              data-testid="admin-user-promote-button"
               onClick={() => {
                 setOpen(false)
                 setShowPromoteDialog(true)
@@ -223,6 +228,18 @@ export function UserActions({ user, currentAdminRole, onActionComplete }: UserAc
             onActionComplete()
           }}
           onCancel={() => setShowPromoteDialog(false)}
+        />
+      )}
+
+      {/* T-019: modal de confirmacao de reset de saldo */}
+      {showResetDialog && (
+        <ResetBalanceDialog
+          userId={user.id}
+          userName={user.name}
+          planType={user.planType ?? 'JOGADOR'}
+          currentBalance={user.fsBalance ?? 0}
+          onConfirm={executeResetBalance}
+          onCancel={() => setShowResetDialog(false)}
         />
       )}
     </div>

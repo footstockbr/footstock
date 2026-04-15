@@ -20,5 +20,9 @@ export default async function RedefinirSenhaPage({ searchParams }: ResetPassword
   const params = await searchParams;
   const token = params.token ?? null;
 
-  return <ResetPasswordForm token={token} />;
+  return (
+    <div data-testid="page-redefinir-senha">
+      <ResetPasswordForm token={token} />
+    </div>
+  );
 }

@@ -10,7 +10,7 @@ export class ContrarianAgent extends BaseAgent {
   }
 
   decide(ctx: MarketContext): AgentDecision {
-    if (ctx.session === 'FECHADO') {
+    if (ctx.session === 'CLOSED') {
       return { side: 'HOLD', quantity: 0, priceModifier: 0, reason: 'market_closed' }
     }
 

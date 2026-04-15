@@ -1,7 +1,7 @@
 'use client'
 
-// Conexão real com o SSE endpoint /api/v1/market/stream (Redis market:tick).
-// Substitui o stub anterior que sempre retornava null.
+// T-022: hook agora expõe isDelayed e delayMinutes do payload SSE.
+// O delay é aplicado server-side — o cliente apenas consome o dado já atrasado.
 import { useEffect, useRef, useState } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 
@@ -16,6 +16,10 @@ export interface MarketTick {
   haltReason?: string | null
   estimatedResume?: string | null
   timestamp: number
+  /** Indica se o preço recebido tem delay server-side aplicado */
+  isDelayed: boolean
+  /** Atraso em ms aplicado pelo servidor (0 para LENDA) */
+  delayMs: number
 }
 
 interface RawMotorTick {
@@ -23,11 +27,16 @@ interface RawMotorTick {
   price: number
   changePercent: number
   timestamp: number
+  isHalted?: boolean
+  haltReason?: string | null
+  estimatedResume?: number | null
 }
 
 interface TickPayload {
   type: string
   ticks: RawMotorTick[]
+  delayed?: boolean
+  delayMs?: number
 }
 
 export function useMarketTick(ticker: string): MarketTick | null {
@@ -71,8 +80,12 @@ export function useMarketTick(ticker: string): MarketTick | null {
             ask: raw.price * 1.001,
             spread: raw.price * 0.002,
             change24h: raw.changePercent,
-            isHalted: false,
+            isHalted: raw.isHalted ?? false,
+            haltReason: raw.haltReason ?? null,
+            estimatedResume: raw.estimatedResume ? new Date(raw.estimatedResume).toISOString() : null,
             timestamp: raw.timestamp,
+            isDelayed: payload.delayed ?? false,
+            delayMs: payload.delayMs ?? 0,
           })
         } catch {
           // parse error — ignora

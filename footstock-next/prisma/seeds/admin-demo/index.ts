@@ -16,6 +16,7 @@ import { seedAdminDemoAssets } from './assets.seed'
 import { seedAdminDemoFinancial } from './financial.seed'
 import { seedAdminDemoEngagement } from './engagement.seed'
 import { seedAdminDemoModeration } from './moderation.seed'
+import { seedAdminDemoPriceHistory } from './priceHistory.seed'
 
 const connectionString = process.env.DATABASE_URL!
 const adapter = new PrismaPg({ connectionString })
@@ -41,8 +42,12 @@ async function main() {
     console.log()
   }
 
-  // Assets são sempre necessários para engajamento
+  // Assets são sempre necessários para engajamento e price history
   await seedAdminDemoAssets(prisma)
+  console.log()
+
+  // Price history GBM — depende dos ativos existirem (TASK-025)
+  await seedAdminDemoPriceHistory(prisma)
   console.log()
 
   if (!skipInitial) {

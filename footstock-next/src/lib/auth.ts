@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { jwtVerify, createRemoteJWKSet } from 'jose'
+import { cookies } from 'next/headers'
 import { createSupabaseServerClient } from '@/lib/supabase'
 import { prisma } from '@/lib/prisma'
 import type { User, AdminRole } from '@/types'
@@ -22,13 +23,30 @@ const SUPABASE_JWKS = createRemoteJWKSet(
 
 export async function getAuthUser(): Promise<{ user: User; supabaseId: string } | null> {
   try {
+    // DEV local fallback: fs_dev_auth cookie bypassa Supabase em desenvolvimento
+    if (process.env.NODE_ENV !== 'production') {
+      const cookieStore = await cookies()
+      const devAuthRaw = cookieStore.get('fs_dev_auth')?.value
+      const devAuthEmail = devAuthRaw ? decodeURIComponent(devAuthRaw) : null
+      if (devAuthEmail) {
+        const devUser = await prisma.user.findUnique({ where: { email: devAuthEmail } })
+        if (devUser) {
+          return { supabaseId: devUser.id, user: serializeUser(devUser) }
+        }
+      }
+    }
+
     // 1. Ler sessão do cookie — sem chamada de rede ao Supabase Auth
     const supabase = await createSupabaseServerClient()
     const { data: { session } } = await supabase.auth.getSession()
     if (!session?.access_token) return null
 
     // 2. Verificar JWT via JWKS (ES256) — sem chamada de rede após o primeiro fetch
-    const { payload } = await jwtVerify(session.access_token, SUPABASE_JWKS)
+    const { payload } = await jwtVerify(session.access_token, SUPABASE_JWKS, {
+      issuer: `${process.env.NEXT_PUBLIC_SUPABASE_URL!}/auth/v1`,
+      audience: 'authenticated',
+      algorithms: ['ES256'],
+    })
     if (!payload.sub) return null
 
     // 3. Buscar usuário no banco
@@ -77,6 +95,7 @@ export function serializeUser(dbUser: {
   tourCompleted: boolean
   ageVerificationPending: boolean
   adminRole?: string | null
+  version?: number
   createdAt: Date
   updatedAt: Date
 }): User {
@@ -96,6 +115,7 @@ export function serializeUser(dbUser: {
     tourCompleted: dbUser.tourCompleted,
     ageVerificationPending: dbUser.ageVerificationPending,
     adminRole: (dbUser.adminRole as User['adminRole']) ?? null,
+    version: dbUser.version ?? 0,
     createdAt: dbUser.createdAt.toISOString(),
     updatedAt: dbUser.updatedAt.toISOString(),
   }

@@ -15,7 +15,7 @@ export const LEAGUE_ERRORS = {
   FULL: {
     code: 'LEAGUE_051',
     status: 422,
-    message: 'Esta liga já atingiu o limite de participantes.',
+    message: 'Liga cheia.',
   },
   NOT_FOUND: {
     code: 'LEAGUE_080',

@@ -4,7 +4,11 @@
     "module": "CommonJS",
     "moduleResolution": "node",
     "esModuleInterop": true,
-    "outDir": ".seed-out"
+    "outDir": ".seed-out",
+    "paths": {
+      "@/lib/*": ["./_lib_legacy_backup/*"],
+      "@/*": ["./*"]
+    }
   },
-  "include": ["prisma/seed/**/*.ts", "lib/**/*.ts"]
+  "include": ["prisma/seed/**/*.ts", "_lib_legacy_backup/**/*.ts"]
 }

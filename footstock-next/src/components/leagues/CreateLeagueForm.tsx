@@ -14,8 +14,8 @@ import type { LeagueType, LeagueDivision, LeagueDuration } from '@/types'
 
 const createLeagueSchema = z.object({
   name:     z.string().min(3, 'Mínimo 3 caracteres').max(50, 'Máximo 50 caracteres'),
-  type:     z.enum(['PUBLICA', 'AMIGOS', 'PRO'] as const),
-  division: z.enum(['BRONZE', 'PRATA', 'OURO', 'ABERTA'] as const),
+  type:     z.enum(['PUBLICA', 'AMIGOS'] as const),
+  division: z.enum(['BRONZE', 'PRATA', 'OURO', 'OPEN'] as const),
   duration: z.enum(['1S', '1M', 'TEMPORADA'] as const),
 })
 
@@ -120,7 +120,7 @@ export function CreateLeagueForm() {
     resolver: zodResolver(createLeagueSchema),
     defaultValues: {
       type:     'PUBLICA',
-      division: 'ABERTA',
+      division: 'OPEN',
       duration: '1M',
     },
   })
@@ -138,7 +138,7 @@ export function CreateLeagueForm() {
     },
   })
 
-  const typeOptions: RadioGroupProps<LeagueType>['options'] = [
+  const typeOptions: RadioGroupProps<'PUBLICA' | 'AMIGOS'>['options'] = [
     { value: 'PUBLICA', label: 'Pública' },
     {
       value: 'AMIGOS',
@@ -146,19 +146,14 @@ export function CreateLeagueForm() {
       restricted: !hasAccess('CRAQUE'),
       restrictedLabel: 'Disponível no plano Craque ou superior',
     },
-    {
-      value: 'PRO',
-      label: 'PRO',
-      restricted: !hasAccess('LENDA'),
-      restrictedLabel: 'Disponível no plano Lenda',
-    },
+    // Ligas PRO são criadas exclusivamente por admins via /admin/ligas-pro
   ]
 
   const divisionOptions: RadioGroupProps<LeagueDivision>['options'] = [
-    { value: 'ABERTA',  label: 'Aberta'  },
-    { value: 'BRONZE',  label: 'Bronze'  },
-    { value: 'PRATA',   label: 'Prata'   },
-    { value: 'OURO',    label: 'Ouro'    },
+    { value: 'OPEN',   label: 'Open'   },
+    { value: 'BRONZE', label: 'Bronze' },
+    { value: 'PRATA',  label: 'Prata'  },
+    { value: 'OURO',   label: 'Ouro'   },
   ]
 
   const durationOptions: RadioGroupProps<LeagueDuration>['options'] = [
@@ -172,6 +167,7 @@ export function CreateLeagueForm() {
       onSubmit={handleSubmit(data => mutate(data))}
       noValidate
       aria-label="Criar nova liga"
+      data-testid="form-create-league"
       className="space-y-6"
     >
       {/* Name */}
@@ -183,6 +179,7 @@ export function CreateLeagueForm() {
           id="league-name"
           type="text"
           autoComplete="off"
+          data-testid="form-create-league-name-input"
           placeholder="Ex: Liga dos Craques"
           className={cn(
             'w-full px-3 py-2.5 rounded-lg bg-[#1E2329] border text-sm text-[#EAECEF] placeholder:text-gray-600',
@@ -201,7 +198,7 @@ export function CreateLeagueForm() {
       </div>
 
       {/* Type */}
-      <RadioGroup<LeagueType>
+      <RadioGroup<'PUBLICA' | 'AMIGOS'>
         id="type"
         label="Tipo"
         options={typeOptions}
@@ -214,7 +211,7 @@ export function CreateLeagueForm() {
       {plan === 'JOGADOR' && (
         <p className="text-xs text-gray-500 flex items-center gap-1.5">
           <Lock className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
-          Ligas de amigos e PRO requerem plano Craque ou superior.
+          Ligas de amigos requerem plano Craque ou superior.
         </p>
       )}
 
@@ -249,6 +246,7 @@ export function CreateLeagueForm() {
       <button
         type="submit"
         disabled={isPending}
+        data-testid="form-create-league-submit-button"
         className="w-full min-h-[48px] px-4 py-3 rounded-lg text-sm font-semibold bg-[#F0B90B] text-black hover:bg-[#d4ad52] disabled:opacity-60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0B90B]"
         aria-label={isPending ? 'Criando liga...' : 'Criar liga'}
       >

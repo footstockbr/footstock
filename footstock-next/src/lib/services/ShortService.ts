@@ -11,6 +11,7 @@ import { PLAN_TYPE } from '@/lib/enums'
 import { verifyMarginConsistency } from '@/lib/contracts/transaction-contract'
 import { calculateFee } from '@/lib/services/plan-order-limits'
 import { AppError } from '@/lib/services/OrderService'
+import { leagueEventRecorder } from '@/lib/services/leagues/LeagueEventRecorder'
 import type { Position, Transaction } from '@prisma/client'
 
 type PositionWithAsset = Prisma.PositionGetPayload<{
@@ -136,7 +137,7 @@ export class ShortService {
     // P&L: positivo quando preço caiu (short ganhou), menos juros e taxa
     const pnl = (avgPrice - currentPrice) * Number(position.quantity) - interestAccrued - closeFee
 
-    return await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const user = await tx.user.findUniqueOrThrow({ where: { id: userId } })
 
       const balanceBefore = Number(user.fsBalance)
@@ -173,6 +174,12 @@ export class ShortService {
 
       return { pnl, transaction }
     })
+
+    if (result.pnl > 0) {
+      leagueEventRecorder.recordForAllActiveLeagues(userId, 'SHORT_PROFITABLE_CLOSED', { pnl: result.pnl }).catch(() => {})
+    }
+
+    return result
   }
 
   /**

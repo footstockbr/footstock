@@ -53,6 +53,7 @@ export function PromoteDialog({ userId: _userId, userName, currentRole, onConfir
   return (
     <div
       role="dialog"
+      data-testid="modal-promote-user"
       aria-modal="true"
       aria-labelledby="promote-dialog-title"
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
@@ -82,6 +83,7 @@ export function PromoteDialog({ userId: _userId, userName, currentRole, onConfir
           </label>
           <select
             id="promote-role"
+            data-testid="modal-promote-role-select"
             value={selectedRole}
             onChange={(e) => {
               setSelectedRole(e.target.value as AdminRole)
@@ -118,6 +120,7 @@ export function PromoteDialog({ userId: _userId, userName, currentRole, onConfir
           </button>
           <button
             type="button"
+            data-testid="modal-promote-confirm-button"
             onClick={handleConfirm}
             disabled={loading}
             className="flex-1 sm:flex-none h-10 px-4 rounded-lg bg-[#F0B90B] text-sm font-medium text-[#0c0b09] hover:bg-[#b8972f] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 min-h-[44px]"

@@ -71,14 +71,16 @@ export async function POST(request: NextRequest) {
 
     // Inserir notificações em batch
     const broadcastId = crypto.randomUUID()
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
     if (recipients.length > 0) {
       await prisma.notification.createMany({
         data: recipients.map((u) => ({
           userId: u.id,
-          type: 'ADMIN_BROADCAST',
+          type: 'ADMIN_BROADCAST' as const,
           title,
           body: message,
-          metadata: { broadcastId, broadcastType: type, targetAudience },
+          data: { broadcastId, broadcastType: type, targetAudience }, // campo correto no schema
+          expiresAt,
         })),
       })
     }

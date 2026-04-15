@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
-import { autoDetectBlockedWords, recordModerationAction } from '@/lib/moderation'
+import { fetchBlockedWords, checkContentAgainstWords, recordModerationAction } from '@/lib/moderation'
 import type { User, AdminRole } from '@/types'
 
 export async function GET(request: NextRequest) {
@@ -11,7 +11,8 @@ export async function GET(request: NextRequest) {
   // Dev mode fallback
   if (!auth && process.env.NODE_ENV === 'development') {
     const adminRole = request.cookies.get('fs-admin-role')?.value
-    if (adminRole) {
+    const validRoles = ['SUPER_ADMIN', 'ADMINISTRADOR', 'MODERADOR', 'EDITOR', 'MONITOR', 'CLUB_PARTNER']
+    if (adminRole && validRoles.includes(adminRole)) {
       const dummyUser: User = {
         id: 'dev-user',
         email: 'dev@foot-stock.test',
@@ -28,6 +29,7 @@ export async function GET(request: NextRequest) {
         tourCompleted: false,
         ageVerificationPending: false,
         adminRole: adminRole as AdminRole,
+        version: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
@@ -48,10 +50,17 @@ export async function GET(request: NextRequest) {
   try {
     let where: Record<string, unknown> = {}
 
+    // Suporte a filtro por status (novo) e isFlagged (legado)
     if (filter === 'flagged') {
-      where = { isFlagged: true, isDeleted: false }
+      where = { status: 'FLAGGED', isDeleted: false }
+    } else if (filter === 'approved') {
+      where = { status: 'APPROVED', isDeleted: false }
+    } else if (filter === 'rejected') {
+      where = { status: 'REJECTED', isDeleted: false }
     } else if (filter === 'ok') {
-      where = { isFlagged: false, isDeleted: false }
+      where = { status: { in: ['PUBLISHED', 'APPROVED'] }, isDeleted: false }
+    } else if (filter === 'removed') {
+      where = { isDeleted: true }
     } else if (filter === 'todos') {
       where = { isDeleted: false }
     }
@@ -78,32 +87,33 @@ export async function GET(request: NextRequest) {
           take: 5,
         },
       },
-      orderBy: { flagCount: 'desc' },
+      orderBy: filter === 'removed' ? { updatedAt: 'desc' } : { flagCount: 'desc' },
       take: 50,
     })
 
-    // Auto-detect blocked words and update if needed
-    for (const post of posts) {
-      if (!post.isDeleted && !post.isFlagged) {
-        const hasBlockedWords = await autoDetectBlockedWords(post.content)
-        if (hasBlockedWords) {
-          await prisma.globalForumPost.update({
-            where: { id: post.id },
-            data: { isFlagged: true, flagCount: 1 },
-          })
+    // Auto-detect blocked words (skip for removed filter — all posts are already deleted)
+    if (filter !== 'removed') {
+      const [blockedWordsList, superAdmin] = await Promise.all([
+        fetchBlockedWords(),
+        prisma.user.findFirst({ where: { adminRole: 'SUPER_ADMIN' }, select: { id: true } }),
+      ])
 
-          // Record auto-flag action
-          const adminUser = await prisma.user.findFirst({
-            where: { adminRole: 'SUPER_ADMIN' },
-            select: { id: true },
-          })
+      for (const post of posts) {
+        if (!post.isDeleted && !post.isFlagged) {
+          const hasBlockedWords = checkContentAgainstWords(post.content, blockedWordsList)
+          if (hasBlockedWords) {
+            await prisma.globalForumPost.update({
+              where: { id: post.id },
+              data: { isFlagged: true, flagCount: 1 },
+            })
 
-          if (adminUser) {
-            await recordModerationAction(post.id, adminUser.id, 'FLAGGED', 'Auto-detected blocked words')
+            if (superAdmin) {
+              await recordModerationAction(post.id, superAdmin.id, 'FLAGGED', 'Auto-detected blocked words')
+            }
+
+            post.isFlagged = true
+            post.flagCount = 1
           }
-
-          post.isFlagged = true
-          post.flagCount = 1
         }
       }
     }

@@ -3,7 +3,7 @@
 // Retorna métricas agregadas e anonimizadas do clube autenticado.
 // NUNCA expõe dados individuais de usuários (ADMIN_051).
 // clubId extraído da sessão — nunca de query params (prevenção IDOR).
-// Rastreabilidade: INT-084, US-025, US-036, TASK-2/ST001
+// Rastreabilidade: INT-084, US-025, US-036, TASK-015, TASK-2/ST001
 // ============================================================================
 
 import { NextResponse } from 'next/server'
@@ -14,6 +14,16 @@ import { ERROR_CODES } from '@/lib/constants/errors'
 import type { ClubMetricsData } from '@/types/club'
 
 const CACHE_TTL_SECONDS = 900 // 15 minutos
+
+/** Mapear sentiment string para score numérico (-1.0 a +1.0) */
+function sentimentToScore(sentiment: string): number {
+  switch (sentiment) {
+    case 'BULLISH': return 0.7
+    case 'BEARISH': return -0.7
+    case 'NEUTRAL':
+    default: return 0.0
+  }
+}
 
 export async function GET() {
   try {
@@ -43,7 +53,15 @@ export async function GET() {
     // ---------- Resolver assetId pelo ticker ----------
     const asset = await prisma.asset.findUnique({
       where: { ticker: clubId },
-      select: { id: true, ticker: true, name: true, currentPrice: true },
+      select: {
+        id: true,
+        ticker: true,
+        displayName: true,
+        currentPrice: true,
+        openPrice: true,
+        sentiment: true,
+        totalShares: true,
+      },
     })
 
     if (!asset) {
@@ -54,7 +72,6 @@ export async function GET() {
     }
 
     // Garantia IDOR: userId da sessão não é usado nas queries de métricas
-    // (métricas são do clube, não do usuário autenticado)
     void userId
 
     // ---------- Queries de métricas agregadas ----------
@@ -86,7 +103,7 @@ export async function GET() {
     // Valor médio da carteira (posições abertas, usando currentPrice do asset)
     const openPositions = await prisma.position.findMany({
       where: { assetId: asset.id, status: 'OPEN', quantity: { gt: 0 } },
-      select: { quantity: true },
+      select: { quantity: true, userId: true },
     })
 
     const currentPriceNum = Number(asset.currentPrice)
@@ -104,7 +121,7 @@ export async function GET() {
       },
       _sum: { quantity: true },
     })
-    const totalFsMovimentado = Number(asset.currentPrice) * Number(fsVolumeResult._sum.quantity ?? 0)
+    const totalFsMovimentado = currentPriceNum * Number(fsVolumeResult._sum.quantity ?? 0)
 
     // Top 5 posições (anônimas — sem userId, sem email)
     const topPositionsRaw = await prisma.position.findMany({
@@ -132,7 +149,6 @@ export async function GET() {
       orderBy: { createdAt: 'asc' },
     })
 
-    // Agrupar por YYYY-MM
     const monthlyMap = new Map<string, number>()
     for (const pos of monthlyRaw) {
       const key = pos.createdAt.toISOString().slice(0, 7)
@@ -142,6 +158,34 @@ export async function GET() {
       month,
       newFans,
     }))
+
+    // ── TASK-015: KPIs adicionais ────────────────────────────────────
+
+    // Preço atual e variação 24h
+    const openPriceNum = Number(asset.openPrice)
+    const priceChange24h = openPriceNum > 0
+      ? ((currentPriceNum - openPriceNum) / openPriceNum) * 100
+      : 0
+
+    // Sentimento
+    const sentimentScore = sentimentToScore(asset.sentiment)
+
+    // Engajamento em ligas: torcedores do clube participando de ligas ativas
+    const leagueEngagement = await prisma.leagueMember.count({
+      where: {
+        userId: { in: totalFansResult.map((f) => f.userId) },
+        league: { status: 'ACTIVE' },
+      },
+    })
+
+    // Total de ações em circulação
+    const totalShares = Number(asset.totalShares)
+
+    // Maior holder individual (percentual do total, sem identificar quem)
+    const largestPosition = topPositionsRaw[0]
+    const topHolderPercentage = largestPosition && totalShares > 0
+      ? Math.round((Number(largestPosition.quantity) / totalShares) * 10000) / 100
+      : 0
 
     // ---------- Montar resposta ----------
     const responseData: ClubMetricsData = {
@@ -153,6 +197,12 @@ export async function GET() {
       topPositions,
       monthlyGrowth,
       leagueParticipation: 0, // feature futura — schema atual sem relação league-asset
+      currentPrice: Math.round(currentPriceNum * 100) / 100,
+      priceChange24h: Math.round(priceChange24h * 10) / 10,
+      sentimentScore,
+      leagueEngagement,
+      totalShares,
+      topHolderPercentage,
     }
 
     // ---------- Cache Redis 15min ----------

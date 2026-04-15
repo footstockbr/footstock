@@ -61,7 +61,7 @@ export type PaymentGateway = 'MERCADO_PAGO' | 'PAGSEGURO' | 'PAYPAL'
 export type PaymentPeriod = 'MONTHLY' | 'YEARLY'
 export type ImpactCategory = 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL' | 'FINANCEIRA_CRITICA' | 'ESPORTIVA_MAJORITARIA' | 'MERCADO_ATIVOS' | 'INTEGRIDADE_SAUDE' | 'INSTITUCIONAL' | 'ESPORTIVA_MENOR'
 export type LeagueType = 'PUBLICA' | 'AMIGOS' | 'PRO'
-export type LeagueDivision = 'BRONZE' | 'PRATA' | 'OURO' | 'ABERTA'
+export type LeagueDivision = 'BRONZE' | 'PRATA' | 'OURO' | 'OPEN'
 /** Alias semântico para LeagueDivision — usado nos contratos de scoring */
 export type LeagueCategory = LeagueDivision
 export type LeagueDuration = '1S' | '1M' | 'TEMPORADA'
@@ -69,10 +69,11 @@ export type LeagueStatus = 'PENDING' | 'ACTIVE' | 'FINISHED'
 export type ScorePillar = 'RENTABILIDADE' | 'SOFISTICACAO' | 'DIVERSIFICACAO' | 'CONSISTENCIA' | 'BONUS_EDUCATIVO'
 export type PostStatus = 'ACTIVE' | 'REMOVED' | 'FLAGGED'
 
-// module-19: 16 tipos de notificação (NOTIFICATION-SPEC v1.0)
+// module-19: 25 tipos de notificação (NOTIFICATION-SPEC v2.0 — T-014, T-023)
 export type NotificationType =
   | 'ORDER_EXECUTED'
   | 'ORDER_CANCELLED'
+  | 'MARGIN_CALL_WARNING'
   | 'MARGIN_CALL_ALERT'
   | 'CIRCUIT_BREAKER'
   | 'NEWS_FAVORITE_CLUB'
@@ -85,6 +86,16 @@ export type NotificationType =
   | 'ADMIN_BROADCAST'
   | 'CANCELLATION_LOCK_ACTIVE'
   | 'CANCELLATION_LOCK_LIQUIDATED'
+  | 'AFFILIATE_COMMISSION_EARNED'
+  | 'AFFILIATE_INVITE_JOINED'
+  | 'PASSWORD_RESET'
+  | 'LGPD_EXPORT_READY'
+  | 'ACCOUNT_DELETED'
+  | 'BRUTE_FORCE_BLOCKED'
+  | 'SYSTEM_MAINTENANCE'
+  | 'REFERRAL_JOINED'
+  | 'AGE_VERIFICATION_PENDING'     // T-023: FlagCheck indisponivel no cadastro
+  | 'AGE_VERIFICATION_COMPLETED'   // T-023: verificacao concluida com sucesso
 
 export interface NotificationDTO {
   id: string
@@ -93,8 +104,10 @@ export interface NotificationDTO {
   title: string
   body: string
   read: boolean
+  archived: boolean
   metadata?: Record<string, unknown> | null
   createdAt: string
+  expiresAt?: string | null
 }
 
 export interface SendNotificationOptions {
@@ -123,6 +136,8 @@ export interface User {
   tourCompleted: boolean
   ageVerificationPending: boolean
   adminRole?: AdminRole | null
+  /** Campo de locking otimista — use para enviar em operações de escrita (optimistic UI). */
+  version: number
   createdAt: string
   updatedAt: string
 }
@@ -130,7 +145,7 @@ export interface User {
 export interface Asset {
   id: string
   ticker: string
-  name: string
+  displayName: string
   clubSlug: string
   division: AssetDivision
   currentPrice: number
@@ -230,7 +245,10 @@ export interface Subscription {
   expiresAt?: string | null
   trialEndsAt?: string | null
   cancelledAt?: string | null
-  cancellationLockExpiresAt?: string | null
+  cancellationLockStartedAt?: string | null    // T+0: inicio do lock
+  cancellationLockExpiresAt?: string | null    // T+7d: cancelamento final
+  forcedLiquidationAt?: string | null          // T+48h: liquidacao de posicoes restritas
+  forcedLiquidationExecutedAt?: string | null  // marcado pelo cron de T+48h
   createdAt: string
   updatedAt: string
 }
@@ -268,9 +286,10 @@ export interface ScoreBreakdown {
   diversificacao: number  // 0-20
   consistencia: number    // 0-15
   bonusEducativo: number  // 0-5
-  total: number           // soma dos pilares
-  finalScore: number      // total × fatorEquidade
-  fatorEquidade: number
+  total: number           // soma dos pilares sem equity
+  finalScore: number      // (rentabilidade × equityFactor para OPEN) + outros pilares
+  fatorEquidade: number   // fator aplicado ao Pilar 1 em ligas OPEN (1.0 nos demais)
+  equityFactorApplied?: boolean // true quando league.division === 'OPEN'
 }
 
 export interface League {
@@ -288,6 +307,7 @@ export interface League {
   memberCount?: number
   isMember?: boolean
   userRank?: number | null
+  permiteAlavancagem?: boolean
   sponsor?: { id: string; name: string; logoUrl?: string | null } | null
   createdAt: string
 }

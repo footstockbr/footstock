@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
-import { SessionIndicator } from "@/components/market/session-indicator";
+import { MarketSessionBadge } from "@/components/market/MarketSessionBadge";
 import { ROUTES } from "@/lib/constants/routes";
 
 // Dynamic import — evita SSR issues com Supabase hooks + React Query
@@ -60,10 +60,12 @@ avoid: Texto, complexidade excessiva, gradientes ruidosos
 
       {/* Right actions */}
       <div data-testid="header-actions" className="flex items-center gap-2">
-        {/* Mobile (≤640px): compact — só dot. Desktop: label + countdown */}
-        <SessionIndicator compact className="sm:hidden" />
-        <SessionIndicator className="hidden sm:flex" />
-        <NotificationBell />
+        {/* Mobile (≤640px): compact — s�� dot. Desktop: label + countdown + tooltip */}
+        <MarketSessionBadge compact className="sm:hidden" />
+        <MarketSessionBadge className="hidden sm:flex" />
+        <div data-tour="notification-bell" className="inline-flex items-center">
+          <NotificationBell />
+        </div>
       </div>
     </header>
   );

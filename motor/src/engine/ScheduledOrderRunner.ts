@@ -4,7 +4,7 @@
 // Rastreabilidade: INT-015 / TASK-3/ST003
 // ============================================================================
 
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Prisma } from '@prisma/client'
 import type Redis from 'ioredis'
 import { SessionManager } from './SessionManager'
 import { logger } from '../utils/logger'
@@ -21,7 +21,7 @@ export class ScheduledOrderRunner {
 
   /**
    * Verifica e executa ordens SCHEDULED cujo horário chegou.
-   * Ordens aguardam sessão NEGOCIACAO para serem executadas.
+   * Ordens aguardam sessão TRADING para serem executadas.
    */
   async checkScheduledOrders(currentPrices: Record<string, number>): Promise<void> {
     const now = new Date()
@@ -39,8 +39,8 @@ export class ScheduledOrderRunner {
 
     if (orders.length === 0) return
 
-    if (session !== 'NEGOCIACAO') {
-      logger.info(`[ScheduledOrderRunner] ${orders.length} ordens aguardando sessão NEGOCIACAO (atual: ${session})`)
+    if (session !== 'TRADING') {
+      logger.info(`[ScheduledOrderRunner] ${orders.length} ordens aguardando sessão TRADING (atual: ${session})`)
       return
     }
 
@@ -67,7 +67,7 @@ export class ScheduledOrderRunner {
         ? now.getTime() - order.scheduledAt.getTime()
         : 0
 
-      await this.prisma.$transaction(async (tx) => {
+      await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const user = await tx.user.findUniqueOrThrow({ where: { id: order.userId } })
         const operationValue = order.quantity * price
         const feeAmount = calculateFee(operationValue)

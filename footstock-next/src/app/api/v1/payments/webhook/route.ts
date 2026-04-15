@@ -2,15 +2,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getGatewayByHeader, detectGatewayType } from '@/lib/gateways/GatewayFactory'
 import { validateWebhookByGateway } from '@/lib/gateways/webhook-validator'
+import { getWebhookRateLimit } from '@/lib/ratelimit'
+import { normalizeIp } from '@/middleware/rateLimit'
 import { planService } from '@/lib/services/PlanService'
 import { webhookAuditService } from '@/lib/services/WebhookAuditService'
+import { sendNotification } from '@/lib/services/NotificationService'
+import { NOTIFICATION_TYPE } from '@/lib/enums'
+import { leagueEventRecorder } from '@/lib/services/leagues/LeagueEventRecorder'
 import type { SubscriptionGateway } from '@prisma/client'
+import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
 
 // POST /api/v1/payments/webhook
 // Público — autenticado por HMAC-SHA256 (sem Bearer token)
 // Qualquer erro retorna 200 silencioso para não vazar informação de segurança
+// Rate limit: 1000 req / 60s por IP (TASK-026) — verificado APÓS validação HMAC
 export async function POST(request: NextRequest) {
-  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? undefined
+  const rawIpHeader = request.headers.get('x-forwarded-for') ?? undefined
+  const ip = rawIpHeader ? normalizeIp(rawIpHeader) : '0.0.0.0'
+  const originalIp = rawIpHeader?.split(',')[0]?.trim()
 
   // 1. Leitura do raw body — necessário para validação HMAC
   let rawBody: string
@@ -30,7 +39,7 @@ export async function POST(request: NextRequest) {
       gateway: 'MERCADO_PAGO' as SubscriptionGateway, // fallback para log
       status: 'REJECTED',
       hmacValid: false,
-      ipAddress: ip,
+      ipAddress: originalIp,
       errorMessage: 'Gateway não reconhecido nos headers',
     })
     return NextResponse.json({ received: true }, { status: 200 })
@@ -39,6 +48,7 @@ export async function POST(request: NextRequest) {
   const gatewayEnum = gatewayType as unknown as SubscriptionGateway
 
   // 3. Validar assinatura HMAC
+  // IMPORTANTE: validação ANTES do rate limit para não contar webhooks inválidos (TASK-026 spec §5)
   let hmacValid: boolean
   try {
     hmacValid = await validateWebhookByGateway(request.headers, rawBody, gatewayType)
@@ -51,13 +61,47 @@ export async function POST(request: NextRequest) {
       gateway: gatewayEnum,
       status: 'REJECTED',
       hmacValid: false,
-      ipAddress: ip,
+      ipAddress: originalIp,
       errorMessage: 'HMAC inválido',
     })
     return NextResponse.json({ received: true }, { status: 200 })
   }
 
-  // 4. Parse do evento
+  // 4. Rate limit por IP — apenas após HMAC válido (não conta webhooks inválidos)
+  // Limite: 1000 req / 60s por IP.
+  const webhookLimiter = getWebhookRateLimit()
+  const rlResult = await webhookLimiter.limit(ip)
+
+  if (!rlResult.success) {
+    console.warn('[webhook] Rate limit excedido para IP:', ip, {
+      remaining: rlResult.remaining,
+      resetAt: new Date(rlResult.reset).toISOString(),
+    })
+    await webhookAuditService.logWebhook({
+      gateway: gatewayEnum,
+      status: 'REJECTED',
+      hmacValid: true,
+      ipAddress: originalIp,
+      errorMessage: `Rate limit excedido (IP: ${ip})`,
+    })
+    // 429 para que o provider saiba que deve aplicar backoff (não 200 — payment provider precisa reprocessar)
+    return NextResponse.json(
+      { error: { code: 'RATE_001', message: 'Rate limit atingido. Reduza a frequência de envio.' } },
+      { status: 429 }
+    )
+  }
+
+  // Alerta de capacidade: log quando atingir 80% do limite (remaining <= 200 de 1000)
+  const ALERT_THRESHOLD = Math.floor(1000 * 0.2)
+  if (rlResult.remaining <= ALERT_THRESHOLD) {
+    console.warn('[webhook] Uso de 80%+ do rate limit de webhook para IP:', ip, {
+      remaining: rlResult.remaining,
+      limit: 1000,
+      resetAt: new Date(rlResult.reset).toISOString(),
+    })
+  }
+
+  // 5. Parse do evento
   let event: Awaited<ReturnType<typeof gateway.parseWebhookEvent>>
   try {
     event = gateway.parseWebhookEvent(rawBody)
@@ -66,7 +110,7 @@ export async function POST(request: NextRequest) {
       gateway: gatewayEnum,
       status: 'REJECTED',
       hmacValid: true,
-      ipAddress: ip,
+      ipAddress: originalIp,
       errorMessage: 'Falha ao parsear evento',
     })
     return NextResponse.json({ received: true }, { status: 200 })
@@ -93,7 +137,7 @@ export async function POST(request: NextRequest) {
     subscriptionId: event.subscriptionId,
     status: 'ACCEPTED',
     hmacValid: true,
-    ipAddress: ip,
+    ipAddress: originalIp,
   })
 
   // 7. Processar evento por tipo
@@ -109,6 +153,9 @@ export async function POST(request: NextRequest) {
         // Ativar plano do usuário
         await planService.upgradeUser(subscription.userId, event.subscriptionId)
 
+        // P5 league bonus: PLAN_UPGRADED
+        leagueEventRecorder.recordForAllActiveLeagues(subscription.userId, 'PLAN_UPGRADED', { planType: subscription.planType }).catch(() => {})
+
         // Criar registro de Payment (para histórico e idempotência futura)
         await prisma.payment.upsert({
           where: { gatewayTransactionId: event.transactionId },
@@ -123,12 +170,39 @@ export async function POST(request: NextRequest) {
             processedAt: new Date(),
           },
         })
+
+        // EVT-022: payment_completed — track after successful payment
+        const existingPaymentCount = await prisma.payment.count({
+          where: { userId: subscription.userId, status: 'PAID' },
+        })
+        mixpanelServer.trackPaymentCompleted(subscription.userId, {
+          plan: subscription.planType as 'CRAQUE' | 'LENDA',
+          gateway: gatewayType,
+          is_first_payment: existingPaymentCount <= 1, // <= 1 because we just upserted the current one
+        })
+
+        // ── Processar comissão de afiliado ────────────────────────────────────
+        // gatewayTransactionId garante idempotência por EVENTO (não por subscription)
+        // → suporta renovações mensais sem bloquear a 2ª, 3ª comissão
+        await processAffiliateCommission({
+          userId: subscription.userId,
+          subscriptionId: event.subscriptionId,
+          subscriptionAmount: Number(event.amount),
+          gatewayTransactionId: event.transactionId,
+          planType: subscription.planType as 'CRAQUE' | 'LENDA',
+        })
       }
     } else if (event.eventType === 'PAYMENT_FAILED') {
       // Marcar subscription como PAST_DUE para acionar dunning
       await prisma.subscription.updateMany({
         where: { id: event.subscriptionId, status: { in: ['ACTIVE', 'PENDING'] } },
         data: { status: 'PAST_DUE' },
+      })
+
+      // Buscar subscription para obter userId e planType para analytics
+      const failedSub = await prisma.subscription.findUnique({
+        where: { id: event.subscriptionId },
+        select: { userId: true, planType: true },
       })
 
       await prisma.payment.upsert({
@@ -140,17 +214,52 @@ export async function POST(request: NextRequest) {
           gateway: gatewayEnum,
           gatewayTransactionId: event.transactionId,
           status: 'FAILED',
-          userId: (await prisma.subscription.findUnique({
-            where: { id: event.subscriptionId },
-            select: { userId: true },
-          }))?.userId ?? '',
+          userId: failedSub?.userId ?? '',
         },
       })
+
+      // EVT-023: payment_failed — track after payment failure
+      if (failedSub?.userId) {
+        mixpanelServer.trackPaymentFailed(failedSub.userId, {
+          plan_attempted: failedSub.planType as 'CRAQUE' | 'LENDA',
+          gateway: gatewayType,
+          error_code: 'GATEWAY_DECLINED',
+        })
+      }
     } else if (event.eventType === 'REFUND_COMPLETED') {
-      await prisma.subscription.updateMany({
+      const refundedSub = await prisma.subscription.findUnique({
         where: { id: event.subscriptionId },
-        data: { status: 'CANCELLED', cancelledAt: new Date() },
+        select: { userId: true },
       })
+
+      if (refundedSub) {
+        await prisma.$transaction([
+          prisma.subscription.update({
+            where: { id: event.subscriptionId },
+            data: { status: 'CANCELLED', cancelledAt: new Date() },
+          }),
+          prisma.user.update({
+            where: { id: refundedSub.userId },
+            data: { planType: 'JOGADOR', fsBalance: 2000 },
+          }),
+        ])
+
+        // Anular comissões PENDING da subscription reembolsada
+        // VOIDED = cancelado por refund — aparece como "Anulado" na UI, não como "Processando"
+        // PAID já não é revertido (responsabilidade operacional do admin via painel)
+        await prisma.affiliateTransaction.updateMany({
+          where: {
+            subscriptionId: event.subscriptionId,
+            status: 'PENDING',
+          },
+          data: { status: 'VOIDED' },
+        })
+      } else {
+        await prisma.subscription.updateMany({
+          where: { id: event.subscriptionId },
+          data: { status: 'CANCELLED', cancelledAt: new Date() },
+        })
+      }
 
       await prisma.payment.upsert({
         where: { gatewayTransactionId: event.transactionId },
@@ -161,10 +270,7 @@ export async function POST(request: NextRequest) {
           gateway: gatewayEnum,
           gatewayTransactionId: event.transactionId,
           status: 'REFUNDED',
-          userId: (await prisma.subscription.findUnique({
-            where: { id: event.subscriptionId },
-            select: { userId: true },
-          }))?.userId ?? '',
+          userId: refundedSub?.userId ?? '',
         },
       })
     }
@@ -174,4 +280,92 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ received: true }, { status: 200 })
+}
+
+// ============================================================================
+// processAffiliateCommission
+// Cria AffiliateTransaction (PENDING) quando um assinante referido confirma pagamento.
+// Idempotente: skipDuplicates=true + unique constraint (affiliateCodeId, subscriptionId, transactionType)
+// garante no máximo 1 comissão por renovação mesmo com replays do webhook.
+// ============================================================================
+async function processAffiliateCommission({
+  userId,
+  subscriptionId,
+  subscriptionAmount,
+  gatewayTransactionId,
+  planType,
+}: {
+  userId: string
+  subscriptionId: string
+  subscriptionAmount: number
+  gatewayTransactionId?: string
+  planType: 'CRAQUE' | 'LENDA'
+}): Promise<void> {
+  try {
+    // 1. Verificar se o assinante foi referido por um afiliado elegível
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { referredByCode: true },
+    })
+
+    if (!user?.referredByCode) return
+
+    // 2. Buscar o AffiliateCode do referrer (deve estar ativo e ser elegível)
+    const affiliateCode = await prisma.affiliateCode.findFirst({
+      where: {
+        code: user.referredByCode,
+        active: true,
+        affiliateType: { in: ['TIME_PARCEIRO', 'INFLUENCIADOR'] },
+      },
+      select: {
+        id: true,
+        userId: true,
+        commissionPercentage: true,
+        affiliateType: true,
+        code: true,
+      },
+    })
+
+    if (!affiliateCode) return
+
+    // Auto-referência: afiliado não pode ganhar comissão de si mesmo
+    if (affiliateCode.userId === userId) return
+
+    // 3. Calcular comissão em FS$ (subscriptionAmount * commissionPercentage)
+    const commissionPct = Number(affiliateCode.commissionPercentage)
+    const commissionAmount = Math.round(subscriptionAmount * commissionPct * 100) / 100
+
+    if (commissionAmount <= 0) return
+
+    // 4. Criar transação (idempotente via gatewayTransactionId único por evento de pagamento)
+    //    skipDuplicates=true ignora silenciosamente se gatewayTransactionId já existe
+    //    → replay do webhook não duplica comissão; renovações futuras geram nova linha
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (prisma.affiliateTransaction as any).createMany({
+      data: [
+        {
+          affiliateCodeId: affiliateCode.id,
+          referredUserId: userId,
+          subscriptionId,
+          gatewayTransactionId: gatewayTransactionId ?? null,
+          transactionType: 'SUBSCRIPTION_RENEWAL',
+          amount: commissionAmount,
+          commissionPercentageAtTime: commissionPct,
+          status: 'PENDING',
+        },
+      ],
+      skipDuplicates: true,
+    })
+
+    // EVT-041: affiliate_conversion
+    mixpanelServer.trackAffiliateConversion(affiliateCode.userId, {
+      affiliateCode: affiliateCode.code,
+      affiliateType: affiliateCode.affiliateType as string,
+      plan: planType,
+      commissionAmount: commissionAmount.toFixed(2),
+    })
+  } catch (err) {
+    // Logar mas não propagar — falha de comissão não impede ativação do plano
+    console.error('[webhook] Erro ao processar comissão de afiliado:', err)
+  }
 }

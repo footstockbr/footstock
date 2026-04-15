@@ -70,4 +70,17 @@ export interface IGateway {
    * @throws Error com mensagem descritiva para payloads malformados
    */
   parseWebhookEvent(payload: string): WebhookEvent
+
+  /**
+   * Cancela a renovação automática de uma assinatura no gateway.
+   * Chamado ao entrar em CANCELLATION_LOCK para evitar nova cobrança.
+   * @param gatewaySubscriptionId — ID da assinatura recorrente no gateway
+   */
+  cancelAutoRenewal(gatewaySubscriptionId: string): Promise<void>
+
+  /**
+   * Reativa a renovação automática após reversão de CANCELLATION_LOCK.
+   * @param gatewaySubscriptionId — ID da assinatura recorrente no gateway
+   */
+  reactivateAutoRenewal(gatewaySubscriptionId: string): Promise<void>
 }

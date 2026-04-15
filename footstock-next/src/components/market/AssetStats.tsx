@@ -1,4 +1,5 @@
 import { Info } from 'lucide-react'
+import { GlossaryInfoIcon } from '@/components/ui/glossary-info-icon'
 import { formatFS, formatPercent } from '@/lib/utils/format'
 
 interface AssetFinancials {
@@ -34,7 +35,7 @@ function formatPremium(value: number): string {
 }
 
 interface StatCardProps {
-  label: string
+  label: React.ReactNode
   value: string
   tooltip: string
   valueColor?: string
@@ -108,7 +109,7 @@ export function AssetStats({ asset, fairValuePremium, volume24h, change24h }: As
         tooltip="Valor total de mercado = preço atual × ações em circulação"
       />
       <StatCard
-        label="Variação 24h"
+        label={<>Variação 24h <GlossaryInfoIcon fieldKey="volatilidade" size={11} /></>}
         value={change24hDisplay}
         tooltip="Variação percentual do preço em relação à abertura do dia"
         valueColor={change24hColor}

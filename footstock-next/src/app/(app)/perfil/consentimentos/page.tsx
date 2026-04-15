@@ -13,28 +13,30 @@ interface Consent {
   revokedAt: string | null;
 }
 
+// Chaves alinhadas com o enum ConsentPurpose do Prisma:
+// ESSENTIAL, ANALYTICS, MARKETING, DATA_TERCEIROS, AGE_VERIFICATION
 const PURPOSE_LABELS: Record<string, { label: string; description: string; required?: boolean }> = {
-  TERMS: {
-    label: "Termos de Uso",
-    description: "Aceite dos termos de uso e condições gerais do serviço.",
+  ESSENTIAL: {
+    label: "Dados Essenciais",
+    description: "Necessário para o funcionamento do serviço (autenticação, transações, notificações de segurança).",
     required: true,
   },
-  PRIVACY: {
-    label: "Política de Privacidade",
-    description: "Aceite da política de privacidade e tratamento de dados.",
+  AGE_VERIFICATION: {
+    label: "Verificação de Idade",
+    description: "Verificação de maioridade (ECA Digital) obrigatória para acesso à plataforma financeira.",
     required: true,
   },
   MARKETING: {
     label: "Comunicações de Marketing",
-    description: "Receber e-mails e notificações sobre novidades e promoções.",
+    description: "Receber e-mails e notificações sobre novidades, promoções e eventos da plataforma.",
   },
   ANALYTICS: {
     label: "Análise de Uso",
-    description: "Coleta de dados anônimos para melhoria do serviço.",
+    description: "Coleta de dados anônimos para melhoria da experiência e desempenho do serviço.",
   },
-  THIRD_PARTY: {
-    label: "Compartilhamento com Terceiros",
-    description: "Compartilhar dados agregados com parceiros selecionados.",
+  DATA_TERCEIROS: {
+    label: "Compartilhamento com Parceiros",
+    description: "Compartilhar dados agregados com parceiros selecionados para personalização e benefícios.",
   },
 };
 

@@ -10,6 +10,7 @@
  */
 import { prisma } from '@/lib/prisma'
 import { seedAssets } from './assets'
+import { seedAssetAliases } from './assetAliases'
 import { seedUsers } from './users'
 import { seedUsersExtra } from './users-extra'
 import { seedCompliance } from './compliance'
@@ -32,7 +33,8 @@ async function main() {
 
   // ── Nível 0: Base ────────────────────────────────────────────────────────
   await seedAssets()
-  console.log('[seed] ✓ Nível 0: Assets (40 clubes)')
+  await seedAssetAliases()
+  console.log('[seed] ✓ Nível 0: Assets (40 clubes) + AssetAliases (~90 aliases)')
 
   // ── Nível 1: Usuários + Consentimentos ──────────────────────────────────
   await seedUsers()

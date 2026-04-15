@@ -2212,6 +2212,8 @@ const ADMIN_USERS_DB=[
 
 // Tempo de inatividade antes de bloquear sessão (em ms) — 30 minutos
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
+// Aviso exibido antes do timeout (em ms) — 25 minutos
+const SESSION_WARNING_MS = 25 * 60 * 1000;
 
 /* ══════════════════════════════════════════════════════════════════
    WEBAUTHN — Biometria nativa iOS (Face ID / Touch ID) e Android
@@ -2326,7 +2328,158 @@ function removeBiometric(userId) {
   localStorage.setItem(BIOMETRIC_STORAGE_KEY, JSON.stringify(stored));
 }
 
-function AdminLoginScreen({onLogin}){
+/* ══════════════════════════════════════════════════════════════════
+   HOOK — useAdminSessionTimeout
+   Rastreia inatividade do admin e expõe isWarning/timeRemaining.
+   - warningMs (25min): seta isWarning=true para exibir toast
+   - timeoutMs (30min): chama onTimeout para logout completo
+   - BroadcastChannel sincroniza logout/atividade entre abas
+   - visibilitychange verifica expiração ao retornar ao foco
+══════════════════════════════════════════════════════════════════ */
+function useAdminSessionTimeout({timeoutMs, warningMs, onTimeout, enabled}) {
+  const [isWarning,     setIsWarning]     = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState(Math.ceil(timeoutMs / 1000));
+  const lastActivityRef = useRef(Date.now());
+  const channelRef      = useRef(null);
+  const onTimeoutRef    = useRef(onTimeout);
+  useEffect(() => { onTimeoutRef.current = onTimeout; }, [onTimeout]);
+
+  const resetTimer = useCallback(() => {
+    lastActivityRef.current = Date.now();
+    setIsWarning(false);
+    channelRef.current?.postMessage({type:"activity"});
+  }, []);
+
+  useEffect(() => {
+    if (!enabled) {
+      setIsWarning(false);
+      setTimeRemaining(Math.ceil(timeoutMs / 1000));
+      return;
+    }
+
+    // BroadcastChannel para sincronizar logout/atividade entre abas
+    try {
+      const ch = new BroadcastChannel("footstock-admin-session");
+      channelRef.current = ch;
+      ch.onmessage = (e) => {
+        if (e.data?.type === "activity") {
+          lastActivityRef.current = Date.now();
+          setIsWarning(false);
+        } else if (e.data?.type === "logout" || e.data?.type === "new-session") {
+          // Logout emitido por outra aba ou nova sessão concorrente
+          onTimeoutRef.current?.();
+        }
+      };
+    } catch (_) { /* BroadcastChannel indisponível — sem sync cross-tab */ }
+
+    // Eventos de atividade do usuário
+    const events = ["mousemove","keydown","click","touchstart"];
+    const handleActivity = () => {
+      lastActivityRef.current = Date.now();
+      setIsWarning(false);
+      channelRef.current?.postMessage({type:"activity"});
+    };
+    events.forEach(e => window.addEventListener(e, handleActivity, {passive:true}));
+
+    // visibilitychange: ao retornar ao foco verificar se timeout já passou
+    const handleVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      const elapsed = Date.now() - lastActivityRef.current;
+      if (elapsed >= timeoutMs) {
+        channelRef.current?.postMessage({type:"logout"});
+        onTimeoutRef.current?.();
+      } else if (elapsed >= warningMs) {
+        setIsWarning(true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    // Tick de 1s: atualiza timeRemaining e verifica warning/timeout
+    let tickId;
+    tickId = setInterval(() => {
+      const elapsed = Date.now() - lastActivityRef.current;
+      const remaining = Math.max(0, timeoutMs - elapsed);
+      setTimeRemaining(Math.ceil(remaining / 1000));
+      if (elapsed >= timeoutMs) {
+        clearInterval(tickId);
+        channelRef.current?.postMessage({type:"logout"});
+        onTimeoutRef.current?.();
+      } else if (elapsed >= warningMs) {
+        setIsWarning(true);
+      } else {
+        setIsWarning(false);
+      }
+    }, 1000);
+
+    return () => {
+      events.forEach(e => window.removeEventListener(e, handleActivity));
+      document.removeEventListener("visibilitychange", handleVisibility);
+      clearInterval(tickId);
+      channelRef.current?.close();
+      channelRef.current = null;
+    };
+  }, [enabled, timeoutMs, warningMs]);
+
+  return {isWarning, timeRemaining, resetTimer};
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   COMPONENTE — SessionWarningToast
+   Exibido quando isWarning=true (5 minutos restantes).
+   Fica visível até o usuário clicar "Continuar" ou o timer expirar.
+   role="alert" garante anúncio por leitores de tela.
+══════════════════════════════════════════════════════════════════ */
+function SessionWarningToast({timeRemaining, onContinue}) {
+  const mins = Math.floor(timeRemaining / 60);
+  const secs = timeRemaining % 60;
+  const label = mins > 0
+    ? `${mins}m ${String(secs).padStart(2,"0")}s`
+    : `${secs}s`;
+  return (
+    <div
+      role="alert"
+      aria-live="assertive"
+      aria-atomic="true"
+      style={{
+        position:"fixed",bottom:88,left:"50%",transform:"translateX(-50%)",
+        zIndex:9999,width:"calc(100% - 28px)",maxWidth:380,
+        background:"linear-gradient(135deg,#1c1400,#1a1100)",
+        border:"1.5px solid rgba(245,158,11,.55)",borderRadius:14,
+        padding:"14px 16px",
+        boxShadow:"0 8px 36px rgba(0,0,0,.65),0 0 0 1px rgba(245,158,11,.12)",
+        display:"flex",flexDirection:"column",gap:10,
+      }}
+    >
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <span style={{fontSize:20,flexShrink:0}}>⏱</span>
+        <div style={{flex:1}}>
+          <div style={{fontSize:11,fontWeight:800,color:GOLD,fontFamily:SANS,letterSpacing:"0.3px"}}>
+            Sessão expirando
+          </div>
+          <div style={{fontSize:10,color:"rgba(255,255,255,.72)",fontFamily:SANS,marginTop:2,lineHeight:1.45}}>
+            Sua sessão expirará em{" "}
+            <strong style={{color:GOLD}}>{label}</strong>{" "}
+            por inatividade
+          </div>
+        </div>
+      </div>
+      <button
+        onClick={onContinue}
+        style={{
+          width:"100%",padding:"10px",borderRadius:10,
+          border:"1px solid rgba(245,158,11,.45)",
+          background:"rgba(245,158,11,.18)",
+          color:GOLD,fontSize:12,fontWeight:700,fontFamily:SANS,
+          cursor:"pointer",transition:"all .15s",
+        }}
+      >
+        Continuar sessão
+      </button>
+    </div>
+  );
+}
+
+function AdminLoginScreen({onLogin, expiredMessage=""}){
   const [email,setEmail]=useState("");
   const [pass,setPass]=useState("");
   const [showPass,setShowPass]=useState(false);
@@ -2490,6 +2643,18 @@ function AdminLoginScreen({onLogin}){
 
     {/* ── FORM ── */}
     <div style={{flex:1,overflowY:"auto",padding:"22px 20px 32px"}}>
+
+      {/* Banner de sessão expirada por inatividade */}
+      {expiredMessage&&<div role="alert" style={{
+        background:"rgba(249,115,22,.09)",border:"1px solid rgba(249,115,22,.3)",
+        borderRadius:11,padding:"10px 14px",marginBottom:16,
+        display:"flex",alignItems:"center",gap:9,
+      }}>
+        <span style={{fontSize:16,flexShrink:0}}>⏰</span>
+        <div style={{fontSize:10,color:"rgba(249,115,22,.9)",fontFamily:SANS,lineHeight:1.45}}>
+          {expiredMessage}
+        </div>
+      </div>}
 
       {/* Botão de biometria — aparece se suportado E já registrado */}
       {bioSupported&&bioRegistered&&<>
@@ -2887,25 +3052,29 @@ const MONITOR_BLOCKED_ACTIONS=new Set(["promote_admin","promote_monitor","promot
 
 export default function FootStockAdmin(){
   // ── Estado de autenticação ──────────────────────────────────────────────
-  const [adminUser, setAdminUser]=useState(null);   // null = não autenticado
-  const [locked,    setLocked]   =useState(false);  // true = tela de bloqueio por inatividade
-  const [liveTime,  setLiveTime] =useState(new Date());
-  const lastActivityRef=useRef(Date.now());
+  const [adminUser,         setAdminUser]        =useState(null);
+  const [locked,            setLocked]           =useState(false);
+  const [liveTime,          setLiveTime]         =useState(new Date());
+  const [sessionExpiredMsg, setSessionExpiredMsg]=useState("");
 
-  // Atualiza relógio do PhoneShell a cada 10s
+  // Relógio do PhoneShell atualizado a cada 10s
   useEffect(()=>{const t=setInterval(()=>setLiveTime(new Date()),10000);return()=>clearInterval(t);},[]);
 
-  // Detecta inatividade e bloqueia sessão após SESSION_TIMEOUT_MS
-  useEffect(()=>{
-    if(!adminUser) return;
-    const resetTimer=()=>{lastActivityRef.current=Date.now();if(locked)setLocked(false);};
-    const events=["mousemove","keydown","mousedown","touchstart","scroll"];
-    events.forEach(e=>window.addEventListener(e,resetTimer,{passive:true}));
-    const check=setInterval(()=>{
-      if(Date.now()-lastActivityRef.current>SESSION_TIMEOUT_MS) setLocked(true);
-    },30000);
-    return()=>{events.forEach(e=>window.removeEventListener(e,resetTimer));clearInterval(check);};
-  },[adminUser,locked]);
+  // Callback de timeout: logout completo com mensagem de expiração
+  const handleSessionTimeout = useCallback(()=>{
+    try { sessionStorage.removeItem("footstock_admin_sid"); } catch(_) {}
+    setAdminUser(null);
+    setLocked(false);
+    setSessionExpiredMsg("Sua sessão expirou por inatividade.");
+  },[]);
+
+  // Hook de timeout de sessão (25min aviso → 30min logout automático)
+  const {isWarning, timeRemaining, resetTimer} = useAdminSessionTimeout({
+    timeoutMs: SESSION_TIMEOUT_MS,
+    warningMs: SESSION_WARNING_MS,
+    onTimeout: handleSessionTimeout,
+    enabled:   !!adminUser,
+  });
 
   // ── Todos os hooks abaixo devem vir ANTES dos early returns (regra do React) ──
   const [tab,setTab]=useState("dashboard");
@@ -2930,8 +3099,19 @@ export default function FootStockAdmin(){
   },[currentRole,tab]);
 
   // ── Early returns de auth — após todos os hooks ──────────────────────────
-  if(!adminUser) return <PhoneShell time={liveTime}><AdminLoginScreen onLogin={u=>{setAdminUser(u);lastActivityRef.current=Date.now();}}/></PhoneShell>;
-  if(locked)     return <PhoneShell time={liveTime}><AdminLockScreen adminUser={adminUser} onUnlock={()=>{setLocked(false);lastActivityRef.current=Date.now();}} onLogout={()=>{setAdminUser(null);setLocked(false);}}/></PhoneShell>;
+  if(!adminUser) return <PhoneShell time={liveTime}><AdminLoginScreen onLogin={u=>{
+    setAdminUser(u);
+    setSessionExpiredMsg("");
+    // Gera sessionId único para detectar sessões concorrentes entre abas
+    try {
+      const sid = crypto.randomUUID();
+      sessionStorage.setItem("footstock_admin_sid", sid);
+      const ch = new BroadcastChannel("footstock-admin-session");
+      ch.postMessage({type:"new-session", sessionId:sid, adminId:u.id});
+      ch.close();
+    } catch(_) {}
+  }} expiredMessage={sessionExpiredMsg}/></PhoneShell>;
+  if(locked) return <PhoneShell time={liveTime}><AdminLockScreen adminUser={adminUser} onUnlock={()=>setLocked(false)} onLogout={()=>{setAdminUser(null);setLocked(false);}}/></PhoneShell>;
 
   const cbCount=Object.values(motorState).filter(s=>s.cb).length;
   const flaggedCount=posts.filter(p=>p.status==="flagged").length;
@@ -2954,6 +3134,8 @@ export default function FootStockAdmin(){
   ];
 
   return <PhoneShell time={liveTime}>
+    {/* Toast de aviso de sessão expirando (25min → 30min) */}
+    {isWarning&&<SessionWarningToast timeRemaining={timeRemaining} onContinue={resetTimer}/>}
     <div style={{flex:1,display:"flex",flexDirection:"column",background:BG,overflow:"hidden"}}>
 
       {/* ── HEADER — idêntico ao app principal ── */}
@@ -2985,7 +3167,10 @@ export default function FootStockAdmin(){
               borderRadius:20,padding:"3px 9px",fontSize:7,fontWeight:900,
               color:isAdmin?RED:ORANGE,fontFamily:SANS
             }}>{roleMeta.icon} {roleMeta.label}</div>
-            <button onClick={()=>setAdminUser(null)} style={{
+            <button onClick={()=>{
+              try{sessionStorage.removeItem("footstock_admin_sid");}catch(_){}
+              setAdminUser(null);
+            }} style={{
               background:"rgba(244,63,94,.08)",border:"1px solid rgba(244,63,94,.2)",color:RED,
               borderRadius:8,padding:"4px 9px",fontSize:9,cursor:"pointer",fontFamily:SANS,fontWeight:700
             }}>Sair</button>

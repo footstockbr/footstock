@@ -66,6 +66,10 @@ export interface EngagementMetricsDTO {
     d30plus: number
   }
   totalUsers: number
+  /** T-013: taxa de conclusão do onboarding tour (0–100). Meta: 60% */
+  tourCompletionRate: number
+  /** T-013: total de usuários que pularam o tour */
+  tourSkippedCount: number
   _approximated?: boolean
 }
 
@@ -179,7 +183,35 @@ export interface AdminUserActionItem {
   name: string
   status: string
   adminRole?: string | null
+  planType?: string
+  fsBalance?: number
 }
+
+// ─── Motor Layers Config ──────────────────────────────────────────────────────
+
+export type ClusterKey = 'A_TOP' | 'A_MID' | 'A_SMALL' | 'B_LIQUID' | 'B_ILLIQ'
+export type SessionKey = 'OPEN' | 'MID' | 'PRE_CLOSE' | 'CLOSE' | 'OVERNIGHT'
+
+export interface OUClusterParams { sigma: number; theta: number; spread_base: number }
+export interface OFIClusterParams { rho: number }
+export interface SessionParams { vol_multiplier: number }
+
+export interface MotorLayersConfig {
+  ou: { clusters: Record<ClusterKey, OUClusterParams> }
+  fundamentalReversion: { reversion_rate: number }
+  garch: { omega: number; alpha: number; beta: number; vol_cap: number }
+  ofi: { clusters: Record<ClusterKey, OFIClusterParams> }
+  kylesLambda: { lambda_scale: number }
+  supplyScaling: { amp_cap: number }
+  pressureQueue: { pressure_spread_ticks: number; absorption_ticks: number; spot_cap: number }
+  velocityCap: { max_per_tick: number }
+  circuitBreaker: { halt_trigger: number; halt_duration_s: number }
+  sessionManagement: { sessions: Record<SessionKey, SessionParams> }
+  updatedAt: string | null
+  updatedBy: string | null
+}
+
+// ─── Gateway Config ───────────────────────────────────────────────────────────
 
 /** GatewayConfig como retornado pela API admin/gateways/config */
 export interface GatewayConfig {

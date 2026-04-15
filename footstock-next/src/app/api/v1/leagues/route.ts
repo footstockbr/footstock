@@ -7,6 +7,9 @@ import { parsePagination, buildPagination } from '@/lib/api'
 import { leagueRepository } from '@/lib/repositories/LeagueRepository'
 import { LeagueError, LEAGUE_ERRORS } from '@/lib/errors/leagueErrors'
 import { createLeagueSchema } from '@/lib/validators/league.schema'
+import { requireActiveSubscription } from '@/lib/middleware/requireActiveSubscription'
+import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
+import type { UserPlan } from '@/lib/analytics'
 
 // GET /api/v1/leagues
 export async function GET(request: NextRequest) {
@@ -38,6 +41,10 @@ export async function POST(request: NextRequest) {
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()
 
+  // Criação de ligas bloqueada em CANCELLATION_LOCK
+  const lockGuard = await requireActiveSubscription(auth.user.id, 'CREATE_LEAGUE')
+  if (lockGuard) return lockGuard
+
   try {
     const body = await request.json()
     const parsed = createLeagueSchema.safeParse(body)
@@ -51,7 +58,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { type, duration, division, name, emblemUrl, sponsorId } = parsed.data
+    const { type, duration, division, name, emblemUrl, sponsorId, permiteAlavancagem } = parsed.data
 
     // planGuard server-side — CRÍTICO: nunca confiar no cliente
     if (type === 'AMIGOS' && !hasPlan(auth.user.planType, 'CRAQUE')) {
@@ -62,11 +69,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (type === 'PRO' && !hasPlan(auth.user.planType, 'LENDA')) {
+    // Ligas PRO são criadas exclusivamente por admins via /api/v1/admin/leagues
+    if (type === 'PRO') {
       return apiError(
-        LEAGUE_ERRORS.PLAN_RESTRICTION.code,
-        'Criação de ligas PRO disponível apenas para o plano Lenda.',
-        LEAGUE_ERRORS.PLAN_RESTRICTION.status
+        'LEAGUE_ADMIN_ONLY',
+        'Ligas PRO são criadas exclusivamente por administradores.',
+        403
       )
     }
 
@@ -78,10 +86,19 @@ export async function POST(request: NextRequest) {
       emblemUrl,
       sponsorId,
       createdBy: auth.user.id,
+      // permiteAlavancagem só tem efeito em ligas PRO (ignorado em PUBLICA/AMIGOS)
+      permiteAlavancagem: permiteAlavancagem ?? false,
     })
 
     // Adicionar criador como primeiro membro
     await leagueRepository.addMember(league.id, auth.user.id)
+
+    // EVT-026: league_created — rastreia criacao de liga
+    mixpanelServer.trackLeagueCreated(auth.user.id, {
+      league_type: 'FRIENDS',
+      duration: duration as 'week' | 'month' | 'season',
+      plan: (auth.user.planType ?? 'JOGADOR') as UserPlan,
+    })
 
     return created(league)
   } catch (err) {

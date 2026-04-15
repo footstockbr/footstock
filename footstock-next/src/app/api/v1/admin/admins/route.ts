@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withAdmin } from '@/app/api/middleware'
 import { prisma } from '@/lib/prisma'
+import { adminAuditService } from '@/lib/services/shared'
 import type { AuthContext } from '@/app/api/middleware'
 import { ADMIN_ROLE } from '@/lib/enums'
 
@@ -92,6 +93,13 @@ async function postHandler(req: NextRequest, ctx: AuthContext): Promise<NextResp
       planType: true,
       updatedAt: true,
     },
+  })
+
+  // Auditoria obrigatória — ação de config de admin (spec §Configurações)
+  await adminAuditService.log({
+    adminId: ctx.user.id,
+    action: 'CONFIG_ADMIN_CREATE',
+    details: { targetId: target.id, targetEmail: email, assignedRole: parsed.data.role },
   })
 
   return NextResponse.json({ success: true, data: updated }, { status: 201 })

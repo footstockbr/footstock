@@ -2,34 +2,33 @@
 
 import { useEffect, useRef } from 'react'
 
+const SW_PATH = '/sw-push.js'
+
 /**
- * Registra o Service Worker de Web Push e solicita permissao de notificacoes.
- * Deve ser chamado apos o login, quando o userId esta disponivel.
+ * Registra o Service Worker de Web Push silenciosamente.
+ * NAO solicita permissao — isso e responsabilidade de usePushNotification.
+ * Se usuario ja tem permissao granted E ja tem chave VAPID configurada,
+ * sincroniza a subscription existente sem pedir nada ao usuario.
  */
 export function usePushRegistration(userId?: string | null) {
-  const registeredRef = useRef(false)
+  const syncedRef = useRef(false)
 
   useEffect(() => {
-    if (!userId || registeredRef.current) return
+    if (!userId || syncedRef.current) return
     if (typeof window === 'undefined') return
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
+    if (Notification.permission !== 'granted') return
 
-    const registerPush = async () => {
+    const syncSubscription = async () => {
       try {
-        const reg = await navigator.serviceWorker.register('/sw-push.js')
-        const permission = await Notification.requestPermission()
-
-        if (permission !== 'granted') return
-
+        const reg = await navigator.serviceWorker.register(SW_PATH)
         const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
         if (!vapidKey) return
 
-        const sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: vapidKey,
-        })
+        const existingSub = await reg.pushManager.getSubscription()
+        if (!existingSub) return
 
-        const json = sub.toJSON()
+        const json = existingSub.toJSON()
         if (!json.endpoint || !json.keys) return
 
         await fetch('/api/v1/push/subscribe', {
@@ -44,12 +43,12 @@ export function usePushRegistration(userId?: string | null) {
           }),
         })
 
-        registeredRef.current = true
+        syncedRef.current = true
       } catch {
         // Falha silenciosa — push e complementar ao inbox in-app
       }
     }
 
-    registerPush()
+    syncSubscription()
   }, [userId])
 }

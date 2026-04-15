@@ -11,6 +11,8 @@ import { calculateFee } from '@/lib/services/plan-order-limits'
 import { validateTransition } from '@/lib/contracts/order-contract'
 import { verifyNonNegativeBalance } from '@/lib/contracts/transaction-contract'
 import { AppError } from '@/lib/services/OrderService'
+import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
+import { LEVERAGE_DAILY_INTEREST_RATE } from '@/lib/constants/leverage'
 import type { Order, Position, Transaction } from '@prisma/client'
 
 export interface PositionWithPnL extends Position {
@@ -41,7 +43,7 @@ export class TransactionService {
     order: Order & { asset: { id: string; ticker: string; currentPrice: import('@prisma/client').Prisma.Decimal } },
     executionPrice: number,
   ): Promise<{ transaction: Transaction; position: Position }> {
-    return await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       // Buscar usuário com dados mais recentes (lock implícito no Prisma)
       const user = await tx.user.findUniqueOrThrow({ where: { id: order.userId } })
 
@@ -52,8 +54,11 @@ export class TransactionService {
       let fsAmount: number
 
       if (order.side === 'BUY') {
-        const leverageDiv = 1  // leverage removed from order schema
-        totalCost = operationValue / leverageDiv + feeAmount
+        // Para ordens alavancadas, o usuário já pagou 50% na criação da ordem (OrderService).
+        // Na execução, registramos o custo real apenas do capital próprio (50% + fee).
+        const levMult = Number(order.leverageMultiplier) >= 2 ? 2 : 1
+        const ownFraction = levMult === 2 ? 0.5 : 1
+        totalCost = operationValue * ownFraction + feeAmount
         fsAmount = -totalCost
       } else {
         // SELL: recebe valor - taxa
@@ -100,17 +105,31 @@ export class TransactionService {
       })
 
       if (order.side === 'BUY') {
+        const isLevered = Number(order.leverageMultiplier) >= 2
+        // Crédito virtual = metade do nocional (plataforma financia a outra metade)
+        const newLeverageAmount = isLevered ? (order.quantity * executionPrice) / 2 : 0
+
         if (existingPos) {
           const existingQty = Number(existingPos.quantity)
           const existingAvg = Number(existingPos.avgPrice)
           const orderQty = Number(order.quantity)
           const newQty = existingQty + orderQty
           const newAvg = (existingQty * existingAvg + orderQty * executionPrice) / newQty
+          // Agregar leverageAmount da nova parcela alavancada à posição existente
+          const updatedLeverageAmount = Number(existingPos.leverageAmount) + newLeverageAmount
+          const updatedLeverageMult = isLevered
+            ? Math.max(Number(existingPos.leverageMultiplier), 2)
+            : Number(existingPos.leverageMultiplier)
           position = await tx.position.update({
             where: { id: existingPos.id },
             data: {
               quantity: newQty,
               avgPrice: newAvg,
+              ...(isLevered && {
+                leverageMultiplier: updatedLeverageMult,
+                leverageAmount: updatedLeverageAmount,
+                dailyInterestRate: LEVERAGE_DAILY_INTEREST_RATE,
+              }),
             },
           })
         } else {
@@ -122,6 +141,9 @@ export class TransactionService {
               avgPrice: executionPrice,
               totalInvested: order.quantity * executionPrice,
               side: 'LONG',
+              leverageMultiplier: isLevered ? 2 : 1,
+              leverageAmount: newLeverageAmount,
+              dailyInterestRate: isLevered ? LEVERAGE_DAILY_INTEREST_RATE : 0,
             },
           })
         }
@@ -130,16 +152,31 @@ export class TransactionService {
         if (!existingPos || Number(existingPos.quantity) < Number(order.quantity)) {
           throw new AppError('ORDER_050', 402, { message: 'Posição insuficiente para venda.' })
         }
-        const newQty = Number(existingPos.quantity) - Number(order.quantity)
+        const existingQty = Number(existingPos.quantity)
+        const sellQty = Number(order.quantity)
+        const newQty = existingQty - sellQty
+
+        // Amortizar leverageAmount proporcionalmente à quantidade vendida
+        const existingLevAmount = Number(existingPos.leverageAmount)
+        const amortizedLevAmount = existingLevAmount > 0
+          ? (existingLevAmount * (sellQty / existingQty))
+          : 0
+        const newLevAmount = Math.max(0, existingLevAmount - amortizedLevAmount)
+
         position = await tx.position.update({
           where: { id: existingPos.id },
           data: newQty > 0
-            ? { quantity: newQty }
-            : { quantity: 0, status: 'CLOSED' },
+            ? {
+                quantity: newQty,
+                leverageAmount: newLevAmount,
+                // Se leverageAmount zerou, resetar taxa de juros
+                ...(newLevAmount <= 0 && { leverageMultiplier: 1, dailyInterestRate: 0 }),
+              }
+            : { quantity: 0, status: 'CLOSED', leverageAmount: 0, leverageMultiplier: 1, dailyInterestRate: 0 },
         })
       }
 
-      // Criar registro de transação
+      // Transaction TRADE — registra a operação principal
       const transaction = await tx.transaction.create({
         data: {
           userId: order.userId,
@@ -158,8 +195,73 @@ export class TransactionService {
         },
       })
 
+      // Transaction FEE — linha separada no extrato para rastreabilidade da taxa
+      // Idempotência: ignora se já existe FEE para esta ordem (proteção contra retry)
+      const existingFee = await tx.transaction.findFirst({
+        where: { orderId: order.id, financialType: 'FEE' },
+        select: { id: true },
+      })
+      if (!existingFee) {
+        await tx.transaction.create({
+          data: {
+            userId: order.userId,
+            assetId: order.assetId,
+            orderId: order.id,
+            type: order.type,
+            financialType: 'FEE',
+            side: order.side,
+            quantity: order.quantity,
+            price: executionPrice,
+            fee: feeAmount,
+            totalAmount: feeAmount,
+            fsAmount: -feeAmount,
+            balanceBefore: null,
+            balanceAfter: null,
+          },
+        })
+      }
+
       return { transaction, position }
     })
+
+    // EVT-013: rastrear execucao da ordem (North Star KPI)
+    // Calcula execution_delay_ms e lê sessão de mercado do Redis de forma assíncrona
+    const executionTimestamp = Date.now()
+    const orderCreatedMs = order.createdAt instanceof Date ? order.createdAt.getTime() : new Date(order.createdAt).getTime()
+    const executionDelayMs = executionTimestamp - orderCreatedMs
+
+    // Buscar plano e sessão de forma assíncrona — analytics nunca bloqueia o retorno
+    Promise.all([
+      prisma.user.findUnique({ where: { id: order.userId }, select: { planType: true } }),
+      redis.get('market:session').catch(() => null),
+    ]).then(([user, sessionStr]) => {
+      const plan = (user?.planType ?? 'JOGADOR') as 'JOGADOR' | 'CRAQUE' | 'LENDA'
+      const marketSession = (sessionStr ?? 'TRADING') as 'PRE_MARKET' | 'TRADING' | 'CALL' | 'AFTER' | 'CLOSED'
+      mixpanelServer.trackOrderExecuted(order.userId, {
+        asset_ticker: order.asset.ticker,
+        order_type: order.type as 'MARKET' | 'LIMIT' | 'SCHEDULED' | 'OCO' | 'SHORT',
+        side: order.side as 'BUY' | 'SELL',
+        plan,
+        execution_delay_ms: executionDelayMs,
+        market_session: marketSession,
+      })
+    }).catch(() => { /* analytics nunca deve quebrar o backend */ })
+
+    // T-019: notificar usuário quando saldo chega a zero (fora da tx Prisma, sem bloquear resultado)
+    // Re-lê o saldo do usuário de forma assíncrona para checar se chegou a zero
+    prisma.user.findUnique({ where: { id: order.userId }, select: { fsBalance: true } })
+      .then((u) => {
+        if (u && Number(u.fsBalance) <= 0) {
+          redis.publish(`notifications:${order.userId}`, JSON.stringify({
+            type: 'BALANCE_ZERO',
+            message: 'Seu saldo FS$ chegou a zero. Venda posicoes para negociar novamente.',
+            balance: Number(u.fsBalance),
+          })).catch(() => { /* silencioso */ })
+        }
+      })
+      .catch(() => { /* silencioso */ })
+
+    return result
   }
 
   /**

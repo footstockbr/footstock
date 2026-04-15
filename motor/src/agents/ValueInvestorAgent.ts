@@ -2,7 +2,7 @@ import { BaseAgent, type AgentDecision, type MarketContext } from './BaseAgent'
 
 /**
  * ValueInvestorAgent — opera baseado em desconto/prêmio em relação ao fair value.
- * Opera apenas em NEGOCIACAO e AFTER_MARKET.
+ * Opera apenas em TRADING e AFTER_MARKET.
  */
 export class ValueInvestorAgent extends BaseAgent {
   constructor(weight = 1) {
@@ -10,8 +10,8 @@ export class ValueInvestorAgent extends BaseAgent {
   }
 
   decide(ctx: MarketContext): AgentDecision {
-    const allowedSessions = ['NEGOCIACAO', 'AFTER_MARKET'] as const
-    if (!allowedSessions.includes(ctx.session as 'NEGOCIACAO' | 'AFTER_MARKET')) {
+    const allowedSessions = ['TRADING', 'AFTER_MARKET'] as const
+    if (!allowedSessions.includes(ctx.session as 'TRADING' | 'AFTER_MARKET')) {
       return { side: 'HOLD', quantity: 0, priceModifier: 0, reason: 'session_not_allowed' }
     }
 

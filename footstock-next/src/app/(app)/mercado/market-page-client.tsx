@@ -1,20 +1,48 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AssetCard, AssetCardSkeleton, type AssetData } from "@/components/market/asset-card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { MarketSessionBadge } from "@/components/market/MarketSessionBadge";
+import { useAllMarketTicks } from "@/hooks/useAllMarketTicks";
+import { useBalance } from "@/hooks/useBalance";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 type Division = "all" | "SERIE_A" | "SERIE_B";
 type SentimentFilter = "all" | "positive" | "neutral" | "negative";
 
 export function MarketPageClient() {
-  const [assets, setAssets] = useState<AssetData[]>([]);
+  const [baseAssets, setBaseAssets] = useState<AssetData[]>([]);
   const [search, setSearch] = useState("");
   const [division, setDivision] = useState<Division>("all");
   const [sentiment, setSentiment] = useState<SentimentFilter>("all");
   const [isLoading, setIsLoading] = useState(true);
+  const { track } = useAnalytics();
+  const trackedRef = useRef(false);
+
+  // Preços em tempo real via SSE (substitui valores do fetch inicial)
+  const tickMap = useAllMarketTicks();
+  // T-019: saldo zero bloqueia compras
+  const { fsBalance } = useBalance();
+  const isBalanceZero = fsBalance !== null && fsBalance <= 0;
+
+  // Merge preços e estado de halt em tempo real sobre a lista base
+  const assets = useMemo<AssetData[]>(() => {
+    if (Object.keys(tickMap).length === 0) return baseAssets;
+    return baseAssets.map((a) => {
+      const live = tickMap[a.ticker];
+      if (!live) return a;
+      return {
+        ...a,
+        price: live.lastPrice,
+        change24h: Math.round(live.change24h * 100) / 100,
+        halted: live.isHalted,
+        haltedUntil: live.haltedUntil ?? null,
+      };
+    });
+  }, [baseAssets, tickMap]);
 
   useEffect(() => {
     async function fetchAssets() {
@@ -33,22 +61,24 @@ export function MarketPageClient() {
           sentiment: string;
           division: string;
           colors: { primary: string };
+          isHalted?: boolean;
         }) => {
           const change24h = a.openPrice > 0
             ? ((a.currentPrice - a.openPrice) / a.openPrice) * 100
             : 0;
           return {
             ticker: a.ticker,
-            name: a.displayName,
+            displayName: a.displayName,
             price: a.currentPrice,
             change24h: Math.round(change24h * 100) / 100,
             sentiment: a.sentiment as AssetData["sentiment"],
             sparkData: [],
             division: a.division as AssetData["division"],
             clubColor: a.colors.primary,
+            halted: a.isHalted ?? false,
           };
         });
-        setAssets(mapped);
+        setBaseAssets(mapped);
       } catch {
         // silently fail, show empty state
       } finally {
@@ -58,12 +88,27 @@ export function MarketPageClient() {
     fetchAssets();
   }, []);
 
-  const filtered = useMemo(() => {
+  // EVT-016: market_list_viewed — rastreia quando a página do mercado é visualizada
+  useEffect(() => {
+    if (trackedRef.current) return;
+    trackedRef.current = true;
+
+    const filterApplied = division !== "all" || sentiment !== "all";
+    const filterType = division !== "all" ? "division" : sentiment !== "all" ? "sentiment" : undefined;
+
+    track("market_list_viewed", {
+      plan: "JOGADOR" as const, // plano real é resolvido pelo provider via identify
+      filter_applied: filterApplied,
+      filter_type: filterType,
+    });
+  }, [track, division, sentiment]);
+
+  const filtered = useMemo<AssetData[]>(() => {
     return assets.filter((a) => {
       const matchSearch =
         !search ||
         a.ticker.toLowerCase().includes(search.toLowerCase()) ||
-        a.name.toLowerCase().includes(search.toLowerCase());
+        a.displayName.toLowerCase().includes(search.toLowerCase());
 
       const matchDivision = division === "all" || a.division === division;
 
@@ -85,6 +130,24 @@ export function MarketPageClient() {
 
   return (
     <div className="flex flex-col" data-testid="mercado-page">
+      {/* T-019: banner saldo zerado — visivel no topo da tela de mercado */}
+      {isBalanceZero && (
+        <div
+          role="alert"
+          data-testid="market-balance-zero-banner"
+          className="flex items-center gap-2 text-sm text-[#F6465D] bg-[rgba(246,70,93,.08)] border-b border-[rgba(246,70,93,.2)] px-4 py-2.5"
+        >
+          <span aria-hidden="true" className="flex-shrink-0">&#9888;</span>
+          Saldo zerado — venda posicoes para negociar novamente.
+        </div>
+      )}
+
+      {/* Session badge — visivel na tela de mercado (T-008) */}
+      <div className="px-4 pt-3 pb-2 flex items-center justify-between border-b border-[rgba(240,185,11,.08)]">
+        <span className="text-xs font-medium text-[#929AA5]">Sessão atual</span>
+        <MarketSessionBadge />
+      </div>
+
       {/* Search */}
       <div className="px-4 pt-4 pb-3 border-b border-[rgba(240,185,11,.08)]">
         <div className="relative">
@@ -185,6 +248,7 @@ export function MarketPageClient() {
       ) : (
         <div
           data-testid="market-list"
+          data-tour="market-list"
           className="flex flex-col gap-2 p-4 md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
         >
           {filtered.map((asset) => (

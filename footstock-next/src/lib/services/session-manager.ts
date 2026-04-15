@@ -19,11 +19,13 @@ export interface SessionWindow {
   volatilityMultiplier: number
 }
 
+// Horários BRT (America/Sao_Paulo) — espelho do motor Railway
+// TRADING cruza meia-noite: 11:00 → 00:45 (endHour usa 24+ para representar wrap)
 const SESSION_SCHEDULE: SessionWindow[] = [
-  { type: MarketSession.PRE_MARKET,   startHour: 10, startMinute: 45, endHour: 11, endMinute: 0,  volatilityMultiplier: 0.30 },
-  { type: MarketSession.REGULAR,      startHour: 11, startMinute: 0,  endHour: 17, endMinute: 30, volatilityMultiplier: 1.00 },
-  // AFTER_MARKET: 17:30 → 01:30 (cruza meia-noite — endHour usa 24+ para representar wrap)
-  { type: MarketSession.AFTER_MARKET, startHour: 17, startMinute: 30, endHour: 25, endMinute: 30, volatilityMultiplier: 0.10 },
+  { type: MarketSession.PRE_OPENING,  startHour: 10, startMinute: 45, endHour: 11,  endMinute: 0,  volatilityMultiplier: 0.30 },
+  { type: MarketSession.TRADING,      startHour: 11, startMinute: 0,  endHour: 24,  endMinute: 45, volatilityMultiplier: 1.00 },
+  { type: MarketSession.CLOSING_CALL, startHour: 0,  startMinute: 45, endHour: 1,   endMinute: 0,  volatilityMultiplier: 0.20 },
+  { type: MarketSession.AFTER_MARKET, startHour: 1,  startMinute: 0,  endHour: 1,   endMinute: 30, volatilityMultiplier: 0.10 },
 ]
 
 export interface NextTransition {
@@ -89,7 +91,7 @@ export function getNextTransition(now = new Date()): NextTransition {
 
 export function isMarketOpen(now = new Date()): boolean {
   const s = getCurrentSession(now)
-  return s === MarketSession.REGULAR || s === MarketSession.PRE_MARKET
+  return s === MarketSession.TRADING || s === MarketSession.PRE_OPENING || s === MarketSession.CLOSING_CALL
 }
 
 export function getSessionLabel(session: MarketSession): string {

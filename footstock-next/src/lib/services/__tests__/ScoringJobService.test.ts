@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
 // module-20: ScoringJobService unit tests — cron auth, LEAGUE_RESULT, degraded mode
 import { ScoringJobService } from '../ScoringJobService'
 
@@ -15,15 +14,15 @@ jest.mock('@/lib/prisma', () => ({
   },
 }))
 
-jest.mock('../ScoringEngine', () => ({
-  ScoringEngine: jest.fn().mockImplementation(() => ({
-    calcularScore: jest.fn().mockResolvedValue({
-      rentabilidade: 10, sofisticacao: 8, diversificacao: 6,
-      consistencia: 4, bonusEducativo: 2, total: 30, finalScore: 30, fatorEquidade: 1.0,
-    }),
-    salvarScore: jest.fn().mockResolvedValue(undefined),
-    recalcularRanks: jest.fn().mockResolvedValue(undefined),
-  })),
+// ScoringJobService now delegates to leagueScoreService (not ScoringEngine directly)
+jest.mock('@/lib/services/leagues/LeagueScoreService', () => ({
+  leagueScoreService: {
+    executarPipelineCompleto: jest.fn().mockResolvedValue({ processed: 0, errors: 0 }),
+  },
+}))
+
+jest.mock('../LeagueTrophyService', () => ({
+  leagueTrophyService: { awardTrophies: jest.fn().mockResolvedValue(undefined) },
 }))
 
 // mockNotifSend must live inside the factory to avoid "before initialization" error
@@ -33,13 +32,16 @@ jest.mock('../NotificationService', () => ({
 }))
 
 import { prisma } from '@/lib/prisma'
+import { leagueScoreService } from '@/lib/services/leagues/LeagueScoreService'
 import { notificationService } from '../NotificationService'
 
 const mockPrisma = prisma as jest.Mocked<typeof prisma>
+const mockPipeline = leagueScoreService.executarPipelineCompleto as jest.Mock
 const mockNotifSend = notificationService.sendNotification as jest.Mock
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockPipeline.mockResolvedValue({ processed: 0, errors: 0 })
   mockNotifSend.mockResolvedValue(undefined)
 })
 
@@ -58,13 +60,14 @@ describe('ScoringJobService', () => {
     })
 
     it('processes each member in active leagues', async () => {
+      mockPipeline.mockResolvedValueOnce({ processed: 2, errors: 0 })
       ;(mockPrisma.league.findMany as jest.Mock).mockResolvedValue([
         {
           id: 'l1',
           name: 'Liga Ativa',
-          division: 'ABERTA',
+          type: 'PUBLICA',
+          division: 'OPEN',
           endsAt: null,
-          createdBy: null,
           members: [{ userId: 'u1' }, { userId: 'u2' }],
         },
       ])
@@ -74,21 +77,14 @@ describe('ScoringJobService', () => {
 
       expect(result.processed).toBe(2)
       expect(result.errors).toBe(0)
+      expect(mockPipeline).toHaveBeenCalledWith('l1')
     })
 
-    it('counts individual member failures as errors without stopping', async () => {
-      const { ScoringEngine } = require('../ScoringEngine')
-      ;(ScoringEngine as jest.Mock).mockImplementationOnce(() => ({
-        calcularScore: jest.fn()
-          .mockResolvedValueOnce({ rentabilidade: 10, sofisticacao: 5, diversificacao: 5, consistencia: 0, bonusEducativo: 0, total: 20, finalScore: 20, fatorEquidade: 1.0 })
-          .mockRejectedValueOnce(new Error('Provider failure')),
-        salvarScore: jest.fn().mockResolvedValue(undefined),
-        recalcularRanks: jest.fn().mockResolvedValue(undefined),
-      }))
-
+    it('counts pipeline failures as errors without stopping other leagues', async () => {
+      mockPipeline.mockRejectedValueOnce(new Error('Pipeline failure'))
       ;(mockPrisma.league.findMany as jest.Mock).mockResolvedValue([
         {
-          id: 'l1', name: 'Liga', division: 'ABERTA', endsAt: null, createdBy: null,
+          id: 'l1', name: 'Liga', type: 'PUBLICA', division: 'OPEN', endsAt: null,
           members: [{ userId: 'u1' }, { userId: 'u2' }],
         },
       ])
@@ -96,7 +92,7 @@ describe('ScoringJobService', () => {
       const service = new ScoringJobService()
       const result = await service.recalcularTodasLigas()
 
-      // One success, one failure counted as error
+      // Pipeline throw counted as one error
       expect(result.errors).toBeGreaterThanOrEqual(1)
     })
 
@@ -106,9 +102,9 @@ describe('ScoringJobService', () => {
         {
           id: 'l-ended',
           name: 'Liga Encerrada',
+          type: 'PUBLICA',
           division: 'PRATA',
           endsAt: pastDate,
-          createdBy: 'u-owner',
           members: [{ userId: 'u1' }],
         },
       ])
@@ -126,23 +122,15 @@ describe('ScoringJobService', () => {
       )
     })
 
-    it('sends LEAGUE_RESULT notification to members on league end (outside quiet hours)', async () => {
-      // Create pastDate BEFORE mocking global.Date (mock ignores constructor args)
-      const pastDate = new Date('2024-06-14T12:00:00Z')
-
-      // Force non-quiet hour: mock Date to 15h UTC (12h BRT)
-      const realDate = global.Date
-      const mockNow = new Date('2024-06-15T15:00:00Z')
-      global.Date = jest.fn(() => mockNow) as unknown as typeof Date
-      ;(global.Date as unknown as { now: () => number }).now = realDate.now
-
+    it('sends LEAGUE_RESULT notification to members on league end', async () => {
+      const pastDate = new Date(Date.now() - 86400_000) // yesterday
       ;(mockPrisma.league.findMany as jest.Mock).mockResolvedValue([
         {
           id: 'l-notify',
           name: 'Liga Notify',
-          division: 'ABERTA',
+          type: 'PUBLICA',
+          division: 'OPEN',
           endsAt: pastDate,
-          createdBy: null,
           members: [{ userId: 'u-member' }],
         },
       ])
@@ -152,56 +140,25 @@ describe('ScoringJobService', () => {
       const service = new ScoringJobService()
       await service.recalcularTodasLigas()
 
+      // ScoringJobService always calls sendNotification and relies on
+      // NotificationService to apply quiet hours deferral internally
       expect(mockNotifSend).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 'u-member',
           type: 'LEAGUE_RESULT',
         })
       )
-
-      global.Date = realDate
-    })
-
-    it('suppresses LEAGUE_RESULT notifications during BRT quiet hours (23h-7h)', async () => {
-      // Create pastDate BEFORE mocking global.Date
-      const pastDate = new Date('2024-06-14T12:00:00Z')
-
-      // Force quiet hour: 02h UTC = 23h BRT
-      const realDate = global.Date
-      const mockNow = new Date('2024-06-15T02:30:00Z')
-      global.Date = jest.fn(() => mockNow) as unknown as typeof Date
-      ;(global.Date as unknown as { now: () => number }).now = realDate.now
-
-      ;(mockPrisma.league.findMany as jest.Mock).mockResolvedValue([
-        {
-          id: 'l-quiet',
-          name: 'Liga Quiet',
-          division: 'ABERTA',
-          endsAt: pastDate, // pastDate was created before mock, so it's a real past date
-          createdBy: null,
-          members: [{ userId: 'u-quiet' }],
-        },
-      ])
-      ;(mockPrisma.league.update as jest.Mock).mockResolvedValue({})
-      ;(mockPrisma.leagueMember.findUnique as jest.Mock).mockResolvedValue({ rank: 3 })
-
-      const service = new ScoringJobService()
-      await service.recalcularTodasLigas()
-
-      expect(mockNotifSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'LEAGUE_RESULT' }))
-
-      global.Date = realDate
     })
 
     it('does not mark league FINISHED when endsAt is in the future', async () => {
-      const futureDate = new Date(Date.now() + 86400_000) // tomorrow
+      const futureDate = new Date(Date.now() + 86400_000)  // tomorrow
       ;(mockPrisma.league.findMany as jest.Mock).mockResolvedValue([
         {
           id: 'l-active',
           name: 'Liga Ativa',
-          division: 'ABERTA',
+          type: 'PUBLICA',
+          division: 'OPEN',
           endsAt: futureDate,
-          createdBy: null,
           members: [{ userId: 'u1' }],
         },
       ])

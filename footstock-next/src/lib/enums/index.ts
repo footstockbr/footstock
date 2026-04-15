@@ -82,23 +82,26 @@ export type AdminRole = (typeof ADMIN_ROLE)[keyof typeof ADMIN_ROLE];
 
 /** Sessões do pregão virtual (alinhado com Prisma SessionType) */
 export const SESSION_TYPE = {
-  /** Período de pré-abertura */
-  PRE_MARKET: 'PRE_MARKET',
-  /** Pregão regular de negociação */
-  REGULAR: 'REGULAR',
-  /** After-market com restrições */
+  /** Período de pré-abertura (10:45-11:00 BRT, volatilidade 30%) */
+  PRE_OPENING: 'PRE_OPENING',
+  /** Pregão de negociação (11:00-00:45 BRT, volatilidade 100%) */
+  TRADING: 'TRADING',
+  /** Call de fechamento (00:45-01:00 BRT, volatilidade 20%) */
+  CLOSING_CALL: 'CLOSING_CALL',
+  /** After-market com restrições (01:00-01:30 BRT, volatilidade 10%) */
   AFTER_MARKET: 'AFTER_MARKET',
-  /** Mercado fechado */
+  /** Mercado fechado (01:30-10:45 BRT, volatilidade 0%) */
   CLOSED: 'CLOSED',
 } as const;
 export type SessionType = (typeof SESSION_TYPE)[keyof typeof SESSION_TYPE];
 
 /** Labels em português para exibição de sessões no UI */
 export const SESSION_TYPE_LABELS: Record<SessionType, string> = {
-  PRE_MARKET: 'Pré-Abertura',
-  REGULAR: 'Negociação',
-  AFTER_MARKET: 'After Market',
-  CLOSED: 'Fechado',
+  PRE_OPENING: 'Pré-Abertura',
+  TRADING: 'Negociação',
+  CLOSING_CALL: 'Call de Fechamento',
+  AFTER_MARKET: 'After-Market',
+  CLOSED: 'Mercado Fechado',
 };
 
 /** Perfil de investidor do usuário (alinhado com Prisma InvestorProfile) */
@@ -133,16 +136,27 @@ export const LEAGUE_TYPE = {
 } as const;
 export type LeagueType = (typeof LEAGUE_TYPE)[keyof typeof LEAGUE_TYPE];
 
-/** Tipos de notificação da plataforma */
+/** Tipos de evento financeiro administrativo (T-019) */
+export const FINANCIAL_EVENT_TYPE = {
+  /** Reset de saldo pelo administrador */
+  BALANCE_RESET: 'BALANCE_RESET',
+} as const;
+export type FinancialEventType = (typeof FINANCIAL_EVENT_TYPE)[keyof typeof FINANCIAL_EVENT_TYPE];
+
+/** Tipos de notificação da plataforma (23 tipos — T-014) */
 export const NOTIFICATION_TYPE = {
   /** Ordem executada com sucesso */
   ORDER_EXECUTED: 'ORDER_EXECUTED',
   /** Ordem cancelada */
   ORDER_CANCELLED: 'ORDER_CANCELLED',
-  /** Alerta de chamada de margem */
+  /** Aviso de margem — 50% consumida (não urgente) */
+  MARGIN_CALL_WARNING: 'MARGIN_CALL_WARNING',
+  /** Alerta crítico de margem — 80% consumida (urgente, ignora quiet hours) */
   MARGIN_CALL_ALERT: 'MARGIN_CALL_ALERT',
   /** Circuit breaker ativado */
   CIRCUIT_BREAKER: 'CIRCUIT_BREAKER',
+  /** Notícia publicada para clube favorito do usuário */
+  NEWS_FAVORITE_CLUB: 'NEWS_FAVORITE_CLUB',
   /** Pagamento confirmado */
   PAYMENT_CONFIRMED: 'PAYMENT_CONFIRMED',
   /** Pagamento falhou */
@@ -151,22 +165,44 @@ export const NOTIFICATION_TYPE = {
   PLAN_CANCEL_ALERT: 'PLAN_CANCEL_ALERT',
   /** Dividendo creditado */
   DIVIDEND_CREDITED: 'DIVIDEND_CREDITED',
-  /** Bônus creditado */
+  /** Bônus creditado após T+7 dias */
   BONUS_CREDITED: 'BONUS_CREDITED',
+  /** Bônus agendado — será creditado em T+7 dias após upgrade */
+  BONUS_SCHEDULED: 'BONUS_SCHEDULED',
+  /** Bônus cancelado — usuário cancelou dentro do período de carência (CDC Art. 49) */
+  BONUS_CANCELLED: 'BONUS_CANCELLED',
   /** Resultado de liga publicado */
   LEAGUE_RESULT: 'LEAGUE_RESULT',
-  /** Notícia publicada para clube favorito do usuário */
-  NEWS_FAVORITE_CLUB: 'NEWS_FAVORITE_CLUB',
   /** Comunicado do administrador do sistema */
   ADMIN_BROADCAST: 'ADMIN_BROADCAST',
   /** Comissão de afiliado recebida */
   AFFILIATE_COMMISSION_EARNED: 'AFFILIATE_COMMISSION_EARNED',
-  /** Usuário cadastrado via link de afiliado */
+  /** Usuário cadastrado via link de afiliado (notificação para o afiliado/referrer) */
   AFFILIATE_INVITE_JOINED: 'AFFILIATE_INVITE_JOINED',
   /** Trava de cancelamento ativada (48h para liquidação) */
   CANCELLATION_LOCK_ACTIVE: 'CANCELLATION_LOCK_ACTIVE',
   /** Posições liquidadas compulsoriamente */
   CANCELLATION_LOCK_LIQUIDATED: 'CANCELLATION_LOCK_LIQUIDATED',
+  /** Redefinição de senha solicitada (email only, urgente) */
+  PASSWORD_RESET: 'PASSWORD_RESET',
+  /** Exportação de dados LGPD pronta (email only) */
+  LGPD_EXPORT_READY: 'LGPD_EXPORT_READY',
+  /** Conta deletada — confirmação enviada antes da remoção (email only, urgente) */
+  ACCOUNT_DELETED: 'ACCOUNT_DELETED',
+  /** IP/conta bloqueada por tentativas excessivas de login (email only, urgente) */
+  BRUTE_FORCE_BLOCKED: 'BRUTE_FORCE_BLOCKED',
+  /** Manutenção programada do sistema (in-app + push) */
+  SYSTEM_MAINTENANCE: 'SYSTEM_MAINTENANCE',
+  /** Usuário se cadastrou via link de indicação (in-app para o indicado) */
+  REFERRAL_JOINED: 'REFERRAL_JOINED',
+  /** Saldo FS$ chegou a zero — usuário não pode mais criar ordens BUY (T-019) */
+  BALANCE_ZERO: 'BALANCE_ZERO',
+  /** Saldo FS$ resetado pelo administrador (T-019) */
+  BALANCE_RESET: 'BALANCE_RESET',
+  /** Verificação de maioridade pendente — FlagCheck indisponível no cadastro (T-023) */
+  AGE_VERIFICATION_PENDING: 'AGE_VERIFICATION_PENDING',
+  /** Verificação de maioridade concluída com sucesso (T-023) */
+  AGE_VERIFICATION_COMPLETED: 'AGE_VERIFICATION_COMPLETED',
 } as const;
 export type NotificationType = (typeof NOTIFICATION_TYPE)[keyof typeof NOTIFICATION_TYPE];
 
@@ -319,8 +355,16 @@ export type PositionVariant = (typeof POSITION_VARIANT)[keyof typeof POSITION_VA
 
 /** Tipo de dividendo distribuído */
 export const DIVIDEND_TYPE = {
+  // Legado (mantido para compatibilidade com dados existentes)
   ESPORTIVO: 'ESPORTIVO',
   FINANCEIRO: 'FINANCEIRO',
+  // Novos tipos canônicos (T-007)
+  /** Vitória ou título — % do tesouro simulado do clube */
+  SPORTING_RESULT: 'SPORTING_RESULT',
+  /** Mensal — clubes BULLISH com baixa dívida e alto free float */
+  FINANCIAL_PERIODIC: 'FINANCIAL_PERIODIC',
+  /** Yield diferencial por plano — CRAQUE/LENDA creditado, JOGADOR realizado na venda */
+  YIELD_DIFFERENTIAL: 'YIELD_DIFFERENTIAL',
 } as const;
 export type DividendType = (typeof DIVIDEND_TYPE)[keyof typeof DIVIDEND_TYPE];
 
@@ -329,8 +373,18 @@ export const DIVIDEND_STATUS = {
   CREDITED: 'CREDITED',
   PENDING: 'PENDING',
   EXPIRADO: 'EXPIRADO',
+  /** Bloqueado por plano — JOGADOR não recebe crédito automático */
+  BLOCKED_PLAN: 'BLOCKED_PLAN',
 } as const;
 export type DividendStatus = (typeof DIVIDEND_STATUS)[keyof typeof DIVIDEND_STATUS];
+
+/** Status do yield diferencial pendente (YieldDifferentialPending) */
+export const YIELD_DIFF_STATUS = {
+  PENDING: 'PENDING',
+  REALIZED: 'REALIZED',
+  UPGRADED: 'UPGRADED',
+} as const;
+export type YieldDiffStatus = (typeof YIELD_DIFF_STATUS)[keyof typeof YIELD_DIFF_STATUS];
 
 // ---------------------------------------------------------------------------
 // module-18: Forum Global & Glossário
@@ -426,3 +480,26 @@ export const MOTOR_STATUS = {
   DEGRADED: 'DEGRADED',
 } as const;
 export type MotorStatus = (typeof MOTOR_STATUS)[keyof typeof MOTOR_STATUS];
+
+// ---------------------------------------------------------------------------
+// Indicadores técnicos — gating por plano (TASK-011)
+// ---------------------------------------------------------------------------
+
+/** Tipos de indicador técnico disponíveis no gráfico */
+export const INDICATOR_TYPE = {
+  /** Candlestick OHLC — todos os planos */
+  OHLC: 'OHLC',
+  /** Volume — todos os planos */
+  VOLUME: 'VOLUME',
+  /** Bollinger Bands (SMA20 +/- 2σ) — todos os planos */
+  BOLLINGER: 'BOLLINGER',
+  /** Order Flow Imbalance — todos os planos */
+  OFI: 'OFI',
+  /** Média Móvel 9 períodos — Lenda only */
+  MM9: 'MM9',
+  /** Média Móvel 21 períodos — Lenda only */
+  MM21: 'MM21',
+  /** Modo comparação de ativos — Craque+ */
+  COMPARISON_MODE: 'COMPARISON_MODE',
+} as const;
+export type IndicatorType = (typeof INDICATOR_TYPE)[keyof typeof INDICATOR_TYPE];

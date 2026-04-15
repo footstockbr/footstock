@@ -5,15 +5,32 @@ import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ScoreBreakdown as ScoreBreakdownType } from '@/types'
 
+export interface P2EventDetail {
+  eventType: string
+  points: number
+  period: string
+}
+
+// Labels legíveis para tipos de evento P2
+const P2_LABELS: Record<string, string> = {
+  LIMIT_ORDER_USED: 'Ordem Limitada',
+  OCO_ORDER_USED: 'Ordem OCO',
+  SHORT_PROFITABLE_CLOSED: 'Short com Lucro',
+  SCHEDULED_ORDER_USED: 'Ordem Agendada',
+  AI_ASSESSOR_CONSULTED: 'IA Assessor',
+  GLOSSARY_5_TERMS: 'Glossário 5 Termos',
+}
+
 interface Props {
   score: ScoreBreakdownType
   userName?: string
+  p2Events?: P2EventDetail[]
   onClose: () => void
   triggerRef: React.RefObject<HTMLElement>
 }
 
 interface Pillar {
-  key: keyof Omit<ScoreBreakdownType, 'total' | 'finalScore' | 'fatorEquidade'>
+  key: keyof Omit<ScoreBreakdownType, 'total' | 'finalScore' | 'fatorEquidade' | 'equityFactorApplied'>
   label: string
   max: number
   color: string
@@ -27,7 +44,7 @@ const PILLARS: Pillar[] = [
   { key: 'bonusEducativo', label: 'Bônus Educativo',max: 5,  color: 'bg-rose-500'    },
 ]
 
-export function ScoreBreakdown({ score, userName, onClose, triggerRef }: Props) {
+export function ScoreBreakdown({ score, userName, p2Events, onClose, triggerRef }: Props) {
   const dialogRef = useRef<HTMLDivElement>(null)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
 
@@ -140,9 +157,12 @@ export function ScoreBreakdown({ score, userName, onClose, triggerRef }: Props) 
             {score.finalScore.toFixed(1)}
           </span>
           <span className="text-xs text-gray-500">/ 100 pts</span>
-          {score.fatorEquidade !== 1 && (
-            <span className="ml-auto text-xs text-gray-500">
-              ×{score.fatorEquidade.toFixed(1)} equidade
+          {score.equityFactorApplied && score.fatorEquidade !== 1 && (
+            <span
+              className="ml-auto text-xs text-blue-400"
+              title={`Fator de equidade ×${score.fatorEquidade.toFixed(2)} aplicado ao Pilar 1 (liga OPEN)`}
+            >
+              ×{score.fatorEquidade.toFixed(2)} P1
             </span>
           )}
         </div>
@@ -180,9 +200,32 @@ export function ScoreBreakdown({ score, userName, onClose, triggerRef }: Props) 
           })}
         </ul>
 
+        {/* Detalhe de eventos P2 (Sofisticação Operacional) */}
+        {p2Events && p2Events.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-[#2a2724]">
+            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-2">
+              Sofisticação Operacional — Eventos
+            </p>
+            <ul className="space-y-1">
+              {p2Events.map((ev, i) => (
+                <li key={i} className="flex items-center justify-between">
+                  <span className="text-[11px] text-gray-400">
+                    {P2_LABELS[ev.eventType] ?? ev.eventType}
+                  </span>
+                  <span className="text-[11px] font-medium text-emerald-400">
+                    +{ev.points} pts
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Footer note */}
         <p className="mt-4 text-[10px] text-gray-600 leading-tight">
-          Score calculado com fator de equidade por divisão. Atualizado a cada hora.
+          {score.equityFactorApplied
+            ? 'Liga OPEN: fator de equidade aplicado ao Pilar 1 conforme plano. Atualizado diariamente.'
+            : 'Score calculado com base nos 5 pilares. Atualizado diariamente.'}
         </p>
       </div>
     </>

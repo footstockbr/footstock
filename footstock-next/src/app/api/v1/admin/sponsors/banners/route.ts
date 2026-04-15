@@ -1,8 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
+import { BANNER_POSITIONS } from '@/lib/types/sponsors'
 import type { User, AdminRole } from '@/types'
+
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
+
+const bannerCreateSchema = z.object({
+  title: z.string().min(1, 'Título obrigatório'),
+  company: z.string().min(1, 'Empresa obrigatória'),
+  position: z.enum(BANNER_POSITIONS),
+  isActive: z.boolean().optional().default(true),
+  color: z.string().regex(HEX_COLOR, 'Cor inválida (use #RRGGBB)').optional().default('#00B1EA'),
+  ctaText: z.string().min(1, 'Texto do CTA obrigatório'),
+  ctaColor: z.string().regex(HEX_COLOR, 'Cor CTA inválida (use #RRGGBB)').optional().default('#00B1EA'),
+  linkUrl: z.string().url('URL de destino inválida').optional().nullable(),
+  // Campos T-017: banner com imagem e vinculo a patrocinador
+  imageUrl:  z.string().url('imageUrl inválida').optional().nullable(),
+  sponsorId: z.string().cuid('sponsorId inválido').optional().nullable(),
+  width:     z.number().int().positive().optional().nullable(),
+  height:    z.number().int().positive().optional().nullable(),
+})
 
 export async function GET(request: NextRequest) {
   let auth = await getAuthUser()
@@ -26,6 +46,7 @@ export async function GET(request: NextRequest) {
         tourCompleted: false,
         ageVerificationPending: false,
         adminRole: adminRole as AdminRole,
+        version: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
@@ -74,6 +95,7 @@ export async function POST(request: NextRequest) {
         tourCompleted: false,
         ageVerificationPending: false,
         adminRole: adminRole as AdminRole,
+        version: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
@@ -91,10 +113,24 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { title, company, position, isActive, color, ctaText, ctaColor } = body
+    const parsed = bannerCreateSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: { code: 'VAL_001', message: 'Dados inválidos', fieldErrors: parsed.error.flatten().fieldErrors } },
+        { status: 422 }
+      )
+    }
+    const { title, company, position, isActive, color, ctaText, ctaColor, linkUrl, imageUrl, sponsorId, width, height } = parsed.data
 
     const banner = await prisma.sponsorBanner.create({
-      data: { title, company, position, isActive, color, ctaText, ctaColor },
+      data: {
+        title, company, position, isActive, color, ctaText, ctaColor,
+        linkUrl:   linkUrl   ?? null,
+        imageUrl:  imageUrl  ?? null,
+        sponsorId: sponsorId ?? null,
+        width:     width     ?? null,
+        height:    height    ?? null,
+      },
     })
 
     return ok(banner, 201)

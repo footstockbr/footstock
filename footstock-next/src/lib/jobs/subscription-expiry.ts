@@ -172,7 +172,7 @@ export async function processCancelledSubscriptions(): Promise<ProcessResult> {
     where: {
       cancelledAt: { not: null },
       expiresAt: { lt: now },
-      status: { notIn: ['CANCELLED', 'CANCELLATION_LOCK'] as never[] },
+      status: { notIn: ['CANCELLED'] as never[] },
     },
     select: { id: true, userId: true, planType: true, expiresAt: true },
   })

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,7 @@ import { formatCPF, formatPhone } from '@/lib/utils/validators'
 import { step1Schema, type Step1Data } from '@/lib/schemas/auth.schema'
 import type { WizardData } from '../register-wizard'
 import { maskDateInput, displayToIso } from '@/lib/utils/format'
+import { useState } from 'react'
 
 interface Step1Props {
   data: WizardData
@@ -29,9 +30,24 @@ export function Step1PersonalData({ data, onNext }: Step1Props) {
       phone: data.phone ?? '',
       birthDate: data.birthDate ?? '',
       cpf: data.cpf ?? '',
+      referredByCode: data.referredByCode ?? '',
     },
     mode: 'onBlur',
   })
+
+  // Se não há código no wizard, tenta ler o cookie fs_ref definido pelo /ref/[code]
+  // (fallback para usuário que acessou o link mas fechou e voltou direto para /cadastro)
+  useEffect(() => {
+    if (!data.referredByCode) {
+      const cookieRef = document.cookie
+        .split('; ')
+        .find((row) => row.startsWith('fs_ref='))
+        ?.split('=')[1]
+      if (cookieRef) {
+        setValue('referredByCode', decodeURIComponent(cookieRef).toUpperCase(), { shouldValidate: false })
+      }
+    }
+  }, [data.referredByCode, setValue])
 
   function handleBirthDateChange(e: React.ChangeEvent<HTMLInputElement>) {
     const masked = maskDateInput(e.target.value)
@@ -48,6 +64,12 @@ export function Step1PersonalData({ data, onNext }: Step1Props) {
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatPhone(e.target.value)
     setValue('phone', formatted, { shouldValidate: false })
+  }
+
+  const handleReferralChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setValue('referredByCode', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''), {
+      shouldValidate: false,
+    })
   }
 
   return (
@@ -106,6 +128,20 @@ export function Step1PersonalData({ data, onNext }: Step1Props) {
         hint="Seu CPF não é armazenado, apenas um código de verificação"
         error={errors.cpf?.message}
         {...register('cpf', { onChange: handleCPFChange })}
+      />
+
+      {/* Código de convite — opcional */}
+      <Input
+        data-testid="form-register-referral-input"
+        label="Código de convite (opcional)"
+        type="text"
+        placeholder="Ex.: PEDRO7K4M"
+        autoComplete="off"
+        inputMode="text"
+        maxLength={20}
+        hint="Se um amigo te indicou, insira o código aqui"
+        error={errors.referredByCode?.message}
+        {...register('referredByCode', { onChange: handleReferralChange })}
       />
 
       <Button

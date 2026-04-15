@@ -2,7 +2,8 @@
 
 // ============================================================================
 // Foot Stock — useMotorStatus
-// Polling do endpoint /api/v1/health/motor a cada 30s.
+// Polling do endpoint /api/v1/health/motor a cada 10s.
+// Frequência alinhada ao intervalo de publicação do heartbeat do motor.
 // Fail-safe: assume offline quando fetch falha.
 // ============================================================================
 
@@ -36,7 +37,7 @@ export function useMotorStatus(): UseMotorStatusReturn {
   const { data, isLoading, isError } = useQuery<MotorStatus, Error>({
     queryKey: ['motor-status'],
     queryFn: fetchMotorStatus,
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
     refetchIntervalInBackground: true,
     retry: 1,
   })

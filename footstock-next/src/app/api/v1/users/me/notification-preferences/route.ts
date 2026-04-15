@@ -1,64 +1,113 @@
-import { NextResponse } from 'next/server'
-import { getAuthUser } from '@/lib/auth/server'
-import { prisma } from '@/lib/prisma'
+// GET|PUT /api/v1/users/me/notification-preferences
+// module-19 — Preferências de notificação por tipo (23 tipos), persistidas no DB
+// Urgentes não podem ser desabilitadas (label "Obrigatória" no frontend)
+// Rastreabilidade: T-014, NOTIFICATION-SPEC.md
 
-const DEFAULT_PREFERENCES = [
-  'orders', 'news', 'leagues', 'payments', 'system',
-].flatMap((type) =>
-  ['push', 'email', 'in_app'].map((channel) => ({ type, channel, enabled: true }))
-)
+import { NextRequest } from 'next/server'
+import { z } from 'zod'
+import { getAuthUser } from '@/lib/auth'
+import { notificationRepository } from '@/lib/repositories/NotificationRepository'
+import { ok, errors, error as apiError } from '@/lib/api'
+import { NOTIFICATION_TYPE } from '@/lib/enums'
+
+// Tipos urgentes que não podem ser desabilitados
+const ALWAYS_ON_TYPES = new Set([
+  'MARGIN_CALL_ALERT',
+  'CIRCUIT_BREAKER',
+  'CANCELLATION_LOCK_ACTIVE',
+  'CANCELLATION_LOCK_LIQUIDATED',
+  'PASSWORD_RESET',
+  'ACCOUNT_DELETED',
+  'BRUTE_FORCE_BLOCKED',
+  'ADMIN_BROADCAST',
+  'PAYMENT_FAILED',
+  'ORDER_EXECUTED',
+])
+
+const ALL_TYPES = Object.values(NOTIFICATION_TYPE)
+
+const PreferenceItemSchema = z.object({
+  notificationType: z.string().refine((v) => ALL_TYPES.includes(v as never), {
+    message: 'Tipo de notificação inválido.',
+  }),
+  inAppEnabled: z.boolean().optional(),
+  pushEnabled: z.boolean().optional(),
+  emailEnabled: z.boolean().optional(),
+})
+
+const PutSchema = z.array(PreferenceItemSchema)
 
 /** GET /api/v1/users/me/notification-preferences */
 export async function GET() {
   const auth = await getAuthUser()
-  if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+  if (!auth) return errors.unauthorized()
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const prefs = await (prisma as any).notificationPreference?.findMany({
-      where: { userId: auth.user.id },
-    }) ?? []
+    const dbPrefs = await notificationRepository.getPreferences(auth.user.id)
 
-    if (!prefs.length) {
-      return NextResponse.json(DEFAULT_PREFERENCES)
-    }
+    // Retornar todos os 23 tipos com defaults (true) para tipos sem preferência salva
+    const result = ALL_TYPES.map((type) => {
+      const saved = dbPrefs[type]
+      const isUrgent = ALWAYS_ON_TYPES.has(type)
+      return {
+        notificationType: type,
+        inAppEnabled: isUrgent ? true : (saved?.inApp ?? true),
+        pushEnabled: isUrgent ? true : (saved?.push ?? true),
+        emailEnabled: isUrgent ? true : (saved?.email ?? true),
+        isUrgent,
+      }
+    })
 
-    return NextResponse.json(prefs.map((p: { type: string; channel: string; enabled: boolean }) => ({
-      type: p.type,
-      channel: p.channel,
-      enabled: p.enabled,
-    })))
+    return ok(result)
   } catch {
-    return NextResponse.json(DEFAULT_PREFERENCES)
+    return errors.server()
   }
 }
 
-/** PATCH /api/v1/users/me/notification-preferences */
-export async function PATCH(request: Request) {
+/** PUT /api/v1/users/me/notification-preferences */
+export async function PUT(request: NextRequest) {
   const auth = await getAuthUser()
-  if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+  if (!auth) return errors.unauthorized()
 
-  const preferences: Array<{ type: string; channel: string; enabled: boolean }> = await request.json()
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch {
+    return errors.validation()
+  }
 
-  if (!Array.isArray(preferences)) {
-    return NextResponse.json({ error: 'Body deve ser array de preferências' }, { status: 400 })
+  const parsed = PutSchema.safeParse(body)
+  if (!parsed.success) {
+    return apiError('VAL_001', 'Body deve ser array de preferências válidas.', 400)
   }
 
   try {
-    await Promise.all(
-      preferences.map((pref) =>
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (prisma as any).notificationPreference?.upsert({
-          where: { userId_type_channel: { userId: auth.user.id, type: pref.type, channel: pref.channel } },
-          update: { enabled: pref.enabled },
-          create: { userId: auth.user.id, type: pref.type, channel: pref.channel, enabled: pref.enabled },
-        }).catch(() => null)
-      )
-    )
+    for (const pref of parsed.data) {
+      if (ALWAYS_ON_TYPES.has(pref.notificationType)) continue // Urgentes não podem ser alterados
 
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error('[NotificationPreferences PATCH]', error)
-    return NextResponse.json({ error: 'Erro ao salvar preferências' }, { status: 500 })
+      await notificationRepository.upsertPreference(auth.user.id, pref.notificationType, {
+        inApp: pref.inAppEnabled,
+        push: pref.pushEnabled,
+        email: pref.emailEnabled,
+      })
+    }
+
+    // Retornar estado atualizado
+    const dbPrefs = await notificationRepository.getPreferences(auth.user.id)
+    const result = ALL_TYPES.map((type) => {
+      const saved = dbPrefs[type]
+      const isUrgent = ALWAYS_ON_TYPES.has(type)
+      return {
+        notificationType: type,
+        inAppEnabled: isUrgent ? true : (saved?.inApp ?? true),
+        pushEnabled: isUrgent ? true : (saved?.push ?? true),
+        emailEnabled: isUrgent ? true : (saved?.email ?? true),
+        isUrgent,
+      }
+    })
+
+    return ok(result)
+  } catch {
+    return errors.server()
   }
 }

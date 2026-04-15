@@ -87,5 +87,5 @@ export function AdminLayoutClient({
     };
   }, [renewActivity, handleTimeout]);
 
-  return <>{children}</>;
+  return <div data-testid="admin-layout" className="flex flex-1 flex-col min-w-0">{children}</div>;
 }

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { getAuthUser } from '@/lib/auth'
 import { subscriptionService } from '@/lib/services/SubscriptionService'
 import { ROUTES } from '@/lib/constants/routes'
-import { CancelSubscriptionButton } from '@/components/payments/CancelSubscriptionButton'
+import { SubscriptionActions } from '@/components/subscription/SubscriptionActions'
 import { PLAN_LABELS, SUBSCRIPTION_STATUS, getGatewayMeta } from '@/lib/constants/admin-ui'
 import { formatDateLong, formatBRLFromCents } from '@/lib/utils/format'
 
@@ -53,6 +53,7 @@ export default async function AssinaturaPage() {
   const planName = PLAN_LABELS[subscription.planType] ?? subscription.planType
   const statusInfo = SUBSCRIPTION_STATUS[subscription.status] ?? { label: subscription.status, color: 'text-[#929AA5]' }
   const canCancel = subscription.status === 'ACTIVE' || subscription.status === 'TRIAL'
+  const inCancellationLock = subscription.status === 'CANCELLATION_LOCK'
 
   return (
     <div data-testid="assinatura-page" className="px-4 pt-4 pb-8 flex flex-col gap-4">
@@ -133,34 +134,40 @@ export default async function AssinaturaPage() {
         </div>
       )}
 
-      {/* Cancelamento bloqueado */}
-      {subscription.cancellationLock && (
-        <div className="bg-[rgba(246,70,93,.06)] border border-[rgba(246,70,93,.2)] rounded-xl p-4 flex items-start gap-3">
-          <AlertCircle className="h-4 w-4 text-[#F6465D] mt-0.5 flex-shrink-0" />
-          <div>
-            <p className="text-sm font-medium text-[#F6465D]">Cancelamento em processamento</p>
-            <p className="text-xs text-[#929AA5] mt-0.5">
-              Seu acesso permanece ativo por mais {subscription.cancellationLock.hoursRemaining}h.
-            </p>
+      {/* CANCELLATION_LOCK: info e ações */}
+      {inCancellationLock && subscription.cancellationLock && (
+        <div className="bg-[rgba(246,70,93,.06)] border border-[rgba(246,70,93,.2)] rounded-xl p-4 flex flex-col gap-3">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-4 w-4 text-[#F6465D] mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-[#F6465D]">Cancelamento em andamento</p>
+              <p className="text-xs text-[#929AA5] mt-0.5">
+                Conta encerrada em {subscription.cancellationLock.hoursRemaining}h caso nao revertida.
+                Voce pode reverter o cancelamento abaixo.
+              </p>
+            </div>
           </div>
         </div>
       )}
 
       {/* Ações */}
       <div className="flex flex-col gap-3">
-        <Link
-          href={ROUTES.PLANOS}
-          className="block w-full text-center py-2.5 rounded-lg border border-[rgba(240,185,11,.3)] text-[#F0B90B] font-medium text-sm"
-          data-testid="change-plan-link"
-        >
-          Ver outros planos
-        </Link>
-
-        {canCancel && (
-          <CancelSubscriptionButton
-            isEligibleForRefund={subscription.isEligibleForRefund}
-          />
+        {!inCancellationLock && (
+          <Link
+            href={ROUTES.PLANOS}
+            className="block w-full text-center py-2.5 rounded-lg border border-[rgba(240,185,11,.3)] text-[#F0B90B] font-medium text-sm"
+            data-testid="change-plan-link"
+          >
+            Ver outros planos
+          </Link>
         )}
+
+        <SubscriptionActions
+          planType={subscription.planType}
+          status={subscription.status}
+          canCancel={canCancel}
+          isEligibleForRefund={subscription.isEligibleForRefund}
+        />
       </div>
 
       <p className="text-xs text-center text-[#707A8A]">

@@ -50,6 +50,33 @@ async function generateInvite(leagueId: string): Promise<{ inviteUrl: string }> 
   return json.data
 }
 
+async function revokeInvite(leagueId: string): Promise<void> {
+  const res = await fetch(`/api/v1/leagues/${leagueId}/invite`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Erro ao revogar convite')
+}
+
+interface P2EventItem {
+  eventType: string
+  points: number
+  period: string
+}
+
+interface MyScoreData {
+  breakdown: Record<string, number>
+  scoreTotal: number
+  rank: number
+  lastScoreAt: string
+  history: { date: string; rank: number; score: number }[]
+  p2Events: P2EventItem[]
+}
+
+async function fetchMyScore(leagueId: string): Promise<MyScoreData> {
+  const res = await fetch(`/api/v1/leagues/${leagueId}/my-score`)
+  if (!res.ok) throw new Error('Erro ao buscar score')
+  const json = await res.json()
+  return json.data
+}
+
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
 const STALE_TIME = 60_000 // 60s
@@ -103,5 +130,20 @@ export function useJoinLeague() {
 export function useGenerateInvite() {
   return useMutation({
     mutationFn: generateInvite,
+  })
+}
+
+export function useRevokeInvite() {
+  return useMutation({
+    mutationFn: revokeInvite,
+  })
+}
+
+export function useMyScore(leagueId: string) {
+  return useQuery({
+    queryKey: ['league-my-score', leagueId],
+    queryFn: () => fetchMyScore(leagueId),
+    staleTime: 5 * 60 * 1000, // 5 min
+    enabled: !!leagueId,
   })
 }

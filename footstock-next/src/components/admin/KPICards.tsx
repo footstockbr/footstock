@@ -24,23 +24,26 @@ function MotorBadge({ status }: { status: 'ONLINE' | 'OFFLINE' | 'DEGRADED' }) {
 
 export function KPICards({ data, isLoading }: KPICardsProps) {
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div data-testid="admin-kpi-cards" className="grid grid-cols-2 gap-3">
       {/* Removed: Usuários Totais (duplicated in UserStatsCard) */}
       {/* Removed: Planos Ativos (duplicated in UserStatsCard distribution) */}
       {/* Removed: MRR (duplicated in FinanceiroCard) */}
       {/* Removed: Ordens Hoje */}
 
       {/* Novos Hoje */}
-      <StatCard
-        label="Novos Hoje"
-        value={isLoading ? '—' : String(data?.newUsers24h ?? 0)}
-        icon={<UserPlus className="h-4 w-4" />}
-        isLoading={isLoading}
-        aria-label="Novos usuários nas últimas 24 horas"
-      />
+      <div data-testid="admin-kpi-card-novos-hoje">
+        <StatCard
+          label="Novos Hoje"
+          value={isLoading ? '—' : String(data?.newUsers24h ?? 0)}
+          icon={<UserPlus className="h-4 w-4" />}
+          isLoading={isLoading}
+          aria-label="Novos usuários nas últimas 24 horas"
+        />
+      </div>
 
       {/* Motor status */}
       <div
+        data-testid="admin-kpi-card-motor"
         className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4 flex flex-col gap-2"
         aria-label={`Estado do motor: ${data?.motorStatus ?? 'desconhecido'}`}
       >

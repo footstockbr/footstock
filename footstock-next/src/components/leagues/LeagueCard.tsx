@@ -16,9 +16,9 @@ interface Props {
 
 const DIVISION_COLORS: Record<string, string> = {
   BRONZE: 'text-amber-700 bg-amber-700/10',
-  PRATA: 'text-gray-400 bg-gray-400/10',
-  OURO: 'text-[#F0B90B] bg-[#F0B90B]/10',
-  ABERTA: 'text-blue-400 bg-blue-400/10',
+  PRATA:  'text-gray-400 bg-gray-400/10',
+  OURO:   'text-[#F0B90B] bg-[#F0B90B]/10',
+  OPEN:   'text-blue-400 bg-blue-400/10',
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -58,6 +58,7 @@ export function LeagueCard({ league, isMember, currentUserId: _currentUserId, on
   return (
     <Link
       href={`/ligas/${league.id}`}
+      data-testid="league-card"
       className={cn(
         'block rounded-xl p-4 transition-colors',
         'bg-[#1E2329] hover:bg-[#1a1816] cursor-pointer',
@@ -70,13 +71,23 @@ export function LeagueCard({ league, isMember, currentUserId: _currentUserId, on
           <Trophy className={cn('h-5 w-5', isPro ? 'text-[#F0B90B]' : 'text-gray-400')} />
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="text-[#EAECEF] font-semibold truncate text-sm sm:text-base">
+          <h3 data-testid="league-card-title" className="text-[#EAECEF] font-semibold truncate text-sm sm:text-base">
             {league.name}
           </h3>
           <div className="flex items-center gap-2 flex-wrap mt-1">
-            <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium', DIVISION_COLORS[league.division])}>
-              {league.division}
-            </span>
+            {league.division === 'OPEN' ? (
+              <span
+                className={cn('text-xs px-2 py-0.5 rounded-full font-medium cursor-help', DIVISION_COLORS['OPEN'])}
+                title="Liga OPEN: aberta a todos os planos. Fator de equidade aplicado ao Pilar 1 para compensar assimetria entre planos."
+                aria-label="Divisão OPEN — fator de equidade ativo"
+              >
+                OPEN ⚖
+              </span>
+            ) : (
+              <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium', DIVISION_COLORS[league.division] ?? 'text-gray-400 bg-gray-400/10')}>
+                {league.division}
+              </span>
+            )}
             <span className={cn(
               'text-xs px-2 py-0.5 rounded-full font-medium',
               isPro ? 'text-[#F0B90B] bg-[#F0B90B]/10' : 'text-gray-400 bg-gray-400/10'
@@ -139,6 +150,7 @@ export function LeagueCard({ league, isMember, currentUserId: _currentUserId, on
           <button
             onClick={handleJoin}
             disabled={isJoining}
+            data-testid="league-card-join-button"
             className="min-h-[44px] min-w-[44px] px-4 py-2 rounded-lg text-sm font-medium bg-[#F0B90B] text-black hover:bg-[#d4ad52] transition-colors disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0B90B]"
             aria-label={`Entrar na liga ${league.name}`}
           >

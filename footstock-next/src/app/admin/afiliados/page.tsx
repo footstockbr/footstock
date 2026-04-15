@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { Network, Plus, Copy } from "lucide-react";
+import { Network } from "lucide-react";
 import { StatCard } from "@/components/ui/stat-card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { prisma } from "@/lib/prisma";
+import { AfiliadosNovoButton } from "@/components/admin/AfiliadosNovoButton";
+import { CopyCodeButton } from "@/components/admin/CopyCodeButton";
 
 export const metadata: Metadata = {
   title: "Afiliados — Admin · Foot Stock",
@@ -36,8 +37,8 @@ export default async function AdminAfiliadosPage() {
   const paidSum = paidTotal._sum.amount?.toNumber() ?? 0;
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-6" data-testid="page-admin-afiliados">
+      <div className="flex items-center justify-between mb-6" data-testid="admin-afiliados-header">
         <div>
           <h1 className="text-xl font-bold text-[#EAECEF] flex items-center gap-2">
             <Network className="h-5 w-5 text-[#F0B90B]" />
@@ -45,13 +46,10 @@ export default async function AdminAfiliadosPage() {
           </h1>
           <p className="text-sm text-[#929AA5]">Programa de indicacao e comissoes</p>
         </div>
-        <Button variant="primary" size="sm">
-          <Plus className="h-4 w-4 mr-1" />
-          Novo afiliado
-        </Button>
+        <AfiliadosNovoButton />
       </div>
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-3 gap-4 mb-6" data-testid="admin-afiliados-stats">
         <StatCard
           label="Afiliados Ativos"
           value={String(activeCount)}
@@ -69,7 +67,7 @@ export default async function AdminAfiliadosPage() {
         />
       </div>
 
-      <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
+      <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4" data-testid="admin-afiliados-table">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[rgba(240,185,11,.08)]">
@@ -96,9 +94,10 @@ export default async function AdminAfiliadosPage() {
                       <code className="text-xs font-mono text-[#F0B90B] bg-[rgba(240,185,11,.08)] px-1.5 py-0.5 rounded">
                         {affiliate.code}
                       </code>
-                      <button className="text-[#707A8A] hover:text-[#929AA5] transition-colors">
-                        <Copy className="h-3 w-3" />
-                      </button>
+                      <CopyCodeButton
+                        code={affiliate.code}
+                        testid={`admin-afiliados-copy-code-${affiliate.code}`}
+                      />
                     </div>
                   </td>
                   <td className="py-2.5 text-right font-mono text-sm text-[#EAECEF]">{conversions}</td>

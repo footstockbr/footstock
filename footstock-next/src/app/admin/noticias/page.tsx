@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { IMPACT_CATEGORY_LABELS, IMPACT_CATEGORY_OPTIONS, SENTIMENT_HEX_COLORS, SENTIMENT_OPTIONS } from '@/lib/constants/admin-ui'
+import { Lock } from 'lucide-react'
+import { IMPACT_CATEGORY_LABELS, IMPACT_CATEGORY_OPTIONS, SENTIMENT_HEX_COLORS, SENTIMENT_LABELS, SENTIMENT_OPTIONS } from '@/lib/constants/admin-ui'
 import { CLUBS } from '@/lib/constants/clubs'
 
 interface NewsItem {
@@ -12,7 +13,7 @@ interface NewsItem {
   sentiment: string
   ticker: string
   assetIds: string[]
-  source?: string
+  source?: string | null
   isPublished: boolean
   publishedAt?: string
   isArchived: boolean
@@ -26,7 +27,18 @@ type FilterType = 'todas' | 'publicada' | 'rascunho' | 'arquivada'
 
 const getSentimentColor = (sentiment: string): string => SENTIMENT_HEX_COLORS[sentiment] ?? '#F0B90B'
 
-const getSentimentLabel = (sentiment: string): string => sentiment
+const getSentimentLabel = (sentiment: string): string => SENTIMENT_LABELS[sentiment] ?? sentiment
+
+const isExternalSource = (item: NewsItem): boolean => {
+  return Boolean(item.source && item.source.trim().length > 0)
+}
+
+const formatDateTime = (dateStr: string): string => {
+  const date = new Date(dateStr)
+  const dateFormatted = date.toLocaleDateString('pt-BR')
+  const timeFormatted = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  return `${dateFormatted} ${timeFormatted}`
+}
 
 const EMPTY_CREATE = {
   title: '',
@@ -45,9 +57,10 @@ export default function NoticiasPage() {
   const [error, setError] = useState<string | null>(null)
 
   // Edit modal
-  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingItem, setEditingItem] = useState<NewsItem | null>(null)
   const [editForm, setEditForm] = useState({ title: '', content: '', impact: 'ESPORTIVA_MAJORITARIA', sentiment: 'NEUTRAL', ticker: '' })
   const [savingEdit, setSavingEdit] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
 
   // Create modal
   const [creating, setCreating] = useState(false)
@@ -62,7 +75,7 @@ export default function NoticiasPage() {
     try {
       setLoading(true)
       const res = await fetch('/api/v1/admin/news', { credentials: 'include' })
-      if (!res.ok) throw new Error('Erro ao carregar notícias')
+      if (!res.ok) throw new Error('Erro ao carregar noticias')
       const data = await res.json()
       setNews(data.data || [])
     } catch (err) {
@@ -84,6 +97,7 @@ export default function NoticiasPage() {
 
   const publishCount = news.filter((n) => n.isPublished && !n.isArchived).length
   const draftCount = news.filter((n) => !n.isPublished && !n.isArchived).length
+  const archivedCount = news.filter((n) => n.isArchived).length
 
   const togglePublish = async (id: string, isPublished: boolean) => {
     try {
@@ -116,7 +130,7 @@ export default function NoticiasPage() {
   }
 
   const deleteNews = async (id: string) => {
-    if (!confirm('Tem certeza que deseja deletar essa notícia?')) return
+    if (!confirm('Tem certeza que deseja deletar essa noticia?')) return
     try {
       const res = await fetch(`/api/v1/admin/news/${id}`, {
         method: 'DELETE',
@@ -130,25 +144,42 @@ export default function NoticiasPage() {
   }
 
   const openEditModal = (item: NewsItem) => {
-    setEditingId(item.id)
+    setEditingItem(item)
     setEditForm({ title: item.title, content: item.content, impact: item.impact, sentiment: item.sentiment, ticker: item.ticker ?? '' })
+    setEditError(null)
   }
 
   const saveEdit = async () => {
-    if (!editingId) return
+    if (!editingItem) return
     setSavingEdit(true)
+    setEditError(null)
     try {
-      const res = await fetch(`/api/v1/admin/news/${editingId}`, {
+      const isExternal = isExternalSource(editingItem)
+      // Only send title/content if news is admin-created (not external)
+      const payload: Record<string, unknown> = {
+        impact: editForm.impact,
+        sentiment: editForm.sentiment,
+        ticker: editForm.ticker,
+      }
+      if (!isExternal) {
+        payload.title = editForm.title
+        payload.content = editForm.content
+      }
+
+      const res = await fetch(`/api/v1/admin/news/${editingItem.id}`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: editForm.title, content: editForm.content, impact: editForm.impact, sentiment: editForm.sentiment, ticker: editForm.ticker }),
+        body: JSON.stringify(payload),
       })
-      if (!res.ok) throw new Error('Erro ao salvar')
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error?.message || 'Erro ao salvar')
+      }
       fetchNews()
-      setEditingId(null)
+      setEditingItem(null)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Erro ao salvar')
+      setEditError(err instanceof Error ? err.message : 'Erro ao salvar')
     } finally {
       setSavingEdit(false)
     }
@@ -156,7 +187,7 @@ export default function NoticiasPage() {
 
   const saveCreate = async () => {
     if (!createForm.title.trim() || !createForm.content.trim()) {
-      alert('Título e conteúdo são obrigatórios')
+      alert('Titulo e conteudo sao obrigatorios')
       return
     }
     setSavingCreate(true)
@@ -175,7 +206,7 @@ export default function NoticiasPage() {
           isPublished: createForm.isPublished,
         }),
       })
-      if (!res.ok) throw new Error('Erro ao criar notícia')
+      if (!res.ok) throw new Error('Erro ao criar noticia')
       fetchNews()
       setCreating(false)
       setCreateForm(EMPTY_CREATE)
@@ -199,6 +230,13 @@ export default function NoticiasPage() {
     boxSizing: 'border-box' as const,
   }
 
+  const inputDisabledStyle = {
+    ...inputStyle,
+    opacity: 0.5,
+    cursor: 'not-allowed',
+    background: '#14161a',
+  }
+
   const labelStyle = {
     display: 'block',
     marginBottom: '6px',
@@ -208,7 +246,7 @@ export default function NoticiasPage() {
   }
 
   return (
-    <div className="fade-in" style={{ padding: '20px', color: 'white' }}>
+    <div data-testid="page-admin-noticias" className="fade-in" style={{ padding: '20px', color: 'white' }}>
       <style>{`
         :root {
           --bg: #1E2329;
@@ -242,45 +280,71 @@ export default function NoticiasPage() {
         .modal-box { background: #181A20; border: 1px solid #2a2d35; border-radius: 8px; padding: 24px; max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; color: white; }
       `}</style>
 
-      <div className="section-header">
+      <div className="section-header" data-testid="admin-noticias-header">
         <div>
-          <div className="section-title">Notícias</div>
-          <div className="section-sub">{publishCount} publicadas · {draftCount} rascunhos</div>
+          <div className="section-title">Noticias</div>
+          <div className="section-sub">{publishCount} publicadas · {draftCount} rascunhos · {archivedCount} arquivadas</div>
         </div>
         <button
           onClick={() => setCreating(true)}
           className="btn btn-sm btn-solid"
+          data-testid="admin-noticias-nova-button"
           style={{ background: 'var(--accent)', color: 'var(--bg)', borderColor: 'transparent' }}
         >
           + Nova
         </button>
       </div>
 
-      <div className="filter-bar">
+      {/* Nota explicativa: injeção no motor */}
+      <div
+        data-testid="admin-noticias-motor-note"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          marginBottom: '12px',
+          padding: '8px 12px',
+          background: 'rgba(240,185,11,.06)',
+          border: '1px solid rgba(240,185,11,.15)',
+          borderRadius: '8px',
+          fontSize: '11px',
+          color: '#929AA5',
+        }}
+      >
+        <Lock size={12} style={{ color: '#F0B90B', flexShrink: 0 }} />
+        <span>
+          Para injetar uma notícia no motor de preço e disparar impacto em tempo real, use o{' '}
+          <strong style={{ color: '#F0B90B' }}>Módulo Motor &gt; Notícias</strong>.
+          As notícias criadas aqui ficam no feed editorial e não afetam o motor diretamente.
+        </span>
+      </div>
+
+      <div className="filter-bar" data-testid="admin-noticias-filter-bar">
         {(['todas', 'publicada', 'rascunho', 'arquivada'] as FilterType[]).map((f) => (
-          <button key={f} onClick={() => setFilter(f)} className={`filter-btn ${filter === f ? 'active' : ''}`}>
+          <button key={f} onClick={() => setFilter(f)} className={`filter-btn ${filter === f ? 'active' : ''}`} data-testid={`admin-noticias-filter-${f}-button`}>
             {f === 'todas' ? 'Todas' : f === 'publicada' ? 'Publicadas' : f === 'rascunho' ? 'Rascunhos' : 'Arquivadas'}
           </button>
         ))}
       </div>
 
-      {loading && <div style={{ color: '#8f95a5', padding: '20px' }}>Carregando...</div>}
-      {error && <div style={{ color: '#F6465D', padding: '20px' }}>Erro: {error}</div>}
+      {loading && <div data-testid="admin-noticias-loading" style={{ color: '#8f95a5', padding: '20px' }}>Carregando...</div>}
+      {error && <div data-testid="admin-noticias-error" style={{ color: '#F6465D', padding: '20px' }}>Erro: {error}</div>}
 
-      <div>
+      <div data-testid="admin-noticias-list">
         {filteredNews.map((item) => {
           const sentimentColor = getSentimentColor(item.sentiment)
           const sentimentLabel = getSentimentLabel(item.sentiment)
-          const statusLabel = item.isPublished ? 'PUBLICADA' : 'RASCUNHO'
-          const statusColor = item.isPublished ? '#2EBD85' : '#F0B90B'
+          const statusLabel = item.isArchived ? 'ARQUIVADA' : item.isPublished ? 'PUBLICADA' : 'RASCUNHO'
+          const statusColor = item.isArchived ? '#929aa5' : item.isPublished ? '#2EBD85' : '#F0B90B'
+          const isExternal = isExternalSource(item)
 
           return (
-            <div key={item.id} className={`news-card ${item.isPublished ? 'published' : ''}`}>
+            <div key={item.id} className={`news-card ${item.isPublished ? 'published' : ''}`} data-testid={`admin-noticias-card-${item.id}`}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '8px' }}>
                 <div style={{ flex: 1 }}>
                   <div className="news-badges">
                     {item.ticker ? (
-                      <span className="badge" style={{ color: 'var(--accent2)' }}>
+                      <span className="badge" data-testid={`admin-noticias-ticker-badge-${item.id}`} style={{ color: 'var(--accent2)' }}>
                         {item.ticker}
                       </span>
                     ) : (
@@ -288,28 +352,43 @@ export default function NoticiasPage() {
                         Sem time
                       </span>
                     )}
-                    <span className="badge" style={{ color: 'var(--muted)' }}>
+                    <span className="badge" data-testid={`admin-noticias-impact-badge-${item.id}`} style={{ color: 'var(--muted)' }}>
                       {IMPACT_CATEGORY_LABELS[item.impact] ?? item.impact}
                     </span>
-                    <span className="badge" style={{ color: statusColor }}>{statusLabel}</span>
+                    <span className="badge" data-testid={`admin-noticias-status-badge-${item.id}`} style={{ color: statusColor }}>{statusLabel}</span>
+                    {isExternal && (
+                      <span
+                        className="badge"
+                        data-testid={`admin-noticias-source-badge-${item.id}`}
+                        style={{ color: '#929aa5', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        title="Noticia de fonte externa — titulo e conteudo protegidos"
+                      >
+                        <Lock size={10} />
+                        {item.source}
+                      </span>
+                    )}
                   </div>
-                  <div className="news-title">{item.title}</div>
-                  <div className="news-author">
-                    Por {item.author} · {new Date(item.publishedAt || item.createdAt).toLocaleDateString('pt-BR')} · {item.clicks} cliques
+                  <div className="news-title" data-testid={`admin-noticias-title-${item.id}`}>{item.title}</div>
+                  <div data-testid={`admin-noticias-content-preview-${item.id}`} style={{ fontSize: '12px', color: '#929aa5', marginBottom: '6px', lineHeight: '1.4' }}>
+                    {item.content.length > 120 ? `${item.content.slice(0, 120)}...` : item.content}
+                  </div>
+                  <div className="news-author" data-testid={`admin-noticias-meta-${item.id}`}>
+                    Por {item.author} · {formatDateTime(item.publishedAt || item.createdAt)} · {item.clicks} cliques
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
                   <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: sentimentColor }} />
-                  <span style={{ fontSize: '10px', fontWeight: '700', color: sentimentColor }}>
+                  <span data-testid={`admin-noticias-sentiment-${item.id}`} style={{ fontSize: '10px', fontWeight: '700', color: sentimentColor }}>
                     {sentimentLabel}
                   </span>
                 </div>
               </div>
 
-              <div className="news-actions">
+              <div className="news-actions" data-testid={`admin-noticias-actions-${item.id}`}>
                 <button
                   onClick={() => togglePublish(item.id, item.isPublished)}
                   className="btn btn-sm btn-outline"
+                  data-testid={`admin-noticias-publish-button-${item.id}`}
                   style={{ background: 'transparent', color: 'var(--muted)', borderColor: 'var(--muted)' }}
                 >
                   {item.isPublished ? 'Despublicar' : 'Publicar'}
@@ -317,23 +396,28 @@ export default function NoticiasPage() {
                 <button
                   onClick={() => openEditModal(item)}
                   className="btn btn-sm btn-outline"
+                  data-testid={`admin-noticias-edit-button-${item.id}`}
                   style={{ background: 'transparent', color: 'var(--accent)', borderColor: 'var(--accent)' }}
                 >
-                  ✎ Editar
+                  Editar
                 </button>
-                <button
-                  onClick={() => archiveNews(item.id)}
-                  className="btn btn-sm btn-outline"
-                  style={{ background: 'transparent', color: 'var(--muted)', borderColor: 'var(--muted)' }}
-                >
-                  📦 Arquivar
-                </button>
+                {!item.isArchived && (
+                  <button
+                    onClick={() => archiveNews(item.id)}
+                    className="btn btn-sm btn-outline"
+                    data-testid={`admin-noticias-archive-button-${item.id}`}
+                    style={{ background: 'transparent', color: 'var(--muted)', borderColor: 'var(--muted)' }}
+                  >
+                    Arquivar
+                  </button>
+                )}
                 <button
                   onClick={() => deleteNews(item.id)}
                   className="btn btn-sm btn-outline"
+                  data-testid={`admin-noticias-delete-button-${item.id}`}
                   style={{ background: 'transparent', color: 'var(--red)', borderColor: 'var(--red)' }}
                 >
-                  🗑
+                  Deletar
                 </button>
               </div>
             </div>
@@ -341,38 +425,122 @@ export default function NoticiasPage() {
         })}
 
         {filteredNews.length === 0 && !loading && (
-          <div style={{ color: '#8f95a5', textAlign: 'center', padding: '20px' }}>
-            Nenhuma notícia neste filtro
+          <div data-testid="admin-noticias-empty" style={{ color: '#8f95a5', textAlign: 'center', padding: '20px' }}>
+            Nenhuma noticia neste filtro
           </div>
         )}
       </div>
 
       {/* ── Modal Editar ── */}
-      {editingId && (
-        <div className="modal-overlay" onClick={() => setEditingId(null)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ margin: 0, marginBottom: '20px' }}>Editar Notícia</h2>
+      {editingItem && (
+        <div className="modal-overlay" data-testid="admin-noticias-edit-modal-overlay" onClick={() => setEditingItem(null)}>
+          <div className="modal-box" data-testid="admin-noticias-edit-modal" onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ margin: 0 }}>Editar Noticia</h2>
+              {isExternalSource(editingItem) && (
+                <span
+                  data-testid="admin-noticias-edit-modal-external-badge"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '11px',
+                    color: '#929aa5',
+                    background: 'rgba(146, 154, 165, 0.1)',
+                    padding: '4px 10px',
+                    borderRadius: '4px',
+                  }}
+                >
+                  <Lock size={12} />
+                  Fonte externa: {editingItem.source}
+                </span>
+              )}
+            </div>
+
+            {/* External source warning */}
+            {isExternalSource(editingItem) && (
+              <div
+                data-testid="admin-noticias-edit-modal-external-warning"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  marginBottom: '16px',
+                  padding: '10px 14px',
+                  background: 'rgba(240, 185, 11, 0.06)',
+                  border: '1px solid rgba(240, 185, 11, 0.15)',
+                  borderRadius: '6px',
+                  color: '#F0B90B',
+                  fontSize: '12px',
+                }}
+              >
+                <Lock size={14} />
+                Titulo e conteudo protegidos contra edicao para manter credibilidade da fonte original. Impacto, sentimento e time podem ser ajustados.
+              </div>
+            )}
+
+            {editError && (
+              <div
+                data-testid="admin-noticias-edit-modal-error"
+                style={{
+                  marginBottom: '16px',
+                  padding: '10px 14px',
+                  background: 'rgba(246, 70, 93, 0.08)',
+                  border: '1px solid rgba(246, 70, 93, 0.2)',
+                  borderRadius: '6px',
+                  color: '#f6465d',
+                  fontSize: '12px',
+                }}
+              >
+                {editError}
+              </div>
+            )}
 
             <div style={{ marginBottom: '16px' }}>
-              <label style={labelStyle}>Título</label>
-              <input type="text" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} style={inputStyle} />
+              <label style={labelStyle}>
+                Titulo
+                {isExternalSource(editingItem) && <Lock size={10} style={{ display: 'inline', marginLeft: '6px', verticalAlign: 'middle' }} />}
+              </label>
+              <input
+                type="text"
+                value={editForm.title}
+                onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                style={isExternalSource(editingItem) ? inputDisabledStyle : inputStyle}
+                readOnly={isExternalSource(editingItem)}
+                data-testid="admin-noticias-edit-modal-title-input"
+              />
             </div>
 
             <div style={{ marginBottom: '16px' }}>
-              <label style={labelStyle}>Conteúdo</label>
+              <label style={labelStyle}>
+                Conteudo
+                {isExternalSource(editingItem) && <Lock size={10} style={{ display: 'inline', marginLeft: '6px', verticalAlign: 'middle' }} />}
+              </label>
               <textarea
                 value={editForm.content}
                 onChange={(e) => setEditForm({ ...editForm, content: e.target.value })}
-                style={{ ...inputStyle, minHeight: '120px', fontFamily: 'inherit', resize: 'vertical' }}
+                style={{
+                  ...(isExternalSource(editingItem) ? inputDisabledStyle : inputStyle),
+                  minHeight: '120px',
+                  fontFamily: 'inherit',
+                  resize: isExternalSource(editingItem) ? 'none' : 'vertical',
+                }}
+                readOnly={isExternalSource(editingItem)}
+                data-testid="admin-noticias-edit-modal-content-input"
               />
             </div>
 
             <div style={{ marginBottom: '16px' }}>
               <label style={labelStyle}>Time</label>
-              <select value={editForm.ticker} onChange={(e) => setEditForm({ ...editForm, ticker: e.target.value })} style={inputStyle}>
+              <select
+                value={editForm.ticker}
+                onChange={(e) => setEditForm({ ...editForm, ticker: e.target.value })}
+                style={inputStyle}
+                data-testid="admin-noticias-edit-modal-ticker-select"
+              >
                 <option value="">Selecionar time...</option>
                 {CLUBS.map((c) => (
-                  <option key={c.ticker} value={c.ticker}>{c.ticker} — {c.name}</option>
+                  <option key={c.ticker} value={c.ticker}>{c.ticker} — {c.displayName}</option>
                 ))}
               </select>
             </div>
@@ -380,23 +548,44 @@ export default function NoticiasPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
               <div>
                 <label style={labelStyle}>Impacto</label>
-                <select value={editForm.impact} onChange={(e) => setEditForm({ ...editForm, impact: e.target.value })} style={inputStyle}>
+                <select
+                  value={editForm.impact}
+                  onChange={(e) => setEditForm({ ...editForm, impact: e.target.value })}
+                  style={inputStyle}
+                  data-testid="admin-noticias-edit-modal-impact-select"
+                >
                   {IMPACT_CATEGORY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
               <div>
                 <label style={labelStyle}>Sentimento</label>
-                <select value={editForm.sentiment} onChange={(e) => setEditForm({ ...editForm, sentiment: e.target.value })} style={inputStyle}>
+                <select
+                  value={editForm.sentiment}
+                  onChange={(e) => setEditForm({ ...editForm, sentiment: e.target.value })}
+                  style={inputStyle}
+                  data-testid="admin-noticias-edit-modal-sentiment-select"
+                >
                   {SENTIMENT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
             </div>
 
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button onClick={() => setEditingId(null)} className="btn" style={{ background: 'transparent', color: '#8f95a5', borderColor: '#8f95a5', border: '1px solid' }}>
+              <button
+                onClick={() => setEditingItem(null)}
+                className="btn"
+                data-testid="admin-noticias-edit-modal-cancel-button"
+                style={{ background: 'transparent', color: '#8f95a5', borderColor: '#8f95a5', border: '1px solid' }}
+              >
                 Cancelar
               </button>
-              <button onClick={saveEdit} disabled={savingEdit} className="btn btn-solid" style={{ background: 'var(--accent)', color: 'var(--bg)', border: 'none' }}>
+              <button
+                onClick={saveEdit}
+                disabled={savingEdit}
+                className="btn btn-solid"
+                data-testid="admin-noticias-edit-modal-save-button"
+                style={{ background: 'var(--accent)', color: 'var(--bg)', border: 'none' }}
+              >
                 {savingEdit ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
@@ -406,35 +595,53 @@ export default function NoticiasPage() {
 
       {/* ── Modal Criar ── */}
       {creating && (
-        <div className="modal-overlay" onClick={() => setCreating(false)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ margin: 0, marginBottom: '20px' }}>Nova Notícia</h2>
+        <div className="modal-overlay" data-testid="admin-noticias-create-modal-overlay" onClick={() => setCreating(false)}>
+          <div className="modal-box" data-testid="admin-noticias-create-modal" onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: 0, marginBottom: '20px' }}>Nova Noticia</h2>
 
             <div style={{ marginBottom: '16px' }}>
-              <label style={labelStyle}>Título *</label>
-              <input type="text" value={createForm.title} onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })} style={inputStyle} placeholder="Ex: URU3 anuncia parceria com banco digital" />
+              <label style={labelStyle}>Titulo *</label>
+              <input
+                type="text"
+                value={createForm.title}
+                onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
+                style={inputStyle}
+                placeholder="Ex: URU3 anuncia parceria com banco digital"
+                data-testid="admin-noticias-create-modal-title-input"
+              />
             </div>
 
             <div style={{ marginBottom: '16px' }}>
-              <label style={labelStyle}>Conteúdo *</label>
+              <label style={labelStyle}>Conteudo *</label>
               <textarea
                 value={createForm.content}
                 onChange={(e) => setCreateForm({ ...createForm, content: e.target.value })}
                 style={{ ...inputStyle, minHeight: '120px', fontFamily: 'inherit', resize: 'vertical' }}
-                placeholder="Descreva a notícia em detalhes..."
+                placeholder="Descreva a noticia em detalhes..."
+                data-testid="admin-noticias-create-modal-content-input"
               />
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
               <div>
                 <label style={labelStyle}>Impacto</label>
-                <select value={createForm.impact} onChange={(e) => setCreateForm({ ...createForm, impact: e.target.value })} style={inputStyle}>
+                <select
+                  value={createForm.impact}
+                  onChange={(e) => setCreateForm({ ...createForm, impact: e.target.value })}
+                  style={inputStyle}
+                  data-testid="admin-noticias-create-modal-impact-select"
+                >
                   {IMPACT_CATEGORY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
               <div>
                 <label style={labelStyle}>Sentimento</label>
-                <select value={createForm.sentiment} onChange={(e) => setCreateForm({ ...createForm, sentiment: e.target.value })} style={inputStyle}>
+                <select
+                  value={createForm.sentiment}
+                  onChange={(e) => setCreateForm({ ...createForm, sentiment: e.target.value })}
+                  style={inputStyle}
+                  data-testid="admin-noticias-create-modal-sentiment-select"
+                >
                   {SENTIMENT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
@@ -442,23 +649,32 @@ export default function NoticiasPage() {
 
             <div style={{ marginBottom: '16px' }}>
               <label style={labelStyle}>Time</label>
-              <select value={createForm.ticker} onChange={(e) => setCreateForm({ ...createForm, ticker: e.target.value })} style={inputStyle}>
+              <select
+                value={createForm.ticker}
+                onChange={(e) => setCreateForm({ ...createForm, ticker: e.target.value })}
+                style={inputStyle}
+                data-testid="admin-noticias-create-modal-ticker-select"
+              >
                 <option value="">Selecionar time...</option>
                 {CLUBS.map((c) => (
-                  <option key={c.ticker} value={c.ticker}>{c.ticker} — {c.name}</option>
+                  <option key={c.ticker} value={c.ticker}>{c.ticker} — {c.displayName}</option>
                 ))}
               </select>
             </div>
 
             <div style={{ marginBottom: '16px' }}>
-              <label style={labelStyle}>Fonte</label>
+              <label style={labelStyle}>Fonte (se externa)</label>
               <input
                 type="text"
                 value={createForm.source}
                 onChange={(e) => setCreateForm({ ...createForm, source: e.target.value })}
                 style={inputStyle}
-                placeholder="Ex: Globo Sports"
+                placeholder="Deixe vazio para noticia editorial. Ex: Globo Esporte, ESPN"
+                data-testid="admin-noticias-create-modal-source-input"
               />
+              <div style={{ fontSize: '10px', color: '#929aa5', marginTop: '4px' }}>
+                Se preenchido, titulo e conteudo ficarao protegidos contra edicao futura.
+              </div>
             </div>
 
             <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -468,6 +684,7 @@ export default function NoticiasPage() {
                 checked={createForm.isPublished}
                 onChange={(e) => setCreateForm({ ...createForm, isPublished: e.target.checked })}
                 style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                data-testid="admin-noticias-create-modal-publish-checkbox"
               />
               <label htmlFor="isPublished" style={{ fontSize: '13px', cursor: 'pointer', color: 'white' }}>
                 Publicar imediatamente
@@ -475,11 +692,22 @@ export default function NoticiasPage() {
             </div>
 
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button onClick={() => setCreating(false)} className="btn" style={{ background: 'transparent', color: '#8f95a5', borderColor: '#8f95a5', border: '1px solid' }}>
+              <button
+                onClick={() => setCreating(false)}
+                className="btn"
+                data-testid="admin-noticias-create-modal-cancel-button"
+                style={{ background: 'transparent', color: '#8f95a5', borderColor: '#8f95a5', border: '1px solid' }}
+              >
                 Cancelar
               </button>
-              <button onClick={saveCreate} disabled={savingCreate} className="btn btn-solid" style={{ background: 'var(--accent)', color: 'var(--bg)', border: 'none' }}>
-                {savingCreate ? 'Criando...' : 'Criar Notícia'}
+              <button
+                onClick={saveCreate}
+                disabled={savingCreate}
+                className="btn btn-solid"
+                data-testid="admin-noticias-create-modal-save-button"
+                style={{ background: 'var(--accent)', color: 'var(--bg)', border: 'none' }}
+              >
+                {savingCreate ? 'Criando...' : 'Criar Noticia'}
               </button>
             </div>
           </div>

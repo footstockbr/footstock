@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withAdmin } from '@/app/api/middleware'
 import { prisma } from '@/lib/prisma'
+import { adminAuditService } from '@/lib/services/shared'
 import type { AuthContext } from '@/app/api/middleware'
 
 const updateAdminSchema = z.object({
@@ -86,6 +87,17 @@ async function patchHandler(req: NextRequest, { user }: AuthContext): Promise<Ne
     },
   })
 
+  // Auditoria obrigatória — alteração de role admin (spec §Configurações)
+  await adminAuditService.log({
+    adminId: user.id,
+    action: 'CONFIG_ADMIN_ROLE_CHANGE',
+    details: {
+      targetId: target.id,
+      previousRole: target.adminRole,
+      newRole: parsed.data.role,
+    },
+  })
+
   return NextResponse.json({ success: true, data: updated })
 }
 
@@ -142,6 +154,13 @@ async function deleteHandler(req: NextRequest, { user }: AuthContext): Promise<N
       planType: true,
       updatedAt: true,
     },
+  })
+
+  // Auditoria obrigatória — desativação de admin (spec §Configurações)
+  await adminAuditService.log({
+    adminId: user.id,
+    action: 'CONFIG_ADMIN_DEACTIVATE',
+    details: { targetId: target.id, removedRole: target.adminRole },
   })
 
   return NextResponse.json({ success: true, data: updated })

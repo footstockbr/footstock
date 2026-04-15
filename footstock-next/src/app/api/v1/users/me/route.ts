@@ -4,6 +4,8 @@ import { getAuthUser, serializeUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
 import { deleteAccount } from '@/lib/services/account-deletion'
+import { leagueAutoEnrollService } from '@/lib/services/LeagueAutoEnrollService'
+import type { PlanType } from '@/types'
 
 const UpdateUserSchema = z.object({
   name: z.string().min(2).max(120).optional(),
@@ -41,6 +43,16 @@ export async function PATCH(request: NextRequest) {
       where: { id: auth.user.id },
       data: parsed.data,
     })
+
+    // Auto-enroll na liga pública da divisão ao concluir o onboarding.
+    // Operação best-effort — não bloqueia a resposta em caso de falha.
+    if (parsed.data.tourCompleted === true) {
+      leagueAutoEnrollService
+        .enrollUserInPublicLeague(auth.user.id, (updated.planType ?? 'JOGADOR') as PlanType)
+        .catch((err) =>
+          console.error('[users/me PATCH] Falha no auto-enroll de liga:', err)
+        )
+    }
 
     return ok(serializeUser(updated))
   } catch {

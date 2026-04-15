@@ -1,22 +1,27 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { IChartApi, type Range, type Time } from 'lightweight-charts'
 import { Lock, Info } from 'lucide-react'
+import { GlossaryInfoIcon } from '@/components/ui/glossary-info-icon'
 import { useMarketTick } from '@/hooks/useMarketTick'
 import { useCircuitBreakerAlert } from '@/hooks/useCircuitBreakerAlert'
 import { usePlanGuard } from '@/hooks/usePlanGuard'
+import { useMotorStatusContext } from '@/contexts/motor-status-context'
+import { useBalance } from '@/hooks/useBalance'
 import { ChartPeriod } from '@/hooks/usePriceHistory'
 import { assignChartColors } from '@/lib/utils/colorCollision'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Modal } from '@/components/ui/modal'
 import { OrderForm } from '@/components/orders/OrderForm'
+import { ShortForm } from '@/components/orders/ShortForm'
 import { OrderBook } from '@/components/market/OrderBook'
 import { AssetStats } from '@/components/market/AssetStats'
 import { SentimentGauge } from '@/components/market/SentimentGauge'
 import { CompareMode } from '@/components/market/CompareMode'
+import { useAnalytics } from '@/hooks/useAnalytics'
 // Lazy-load gráficos — lightweight-charts usa window no topo do módulo
 const PriceChart = dynamic(
   () => import('@/components/market/PriceChart').then((m) => ({ default: m.PriceChart })),
@@ -78,6 +83,7 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
   const tick = useMarketTick(asset.ticker)
   const [currentPeriod, setCurrentPeriod] = useState<ChartPeriod>('1M')
   const [orderFormOpen, setOrderFormOpen] = useState<{ side: 'BUY' | 'SELL' } | null>(null)
+  const [shortFormOpen, setShortFormOpen] = useState(false)
   const [compareOpen, setCompareOpen] = useState(false)
   const [compareTickers, setCompareTickers] = useState<Array<{ ticker: string; color: string }>>([])
 
@@ -86,15 +92,30 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
   const router = useRouter()
   const searchParams = useSearchParams()
   const activeTab = searchParams.get('tab') ?? 'book'
+  const { track } = useAnalytics()
+
+  // EVT-017: asset_detail_viewed — rastreia visualizacao da pagina de detalhe do ativo
+  useEffect(() => {
+    track('asset_detail_viewed', {
+      asset_ticker: asset.ticker,
+      asset_serie: asset.division === 'SERIE_A' ? 'A' : 'B',
+      plan: 'JOGADOR' as const,
+    })
+  }, [asset.ticker, asset.division, track])
 
   useCircuitBreakerAlert(asset.ticker)
 
   const { hasAccess } = usePlanGuard()
   const canCompare = hasAccess('CRAQUE')
+  const { isOffline: isMotorOffline } = useMotorStatusContext()
+  const { fsBalance } = useBalance()
+  const isBuyBlocked = fsBalance !== null && fsBalance <= 0
 
   const currentPrice = tick?.lastPrice ?? asset.currentPrice
   // Fallback para variação calculada no SSR (openPrice → currentPrice) quando SSE não está disponível
   const change24h = tick?.change24h ?? asset.change24h
+  // Halt estado: prioriza tick em tempo real (SSE), fallback para dado SSR
+  const isHalted = tick?.isHalted ?? asset.isHalted
 
   function handleCompare(tickers: string[]) {
     // tickers inclui o baseTicker na posição 0 — removemos para passar só os secundários
@@ -171,19 +192,45 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
         </div>
       </header>
 
-      {/* Compare button */}
-      <div className="flex justify-end px-4 pt-2">
-        <button
-          onClick={() => setCompareOpen(true)}
-          className="flex items-center gap-1.5 text-xs text-[#929AA5] hover:text-[#EAECEF] border border-[#2B3139] px-3 py-1 rounded-full"
+      {/* Compare button — escondido para JOGADOR (FDD CTA-003 / TASK-011) */}
+      {canCompare && (
+        <div className="flex justify-end px-4 pt-2">
+          <button
+            onClick={() => setCompareOpen(true)}
+            className="flex items-center gap-1.5 text-xs text-[#929AA5] hover:text-[#EAECEF] border border-[#2B3139] px-3 py-1 rounded-full"
+          >
+            Comparar
+          </button>
+        </div>
+      )}
+
+      {/* Circuit breaker halt banner — atualizado via tick SSE em tempo real */}
+      {isHalted && (
+        <div
+          data-testid="halt-banner"
+          className="mx-4 mt-2 rounded-lg bg-[rgba(246,70,93,.1)] border border-[rgba(246,70,93,.25)] px-3 py-2.5"
         >
-          {canCompare ? null : <Lock className="w-3 h-3" />}
-          Comparar
-        </button>
-      </div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-bold text-[#F6465D] animate-pulse">SUSPENSO</span>
+            <span className="text-xs text-[#929AA5]">
+              Negociação suspensa por circuit breaker{(tick?.haltReason ?? asset.haltReason) ? `: ${tick?.haltReason ?? asset.haltReason}` : ''}
+            </span>
+            <GlossaryInfoIcon fieldKey="circuit-breaker" size={12} />
+          </div>
+          <p className="text-[11px] text-[#707A8A]">
+            O circuit breaker é ativado quando a variação acumulada do ativo atinge 8%.
+            As negociações são retomadas automaticamente após 5 minutos ou por liberação do administrador.
+            Ordens existentes permanecem na fila e são executadas ao retomar.
+          </p>
+        </div>
+      )}
 
       {/* Charts */}
-      <section className="px-0 md:px-4 mt-3" aria-label="Gráfico de preços">
+      <section
+        className="px-0 md:px-4 mt-3"
+        aria-label="Gráfico de preços"
+        data-tour="chart-area"
+      >
         <PriceChart
           ticker={asset.ticker}
           primaryColor={asset.colorPrimary ?? asset.colors.primary}
@@ -192,11 +239,13 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
           onPeriodChange={handlePeriodChange}
           onChartReady={handleChartReady('price')}
         />
-        <OFIChart
-          ticker={asset.ticker}
-          period={currentPeriod}
-          onChartReady={handleChartReady('ofi')}
-        />
+        <div data-tour="ofi-chart">
+          <OFIChart
+            ticker={asset.ticker}
+            period={currentPeriod}
+            onChartReady={handleChartReady('ofi')}
+          />
+        </div>
       </section>
 
       {/* Tabs — largura total */}
@@ -210,7 +259,7 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
           <TabsList className="w-full">
             <TabsTrigger value="book">Book</TabsTrigger>
             <TabsTrigger value="stats">Estatísticas</TabsTrigger>
-            <TabsTrigger value="sentimento">Sentimento</TabsTrigger>
+            <TabsTrigger value="sentimento">Sentimento <GlossaryInfoIcon fieldKey="sentimento-de-mercado" size={11} /></TabsTrigger>
           </TabsList>
 
           <TabsContent value="book">
@@ -242,6 +291,19 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
             ticker={asset.ticker}
             side={orderFormOpen.side}
             onClose={() => setOrderFormOpen(null)}
+            fsBalance={fsBalance ?? undefined}
+          />
+        </Modal>
+      )}
+
+      {/* ShortForm modal (module-14 — Lenda only) */}
+      {shortFormOpen && (
+        <Modal isOpen onClose={() => setShortFormOpen(false)}>
+          <ShortForm
+            ticker={asset.ticker}
+            assetName={asset.displayName}
+            onSuccess={() => setShortFormOpen(false)}
+            onClose={() => setShortFormOpen(false)}
           />
         </Modal>
       )}
@@ -261,22 +323,63 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
 
       {/* Fixed bottom buttons (mobile) */}
       <div className="fixed bottom-16 left-0 right-0 z-30 p-4 bg-gradient-to-t from-[#0B0E11] to-transparent md:hidden">
-        <div className="flex gap-2">
-          <button
-            data-testid="buy-btn"
-            onClick={() => setOrderFormOpen({ side: 'BUY' })}
-            className="flex-1 py-3 rounded-xl bg-[#2EBD85] text-[#0B0E11] font-bold text-sm"
+        {isHalted ? (
+          <div
+            data-testid="halt-buttons-overlay"
+            className="w-full py-3 rounded-xl bg-[rgba(246,70,93,.1)] border border-[rgba(246,70,93,.25)] text-center"
           >
-            Comprar
-          </button>
-          <button
-            data-testid="sell-btn"
-            onClick={() => setOrderFormOpen({ side: 'SELL' })}
-            className="flex-1 py-3 rounded-xl bg-[#F6465D] text-white font-bold text-sm"
+            <p className="text-xs font-bold text-[#F6465D]">Negociação suspensa</p>
+            <p className="text-[10px] text-[#929AA5] mt-0.5">Circuit breaker ativo — aguarde a retomada</p>
+          </div>
+        ) : isMotorOffline ? (
+          <div
+            data-testid="motor-offline-buttons-overlay"
+            className="w-full py-3 rounded-xl text-center"
+            style={{ backgroundColor: 'rgba(249,115,22,0.12)', border: '1px solid rgba(249,115,22,0.3)' }}
           >
-            Vender
-          </button>
-        </div>
+            <p className="text-xs font-bold" style={{ color: '#f97316' }}>Mercado em manutenção</p>
+            <p className="text-[10px] text-[#929AA5] mt-0.5">Ordens suspensas temporariamente</p>
+          </div>
+        ) : (
+          <>
+          {isBuyBlocked && (
+            <div
+              role="alert"
+              data-testid="balance-zero-bar-banner"
+              className="mb-2 flex items-center gap-2 text-xs text-[#F6465D] bg-[rgba(246,70,93,.08)] border border-[rgba(246,70,93,.2)] rounded-lg px-3 py-2"
+            >
+              <span className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true">&#9888;</span>
+              Saldo zerado — venda posicoes para negociar.
+            </div>
+          )}
+          <div className="flex gap-2">
+            <button
+              data-testid="buy-btn"
+              onClick={() => !isBuyBlocked && setOrderFormOpen({ side: 'BUY' })}
+              disabled={isBuyBlocked}
+              title={isBuyBlocked ? 'Saldo FS$ zerado. Venda posicoes para negociar novamente.' : undefined}
+              className={`flex-1 py-3 rounded-xl font-bold text-sm transition-opacity ${isBuyBlocked ? 'bg-[#2EBD85]/40 text-[#0B0E11]/60 cursor-not-allowed' : 'bg-[#2EBD85] text-[#0B0E11]'}`}
+            >
+              Comprar
+            </button>
+            <button
+              data-testid="sell-btn"
+              onClick={() => setOrderFormOpen({ side: 'SELL' })}
+              className="flex-1 py-3 rounded-xl bg-[#F6465D] text-white font-bold text-sm"
+            >
+              Vender
+            </button>
+            <button
+              data-testid="short-btn"
+              onClick={() => setShortFormOpen(true)}
+              className="px-3 py-3 rounded-xl bg-[#2B3139] text-[#F6465D] font-bold text-xs border border-[#F6465D]/40"
+              title="Short Selling (Lenda)"
+            >
+              Short
+            </button>
+          </div>
+          </>
+        )}
       </div>
     </div>
   )

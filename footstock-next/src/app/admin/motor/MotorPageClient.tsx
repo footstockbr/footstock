@@ -7,6 +7,9 @@ import { MotorStateCard } from '@/components/admin/MotorStateCard'
 import { ClubEditor } from '@/components/admin/ClubEditor'
 import { NewsInjector } from '@/components/admin/NewsInjector'
 import { ImpactMatrix } from '@/components/admin/ImpactMatrix'
+import { MotorCamadas } from '@/components/admin/MotorCamadas'
+import { HaltControl } from './HaltControl'
+import { AssetsTable } from './AssetsTable'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { hasAdminRole } from '@/lib/utils/admin-roles'
@@ -40,12 +43,13 @@ const ACTION_BADGE: Record<string, string> = {
   ADMIN_BROADCAST: 'bg-purple-500/20 text-purple-400',
 }
 
-type MotorTab = 'estado' | 'noticias' | 'matriz'
+type MotorTab = 'estado' | 'noticias' | 'matriz' | 'camadas'
 
 const TABS: { id: MotorTab; label: string }[] = [
-  { id: 'estado', label: 'Estado Ao Vivo' },
-  { id: 'noticias', label: 'Disparar Notícia' },
-  { id: 'matriz', label: 'Matriz de Impacto' },
+  { id: 'estado', label: 'Estado' },
+  { id: 'noticias', label: 'Notícias' },
+  { id: 'matriz', label: 'Matriz' },
+  { id: 'camadas', label: 'Camadas' },
 ]
 
 function AuditLog() {
@@ -57,7 +61,7 @@ function AuditLog() {
   })
 
   return (
-    <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
+    <div data-testid="admin-motor-audit-log" className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
       <h2 className="text-sm font-semibold text-[#EAECEF] mb-3">Ações Recentes</h2>
       {isLoading ? (
         <div className="space-y-2">
@@ -67,7 +71,7 @@ function AuditLog() {
         <p className="text-xs text-[#929AA5] py-4 text-center">Nenhuma ação registrada ainda</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[480px] text-xs">
+          <table data-testid="admin-motor-audit-log-table" className="w-full min-w-[480px] text-xs">
             <thead>
               <tr className="text-[#929AA5] border-b border-[rgba(240,185,11,.08)]">
                 <th className="text-left py-1.5 px-2 font-medium">Data/Hora</th>
@@ -106,6 +110,38 @@ interface MotorPageClientProps {
 export default function MotorPageClient({ adminRole }: MotorPageClientProps) {
   const [activeTab, setActiveTab] = useState<MotorTab>('estado')
   const canHalt = hasAdminRole(adminRole, 'MODERADOR')
+  const canGlobalHalt = hasAdminRole(adminRole, 'ADMINISTRADOR')
+
+  const [motorHalted, setMotorHalted] = useState(false)
+  const [haltLoading, setHaltLoading] = useState(false)
+
+  useEffect(() => {
+    if (!canGlobalHalt) return
+    fetch('/api/v1/admin/motor/global-halt', { credentials: 'include' })
+      .then((r) => r.json())
+      .then(({ data }) => setMotorHalted(data?.status === 'halted'))
+      .catch(() => {})
+  }, [canGlobalHalt])
+
+  const handleGlobalHalt = async () => {
+    const msg = motorHalted
+      ? 'Retomar o motor de mercado? As negociações serão reativadas imediatamente.'
+      : 'Pausar o motor de mercado? TODOS os ativos serão suspensos imediatamente.'
+    if (!window.confirm(msg)) return
+
+    setHaltLoading(true)
+    try {
+      const res = await fetch('/api/v1/admin/motor/global-halt', {
+        method: motorHalted ? 'DELETE' : 'POST',
+        credentials: 'include',
+      })
+      if (res.ok) setMotorHalted(!motorHalted)
+    } catch {
+      /* silently fail — status unchanged */
+    } finally {
+      setHaltLoading(false)
+    }
+  }
 
   const { data: kpis, isLoading: kpisLoading } = useQuery({
     queryKey: ['motor-kpis'],
@@ -122,24 +158,33 @@ export default function MotorPageClient({ adminRole }: MotorPageClientProps) {
   const pnlSign = pnlIsNegative ? '-' : ''
 
   return (
-    <div className="p-4 md:p-6 space-y-5">
+    <div data-testid="admin-motor-content" className="p-4 md:p-6 space-y-5">
       <AdminBreadcrumb />
 
-      <div className="flex items-center justify-between">
+      <div data-testid="admin-motor-header" className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-[#EAECEF]">Motor de Mercado</h1>
           <p className="text-xs text-[#929AA5] mt-0.5">Controles, estado ao vivo e configuração</p>
         </div>
-        {canHalt && (
-          <button className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#1E2329] text-[#F6465D] border border-[rgba(246,70,93,.2)] hover:border-[rgba(246,70,93,.4)] transition-all whitespace-nowrap">
-            ⏸ Pausar
+        {canGlobalHalt && (
+          <button
+            data-testid="admin-motor-pause-button"
+            onClick={handleGlobalHalt}
+            disabled={haltLoading}
+            className="px-2.5 py-1 rounded text-[11px] font-semibold border transition-all whitespace-nowrap disabled:opacity-50"
+            style={motorHalted
+              ? { background: 'rgba(46,189,133,.1)', color: '#2EBD85', borderColor: 'rgba(46,189,133,.3)' }
+              : { background: 'rgba(246,70,93,.1)', color: '#F6465D', borderColor: 'rgba(246,70,93,.2)' }
+            }
+          >
+            {haltLoading ? '⏳' : motorHalted ? '▶ Retomar' : '⏸ Pausar'}
           </button>
         )}
       </div>
 
       {/* KPIs — dados reais */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
+      <div data-testid="admin-motor-kpis" className="grid grid-cols-2 gap-3">
+        <div data-testid="admin-motor-kpi-pnl" className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
           <div className="text-[10px] text-[#929AA5] uppercase tracking-wide mb-1">P&L Agregado</div>
           {kpisLoading ? (
             <Skeleton className="h-7 w-24" />
@@ -151,7 +196,7 @@ export default function MotorPageClient({ adminRole }: MotorPageClientProps) {
           <div className="text-[10px] text-[#929AA5] mt-1">soma de todas as carteiras abertas</div>
         </div>
 
-        <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
+        <div data-testid="admin-motor-kpi-circuit-breakers" className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
           <div className="flex items-center justify-between mb-1">
             <div className="text-[10px] text-[#929AA5] uppercase tracking-wide">Circuit Breakers</div>
             <span>🔒</span>
@@ -173,13 +218,14 @@ export default function MotorPageClient({ adminRole }: MotorPageClientProps) {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2">
+      <div data-testid="admin-motor-tabs" className="flex gap-2">
         {TABS.map((tab) => (
           <button
             key={tab.id}
+            data-testid={`admin-motor-tab-${tab.id}-button`}
             onClick={() => setActiveTab(tab.id)}
             className={cn(
-              'flex-1 px-2 py-1.5 rounded text-xs font-medium transition-all',
+              'flex-1 px-1.5 py-1.5 rounded text-[11px] font-medium transition-all',
               activeTab === tab.id
                 ? 'bg-[#F0B90B] text-[#080b12]'
                 : 'bg-[#1E2329] text-[#929AA5] border border-[rgba(240,185,11,.1)] hover:border-[rgba(240,185,11,.3)]'
@@ -191,8 +237,10 @@ export default function MotorPageClient({ adminRole }: MotorPageClientProps) {
       </div>
 
       {activeTab === 'estado' && (
-        <div className="space-y-4">
+        <div data-testid="admin-motor-tab-estado-content" className="space-y-4">
           <MotorStateCard />
+          <AssetsTable />
+          <HaltControl adminRole={adminRole} />
           <ClubEditor canHalt={canHalt} />
           <AuditLog />
         </div>
@@ -209,6 +257,12 @@ export default function MotorPageClient({ adminRole }: MotorPageClientProps) {
         <div className="space-y-4">
           <ImpactMatrix />
           <AuditLog />
+        </div>
+      )}
+
+      {activeTab === 'camadas' && (
+        <div data-testid="admin-motor-tab-camadas-content" className="space-y-4">
+          <MotorCamadas />
         </div>
       )}
     </div>

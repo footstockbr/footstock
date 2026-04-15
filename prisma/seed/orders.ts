@@ -316,7 +316,7 @@ export async function seedOrders() {
   // PRICE HISTORY — SessionType cobertura
   // =========================================================================
 
-  const sessions = ['PRE_MARKET', 'REGULAR', 'AFTER_MARKET', 'CLOSED'] as const
+  const sessions = ['PRE_OPENING', 'TRADING', 'CLOSING_CALL', 'AFTER_MARKET', 'CLOSED'] as const
   const asset = a1!
 
   for (let dayOffset = -7; dayOffset <= 0; dayOffset++) {
@@ -328,10 +328,11 @@ export async function seedOrders() {
       const low = open * 0.99
       const close = (open + high + low) / 3
 
-      const sessionHour = sessionType === 'PRE_MARKET' ? 8
-        : sessionType === 'REGULAR' ? 10
-        : sessionType === 'AFTER_MARKET' ? 18
-        : 22
+      const sessionHour = sessionType === 'PRE_OPENING' ? 8
+        : sessionType === 'TRADING' ? 10
+        : sessionType === 'CLOSING_CALL' ? 21
+        : sessionType === 'AFTER_MARKET' ? 22
+        : 2
 
       await prisma.priceHistory.upsert({
         where: { id: `ph-${asset.id}-${dayOffset}-${sessionType}` },
@@ -348,5 +349,5 @@ export async function seedOrders() {
     }
   }
 
-  console.log('[seed:orders] ✓ PriceHistory: 7 dias × 4 sessões (PRE_MARKET, REGULAR, AFTER_MARKET, CLOSED)')
+  console.log('[seed:orders] ✓ PriceHistory: 7 dias × 5 sessões (PRE_OPENING, TRADING, CLOSING_CALL, AFTER_MARKET, CLOSED)')
 }

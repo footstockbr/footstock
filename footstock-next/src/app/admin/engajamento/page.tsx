@@ -35,17 +35,19 @@ export default function AdminEngajamentoPage() {
   })
 
   return (
-    <div className="p-4 md:p-6 space-y-5">
+    <div className="p-4 md:p-6 space-y-5" data-testid="page-admin-engajamento">
       <AdminBreadcrumb />
 
-      <div>
+      <div data-testid="admin-engajamento-header">
         <h1 className="text-xl font-bold text-[#EAECEF]">Engajamento</h1>
         <p className="text-xs text-[#929AA5] mt-0.5">Acessos, permanência e movimentação FS$</p>
       </div>
 
-      <EngagementDashboard data={engagement ?? null} isLoading={loadingEng} />
+      <div data-testid="admin-engajamento-stats">
+        <EngagementDashboard data={engagement ?? null} isLoading={loadingEng} />
 
-      <RetentionTable cohortData={cohort} isLoading={loadingCohort} />
+        <RetentionTable cohortData={cohort} isLoading={loadingCohort} />
+      </div>
     </div>
   )
 }

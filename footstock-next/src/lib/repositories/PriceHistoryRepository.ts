@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 
-export type ChartPeriod = '1D' | '1W' | '1M' | '3M' | '1Y' | 'ALL'
+export type ChartPeriod = '1H' | '1D' | '1W' | '1S' | '1M' | '3M' | '1Y' | 'ALL'
 export type Granularity = 'minute' | 'hourly' | 'daily' | 'weekly'
 
 export interface HistoryFilters {
@@ -21,12 +21,18 @@ function resolvePeriodConfig(period: ChartPeriod): {
 } {
   const now = new Date()
   switch (period) {
+    case '1H':
+      return {
+        granularity: 'minute',
+        fromDate: new Date(now.getTime() - 60 * 60 * 1000),
+      }
     case '1D':
       return {
         granularity: 'minute',
         fromDate: new Date(now.getTime() - 24 * 60 * 60 * 1000),
       }
     case '1W':
+    case '1S':
       return {
         granularity: 'hourly',
         fromDate: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
@@ -68,6 +74,7 @@ export const PriceHistoryRepository = {
     close: number
     volume: number
     ofi: number
+    source: string
   }>> {
     // Resolve ticker to assetId
     const asset = await prisma.asset.findUnique({
@@ -99,6 +106,7 @@ export const PriceHistoryRepository = {
       close: c.close.toNumber(),
       volume: Number(c.volume),
       ofi: 0, // TECH-DEBT: ofi field not yet in PriceHistory schema — will be added by motor (module-7)
+      source: (c as unknown as { source: string }).source ?? 'REAL',
     }))
   },
 

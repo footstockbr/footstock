@@ -1,0 +1,231 @@
+'use client'
+
+// ============================================================================
+// CancellationModal — modal de cancelamento em 3 etapas
+// Etapa 1: "Tem certeza?" — consequencias listadas
+// Etapa 2: Confirmação — checkbox de ciência + confirmação explícita
+// Etapa 3: Cancelamento confirmado — próximos passos
+// ============================================================================
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+
+interface Props {
+  isOpen: boolean
+  onClose: () => void
+  planType: string
+}
+
+type Step = 'confirm' | 'acknowledge' | 'done'
+
+const CONSEQUENCES_BY_PLAN: Record<string, string[]> = {
+  LENDA: [
+    'Novas ordens, shorts e alavancagem serao bloqueados imediatamente',
+    'Acesso ao AI Assessor sera bloqueado imediatamente',
+    'Inscricao em novas ligas sera bloqueada imediatamente',
+    'Suas posicoes short, alavancadas e ordens OCO serao encerradas automaticamente em 48 horas',
+    'Seu saldo FS$ sera ajustado para FS$2.000 apos 7 dias',
+  ],
+  CRAQUE: [
+    'Novas ordens limitadas e agendadas serao bloqueadas imediatamente',
+    'Inscricao em novas ligas sera bloqueada imediatamente',
+    'Seu saldo FS$ sera ajustado para FS$2.000 apos 7 dias',
+  ],
+  JOGADOR: [],
+}
+
+export function CancellationModal({ isOpen, onClose, planType }: Props) {
+  const router = useRouter()
+  const [step, setStep] = useState<Step>('confirm')
+  const [acknowledged, setAcknowledged] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [lockInfo, setLockInfo] = useState<{
+    cancellationLockExpiresAt?: string
+    forcedLiquidationAt?: string
+    isEligibleForRefund?: boolean
+  } | null>(null)
+
+  const consequences = CONSEQUENCES_BY_PLAN[planType] ?? []
+
+  function handleClose() {
+    if (step === 'done') router.refresh()
+    setStep('confirm')
+    setAcknowledged(false)
+    setError(null)
+    setLockInfo(null)
+    onClose()
+  }
+
+  async function handleConfirmCancel() {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const res = await fetch('/api/v1/subscriptions/me', {
+        method: 'DELETE',
+      })
+
+      const json = await res.json()
+
+      if (!res.ok) {
+        setError(json?.message ?? 'Ocorreu um erro ao processar o cancelamento.')
+        return
+      }
+
+      setLockInfo({
+        cancellationLockExpiresAt: json?.data?.cancellationLockExpiresAt,
+        forcedLiquidationAt: json?.data?.forcedLiquidationAt,
+        isEligibleForRefund: json?.data?.isEligibleForRefund,
+      })
+      setStep('done')
+    } catch {
+      setError('Erro de conexao. Verifique sua internet e tente novamente.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="cancellation-modal-title"
+    >
+      <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
+        {/* Etapa 1: Tem certeza? */}
+        {step === 'confirm' && (
+          <div className="p-6">
+            <h2 id="cancellation-modal-title" className="text-lg font-bold text-gray-900 mb-1">
+              Cancelar assinatura
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Ao cancelar, voce perdera os seguintes beneficios:
+            </p>
+
+            {consequences.length > 0 && (
+              <ul className="mb-4 space-y-2">
+                {consequences.map((c, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                    <span className="mt-0.5 h-4 w-4 flex-shrink-0 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-xs font-bold">!</span>
+                    {c}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <p className="text-xs text-gray-500 mb-6">
+              Voce tera 7 dias para reverter o cancelamento antes que a conta seja definitivamente encerrada.
+            </p>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setStep('acknowledge')}
+                className="flex-1 rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 transition-colors"
+              >
+                Quero cancelar
+              </button>
+              <button
+                onClick={handleClose}
+                className="flex-1 rounded-md border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Voltar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Etapa 2: Confirmação */}
+        {step === 'acknowledge' && (
+          <div className="p-6">
+            <h2 id="cancellation-modal-title" className="text-lg font-bold text-gray-900 mb-4">
+              Confirmar cancelamento
+            </h2>
+
+            <div className="rounded-md bg-amber-50 border border-amber-200 p-4 mb-4">
+              <p className="text-sm text-amber-900 font-medium mb-1">O que acontece apos o cancelamento:</p>
+              <ul className="text-xs text-amber-800 space-y-1 list-disc list-inside">
+                <li>Posicoes restritas encerradas automaticamente em 48 horas</li>
+                <li>Conta definitivamente encerrada em 7 dias se nao reverter</li>
+                <li>Saldo FS$ ajustado para FS$2.000 no encerramento</li>
+              </ul>
+            </div>
+
+            <label className="flex items-start gap-3 cursor-pointer mb-6">
+              <input
+                type="checkbox"
+                checked={acknowledged}
+                onChange={(e) => setAcknowledged(e.target.checked)}
+                className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-gray-300 text-red-600 focus:ring-red-500"
+              />
+              <span className="text-sm text-gray-700">
+                Entendo e estou ciente das consequencias do cancelamento descritas acima.
+              </span>
+            </label>
+
+            {error && (
+              <p className="mb-4 text-sm text-red-600 rounded-md bg-red-50 p-3" role="alert">{error}</p>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleConfirmCancel}
+                disabled={!acknowledged || loading}
+                className="flex-1 rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {loading ? 'Processando...' : 'Confirmar cancelamento'}
+              </button>
+              <button
+                onClick={() => setStep('confirm')}
+                disabled={loading}
+                className="flex-1 rounded-md border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Voltar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Etapa 3: Cancelamento confirmado */}
+        {step === 'done' && (
+          <div className="p-6 text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
+              <span className="text-2xl">&#x26A0;&#xFE0F;</span>
+            </div>
+            <h2 id="cancellation-modal-title" className="text-lg font-bold text-gray-900 mb-2">
+              {lockInfo?.isEligibleForRefund
+                ? 'Assinatura cancelada com reembolso'
+                : 'Cancelamento iniciado'}
+            </h2>
+
+            {lockInfo?.isEligibleForRefund ? (
+              <p className="text-sm text-gray-600 mb-6">
+                Sua assinatura foi cancelada dentro do periodo de arrependimento (CDC Art. 49).
+                O reembolso sera processado em ate 7 dias uteis.
+              </p>
+            ) : (
+              <div className="text-sm text-gray-600 mb-6 space-y-2">
+                <p>Seu cancelamento foi registrado. O que acontece agora:</p>
+                <ul className="text-left space-y-1 text-xs text-gray-700 list-disc list-inside">
+                  <li>Posicoes restritas serao encerradas automaticamente em 48 horas</li>
+                  <li>Voce pode reverter o cancelamento a qualquer momento nos proximos 7 dias</li>
+                  <li>Apos 7 dias sem reversao, a conta sera definitivamente encerrada</li>
+                </ul>
+              </div>
+            )}
+
+            <button
+              onClick={handleClose}
+              className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 transition-colors"
+            >
+              Entendi
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

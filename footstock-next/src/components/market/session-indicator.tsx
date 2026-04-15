@@ -51,7 +51,8 @@ export function SessionIndicator({ compact = false, className }: SessionIndicato
 
   const color = SESSION_COLORS[session]
   const label = SESSION_LABELS[session]
-  const isNegociacao = session === MarketSession.REGULAR
+  // Dot pulsa em sessões de negociação ativa (TRADING e CLOSING_CALL)
+  const isNegociacao = session === MarketSession.TRADING || session === MarketSession.CLOSING_CALL
   const countdownText = countdownSeconds > 0 ? `em ${formatCountdown(countdownSeconds)}` : ''
   const ariaLabel = compact
     ? `Sessão: ${label}`
@@ -64,7 +65,7 @@ export function SessionIndicator({ compact = false, className }: SessionIndicato
       aria-live="polite"
       aria-label={ariaLabel}
     >
-      {/* Dot — pulsante apenas em NEGOCIACAO */}
+      {/* Dot — pulsante em sessões abertas (TRADING e CLOSING_CALL) */}
       <span
         className={cn(
           'w-2 h-2 rounded-full shrink-0 transition-all duration-300',

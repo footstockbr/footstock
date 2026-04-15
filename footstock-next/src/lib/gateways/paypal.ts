@@ -211,4 +211,12 @@ export class PayPalGateway implements IGateway {
       rawPayload:     payload,
     }
   }
+
+  async cancelAutoRenewal(gatewaySubscriptionId: string): Promise<void> {
+    console.warn(`[PAYPAL] cancelAutoRenewal stub — integração pendente. subscriptionId: ${gatewaySubscriptionId}`)
+  }
+
+  async reactivateAutoRenewal(gatewaySubscriptionId: string): Promise<void> {
+    console.warn(`[PAYPAL] reactivateAutoRenewal stub — integração pendente. subscriptionId: ${gatewaySubscriptionId}`)
+  }
 }

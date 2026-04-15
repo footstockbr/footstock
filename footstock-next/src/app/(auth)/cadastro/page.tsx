@@ -6,6 +6,15 @@ export const metadata: Metadata = {
   robots: "noindex",
 };
 
-export default function CadastroPage() {
-  return <RegisterWizard />;
+interface Props {
+  searchParams: Promise<{ ref?: string }>
+}
+
+export default async function CadastroPage({ searchParams }: Props) {
+  const { ref } = await searchParams
+  return (
+    <div data-testid="page-cadastro">
+      <RegisterWizard initialReferredByCode={ref ?? ''} />
+    </div>
+  );
 }

@@ -9,7 +9,7 @@ const HaltAssetSchema = z.object({
 })
 
 function serializeAsset(a: {
-  id: string; ticker: string; name: string; division: string
+  id: string; ticker: string; displayName: string; division: string
   currentPrice: { toNumber(): number }; fairValue: { toNumber(): number }
   currentSupply: bigint; totalShares: bigint; isHalted: boolean
   haltReason: string | null; colorPrimary: string; colorSecondary: string
@@ -18,7 +18,7 @@ function serializeAsset(a: {
   return {
     id: a.id,
     ticker: a.ticker,
-    displayName: a.name,
+    displayName: a.displayName,
     division: a.division,
     currentPrice: a.currentPrice.toNumber(),
     fairValue: a.fairValue.toNumber(),

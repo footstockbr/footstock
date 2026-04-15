@@ -1,17 +1,22 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { toast } from 'sonner'
-import { AlertCircle, Clock } from 'lucide-react'
+import { AlertCircle, Clock, WalletMinimal } from 'lucide-react'
 import { InfoTip } from '@/components/ui/info-tip'
+import { GlossaryInfoIcon } from '@/components/ui/glossary-info-icon'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { LeverageToggle } from '@/components/orders/LeverageToggle'
 import { useMotorStatusContext } from '@/contexts/motor-status-context'
 import { useMarketSession } from '@/hooks/useMarketSession'
 import { useMarketTick } from '@/hooks/useMarketTick'
 import { usePlanGuard, type PlanTier } from '@/hooks/usePlanGuard'
+import { useBalance } from '@/hooks/useBalance'
+import { useAnalytics } from '@/hooks/useAnalytics'
 import { calculateFee } from '@/lib/constants/limits'
 import { MarketSession } from '@/lib/constants/market'
+import type { OrderType } from '@/lib/analytics'
 
 // ── Constants mirrored from lib/services/plan-order-limits.ts ────────────────
 const ALLOWED_ORDER_TYPES: Record<PlanTier, string[]> = {
@@ -41,16 +46,23 @@ interface OrderFormProps {
   onSuccess?: () => void
   onClose?: () => void
   dailyOrdersUsed?: number
+  /** Saldo FS$ atual do usuário. Se omitido, o componente busca via /api/v1/me (T-019) */
+  fsBalance?: number
 }
 
-export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 0 }: OrderFormProps) {
-  const { plan } = usePlanGuard()
+export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 0, fsBalance: fsBalanceProp }: OrderFormProps) {
+  const { plan, hasAccess } = usePlanGuard()
   const { isOffline } = useMotorStatusContext()
   const { session } = useMarketSession()
   const tick = useMarketTick(ticker)
+  const { fsBalance: fsBalanceFetched } = useBalance()
+  const { track } = useAnalytics()
+  // Usar prop se fornecida (evita fetch extra); caso contrário usar hook
+  const fsBalance = fsBalanceProp !== undefined ? fsBalanceProp : (fsBalanceFetched ?? null)
 
   const allowedTypes = ALLOWED_ORDER_TYPES[plan]
   const dailyLimit = DAILY_ORDER_LIMITS[plan]
+  const isLenda = hasAccess('LENDA')
 
   const [orderType, setOrderType] = useState(allowedTypes[0])
   const [quantity, setQuantity] = useState('')
@@ -58,15 +70,47 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
   const [stopLossPrice, setStopLossPrice] = useState('')
   const [takeProfitPrice, setTakeProfitPrice] = useState('')
   const [scheduledAt, setScheduledAt] = useState('')
+  const [leverageEnabled, setLeverageEnabled] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
-  const currentPrice = tick?.lastPrice ?? 0
-  const isMarketClosed = session !== MarketSession.REGULAR
-  const isMarketDisabled = orderType === 'MARKET' && isMarketClosed
-  const atDailyLimit = dailyOrdersUsed >= dailyLimit
+  // Contador de ordens restantes — inicializado pelo prop; auto-buscado se prop for 0 (valor default)
+  const initialRemaining = dailyLimit === Infinity ? Infinity : Math.max(0, dailyLimit - dailyOrdersUsed)
+  const [ordersRemaining, setOrdersRemaining] = useState<number>(initialRemaining)
 
-  // Custo estimado
+  // Auto-fetch do contador quando o componente monta sem dailyOrdersUsed explícito
+  useEffect(() => {
+    if (dailyLimit === Infinity) return // Lenda: sem limite, sem fetch
+    fetch('/api/v1/orders/daily-count')
+      .then((r) => r.json())
+      .then((body) => {
+        const remaining = body?.data?.remaining
+        if (typeof remaining === 'number') setOrdersRemaining(remaining)
+      })
+      .catch(() => { /* Silencioso — valor inicial do prop é usado como fallback */ })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // EVT-011: rastrear abertura do formulario de ordem
+  useEffect(() => {
+    track('order_form_opened', {
+      asset_ticker: ticker,
+      order_type: orderType as OrderType,
+      side,
+      plan,
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const currentPrice = tick?.lastPrice ?? 0
+  // MARKET orders aceitos em TRADING e CLOSING_CALL (call de fechamento também é pregão aberto)
+  const isMarketClosed = session !== MarketSession.TRADING && session !== MarketSession.CLOSING_CALL
+  const isMarketDisabled = orderType === 'MARKET' && isMarketClosed
+  const atDailyLimit = ordersRemaining <= 0 && dailyLimit !== Infinity
+  // T-019: saldo zero ou negativo bloqueia novas ordens BUY
+  const isBalanceZero = side === 'BUY' && fsBalance !== null && fsBalance <= 0
+
+  // Custo estimado (alavancagem reduz capital proprio necessario para 50%)
   const estimatedCost = useMemo(() => {
     const qty = Number(quantity)
     if (!qty || qty <= 0) return null
@@ -74,8 +118,9 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
     if (!unitPrice || unitPrice <= 0) return null
     const operationValue = qty * unitPrice
     const fee = calculateFee(operationValue)
-    return { operationValue, fee, total: operationValue + fee }
-  }, [quantity, price, orderType, currentPrice])
+    const ownCapital = side === 'BUY' && leverageEnabled ? operationValue / 2 : operationValue
+    return { operationValue, fee, total: ownCapital + fee, leverageEnabled }
+  }, [quantity, price, orderType, currentPrice, leverageEnabled, side])
 
   function validate(): boolean {
     const errs: Record<string, string> = {}
@@ -134,6 +179,11 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
         quantity: Number(quantity),
       }
 
+      // Alavancagem: apenas BUY Lenda com toggle ativo
+      if (side === 'BUY' && leverageEnabled && isLenda) {
+        body.leverage = 2
+      }
+
       if (orderType === 'LIMIT' || orderType === 'OCO') {
         body.price = Number(price)
       }
@@ -157,6 +207,24 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
         throw new Error(data.message || `Erro ${res.status}`)
       }
 
+      // EVT-012: rastrear ordem enviada com sucesso
+      const estValue = estimatedCost?.operationValue ?? 0
+      const valueBracket: '0-500' | '500-1000' | '1000+' =
+        estValue >= 1000 ? '1000+' : estValue >= 500 ? '500-1000' : '0-500'
+      track('order_submitted', {
+        asset_ticker: ticker,
+        order_type: orderType as OrderType,
+        side,
+        plan,
+        value_bracket: valueBracket,
+      })
+
+      // Atualizar contador de ordens restantes a partir do header da resposta
+      const remainingHeader = res.headers.get('X-DailyOrder-Remaining')
+      if (remainingHeader !== null && remainingHeader !== 'unlimited') {
+        setOrdersRemaining(parseInt(remainingHeader, 10))
+      }
+
       toast.success(
         side === 'BUY'
           ? `Ordem de compra de ${ticker} enviada!`
@@ -174,7 +242,7 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
   const isBuy = side === 'BUY'
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 p-4" data-testid="order-form">
+    <form onSubmit={handleSubmit} className="space-y-4 p-4" data-testid="order-form" data-tour="order-form">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-[#EAECEF] font-semibold text-lg">
@@ -188,15 +256,37 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
         )}
       </div>
 
-      {/* Daily limit counter */}
-      <div className="text-xs text-[#707A8A]">
-        {dailyLimit === Infinity
-          ? `${dailyOrdersUsed} ordens hoje (ilimitado)`
-          : `${dailyOrdersUsed} de ${dailyLimit} ordens diarias`}
+      {/* Daily limit counter + saldo atual */}
+      <div className="flex items-center justify-between text-xs text-[#707A8A]">
+        <span>
+          {dailyLimit === Infinity
+            ? 'Ordens ilimitadas hoje'
+            : ordersRemaining > 0
+              ? `${ordersRemaining} ordem${ordersRemaining !== 1 ? 's' : ''} restante${ordersRemaining !== 1 ? 's' : ''} hoje`
+              : 'Limite diario atingido'}
+        </span>
+        {fsBalance !== null && (
+          <span className={`flex items-center gap-1 font-mono ${fsBalance <= 0 ? 'text-[#F6465D] font-semibold' : 'text-[#929AA5]'}`}>
+            <WalletMinimal className="h-3 w-3" aria-hidden="true" />
+            FS$ {fsBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        )}
       </div>
 
+      {/* T-019: banner saldo zerado — visivel apenas em BUY */}
+      {isBalanceZero && (
+        <div
+          role="alert"
+          data-testid="balance-zero-banner"
+          className="flex items-center gap-2 text-sm text-[#F6465D] bg-[rgba(246,70,93,.08)] border border-[rgba(246,70,93,.2)] p-3 rounded-lg"
+        >
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          <span>Saldo zerado — venda posicoes para negociar novamente.</span>
+        </div>
+      )}
+
       {/* Order type selector */}
-      <div role="group" aria-label="Tipo de ordem" className="flex gap-2">
+      <div role="group" aria-label="Tipo de ordem" className="flex gap-2" data-tour="order-type-selector">
         {allowedTypes.map((t) => (
           <button
             key={t}
@@ -247,7 +337,7 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
         <>
           <Input
             label="Stop Loss (FS$)"
-            labelExtra={<InfoTip text="Preco que limita sua perda — a ordem e cancelada automaticamente se o ativo atingir este valor" />}
+            labelExtra={<GlossaryInfoIcon fieldKey="stop-loss" size={12} />}
             type="number"
             min={0.01}
             step={0.01}
@@ -258,7 +348,7 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
           />
           <Input
             label="Take Profit (FS$)"
-            labelExtra={<InfoTip text="Preco que garante seu lucro — a ordem e executada automaticamente ao atingir este valor" />}
+            labelExtra={<GlossaryInfoIcon fieldKey="take-profit" size={12} />}
             type="number"
             min={0.01}
             step={0.01}
@@ -294,6 +384,17 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
         </div>
       )}
 
+      {/* Alavancagem 2x — visivel apenas em ordens BUY */}
+      {side === 'BUY' && (
+        <LeverageToggle
+          isLenda={isLenda}
+          enabled={leverageEnabled}
+          onToggle={setLeverageEnabled}
+          operationValue={estimatedCost?.operationValue ?? 0}
+          plan={plan}
+        />
+      )}
+
       {/* Estimated cost */}
       {estimatedCost && (
         <div className="bg-[#1E2329] rounded-lg p-3 space-y-1 text-sm">
@@ -301,14 +402,43 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
             <span className="flex items-center gap-1">Valor da operacao <InfoTip text="Quantidade x preco unitario (sem taxas)" /></span>
             <span className="font-mono text-[#EAECEF]">FS$ {estimatedCost.operationValue.toFixed(2)}</span>
           </div>
+          {estimatedCost.leverageEnabled && (
+            <div className="flex justify-between text-[#929AA5]">
+              <span className="flex items-center gap-1">
+                Credito da plataforma (2x)
+                <InfoTip text="A plataforma financia 50% do nocional. Sobre este valor incidem juros diarios de 0,2%." />
+              </span>
+              <span className="font-mono text-[#F0B90B]">FS$ {(estimatedCost.operationValue / 2).toFixed(2)}</span>
+            </div>
+          )}
           <div className="flex justify-between text-[#929AA5]">
-            <span className="flex items-center gap-1">Taxa operacional <InfoTip text="Taxa cobrada pela plataforma sobre o valor da operacao" /></span>
+            <span className="flex items-center gap-1">
+              Taxa estimada
+              <InfoTip text={
+                side === 'SELL'
+                  ? 'Taxa fixa cobrada sobre o valor da operacao. Deduzida dos rendimentos da venda.'
+                  : 'Taxa fixa cobrada pela plataforma sobre o valor da operacao'
+              } />
+            </span>
             <span className="font-mono text-[#EAECEF]">FS$ {estimatedCost.fee.toFixed(2)}</span>
           </div>
-          <div className="flex justify-between text-[#EAECEF] font-medium border-t border-[#2B3139] pt-1">
-            <span className="flex items-center gap-1">Total estimado <InfoTip text="Valor da operacao + taxa operacional" /></span>
-            <span className="font-mono">FS$ {estimatedCost.total.toFixed(2)}</span>
-          </div>
+          {side === 'SELL' && (
+            <p className="text-[10px] text-[#707A8A] leading-relaxed">
+              Taxa deduzida dos rendimentos. Voce recebera FS$ {(estimatedCost.operationValue - estimatedCost.fee).toFixed(2)}.
+            </p>
+          )}
+          {side === 'BUY' && (
+            <div className="flex justify-between text-[#EAECEF] font-medium border-t border-[#2B3139] pt-1">
+              <span className="flex items-center gap-1">
+                {estimatedCost.leverageEnabled ? 'Capital proprio necessario' : 'Total estimado'}
+                <InfoTip text={estimatedCost.leverageEnabled
+                  ? 'Seu capital proprio: 50% do nocional + taxa. O restante e credito virtual da plataforma.'
+                  : 'Valor da operacao + taxa operacional'
+                } />
+              </span>
+              <span className="font-mono">FS$ {estimatedCost.total.toFixed(2)}</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -326,26 +456,36 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
         </div>
       )}
       {atDailyLimit && (
-        <div className="flex items-center gap-2 text-sm text-[#F6465D] bg-[rgba(246,70,93,.08)] p-2 rounded">
+        <div
+          role="alert"
+          data-testid="daily-limit-banner"
+          className="flex items-center gap-2 text-sm text-[#F6465D] bg-[rgba(246,70,93,.08)] border border-[rgba(246,70,93,.2)] p-3 rounded-lg"
+        >
           <AlertCircle className="h-4 w-4 flex-shrink-0" />
-          Limite diario de ordens atingido ({dailyLimit}).
+          Limite diario atingido. Retorne amanha.
         </div>
       )}
 
       {/* Submit */}
-      <Button
-        type="submit"
-        fullWidth
-        isLoading={isSubmitting}
-        disabled={isOffline || isMarketDisabled || atDailyLimit}
-        className={isBuy
-          ? 'bg-[#2EBD85] hover:bg-[#33d498] text-[#0B0E11] shadow-none'
-          : 'bg-[#F6465D] hover:bg-[#ff5a70] text-white shadow-none'
-        }
-        data-testid="order-submit"
+      <div
+        title={isBalanceZero ? 'Saldo FS$ zerado. Venda posicoes para recuperar saldo e negociar novamente.' : undefined}
+        className="w-full"
       >
-        {isBuy ? 'Confirmar Compra' : 'Confirmar Venda'}
-      </Button>
+        <Button
+          type="submit"
+          fullWidth
+          isLoading={isSubmitting}
+          disabled={isOffline || isMarketDisabled || atDailyLimit || isBalanceZero}
+          className={isBuy
+            ? 'bg-[#2EBD85] hover:bg-[#33d498] text-[#0B0E11] shadow-none'
+            : 'bg-[#F6465D] hover:bg-[#ff5a70] text-white shadow-none'
+          }
+          data-testid="order-submit"
+          aria-disabled={isBalanceZero}
+        >
+          {isBuy ? 'Confirmar Compra' : 'Confirmar Venda'}
+        </Button>
+      </div>
     </form>
   )
 }

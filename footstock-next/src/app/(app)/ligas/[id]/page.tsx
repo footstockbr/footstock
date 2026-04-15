@@ -15,5 +15,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function LeagueDetailPage({ params }: Props) {
   const { id } = await params
-  return <LeagueDetail leagueId={id} />
+  return (
+    <div data-testid="page-liga-detail">
+      <LeagueDetail leagueId={id} />
+    </div>
+  )
 }

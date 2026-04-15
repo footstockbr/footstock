@@ -11,7 +11,7 @@ import { sessionManager } from './SessionManager'
 import { agentOrchestrator, AssetCluster } from '../agents/AgentOrchestrator'
 import type { MarketContext } from '../agents/BaseAgent'
 import { getClusterParams } from '../microstructure/clusters'
-import { buildMotorTick, serializeTick } from '../microstructure/MotorTick'
+import { buildMotorTick, buildHaltTick, serializeTick } from '../microstructure/MotorTick'
 import { REDIS_CHANNELS } from '../types/events.types'
 import type { AssetState, MotorTick, SessionType } from '../types/motor.types'
 import { logger } from '../utils/logger'
@@ -32,7 +32,9 @@ const HEARTBEAT_EVERY = parseInt(process.env.MOTOR_HEARTBEAT_EVERY ?? '5', 10)
 export class MarketEngine {
   private redis: Redis
   private prisma: PrismaClient
-  private calculator = new PriceCalculator()
+  private calculator: PriceCalculator
+  /** Últimos resultados de camadas por ativo — exposto via endpoint /layers-debug. */
+  private lastLayerResults: Map<string, import('./PriceCalculator').PriceCalculationResult> = new Map()
   private orderBooks: Map<string, OrderBook> = new Map()
   private assetStates: Map<string, AssetState> = new Map()
   private tickTimer: ReturnType<typeof setInterval> | null = null
@@ -51,6 +53,7 @@ export class MarketEngine {
   constructor(redis: Redis) {
     this.redis = redis
     this.prisma = new PrismaClient()
+    this.calculator = new PriceCalculator(redis)  // Passa Redis para persistência dos estados de camada
     this.healthService = MotorHealthService.getInstance(redis)
     this.orderExecutor = new OrderExecutor(this.prisma, redis)
     this.orderMatcher = new OrderMatcher(this.prisma, redis)
@@ -113,8 +116,13 @@ export class MarketEngine {
         pendingBuyVolume: 0,
         pendingSellVolume: 0,
         isPaused: false,
+        haltReason: null,
+        haltResumeAt: null,
         newsImpact: 0,
         newsImpactTicks: 0,
+        ofiState: 0,               // L4_OFI: OFI_t inicial (sem acumulação)
+        dailyVolAccum: 0,          // L9_DailyVolTarget: acumulador diário de variação
+        dailySigmaMultiplier: 1.0, // L9_DailyVolTarget: multiplicador sigma (1.0 = normal)
       }
 
       this.assetStates.set(asset.id, state)
@@ -124,6 +132,13 @@ export class MarketEngine {
       const cluster = state.cluster === 'A_TOP' ? AssetCluster.A_TOP : AssetCluster.B_ILLIQ
       agentOrchestrator.initAsset(asset.id, cluster)
     }
+
+    // Hydratar estados críticos do Redis (variance GARCH, OFI state, daily vol)
+    // Executado após todos os ativos terem sido carregados com defaults seguros
+    const hydratePromises = [...this.assetStates.values()].map(state =>
+      this.calculator.hydrateFromRedis(state)
+    )
+    await Promise.allSettled(hydratePromises)
 
     logger.info(`[engine] AgentOrchestrator inicializado para ${this.assetStates.size} ativos`)
   }
@@ -140,8 +155,23 @@ export class MarketEngine {
       for (const state of this.assetStates.values()) {
         state.closePrice = state.currentPrice
       }
+      // Reset do DailyVolTarget ao iniciar o dia de negociação (L9)
+      if (sessionType === 'PRE_OPENING') {
+        for (const s of this.assetStates.values()) {
+          this.calculator.resetDailyVolTarget(s)
+        }
+        this.calculator.resetDailyVolCap()  // compatibilidade retroativa
+        logger.info('[engine] DailyVolTarget resetado para nova sessão PRE_OPENING')
+      }
     }
     this.previousSessionType = sessionType
+
+    // Incluir ticks de halt para ativos suspensos (frontend precisa saber do halt em tempo real)
+    for (const [, state] of this.assetStates) {
+      if (!state.isPaused) continue
+      // Usa haltReason e haltResumeAt persistidos no estado (evita hardcode e preserva estimativa)
+      ticks.push(buildHaltTick(state, sessionType, state.haltReason ?? 'CIRCUIT_BREAKER', state.haltResumeAt))
+    }
 
     for (const [assetId, state] of this.assetStates) {
       if (state.isPaused) continue
@@ -157,17 +187,34 @@ export class MarketEngine {
         // Gerar ruído gaussiano (Box-Muller)
         const noise = this.gaussianNoise()
 
-        // Calcular novo preço via 9 camadas + L10 correlação
-        const { newPrice, halted } = this.calculator.calculate(state, params, noise, this.previousTickDeltas)
+        // Calcular novo preço via 10 camadas (L1-L10) + Correlação
+        const calcResult = this.calculator.calculate(state, params, noise, this.previousTickDeltas)
+        const { newPrice, halted } = calcResult
+
+        // Armazenar resultado das camadas para o endpoint de debug (admin only)
+        this.lastLayerResults.set(state.ticker, calcResult)
 
         if (halted) {
-          // Circuit breaker: notificar e pausar por 150 ticks
-          this.notifyCircuitBreaker(assetId, state.ticker).catch(console.error)
+          // Circuit breaker: notificar, pausar e persistir halt no DB
+          const variationPct = state.closePrice > 0
+            ? Math.abs((state.currentPrice - state.closePrice) / state.closePrice) * 100
+            : 0
+          const resumeAt = Date.now() + 150 * TICK_INTERVAL_MS
           state.isPaused = true
+          state.haltReason = 'CIRCUIT_BREAKER'
+          state.haltResumeAt = resumeAt
+          this.notifyCircuitBreaker(assetId, state.ticker, variationPct, resumeAt, sessionType).catch(console.error)
           setTimeout(() => {
             state.isPaused = false
+            state.haltReason = null
+            state.haltResumeAt = null
             state.closePrice = state.currentPrice  // Reset âncora: evita re-trigger imediato do CB
             logger.info(`[engine] ${state.ticker} retomado após circuit breaker (closePrice reset para ${state.currentPrice.toFixed(4)})`)
+            this.persistHaltState(assetId, false, null).catch(console.error)
+            // Publica tick de retomada para o frontend atualizar em tempo real
+            const resumeTick = buildHaltTick(state, sessionType, null, null)
+            resumeTick.isHalted = false
+            this.redis.publish(REDIS_CHANNELS.MARKET_TICK, serializeTick([resumeTick])).catch(console.error)
           }, 150 * TICK_INTERVAL_MS)
           continue
         }
@@ -217,8 +264,9 @@ export class MarketEngine {
     }
 
     // Heartbeat publicado a cada HEARTBEAT_EVERY ticks (motor está vivo)
+    // Sessão canônica (PRE_OPENING/TRADING/CLOSING_CALL/AFTER_MARKET/CLOSED) — consumida pelo OrderService do Next.js
     if (this.tickCount % HEARTBEAT_EVERY === 0) {
-      await this.healthService.publishTick()
+      await this.healthService.publishTick(sessionType)
     }
 
     if (ticks.length > 0) {
@@ -268,8 +316,8 @@ export class MarketEngine {
       )
     }
 
-    // Cobrar juros diários de posições LONG alavancadas (sessão FECHADO = fim do dia)
-    if (sessionType === 'FECHADO' && this.tickCount % 300 === 1) {
+    // Cobrar juros diários de posições LONG alavancadas (sessão CLOSED = fim do dia)
+    if (sessionType === 'CLOSED' && this.tickCount % 300 === 1) {
       // 300 ticks × 2s = 10 min — trigger no início do período FECHADO, não a cada tick
       this.leverageInterestRunner.chargeDaily().catch(err =>
         logger.error('[engine] LeverageInterestRunner erro:', err)
@@ -289,17 +337,6 @@ export class MarketEngine {
     return Math.sqrt(-2 * Math.log(Math.max(u1, 1e-10))) * Math.cos(2 * Math.PI * u2)
   }
 
-  private _mapSessionType(s: string): string {
-    const map: Record<string, string> = {
-      PRE_ABERTURA: 'PRE_MARKET',
-      NEGOCIACAO: 'REGULAR',
-      CALL: 'REGULAR',
-      AFTER_MARKET: 'AFTER_MARKET',
-      FECHADO: 'CLOSED',
-    }
-    return map[s] ?? 'CLOSED'
-  }
-
   private async persistPriceHistory(tick: MotorTick): Promise<void> {
     await this.prisma.priceHistory.create({
       data: {
@@ -310,7 +347,7 @@ export class MarketEngine {
         low: tick.low,
         close: tick.price,
         volume: BigInt(tick.volume),
-        sessionType: this._mapSessionType(tick.sessionType) as any,
+        sessionType: tick.sessionType as any,
       },
     })
   }
@@ -354,16 +391,97 @@ export class MarketEngine {
 
   // ─── Notificações Redis ──────────────────────────────────────────────────
 
-  private async notifyCircuitBreaker(assetId: string, ticker: string): Promise<void> {
+  private async notifyCircuitBreaker(
+    assetId: string,
+    ticker: string,
+    variationPct: number,
+    resumeAt: number,
+    sessionType: SessionType,
+  ): Promise<void> {
+    const haltReason = 'CIRCUIT_BREAKER'
+
+    // 1. Persistir halt no banco (isHalted=true) — sincroniza OrderService que lê do DB
+    await this.persistHaltState(assetId, true, haltReason)
+
+    // 2. Publicar evento circuit-breaker no Redis (consumido por outros serviços)
     const notification = {
       type: 'CIRCUIT_BREAKER',
       assetId,
       ticker,
       timestamp: Date.now(),
       haltDurationSeconds: 300,  // 150 ticks × 2s
+      resumeAt,
+      variationPct: parseFloat(variationPct.toFixed(2)),
+      haltReason,
     }
     await this.redis.publish('notifications:circuit-breaker', JSON.stringify(notification))
-    logger.warn(`[engine] CIRCUIT_BREAKER publicado para ${ticker}`)
+    // Métrica: total de ativações do circuit breaker (consumida pelo admin dashboard)
+    await this.redis.incr('motor:metrics:circuit_breaker_activations').catch(() => {})
+    logger.warn(`[engine] CIRCUIT_BREAKER publicado para ${ticker} (${variationPct.toFixed(2)}% — retomada em ${new Date(resumeAt).toISOString()})`)
+
+    // 3. Notificar usuários com posições no ativo suspenso (in-app + push)
+    await this.notifyUsersWithPositions(assetId, ticker, resumeAt, variationPct)
+
+    // 4. Publicar halt tick para SSE chegar ao frontend em tempo real
+    const state = this.assetStates.get(assetId)
+    if (state) {
+      const haltTick = buildHaltTick(state, sessionType, haltReason, resumeAt)
+      await this.redis.publish(REDIS_CHANNELS.MARKET_TICK, serializeTick([haltTick]))
+    }
+  }
+
+  /** Persiste isHalted e haltReason no banco de dados. */
+  private async persistHaltState(
+    assetId: string,
+    isHalted: boolean,
+    haltReason: string | null
+  ): Promise<void> {
+    try {
+      await this.prisma.asset.update({
+        where: { id: assetId },
+        data: { isHalted, haltReason },
+      })
+    } catch (err) {
+      logger.error(`[engine] Falha ao persistir halt state para ${assetId}:`, err)
+    }
+  }
+
+  /** Notifica usuários que possuem posições no ativo suspenso. */
+  private async notifyUsersWithPositions(
+    assetId: string,
+    ticker: string,
+    resumeAt: number,
+    variationPct: number,
+  ): Promise<void> {
+    try {
+      const positions = await this.prisma.position.findMany({
+        where: { assetId, quantity: { gt: 0 } },
+        select: { userId: true },
+        distinct: ['userId'],
+      })
+
+      const resumeAtIso = new Date(resumeAt).toISOString()
+      const resumeMin = Math.ceil((resumeAt - Date.now()) / 60_000)
+
+      if (positions.length > 0) {
+        // Persistir notificações diretamente no banco — Supabase Realtime broadcast
+        // para clientes conectados + push service lê da tabela notifications.
+        // Redis publish para notifications:{userId} não tem consumer no Next.js,
+        // então a persistência direta é o caminho correto.
+        await this.prisma.notification.createMany({
+          data: positions.map(({ userId }: { userId: string }) => ({
+            userId,
+            type: 'CIRCUIT_BREAKER' as any,
+            title: `Ativo ${ticker} suspenso`,
+            body: `Negociação interrompida por variação de ${variationPct.toFixed(1)}%. Retomada em ~${resumeMin} min.`,
+            data: { ticker, resumeAt: resumeAtIso, variationPct },
+          })),
+        })
+        logger.info(`[engine] CIRCUIT_BREAKER: ${positions.length} notificações criadas para ${ticker}`)
+      }
+    } catch (err) {
+      logger.error(`[engine] Falha ao notificar usuários sobre CB de ${ticker}:`, err)
+    }
   }
 
   private async notifyOrderExecuted(
@@ -398,14 +516,22 @@ export class MarketEngine {
     return undefined
   }
 
-  pauseAsset(assetId: string): void {
+  pauseAsset(assetId: string, haltReason?: string | null): void {
     const state = this.assetStates.get(assetId)
-    if (state) state.isPaused = true
+    if (state) {
+      state.isPaused = true
+      state.haltReason = haltReason ?? null
+      state.haltResumeAt = null  // Halt admin não tem retomada automática determinística
+    }
   }
 
   resumeAsset(assetId: string): void {
     const state = this.assetStates.get(assetId)
-    if (state) state.isPaused = false
+    if (state) {
+      state.isPaused = false
+      state.haltReason = null
+      state.haltResumeAt = null
+    }
   }
 
   adjustPrice(assetId: string, newPrice: number): void {
@@ -437,5 +563,62 @@ export class MarketEngine {
     }
     logger.info(`[engine] RESUME_ALL: ${count} ativos retomados`)
     return count
+  }
+
+  // ─── Debug / Admin (T-009) ───────────────────────────────────────────────
+
+  /**
+   * Retorna contribuição de cada camada por ticker no último tick processado.
+   * Usado por `GET /api/v1/market/engine/layers-debug` (admin only).
+   *
+   * @param ticker Opcional: filtrar por ativo. Se omitido, retorna todos.
+   */
+  getLayersDebug(ticker?: string): Record<string, unknown> {
+    if (ticker) {
+      const result = this.lastLayerResults.get(ticker)
+      const state  = [...this.assetStates.values()].find(s => s.ticker === ticker)
+      if (!result || !state) return {}
+      return {
+        ticker,
+        currentPrice:     state.currentPrice,
+        isPaused:         state.isPaused,
+        dailyVolAccum:    state.dailyVolAccum ?? 0,
+        sigmaMultiplier:  state.dailySigmaMultiplier ?? 1.0,
+        ofiState:         state.ofiState ?? 0,
+        variance:         state.variance,
+        halted:           result.halted,
+        layers:           result.layerResults,
+      }
+    }
+
+    const out: Record<string, unknown> = {}
+    for (const [t, result] of this.lastLayerResults) {
+      const state = [...this.assetStates.values()].find(s => s.ticker === t)
+      out[t] = {
+        ticker:          t,
+        currentPrice:    state?.currentPrice,
+        isPaused:        state?.isPaused ?? false,
+        dailyVolAccum:   state?.dailyVolAccum ?? 0,
+        sigmaMultiplier: state?.dailySigmaMultiplier ?? 1.0,
+        ofiState:        state?.ofiState ?? 0,
+        variance:        state?.variance,
+        halted:          result.halted,
+        layers:          result.layerResults,
+      }
+    }
+    return out
+  }
+
+  /**
+   * Retorna histórico OFI do ticker (últimos 100 pontos).
+   * Usado por `GET /api/v1/assets/:ticker/ofi-history`.
+   */
+  async getOfiHistory(ticker: string): Promise<{ timestamp: number; ofi: number }[]> {
+    try {
+      const raw = await this.redis.lrange(`ofi:history:${ticker}`, 0, 99)
+      return raw.map(r => JSON.parse(r) as { timestamp: number; ofi: number })
+    } catch {
+      return []
+    }
   }
 }

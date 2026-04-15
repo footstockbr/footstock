@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { redisPublisher } from '@/lib/redis'
 import { env } from '@/lib/env'
+import { adminAuditService } from '@/lib/services/shared'
 import type { User, AdminRole } from '@/types'
 
 const REDIS_KEY = 'admin:gateway:config:v1'
@@ -143,6 +144,7 @@ async function getHandler(req: NextRequest) {
         tourCompleted: false,
         ageVerificationPending: false,
         adminRole: adminRole as AdminRole,
+        version: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
@@ -202,6 +204,7 @@ async function patchHandler(req: NextRequest) {
         tourCompleted: false,
         ageVerificationPending: false,
         adminRole: adminRole as AdminRole,
+        version: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
@@ -216,9 +219,10 @@ async function patchHandler(req: NextRequest) {
     )
   }
 
-  if (!hasAdminRole(auth.user.adminRole, 'ADMINISTRADOR')) {
+  // PATCH de configuração de gateway é exclusivo SUPER_ADMIN (re-auth feita no frontend)
+  if (auth.user.adminRole !== 'SUPER_ADMIN') {
     return NextResponse.json(
-      { success: false, error: { code: 'AUTH_009', message: 'Acesso negado' } },
+      { success: false, error: { code: 'AUTH_009', message: 'Apenas SUPER_ADMIN pode alterar configuração de gateways' } },
       { status: 403 }
     )
   }
@@ -269,6 +273,16 @@ async function patchHandler(req: NextRequest) {
     })
 
     await redisPublisher.set(REDIS_KEY, JSON.stringify({ gateways: mergedGateways }))
+
+    // Auditoria: registra ação de config de gateway (audit trail obrigatório — spec §Configurações)
+    await adminAuditService.log({
+      adminId: auth.user.id,
+      action: 'CONFIG_GATEWAY_EDIT',
+      details: {
+        gatewayCodes: mergedGateways.map((g) => g.code),
+        activeCodes: mergedGateways.filter((g) => g.active).map((g) => g.code),
+      },
+    })
 
     return NextResponse.json({
       success: true,

@@ -13,9 +13,11 @@ import { Input } from "@/components/ui/input";
 import { ROUTES } from "@/lib/constants/routes";
 import { loginSchema, type LoginFormData } from "@/lib/schemas/auth.schema";
 import { DEV_TEST_USERS } from "@/lib/constants/dev-test-users";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 function LoginForm() {
   const router = useRouter();
+  const { track, identify } = useAnalytics();
   const [isLoading, setIsLoading] = useState(false);
   const [devLoginRole, setDevLoginRole] = useState<string | null>(null);
 
@@ -34,7 +36,10 @@ function LoginForm() {
   }));
 
   async function performLogin(email: string, password: string) {
-    const res = await fetch("/api/v1/auth/login", {
+    const isDev = process.env.NODE_ENV !== "production";
+    const endpoint = isDev ? "/api/v1/auth/dev-login" : "/api/v1/auth/login";
+
+    const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
@@ -45,14 +50,23 @@ function LoginForm() {
       throw new Error(json.error.message || "Email ou senha incorretos");
     }
 
-    // Set Supabase session cookies so middleware recognizes the user
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-    await supabase.auth.setSession({
-      access_token: json.data.session.access_token,
-      refresh_token: json.data.session.refresh_token,
+    // Em produção, setar sessão Supabase nos cookies do browser
+    if (!isDev) {
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      );
+      await supabase.auth.setSession({
+        access_token: json.data.session.access_token,
+        refresh_token: json.data.session.refresh_token,
+      });
+    }
+
+    // EVT-005: Login Concluido
+    const userData = json.data.user;
+    track('login_completed', {
+      method: 'email_password',
+      plan: (userData?.planType ?? 'JOGADOR') as 'JOGADOR' | 'CRAQUE' | 'LENDA',
     });
 
     // Store admin role in cookie for middleware redirect

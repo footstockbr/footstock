@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { withAdmin } from '@/app/api/middleware'
 import { prisma } from '@/lib/prisma'
+import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
 
 const createSchema = z.object({
   email:                z.string().email('E-mail inválido'),
@@ -111,6 +112,13 @@ export const POST = withAdmin('financial:write')(async (request: NextRequest) =>
       bankData:             parsed.data.bankData ?? Prisma.JsonNull,
     },
     select: { id: true, code: true, affiliateType: true, commissionPercentage: true, active: true, createdAt: true },
+  })
+
+  // EVT-038: affiliate_code_generated
+  mixpanelServer.trackAffiliateCodeGenerated(user.id, {
+    affiliateType: parsed.data.affiliateType,
+    code,
+    commissionPercentage: parsed.data.commissionPercentage,
   })
 
   return NextResponse.json({ success: true, data: affiliate }, { status: 201 })

@@ -6,7 +6,7 @@
     "node": ">=18.17.0"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "NODE_OPTIONS='--max-old-space-size=4096' next dev --webpack",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -43,6 +43,8 @@
     "jszip": "^3.10.1",
     "lightweight-charts": "^4.2.3",
     "lucide-react": "^1.7.0",
+    "mixpanel": "^0.18.0",
+    "mixpanel-browser": "^2.55.1",
     "next": "16.2.1",
     "next-themes": "^0.4.6",
     "pg": "^8.20.0",
@@ -65,6 +67,7 @@
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
     "@types/jest": "^30.0.0",
+    "@types/mixpanel-browser": "^2.60.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

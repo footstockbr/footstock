@@ -3,13 +3,19 @@ import { AppHeader } from "@/components/shared/app-header";
 import { BottomTabBar } from "@/components/shared/bottom-tab-bar";
 import { DesktopSidebar } from "@/components/shared/desktop-sidebar";
 import { AdminRouteGuard } from "@/components/shared/admin-route-guard";
+import { PushSyncBootstrap } from "@/components/shared/push-sync-bootstrap";
 import { MotorStatusProvider } from "@/contexts/motor-status-context";
 import { MotorOfflineBanner } from "@/components/market/motor-offline-banner";
+import { CancellationLockBannerLoader } from "@/components/subscription/CancellationLockBannerLoader";
+import { OnboardingTour } from "@/components/onboarding/OnboardingTour";
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <MotorStatusProvider>
       <AdminRouteGuard />
+      <PushSyncBootstrap />
+      {/* T-013: Onboarding tour adaptativo — auto-inicia quando tourCompleted=false */}
+      <OnboardingTour />
       <div data-testid="app-shell" className="min-h-dvh md:h-dvh md:overflow-hidden flex bg-[#0B0E11]">
         {/* Skip navigation */}
         <a
@@ -24,6 +30,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <div className="flex min-w-0 flex-1 flex-col md:overflow-y-auto">
           <AppHeader />
           <MotorOfflineBanner />
+          <CancellationLockBannerLoader />
 
           <main
             id="main-content"

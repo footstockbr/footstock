@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { createBrowserClient } from '@supabase/ssr'
 import { Button } from '@/components/ui/button'
 import { ROUTES } from '@/lib/constants/routes'
 import type { WizardData } from '../register-wizard'
@@ -86,6 +87,7 @@ export function Step4Terms({ data, onComplete }: Step4Props) {
         cpf: data.cpf,
         favoriteClub: data.favoriteClub,
         consents,
+        referredByCode: data.referredByCode || undefined,
       }
 
       const res = await fetch('/api/v1/auth/register', {
@@ -99,6 +101,18 @@ export function Step4Terms({ data, onComplete }: Step4Props) {
       if (!res.ok || !json.success) {
         toast.error(json.error?.message ?? 'Erro ao criar conta. Tente novamente.')
         return
+      }
+
+      // Persistir sessão Supabase nos cookies do browser (espelha padrão do login-form)
+      if (json.data.session) {
+        const supabase = createBrowserClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
+        await supabase.auth.setSession({
+          access_token: json.data.session.access_token,
+          refresh_token: json.data.session.refresh_token,
+        })
       }
 
       const finalData = { ...data, consents }

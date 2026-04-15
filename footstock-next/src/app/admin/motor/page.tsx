@@ -21,5 +21,9 @@ export default async function AdminMotorPage() {
 
   if (!adminRole) redirect(ROUTES.LOGIN)
 
-  return <MotorPageClient adminRole={adminRole} />
+  return (
+    <div data-testid="page-admin-motor">
+      <MotorPageClient adminRole={adminRole} />
+    </div>
+  )
 }

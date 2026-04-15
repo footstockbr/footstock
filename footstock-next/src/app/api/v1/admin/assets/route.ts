@@ -19,10 +19,12 @@ export async function GET() {
       select: {
         id: true,
         ticker: true,
-        name: true,
+        displayName: true,
+        realName: true,
         division: true,
         currentPrice: true,
         fairValue: true,
+        volume: true,
         isHalted: true,
         haltReason: true,
         sentiment: true,
@@ -35,10 +37,12 @@ export async function GET() {
       assets.map((a) => ({
         id: a.id,
         ticker: a.ticker,
-        displayName: a.name,
+        displayName: a.displayName,
+        realName: a.realName ?? null,
         division: a.division,
         currentPrice: a.currentPrice.toNumber(),
         fairValue: a.fairValue.toNumber(),
+        volume24h: Number(a.volume),
         priceChange:
           a.fairValue.toNumber() > 0
             ? Math.round(

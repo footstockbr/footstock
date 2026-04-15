@@ -167,7 +167,7 @@ async function postHandler(req: NextRequest, _ctx: AuthContext): Promise<NextRes
     content: payload.content,
     impact: payload.impact as import("@prisma/client").ImpactCategory,
     sentiment: payload.sentiment as import("@prisma/client").Sentiment,
-    source: payload.source?.trim() || 'Editorial',
+    source: payload.source?.trim() || null,
     assetIds: [asset.id],
     ...statusData,
   }

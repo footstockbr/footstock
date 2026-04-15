@@ -13,12 +13,18 @@ const MAX_DIVERSIFICACAO = 20
 const MAX_CONSISTENCIA = 15
 const MAX_BONUS_EDUCATIVO = 5
 
-// Fator de equidade por categoria (division)
-const FATOR_EQUIDADE: Record<string, number> = {
-  BRONZE: 1.2,
-  PRATA: 1.0,
-  OURO: 0.9,
-  ABERTA: 1.0,
+// Fator de equidade na liga OPEN — aplicado SOMENTE ao Pilar 1 (rentabilidade).
+// Compensa assimetria de informação e saldo entre planos.
+// Configurável via env vars para ajustes em beta sem redeploy.
+function parseEnvFactor(raw: string | undefined, fallback: number): number {
+  const n = Number(raw)
+  return isNaN(n) || n <= 0 ? fallback : n
+}
+
+const EQUITY_FACTOR_OPEN: Record<string, number> = {
+  JOGADOR: parseEnvFactor(process.env.EQUITY_FACTOR_JOGADOR, 1.40),
+  CRAQUE:  parseEnvFactor(process.env.EQUITY_FACTOR_CRAQUE,  1.15),
+  LENDA:   parseEnvFactor(process.env.EQUITY_FACTOR_LENDA,   1.0),
 }
 
 // ─── Funções auxiliares ────────────────────────────────────────────────────────
@@ -65,27 +71,25 @@ export class ScoringEngine implements ScoringContract {
     let dailyReturns: number[] = []
 
     try {
-      // Busca posições LONG abertas pelo userId (module-15/PositionRepository)
       const rawPositions = await prisma.position.findMany({
-        where: { userId, side: 'LONG' },
-        select: { assetId: true, quantity: true, avgPrice: true },
+        where: { userId, status: 'OPEN' },
+        select: {
+          assetId: true, quantity: true, avgPrice: true,
+          asset: { select: { division: true } },
+        },
       })
 
-      // Soma valor de mercado por posição (quantity × avgPrice como proxy)
       let totalValue = 0
       let totalCost = 0
       positions = rawPositions.map((p) => {
         const value = Number(p.quantity) * Number(p.avgPrice)
         totalValue += value
         totalCost += value
-        return { ticker: p.assetId, value }
+        return { ticker: p.assetId, value, division: p.asset?.division ?? undefined }
       })
 
-      // P&L% simples: (valor_atual - custo) / custo × 100
-      // Em produção seria buscado o preço atual via module-7; aqui proxy de avgPrice
       pnLPercent = totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : 0
 
-      // Retornos diários: calcula a partir do histórico de snapshots (proxy simples)
       const snapshots = await prisma.priceHistory.findMany({
         where: {
           assetId: { in: rawPositions.map((p) => p.assetId) },
@@ -138,20 +142,29 @@ export class ScoringEngine implements ScoringContract {
       })
     } catch (err) {
       console.error('[ScoringEngine] Falha ao buscar glossaryInteractions (module-18):', err)
-      // glossaryInteractions permanece 0 — modo degradado
     }
 
     return { pnLPercent, totalOrders, advancedOrders, positions, dailyReturns, glossaryInteractions }
   }
 
-  /** Fator de equidade por categoria de liga */
-  getFatorEquidade(category: string): number {
-    return FATOR_EQUIDADE[category] ?? 1.0
+  /**
+   * Fator de equidade para liga OPEN baseado no plano do usuário.
+   * BRONZE/PRATA/OURO não aplicam fator (retorna 1.0).
+   */
+  getEquityFactorForPlan(planType: string): number {
+    return EQUITY_FACTOR_OPEN[planType] ?? 1.0
   }
 
   /**
    * Calcula o score completo do usuário em uma liga.
    * Nunca lança exceção — retorna zeros em caso de falha total.
+   *
+   * Pilar 2 — Pontuação aditiva por tipo de evento:
+   *   LIMIT_ORDER_USED: +4, OCO_ORDER_USED: +6, SHORT_PROFITABLE_CLOSED: +8,
+   *   SCHEDULED_ORDER_USED: +3, AI_ASSESSOR_CONSULTED: +2, GLOSSARY_5_TERMS: +2
+   *
+   * Pilar 5 — Bônus Educativo aditivo:
+   *   FORUM_POST_LIKED: +2, GLOSSARY_3_CATEGORIES: +1, PLAN_UPGRADED: +2
    */
   async calcularScore(userId: string, leagueId: string): Promise<ScoreBreakdown> {
     try {
@@ -165,41 +178,121 @@ export class ScoringEngine implements ScoringContract {
       }
 
       const data = await this.getTradingData(userId, leagueId, league.startsAt)
-      const fatorEquidade = this.getFatorEquidade(league.division)
 
-      // Pilar 1 — Rentabilidade (0-35)
-      const rentabilidade = Math.max(
-        0,
-        Math.min((data.pnLPercent / 100) * MAX_RENTABILIDADE, MAX_RENTABILIDADE)
-      )
+      // Equity factor: somente ligas OPEN, baseado no plano ATUAL do usuário.
+      // Plano muda a partir do dia seguinte — o cron diário recalcula automaticamente.
+      const isOpenLeague = league.division === 'OPEN'
+      let fatorEquidade = 1.0
+      if (isOpenLeague) {
+        try {
+          const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { planType: true },
+          })
+          fatorEquidade = this.getEquityFactorForPlan(user?.planType ?? 'JOGADOR')
+        } catch (err) {
+          console.error('[ScoringEngine] Falha ao buscar planType para equity factor:', err)
+          // Modo degradado: fator neutro (sem boost)
+          fatorEquidade = 1.0
+        }
+      }
 
-      // Pilar 2 — Sofisticação (0-25)
-      const sofisticacao =
-        (data.advancedOrders / Math.max(data.totalOrders, 1)) * MAX_SOFISTICACAO
+      // ── Buscar eventos de scoring (Pilar 2 e 5) ──────────────────────────
+      let scoreEvents: { eventType: string; points: number }[] = []
+      try {
+        scoreEvents = await prisma.leagueScoreEvent.findMany({
+          where: { leagueId, userId, createdAt: { gte: league.startsAt } },
+          select: { eventType: true, points: true },
+        })
+      } catch {
+        // Modo degradado: sem eventos, pilares 2 e 5 ficam em 0
+      }
 
-      // Pilar 3 — Diversificação (0-20)
-      const hh = herfindahl(data.positions)
-      const diversificacao = Math.max(0, (1 - hh) * MAX_DIVERSIFICACAO)
+      // Pilar 1 — Rentabilidade Ajustada ao Risco (0-35)
+      // Sharpe simplificado: (retorno - retorno_média) / volatilidade
+      let rentabilidade = 0
+      if (data.dailyReturns.length >= 2) {
+        const avg = mean(data.dailyReturns)
+        const sd = stdDev(data.dailyReturns, avg)
+        if (sd > 0) {
+          const sharpe = avg / sd
+          rentabilidade = Math.max(0, Math.min(sharpe * MAX_RENTABILIDADE, MAX_RENTABILIDADE))
+        } else if (avg > 0) {
+          rentabilidade = MAX_RENTABILIDADE // Retorno positivo sem volatilidade
+        }
+      } else if (data.pnLPercent > 0) {
+        // Fallback: P&L linear quando não há retornos diários suficientes
+        rentabilidade = Math.max(0, Math.min((data.pnLPercent / 100) * MAX_RENTABILIDADE, MAX_RENTABILIDADE))
+      }
 
-      // Pilar 4 — Consistência / Sharpe simplificado (0-15)
+      // Pilar 2 — Sofisticação Operacional (0-25) — pontuação aditiva por evento
+      const PILAR2_POINTS: Record<string, number> = {
+        LIMIT_ORDER_USED: 4,
+        OCO_ORDER_USED: 6,
+        SHORT_PROFITABLE_CLOSED: 8,
+        SCHEDULED_ORDER_USED: 3,
+        AI_ASSESSOR_CONSULTED: 2,
+        GLOSSARY_5_TERMS: 2,
+      }
+
+      let sofisticacaoRaw = 0
+      for (const event of scoreEvents) {
+        const pts = PILAR2_POINTS[event.eventType]
+        if (pts !== undefined) {
+          sofisticacaoRaw += event.points > 0 ? event.points : pts
+        }
+      }
+      const sofisticacao = Math.min(sofisticacaoRaw, MAX_SOFISTICACAO)
+
+      // Pilar 3 — Diversificação da Carteira (0-20)
+      // min(20, ativos_únicos × 3 + bônus Série A+B)
+      const uniqueAssets = new Set(data.positions.map(p => p.ticker)).size
+      let diversificacaoRaw = uniqueAssets * 3
+      // Bônus +4 se tem ativos de AMBAS as divisões (SERIE_A e SERIE_B)
+      const divisions = new Set(data.positions.map(p => p.division).filter(Boolean))
+      if (divisions.has('SERIE_A') && divisions.has('SERIE_B')) diversificacaoRaw += 4
+      const diversificacao = Math.min(diversificacaoRaw, MAX_DIVERSIFICACAO)
+
+      // Pilar 4 — Consistência ao Longo da Liga (0-15)
+      // Estabilidade no ranking (desincentiva all-in de último dia)
       let consistencia = 0
       if (data.dailyReturns.length >= 2) {
         const avg = mean(data.dailyReturns)
         const sd = stdDev(data.dailyReturns, avg)
         if (sd > 0) {
-          consistencia = Math.min((avg / sd) * MAX_CONSISTENCIA, MAX_CONSISTENCIA)
+          // Quanto menor a volatilidade com retorno positivo, maior a consistência
+          const consistency = avg >= 0 ? Math.max(0, 1 - sd) : Math.max(0, 0.5 - sd)
+          consistencia = Math.min(consistency * MAX_CONSISTENCIA, MAX_CONSISTENCIA)
           consistencia = Math.max(0, consistencia)
+        } else if (avg >= 0) {
+          consistencia = MAX_CONSISTENCIA // Retorno estável sem volatilidade
         }
       }
 
-      // Pilar 5 — Bônus Educativo (0-5): 10 interações = máximo
-      const bonusEducativo = Math.min(
-        data.glossaryInteractions * 0.5,
-        MAX_BONUS_EDUCATIVO
-      )
+      // Pilar 5 — Bônus Educativo (0-5) — pontuação aditiva por evento
+      const PILAR5_POINTS: Record<string, number> = {
+        FORUM_POST_LIKED: 2,
+        GLOSSARY_3_CATEGORIES: 1,
+        PLAN_UPGRADED: 2,
+      }
+
+      let bonusRaw = 0
+      for (const event of scoreEvents) {
+        const pts = PILAR5_POINTS[event.eventType]
+        if (pts !== undefined) {
+          bonusRaw += event.points > 0 ? event.points : pts
+        }
+      }
+      const bonusEducativo = Math.min(bonusRaw, MAX_BONUS_EDUCATIVO)
 
       const total = rentabilidade + sofisticacao + diversificacao + consistencia + bonusEducativo
-      const finalScore = total * fatorEquidade
+
+      // Equity factor aplicado SOMENTE ao Pilar 1 em ligas OPEN.
+      // Outros 4 pilares não são modificados para não distorcer habilidades técnicas.
+      const rentabilidadeAjustada = isOpenLeague
+        ? rentabilidade * fatorEquidade
+        : rentabilidade
+      const finalScore = rentabilidadeAjustada + sofisticacao + diversificacao + consistencia + bonusEducativo
 
       return {
         rentabilidade: +rentabilidade.toFixed(4),
@@ -210,6 +303,7 @@ export class ScoringEngine implements ScoringContract {
         total: +total.toFixed(4),
         finalScore: +finalScore.toFixed(4),
         fatorEquidade,
+        equityFactorApplied: isOpenLeague,
       }
     } catch (err) {
       console.error('[ScoringEngine] Erro inesperado ao calcular score:', err)
@@ -261,7 +355,7 @@ export class ScoringEngine implements ScoringContract {
     )
   }
 
-  private _zeroScore(fatorEquidade: number): ScoreBreakdown {
+  private _zeroScore(fatorEquidade: number, equityFactorApplied = false): ScoreBreakdown {
     return {
       rentabilidade: 0,
       sofisticacao: 0,
@@ -271,6 +365,7 @@ export class ScoringEngine implements ScoringContract {
       total: 0,
       finalScore: 0,
       fatorEquidade,
+      equityFactorApplied,
     }
   }
 }

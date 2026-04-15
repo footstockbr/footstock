@@ -25,26 +25,26 @@ function brtNoDst(utcIso: string): Date {
 }
 
 // Foot Stock schedule (BRT):
-//   FECHADO:      01:30 – 10:45
-//   PRE_ABERTURA: 10:45 – 11:00
-//   NEGOCIACAO:   11:00 – 00:45 (next day)
-//   CALL:         00:45 – 01:00
+//   CLOSED:       01:30 – 10:45
+//   PRE_OPENING:  10:45 – 11:00
+//   TRADING:      11:00 – 00:45 (next day)
+//   CLOSING_CALL: 00:45 – 01:00
 //   AFTER_MARKET: 01:00 – 01:30
 
 describe('SessionManager', () => {
   describe('getCurrentSession — limites de horário (inverno UTC-3)', () => {
     test.each<[number, number, SessionType]>([
       [1, 29, 'AFTER_MARKET'],
-      [1, 30, 'FECHADO'],
-      [10, 44, 'FECHADO'],
-      [10, 45, 'PRE_ABERTURA'],
-      [10, 59, 'PRE_ABERTURA'],
-      [11, 0, 'NEGOCIACAO'],
-      [16, 0, 'NEGOCIACAO'],
-      [23, 59, 'NEGOCIACAO'],
-      [0, 44, 'NEGOCIACAO'],
-      [0, 45, 'CALL'],
-      [0, 59, 'CALL'],
+      [1, 30, 'CLOSED'],
+      [10, 44, 'CLOSED'],
+      [10, 45, 'PRE_OPENING'],
+      [10, 59, 'PRE_OPENING'],
+      [11, 0, 'TRADING'],
+      [16, 0, 'TRADING'],
+      [23, 59, 'TRADING'],
+      [0, 44, 'TRADING'],
+      [0, 45, 'CLOSING_CALL'],
+      [0, 59, 'CLOSING_CALL'],
       [1, 0, 'AFTER_MARKET'],
     ])('%02d:%02d BRT → %s', (hour, minute, expected) => {
       const sm = new SessionManager(() => brtWinter(hour, minute))
@@ -56,43 +56,43 @@ describe('SessionManager', () => {
     // O Brasil eliminou o horário de verão pelo Decreto 9.528/2018.
     // A partir de 2019, America/Sao_Paulo é sempre UTC-3 (sem DST).
 
-    test('15 Nov 2026 14:00 UTC = 11:00 BRT (UTC-3, sem DST) → NEGOCIACAO', () => {
-      // 14:00 UTC - 3h = 11:00 BRT → início de NEGOCIACAO
+    test('15 Nov 2026 14:00 UTC = 11:00 BRT (UTC-3, sem DST) → TRADING', () => {
+      // 14:00 UTC - 3h = 11:00 BRT → início de TRADING
       const sm = new SessionManager(() => brtNoDst('2026-11-15T14:00:00.000Z'))
-      expect(sm.getCurrentSession()).toBe('NEGOCIACAO')
+      expect(sm.getCurrentSession()).toBe('TRADING')
     })
 
-    test('15 Nov 2026 03:45 UTC = 00:45 BRT (UTC-3, sem DST) → CALL', () => {
-      // 03:45 UTC - 3h = 00:45 BRT → início de CALL
+    test('15 Nov 2026 03:45 UTC = 00:45 BRT (UTC-3, sem DST) → CLOSING_CALL', () => {
+      // 03:45 UTC - 3h = 00:45 BRT → início de CLOSING_CALL
       const sm = new SessionManager(() => brtNoDst('2026-11-15T03:45:00.000Z'))
-      expect(sm.getCurrentSession()).toBe('CALL')
+      expect(sm.getCurrentSession()).toBe('CLOSING_CALL')
     })
 
-    test('15 Nov 2026 13:45 UTC = 10:45 BRT (UTC-3, sem DST) → PRE_ABERTURA', () => {
-      // 13:45 UTC - 3h = 10:45 BRT → início de PRE_ABERTURA
+    test('15 Nov 2026 13:45 UTC = 10:45 BRT (UTC-3, sem DST) → PRE_OPENING', () => {
+      // 13:45 UTC - 3h = 10:45 BRT → início de PRE_OPENING
       // Confirma que date-fns-tz NÃO aplica offset UTC-2 (sem DST)
       const sm = new SessionManager(() => brtNoDst('2026-11-15T13:45:00.000Z'))
-      expect(sm.getCurrentSession()).toBe('PRE_ABERTURA')
+      expect(sm.getCurrentSession()).toBe('PRE_OPENING')
     })
   })
 
   describe('getVolatilityMultiplier', () => {
-    const sm = new SessionManager(() => brtWinter(14, 0)) // 14:00 = NEGOCIACAO
+    const sm = new SessionManager(() => brtWinter(14, 0)) // 14:00 = TRADING
 
-    test('NEGOCIACAO → 1.0', () => {
-      expect(sm.getVolatilityMultiplier('NEGOCIACAO')).toBe(1.0)
+    test('TRADING → 1.0', () => {
+      expect(sm.getVolatilityMultiplier('TRADING')).toBe(1.0)
     })
 
-    test('FECHADO → 0.0', () => {
-      expect(sm.getVolatilityMultiplier('FECHADO')).toBe(0.0)
+    test('CLOSED → 0.0', () => {
+      expect(sm.getVolatilityMultiplier('CLOSED')).toBe(0.0)
     })
 
-    test('PRE_ABERTURA → 0.30', () => {
-      expect(sm.getVolatilityMultiplier('PRE_ABERTURA')).toBe(0.30)
+    test('PRE_OPENING → 0.30', () => {
+      expect(sm.getVolatilityMultiplier('PRE_OPENING')).toBe(0.30)
     })
 
-    test('CALL → 0.20', () => {
-      expect(sm.getVolatilityMultiplier('CALL')).toBe(0.20)
+    test('CLOSING_CALL → 0.20', () => {
+      expect(sm.getVolatilityMultiplier('CLOSING_CALL')).toBe(0.20)
     })
 
     test('AFTER_MARKET → 0.10', () => {
@@ -107,17 +107,17 @@ describe('SessionManager', () => {
   })
 
   describe('getNextTransition', () => {
-    test('dentro de NEGOCIACAO → próxima sessão é CALL', () => {
-      const sm = new SessionManager(() => brtWinter(14, 0)) // 14:00 BRT = NEGOCIACAO
+    test('dentro de TRADING → próxima sessão é CLOSING_CALL', () => {
+      const sm = new SessionManager(() => brtWinter(14, 0)) // 14:00 BRT = TRADING
       const { session, countdownSeconds } = sm.getNextTransition()
-      expect(session).toBe('CALL')
+      expect(session).toBe('CLOSING_CALL')
       expect(countdownSeconds).toBeGreaterThan(0)
     })
 
-    test('dentro de PRE_ABERTURA → próxima sessão é NEGOCIACAO', () => {
-      const sm = new SessionManager(() => brtWinter(10, 50)) // 10:50 BRT = PRE_ABERTURA
+    test('dentro de PRE_OPENING → próxima sessão é TRADING', () => {
+      const sm = new SessionManager(() => brtWinter(10, 50)) // 10:50 BRT = PRE_OPENING
       const { session } = sm.getNextTransition()
-      expect(session).toBe('NEGOCIACAO')
+      expect(session).toBe('TRADING')
     })
 
     test('countdownSeconds é positivo', () => {
@@ -128,23 +128,23 @@ describe('SessionManager', () => {
   })
 
   describe('isMarketOpen', () => {
-    test('NEGOCIACAO → true', () => {
+    test('TRADING → true', () => {
       const sm = new SessionManager(() => brtWinter(14, 0))
       expect(sm.isMarketOpen()).toBe(true)
     })
 
-    test('PRE_ABERTURA → true', () => {
+    test('PRE_OPENING → true', () => {
       const sm = new SessionManager(() => brtWinter(10, 50))
       expect(sm.isMarketOpen()).toBe(true)
     })
 
-    test('FECHADO → false', () => {
-      const sm = new SessionManager(() => brtWinter(5, 0))
-      expect(sm.isMarketOpen()).toBe(false)
+    test('CLOSING_CALL → true', () => {
+      const sm = new SessionManager(() => brtWinter(0, 50))
+      expect(sm.isMarketOpen()).toBe(true)
     })
 
-    test('CALL → false', () => {
-      const sm = new SessionManager(() => brtWinter(0, 50))
+    test('CLOSED → false', () => {
+      const sm = new SessionManager(() => brtWinter(5, 0))
       expect(sm.isMarketOpen()).toBe(false)
     })
 
@@ -156,9 +156,9 @@ describe('SessionManager', () => {
 
   describe('injeção de clock', () => {
     test('aceita clock customizado para testes determinísticos', () => {
-      const fixedTime = brtWinter(11, 0) // exatamente 11:00 → NEGOCIACAO (inclusivo)
+      const fixedTime = brtWinter(11, 0) // exatamente 11:00 → TRADING (inclusivo)
       const sm = new SessionManager(() => fixedTime)
-      expect(sm.getCurrentSession()).toBe('NEGOCIACAO')
+      expect(sm.getCurrentSession()).toBe('TRADING')
     })
   })
 })

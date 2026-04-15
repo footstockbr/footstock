@@ -1,12 +1,26 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { Trophy, Medal, Star, Users, ArrowLeft } from 'lucide-react'
+import { Trophy, Medal, Star, Users, ArrowLeft, Scale } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import { useLeagueDetail, useLeagueRanking } from '@/hooks/useLeagues'
+import { useLeagueDetail, useLeagueRanking, useMyScore } from '@/hooks/useLeagues'
 import { ScoreBreakdown } from './ScoreBreakdown'
+import { LeagueScoreHistory } from './LeagueScoreHistory'
+import { LeagueInviteLink } from './LeagueInviteLink'
+import { LeagueProBadge } from './LeagueProBadge'
 import type { LeagueMemberRanking } from '@/types'
+
+const PLAN_LABELS: Record<string, string> = {
+  JOGADOR: 'J',
+  CRAQUE:  'C',
+  LENDA:   'L',
+}
+const PLAN_COLORS: Record<string, string> = {
+  JOGADOR: 'text-amber-600 bg-amber-600/10',
+  CRAQUE:  'text-gray-300 bg-gray-300/10',
+  LENDA:   'text-[#F0B90B] bg-[#F0B90B]/10',
+}
 
 interface Props {
   leagueId: string
@@ -31,11 +45,14 @@ function SkeletonRow() {
 
 interface ScoreButtonProps {
   member: LeagueMemberRanking
+  leagueId?: string
 }
 
-function ScoreCell({ member }: ScoreButtonProps) {
+function ScoreCell({ member, leagueId }: ScoreButtonProps) {
   const [open, setOpen] = useState(false)
   const btnRef = useRef<HTMLButtonElement>(null)
+  const { data: myScore } = useMyScore(leagueId ?? '')
+  const p2Events = member.isCurrentUser ? (myScore?.p2Events ?? []) : undefined
 
   return (
     <td className="py-3 px-4 text-right relative">
@@ -45,14 +62,15 @@ function ScoreCell({ member }: ScoreButtonProps) {
         className="text-sm font-semibold text-[#F0B90B] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0B90B] rounded"
         aria-expanded={open}
         aria-haspopup="dialog"
-        aria-label={`Ver breakdown de score de ${member.userName}: ${member.score.finalScore.toFixed(1)} pontos`}
+        aria-label={`Ver breakdown de score: ${(member.score.finalScore ?? 0).toFixed(1)} pontos`}
       >
-        {member.score.finalScore.toFixed(1)}
+        {(member.score.finalScore ?? 0).toFixed(1)}
       </button>
       {open && (
         <ScoreBreakdown
           score={member.score}
           userName={member.isCurrentUser ? undefined : member.userName}
+          p2Events={p2Events}
           onClose={() => setOpen(false)}
           triggerRef={btnRef as React.RefObject<HTMLElement>}
         />
@@ -84,7 +102,7 @@ export function LeagueDetail({ leagueId }: Props) {
   const currentUserEntry = members.find(m => m.isCurrentUser)
 
   return (
-    <div className="px-4 pt-4 pb-8 max-w-2xl mx-auto">
+    <div data-testid="league-detail" className="px-4 pt-4 pb-8 max-w-2xl mx-auto">
       {/* Back nav */}
       <Link
         href="/ligas"
@@ -120,23 +138,59 @@ export function LeagueDetail({ leagueId }: Props) {
             </div>
           </div>
 
+          {/* Badge e info de liga PRO */}
+          {league.type === 'PRO' && (
+            <div className="mt-3 space-y-2">
+              <LeagueProBadge permiteAlavancagem={league.permiteAlavancagem} />
+              {league.sponsor?.name && (
+                <p className="text-xs text-gray-400">
+                  Patrocinada por <span className="text-[#F0B90B] font-medium">{league.sponsor.name}</span>
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Nota de equidade — visível somente em ligas OPEN */}
+          {league.division === 'OPEN' && (
+            <div
+              className="mt-3 px-3 py-2 rounded-lg bg-blue-400/5 border border-blue-400/20 flex items-center gap-2"
+              aria-label="Fator de equidade ativo nesta liga"
+            >
+              <Scale className="h-3.5 w-3.5 text-blue-400 flex-shrink-0" aria-hidden="true" />
+              <p className="text-xs text-blue-300">
+                Fator de equidade aplicado ao Pilar 1 para todos os planos.
+              </p>
+            </div>
+          )}
+
           {/* Current user position */}
           {currentUserEntry && (
-            <div
-              className="mt-4 p-3 rounded-lg bg-[#F0B90B]/10 border border-[#F0B90B]/20 flex items-center justify-between"
-              aria-label={`Sua posição: ${currentUserEntry.rank}º com ${currentUserEntry.score.finalScore.toFixed(1)} pontos`}
-            >
-              <div className="flex items-center gap-2">
-                <Star className="h-4 w-4 text-[#F0B90B]" aria-hidden="true" />
-                <span className="text-sm font-medium text-[#EAECEF]">Sua posição</span>
+            <>
+              <div
+                className="mt-4 p-3 rounded-lg bg-[#F0B90B]/10 border border-[#F0B90B]/20 flex items-center justify-between"
+                aria-label={`Sua posição: ${currentUserEntry.rank}º com ${(currentUserEntry.score.finalScore ?? 0).toFixed(1)} pontos`}
+              >
+                <div className="flex items-center gap-2">
+                  <Star className="h-4 w-4 text-[#F0B90B]" aria-hidden="true" />
+                  <span className="text-sm font-medium text-[#EAECEF]">Sua posição</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-gray-400">#{currentUserEntry.rank}</span>
+                  <span className="text-sm font-bold text-[#F0B90B]">
+                    {(currentUserEntry.score.finalScore ?? 0).toFixed(1)} pts
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-400">#{currentUserEntry.rank}</span>
-                <span className="text-sm font-bold text-[#F0B90B]">
-                  {currentUserEntry.score.finalScore.toFixed(1)} pts
-                </span>
+              <div className="mt-3">
+                <LeagueScoreHistory leagueId={leagueId} />
               </div>
-            </div>
+              {league?.type === 'AMIGOS' && (
+                <LeagueInviteLink
+                  leagueId={leagueId}
+                  isCreator={!!league.createdBy && league.createdBy === currentUserEntry?.userId}
+                />
+              )}
+            </>
           )}
         </div>
       ) : null}
@@ -198,17 +252,31 @@ export function LeagueDetail({ leagueId }: Props) {
                           <RankBadge rank={member.rank} />
                         </td>
                         <td className="py-3 px-4">
-                          <span className={cn(
-                            'text-sm',
-                            member.isCurrentUser ? 'font-semibold text-[#EAECEF]' : 'text-gray-300'
-                          )}>
-                            {member.userName}
-                            {member.isCurrentUser && (
-                              <span className="sr-only"> (você)</span>
+                          <div className="flex items-center gap-1.5">
+                            {league?.division === 'OPEN' && member.userPlan && (
+                              <span
+                                className={cn(
+                                  'text-[10px] font-bold px-1 py-0.5 rounded',
+                                  PLAN_COLORS[member.userPlan] ?? 'text-gray-400 bg-gray-400/10'
+                                )}
+                                title={`Plano ${member.userPlan}`}
+                                aria-label={`Plano ${member.userPlan}`}
+                              >
+                                {PLAN_LABELS[member.userPlan] ?? member.userPlan[0]}
+                              </span>
                             )}
-                          </span>
+                            <span className={cn(
+                              'text-sm',
+                              member.isCurrentUser ? 'font-semibold text-[#EAECEF]' : 'text-gray-300'
+                            )}>
+                              {member.userName}
+                              {member.isCurrentUser && (
+                                <span className="sr-only"> (você)</span>
+                              )}
+                            </span>
+                          </div>
                         </td>
-                        <ScoreCell member={member} />
+                        <ScoreCell member={member} leagueId={leagueId} />
                       </tr>
                     ))}
               </tbody>

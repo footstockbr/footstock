@@ -12,6 +12,7 @@ import { ROUTES } from "@/lib/constants/routes";
 import { formatFS, formatPct } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import { PortfolioChart } from "@/components/portfolio/PortfolioChart";
+import { GlossaryInfoIcon } from "@/components/ui/glossary-info-icon";
 
 interface PortfolioPosition {
   ticker: string;
@@ -69,9 +70,21 @@ export function PortfolioClient() {
   const hasPositions = (data?.positions.length ?? 0) > 0;
 
   return (
-    <div data-testid="portfolio-page" className="flex flex-col gap-0">
+    <div data-testid="portfolio-page" data-tour="portfolio-section" className="flex flex-col gap-0">
       <div className="px-4 pt-4 pb-3">
         <h1 className="text-lg font-bold text-[#EAECEF] mb-4">Minha Carteira</h1>
+
+        {/* T-019: banner saldo zerado */}
+        {!isLoading && !error && data && data.balance <= 0 && (
+          <div
+            role="alert"
+            data-testid="portfolio-balance-zero-banner"
+            className="flex items-center gap-2 text-sm text-[#F6465D] bg-[rgba(246,70,93,.08)] border border-[rgba(246,70,93,.2)] rounded-lg px-3 py-2.5 mb-4"
+          >
+            <span aria-hidden="true" className="flex-shrink-0">&#9888;</span>
+            <span>Saldo zerado — venda posicoes para negociar novamente.</span>
+          </div>
+        )}
 
         {error ? (
           <div className="bg-[rgba(246,70,93,.1)] border border-[#F6465D] rounded-lg p-4 mb-4 text-sm text-[#F6465D]">
@@ -88,7 +101,7 @@ export function PortfolioClient() {
               isLoading={isLoading}
             />
             <StatCard
-              label="P&L Hoje"
+              label={<>P&L Hoje <GlossaryInfoIcon fieldKey="pnl" size={12} /></>}
               value={isLoading ? "" : `${pnlTodaySign}${formatFS(Math.abs(data?.pnlToday ?? 0))}`}
               subValue={isLoading ? "" : `${data?.todayTransactionsCount ?? 0} operacoes`}
               subValueColor={pnlTodayColor}
@@ -149,7 +162,7 @@ export function PortfolioClient() {
                         </div>
                         <div className="flex items-center gap-3 text-xs text-[#929AA5]">
                           <span>{pos.quantity} cotas</span>
-                          <span>PM: {formatFS(pos.avgPrice)}</span>
+                          <span className="inline-flex items-center gap-0.5">PM: {formatFS(pos.avgPrice)} <GlossaryInfoIcon fieldKey="margem" size={11} /></span>
                         </div>
                       </div>
                       <div className="text-right">

@@ -1,9 +1,16 @@
+// T-022: SSR page agora aplica delay de cotação por plano antes de hidratar o cliente.
+// Evita vazamento do preço real no HTML inicial para planos JOGADOR/CRAQUE.
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { QueryClient, dehydrate, HydrationBoundary } from '@tanstack/react-query'
 import { prisma } from '@/lib/prisma'
 import { tickerSchema } from '@/lib/validators/tickerSchema'
 import { AssetDetailPage } from '@/components/market/AssetDetailPage'
+import { SponsorBanner } from '@/components/shared/sponsor-banner'
+import { getAuthUser } from '@/lib/auth'
+import { applyPriceDelay } from '@/lib/services/DelayService'
+import type { PlanType } from '@/lib/enums'
+import type { AssetListItem } from '@/types/market'
 
 type Props = { params: Promise<{ ticker: string }> }
 
@@ -19,10 +26,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const asset = await prisma.asset.findUnique({ where: { ticker } })
     if (!asset) return { title: 'Ativo não encontrado | Foot Stock' }
     return {
-      title: `${asset.ticker} — ${asset.name} | Foot Stock`,
-      description: `Cotações, gráficos e análise de ${asset.name}. Preço atual: FS$${asset.currentPrice.toNumber().toFixed(2)}`,
+      title: `${asset.ticker} — ${asset.displayName} | Foot Stock`,
+      description: `Cotações, gráficos e análise de ${asset.displayName}. Preço atual: FS$${asset.currentPrice.toNumber().toFixed(2)}`,
       openGraph: {
-        title: `${asset.name} | Foot Stock`,
+        title: `${asset.displayName} | Foot Stock`,
         description: `Acompanhe ${asset.ticker} no simulador de trading de futebol.`,
       },
     }
@@ -66,7 +73,19 @@ export default async function AssetDetailServerPage({ params }: Props) {
 
   if (!asset) notFound()
 
-  const currentPrice = asset.currentPrice.toNumber()
+  // Aplicar delay de cotação por plano (T-022)
+  const authResult = await getAuthUser()
+  const planType = (authResult?.user?.planType ?? 'JOGADOR') as PlanType
+  const rawPrice = asset.currentPrice.toNumber()
+  const assetItem: AssetListItem = {
+    id: asset.id,
+    ticker: asset.ticker,
+    displayName: asset.displayName,
+    currentPrice: rawPrice,
+  }
+  const delayedAsset = await applyPriceDelay(assetItem, planType)
+  const currentPrice = delayedAsset.currentPrice
+
   const openPrice = asset.openPrice.toNumber()
   const fairValue = asset.fairValue.toNumber()
   const change24h = openPrice > 0
@@ -98,7 +117,7 @@ export default async function AssetDetailServerPage({ params }: Props) {
       select: { title: true, sentiment: true, impact: true, publishedAt: true },
     }),
     prisma.asset.findMany({
-      select: { ticker: true, name: true, colorPrimary: true, colorSecondary: true },
+      select: { ticker: true, displayName: true, colorPrimary: true, colorSecondary: true },
       where: { ticker: { not: ticker }, isActive: true },
       orderBy: { ticker: 'asc' },
     }),
@@ -131,7 +150,7 @@ export default async function AssetDetailServerPage({ params }: Props) {
   const serializedAsset = {
     id: asset.id,
     ticker: asset.ticker,
-    displayName: asset.name,
+    displayName: asset.displayName,
     division: asset.division as 'SERIE_A' | 'SERIE_B',
     currentPrice,
     openPrice,
@@ -162,7 +181,7 @@ export default async function AssetDetailServerPage({ params }: Props) {
 
   const allAssetsForCompare = allAssets.map((a) => ({
     ticker: a.ticker,
-    displayName: a.name,
+    displayName: a.displayName,
     colors: { primary: a.colorPrimary, secondary: a.colorSecondary },
   }))
 
@@ -170,11 +189,18 @@ export default async function AssetDetailServerPage({ params }: Props) {
   queryClient.setQueryData(['asset', ticker], serializedAsset)
 
   return (
-    <HydrationBoundary state={dehydrate(queryClient)}>
-      <AssetDetailPage
-        asset={serializedAsset}
-        allAssets={allAssetsForCompare}
-      />
-    </HydrationBoundary>
+    <div className="flex flex-col">
+      {/* Banner MARKET_TOP: 360×60 — topo da página de detalhe do ativo no mercado */}
+      <div className="flex justify-center px-4 pt-3">
+        <SponsorBanner position="market_top" />
+      </div>
+
+      <HydrationBoundary state={dehydrate(queryClient)}>
+        <AssetDetailPage
+          asset={serializedAsset}
+          allAssets={allAssetsForCompare}
+        />
+      </HydrationBoundary>
+    </div>
   )
 }

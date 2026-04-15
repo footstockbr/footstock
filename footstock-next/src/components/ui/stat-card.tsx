@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { Skeleton } from "./skeleton";
 
 interface StatCardProps {
-  label: string;
+  label: React.ReactNode;
   value: string;
   subValue?: string;
   subValueColor?: "positive" | "negative" | "neutral";

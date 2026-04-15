@@ -15,6 +15,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   clubes: 'Clubes',
   patrocinadores: 'Patrocinadores',
   afiliados: 'Afiliados',
+  lgpd: 'LGPD / DPO',
 }
 
 export function AdminBreadcrumb() {

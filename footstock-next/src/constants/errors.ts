@@ -22,6 +22,8 @@ export const ERROR_CODES = {
   AUTH_006: 'É necessário ter 18 anos ou mais para se cadastrar.',
   AUTH_007: 'E-mail já cadastrado.',
   AUTH_008: 'Token de reset inválido ou expirado.',
+  AUTH_011: 'CPF identificado como menor de idade. Cadastro não permitido.',
+  AUTH_012: 'Sua verificação de idade está pendente. Aguarde a conclusão.',
 
   // RATE — Rate Limiting
   RATE_001: 'Limite de requisições atingido. Tente novamente em instantes.',

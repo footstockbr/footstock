@@ -72,6 +72,11 @@ function BottomTabBar() {
               key={tab.href}
               href={tab.href}
               data-testid={`bottom-tab-${tab.label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")}`}
+              data-tour={
+                tab.label === "Portfolio" ? "portfolio-tab" :
+                tab.label === "Ligas" ? "leagues-tab" :
+                undefined
+              }
               aria-current={isActive ? "page" : undefined}
               className={cn(
                 "flex-1 flex flex-col items-center justify-center gap-0.5 py-2 transition-colors",
@@ -87,9 +92,10 @@ function BottomTabBar() {
         {/* Mais */}
         <button
           data-testid="bottom-tab-mais"
+          data-tour="glossary-link"
           onClick={() => setMoreOpen(true)}
           className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[#707A8A] hover:text-[#929AA5] transition-colors"
-          aria-label="Mais opções"
+          aria-label="Mais opções (inclui Glossário)"
         >
           <MoreHorizontal className="h-5 w-5" />
           <span className="text-[10px] font-medium">Mais</span>

@@ -46,6 +46,9 @@ export const CreateOrderSchema = z
       .optional(),
 
     leverage: z.literal(2).optional(),
+
+    // Liga PRO opcional — quando presente, valida permiteAlavancagem antes de aceitar ordem alavancada
+    leagueId: z.string().cuid('leagueId inválido.').optional(),
   })
   .superRefine((data, ctx) => {
     // LIMIT requer price
@@ -124,7 +127,11 @@ export interface ValidationResult {
   message?: string
 }
 
-export function validateOrderForPlan(dto: CreateOrderDTO, planType: PlanType): ValidationResult {
+export function validateOrderForPlan(
+  dto: CreateOrderDTO,
+  planType: PlanType,
+  opts?: { skipLeverageCheck?: boolean }
+): ValidationResult {
   const allowed = ALLOWED_ORDER_TYPES_BY_PLAN[planType]
 
   if (!allowed.includes(dto.type)) {
@@ -145,8 +152,9 @@ export function validateOrderForPlan(dto: CreateOrderDTO, planType: PlanType): V
     }
   }
 
-  // Alavancagem 2x apenas para Lenda
-  if (dto.leverage === 2 && planType !== PLAN_TYPE.LENDA) {
+  // Alavancagem 2x: validação de plano pode ser pulada quando LeverageService
+  // já validou o contexto de liga PRO (onde qualquer plano pode usar alavancagem).
+  if (!opts?.skipLeverageCheck && dto.leverage === 2 && planType !== PLAN_TYPE.LENDA) {
     return {
       valid: false,
       errorCode: 'ORDER_051',

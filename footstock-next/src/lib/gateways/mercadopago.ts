@@ -207,4 +207,22 @@ export class MercadoPagoGateway implements IGateway {
       rawPayload:     payload,
     }
   }
+
+  /**
+   * Cancela renovação automática no MercadoPago.
+   * Stub: integração real requer preassignment de subscriptionId do MP.
+   * TODO: implementar quando MP recorrente for integrado.
+   */
+  async cancelAutoRenewal(gatewaySubscriptionId: string): Promise<void> {
+    console.warn(`[MERCADO_PAGO] cancelAutoRenewal stub — integração pendente. subscriptionId: ${gatewaySubscriptionId}`)
+  }
+
+  /**
+   * Reativa renovação automática no MercadoPago após revert.
+   * Stub: integração real requer preassignment de subscriptionId do MP.
+   * TODO: implementar quando MP recorrente for integrado.
+   */
+  async reactivateAutoRenewal(gatewaySubscriptionId: string): Promise<void> {
+    console.warn(`[MERCADO_PAGO] reactivateAutoRenewal stub — integração pendente. subscriptionId: ${gatewaySubscriptionId}`)
+  }
 }

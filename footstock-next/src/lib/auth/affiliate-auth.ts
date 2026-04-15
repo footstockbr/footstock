@@ -1,8 +1,9 @@
 // ============================================================================
 // Foot Stock — Affiliate Auth
-// Helper server-side para validar sessão de influenciador afiliado.
-// Verifica se o usuário possui um AffiliateCode ativo no banco de dados.
-// Rastreabilidade: INT-084, US-036, TASK-3/ST001
+// Helper server-side para validar sessão de afiliado (INFLUENCIADOR ou TIME_PARCEIRO).
+// ATENÇÃO: Todo usuário recebe um AffiliateCode no cadastro (commissionPercentage=0).
+// Para acesso ao painel /affiliate, userType DEVE ser TIME_PARCEIRO ou INFLUENCIADOR.
+// Rastreabilidade: INT-084, US-036, US-037, TASK-T-001 (Gap 2 — modelo de elegibilidade)
 // ============================================================================
 
 import { redirect } from 'next/navigation'
@@ -10,16 +11,22 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 
+// Tipos de usuário elegíveis ao portal de afiliados
+const ELIGIBLE_AFFILIATE_TYPES = ['TIME_PARCEIRO', 'INFLUENCIADOR'] as const
+export type EligibleAffiliateType = (typeof ELIGIBLE_AFFILIATE_TYPES)[number]
+
 export type AffiliateContext = {
   userId: string
   affiliateCodeId: string
   code: string
   commissionPercentage: number
+  affiliateType: EligibleAffiliateType
 }
 
 /**
- * Retorna o contexto do afiliado se o usuário tiver um código ativo.
- * Retorna null se não autenticado ou sem código ativo (sem redirecionar).
+ * Retorna o contexto do afiliado APENAS para usuários elegíveis (TIME_PARCEIRO ou INFLUENCIADOR).
+ * Usuários NORMAL têm AffiliateCode, mas commissionPercentage=0 e NÃO têm acesso ao portal.
+ * Retorna null se: não autenticado, userType=NORMAL, ou sem código ativo.
  */
 export async function getAffiliateContext(): Promise<AffiliateContext | null> {
   try {
@@ -31,8 +38,12 @@ export async function getAffiliateContext(): Promise<AffiliateContext | null> {
       const devAuthEmail = devAuthRaw ? decodeURIComponent(devAuthRaw) : null
       if (devAuthEmail) {
         const affiliateCode = await prisma.affiliateCode.findFirst({
-          where: { user: { email: devAuthEmail }, active: true },
-          select: { id: true, code: true, commissionPercentage: true, userId: true },
+          where: {
+            user: { email: devAuthEmail },
+            active: true,
+            affiliateType: { in: ELIGIBLE_AFFILIATE_TYPES as unknown as string[] },
+          },
+          select: { id: true, code: true, commissionPercentage: true, userId: true, affiliateType: true },
         })
         if (affiliateCode) {
           return {
@@ -40,8 +51,10 @@ export async function getAffiliateContext(): Promise<AffiliateContext | null> {
             affiliateCodeId: affiliateCode.id,
             code: affiliateCode.code,
             commissionPercentage: Number(affiliateCode.commissionPercentage),
+            affiliateType: affiliateCode.affiliateType as EligibleAffiliateType,
           }
         }
+        return null
       }
     }
 
@@ -65,12 +78,18 @@ export async function getAffiliateContext(): Promise<AffiliateContext | null> {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return null
 
+    // Busca código ativo E verifica elegibilidade pelo affiliateType
     const affiliateCode = await prisma.affiliateCode.findFirst({
-      where: { userId: user.id, active: true },
+      where: {
+        userId: user.id,
+        active: true,
+        affiliateType: { in: ELIGIBLE_AFFILIATE_TYPES as unknown as string[] },
+      },
       select: {
         id: true,
         code: true,
         commissionPercentage: true,
+        affiliateType: true,
       },
     })
 
@@ -81,6 +100,7 @@ export async function getAffiliateContext(): Promise<AffiliateContext | null> {
       affiliateCodeId: affiliateCode.id,
       code: affiliateCode.code,
       commissionPercentage: Number(affiliateCode.commissionPercentage),
+      affiliateType: affiliateCode.affiliateType as EligibleAffiliateType,
     }
   } catch {
     return null
@@ -90,6 +110,7 @@ export async function getAffiliateContext(): Promise<AffiliateContext | null> {
 /**
  * Variante que redireciona para /affiliate/sem-permissao se não autorizado.
  * Usar em layouts/páginas Server Component do portal de afiliados.
+ * 403 para userType=NORMAL — "ter código" não implica "ser afiliado elegível".
  */
 export async function withAffiliateAuth(): Promise<AffiliateContext> {
   const ctx = await getAffiliateContext()

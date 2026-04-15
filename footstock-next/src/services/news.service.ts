@@ -1,9 +1,3 @@
-// TODO: Implementar via /auto-flow execute
-
-export class NewsService {
-  async findAll(_options: { ticker?: string; impactCategory?: string; page?: number; limit?: number }): Promise<unknown[]> {
-    return []
-  }
-}
-
-export const newsService = new NewsService()
+// Re-exporta do serviço real em lib/services/NewsInjectionService
+// Mantém compatibilidade com imports legados
+export { NewsInjectionService, newsInjectionService } from '@/lib/services/NewsInjectionService'

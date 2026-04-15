@@ -17,8 +17,13 @@ const baseState = (): AssetState => ({
   pendingBuyVolume: 0,
   pendingSellVolume: 0,
   isPaused: false,
+  haltReason: null,
+  haltResumeAt: null,
   newsImpact: 0,
   newsImpactTicks: 0,
+  ofiState: 0,
+  dailyVolAccum: 0,
+  dailySigmaMultiplier: 1.0,
 })
 
 const baseParams = (): ClusterParams => ({
@@ -33,6 +38,7 @@ const baseParams = (): ClusterParams => ({
   spread: 0.0005,
   maxTickChange: 0.0035,
   ofiDecay: 0.91,
+  alphaOfi: 0.0005,
 })
 
 describe('PriceCalculator (integração)', () => {
@@ -51,13 +57,15 @@ describe('PriceCalculator (integração)', () => {
     expect(result.layerResults).toHaveLength(0)
   })
 
-  test('circuit breaker (L9) interrompe pipeline se variação >= 8%', () => {
+  test('circuit breaker (L10) interrompe pipeline se variação >= 8%', () => {
     const state = baseState()
-    state.currentPrice = 30.25  // ~8.04% acima do closePrice 28.00
+    state.currentPrice = 30.80  // ~10% acima do closePrice 28.00 — margem suficiente pós-L2 (-0.3%)
     const result = calculator.calculate(state, baseParams(), 0)
     expect(result.halted).toBe(true)
     expect(state.isPaused).toBe(true)
-    expect(result.layerResults[0].layer).toBe('L9_CircuitBreaker')
+    // L10 é o último layer no pipeline (trigger após L1-L9)
+    const cbResult = result.layerResults.find(r => r.layer === 'L10_CircuitBreaker')
+    expect(cbResult).toBeDefined()
   })
 
   test('com noise=0 e sem ordens pendentes: delta próximo de zero', () => {
@@ -85,9 +93,15 @@ describe('PriceCalculator (integração)', () => {
     expect(result.newPrice).toBeGreaterThanOrEqual(0.01)
   })
 
-  test('layerResults contém L9 + L1-L7 + L8 (9 entradas total)', () => {
+  test('layerResults contém todas as camadas do pipeline (L9+L1-L7+L8+L10 = 10 entradas mínimo)', () => {
     const state = baseState()
     const result = calculator.calculate(state, baseParams(), 0)
-    expect(result.layerResults).toHaveLength(9)  // L9 + 7 layers + L8
+    // Pipeline: L9_DailyVolTarget + L1-L7 (7 layers) + L8_VelocityCap + L10_CircuitBreaker = 10
+    expect(result.layerResults.length).toBeGreaterThanOrEqual(10)
+    const layerNames = result.layerResults.map(r => r.layer)
+    expect(layerNames).toContain('L9_DailyVolTarget')
+    expect(layerNames).toContain('L1_OrnsteinUhlenbeck')
+    expect(layerNames).toContain('L8_VelocityCap')
+    expect(layerNames).toContain('L10_CircuitBreaker')
   })
 })

@@ -64,7 +64,7 @@ export function useMarketSession(): UseMarketSessionReturn {
   return {
     session: data?.session ?? MarketSession.CLOSED,
     countdownSeconds: countdown,
-    nextSession: data?.nextSession ?? MarketSession.REGULAR,
+    nextSession: data?.nextSession ?? MarketSession.TRADING,
     transitionAt: data?.transitionAt ?? null,
     isMarketOpen: data?.isMarketOpen ?? false,
     isLoading,

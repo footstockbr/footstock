@@ -2,7 +2,7 @@ import { BaseAgent, type AgentDecision, type MarketContext } from './BaseAgent'
 
 /**
  * RandomTraderAgent — toma decisões aleatórias com distribuição 30/30/40.
- * Opera em todas as sessões exceto FECHADO.
+ * Opera em todas as sessões exceto CLOSED.
  */
 export class RandomTraderAgent extends BaseAgent {
   constructor(weight = 1) {
@@ -10,7 +10,7 @@ export class RandomTraderAgent extends BaseAgent {
   }
 
   decide(ctx: MarketContext): AgentDecision {
-    if (ctx.session === 'FECHADO') {
+    if (ctx.session === 'CLOSED') {
       return { side: 'HOLD', quantity: 0, priceModifier: 0, reason: 'market_closed' }
     }
 

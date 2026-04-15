@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { list, errors, parsePagination, buildPagination } from '@/lib/api'
 
 // GET /api/v1/admin/forum/flagged — MODERADOR+
+// Retorna posts com status=FLAGGED aguardando revisão
 export async function GET(request: NextRequest) {
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
   const { page, limit, skip } = parsePagination(request.nextUrl.searchParams)
 
   try {
-    const where = { isFlagged: true, isDeleted: false }
+    const where = { status: 'FLAGGED' as const, isDeleted: false }
 
     const [posts, total] = await Promise.all([
       prisma.globalForumPost.findMany({
@@ -24,6 +25,7 @@ export async function GET(request: NextRequest) {
         skip,
         take: limit,
         include: {
+          user: { select: { id: true, name: true, planType: true } },
           _count: { select: { likes: true } },
         },
       }),
@@ -34,10 +36,18 @@ export async function GET(request: NextRequest) {
       id: p.id,
       userId: p.userId,
       content: p.content,
+      contentRaw: p.contentRaw, // admin vê original com PII
       ticker: p.ticker ?? null,
       isFlagged: p.isFlagged,
+      flaggedBy: p.flaggedBy, // regras que ativaram
       flagCount: p.flagCount,
+      status: p.status,
       likes: p._count.likes,
+      author: {
+        id: p.user.id,
+        name: p.user.name,
+        plan: p.user.planType,
+      },
       createdAt: p.createdAt.toISOString(),
       updatedAt: p.updatedAt.toISOString(),
     }))

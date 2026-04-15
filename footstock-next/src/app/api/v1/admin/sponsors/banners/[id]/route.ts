@@ -1,8 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
+import { BANNER_POSITIONS } from '@/lib/types/sponsors'
 import type { User, AdminRole } from '@/types'
+
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
+
+const bannerUpdateSchema = z.object({
+  title: z.string().min(1, 'Título não pode ser vazio').optional(),
+  company: z.string().min(1, 'Empresa não pode ser vazia').optional(),
+  position: z.enum(BANNER_POSITIONS).optional(),
+  isActive: z.boolean().optional(),
+  color: z.string().regex(HEX_COLOR, 'Cor inválida (use #RRGGBB)').optional(),
+  ctaText: z.string().min(1, 'Texto do CTA não pode ser vazio').optional(),
+  ctaColor: z.string().regex(HEX_COLOR, 'Cor CTA inválida (use #RRGGBB)').optional(),
+  linkUrl: z.string().url('URL de destino inválida').nullish(),
+  // Campos T-017
+  imageUrl:  z.string().url('imageUrl inválida').nullish(),
+  sponsorId: z.string().cuid('sponsorId inválido').nullish(),
+  width:     z.number().int().positive().nullish(),
+  height:    z.number().int().positive().nullish(),
+})
 
 interface BannerParams {
   params: Promise<{ id: string }>
@@ -31,6 +51,7 @@ export async function PATCH(request: NextRequest, { params }: BannerParams) {
         tourCompleted: false,
         ageVerificationPending: false,
         adminRole: adminRole as AdminRole,
+        version: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
@@ -48,14 +69,27 @@ export async function PATCH(request: NextRequest, { params }: BannerParams) {
 
   try {
     const body = await request.json()
+    const parsed = bannerUpdateSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: { code: 'VAL_001', message: 'Dados inválidos', fieldErrors: parsed.error.flatten().fieldErrors } },
+        { status: 422 }
+      )
+    }
+    const { title, company, position, isActive, color, ctaText, ctaColor, linkUrl, imageUrl, sponsorId, width, height } = parsed.data
     const updateData: Record<string, unknown> = {}
-    if (body.title !== undefined) updateData.title = body.title
-    if (body.company !== undefined) updateData.company = body.company
-    if (body.position !== undefined) updateData.position = body.position
-    if (body.isActive !== undefined) updateData.isActive = body.isActive
-    if (body.color !== undefined) updateData.color = body.color
-    if (body.ctaText !== undefined) updateData.ctaText = body.ctaText
-    if (body.ctaColor !== undefined) updateData.ctaColor = body.ctaColor
+    if (title !== undefined) updateData.title = title
+    if (company !== undefined) updateData.company = company
+    if (position !== undefined) updateData.position = position
+    if (isActive !== undefined) updateData.isActive = isActive
+    if (color !== undefined) updateData.color = color
+    if (ctaText !== undefined) updateData.ctaText = ctaText
+    if (ctaColor !== undefined) updateData.ctaColor = ctaColor
+    if (linkUrl !== undefined) updateData.linkUrl = linkUrl ?? null
+    if (imageUrl !== undefined) updateData.imageUrl = imageUrl ?? null
+    if (sponsorId !== undefined) updateData.sponsorId = sponsorId ?? null
+    if (width !== undefined) updateData.width = width ?? null
+    if (height !== undefined) updateData.height = height ?? null
 
     const banner = await prisma.sponsorBanner.update({
       where: { id },
@@ -98,6 +132,7 @@ export async function DELETE(request: NextRequest, { params }: BannerParams) {
         tourCompleted: false,
         ageVerificationPending: false,
         adminRole: adminRole as AdminRole,
+        version: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }

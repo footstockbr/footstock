@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
+import { invalidateBlockedWordsCache } from '@/lib/moderation'
 import type { User, AdminRole } from '@/types'
 
 export async function GET(request: NextRequest) {
@@ -27,6 +28,7 @@ export async function GET(request: NextRequest) {
         tourCompleted: false,
         ageVerificationPending: false,
         adminRole: adminRole as AdminRole,
+        version: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
@@ -80,6 +82,7 @@ export async function POST(request: NextRequest) {
         tourCompleted: false,
         ageVerificationPending: false,
         adminRole: adminRole as AdminRole,
+        version: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
@@ -120,6 +123,7 @@ export async function POST(request: NextRequest) {
       data: { word: normalizedWord },
     })
 
+    invalidateBlockedWordsCache()
     return ok({ message: 'Palavra adicionada à lista bloqueada', word: normalizedWord })
   } catch (error) {
     console.error('[moderation] Error:', error)

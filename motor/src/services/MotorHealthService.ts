@@ -1,15 +1,17 @@
 // ============================================================================
 // Foot Stock Motor — MotorHealthService
 // Publica e verifica heartbeat do motor via Redis.
-// Chaves publicadas a cada tick (TTL=30s):
+// Delega publicação para heartbeat.ts (fonte de verdade das chaves).
+// Chaves publicadas:
 //   motor:heartbeat    — consumido por lib/monitoring/health.ts (checkMotor)
 //   motor:status       — 'ONLINE' | 'OFFLINE' | 'DEGRADED', consumido por admin/motor/status
 //   motor:last_tick    — ISO timestamp do último tick, consumido por admin/motor/status
-//   market:tick:latest — Unix ms do último tick (compat. legado)
+//   market:tick:latest — Unix ms do último tick (consumido por /api/v1/health/motor)
 // ============================================================================
 
 import type Redis from 'ioredis'
 import { logger } from '../utils/logger'
+import { publishHeartbeat, publishOffline as doPublishOffline, TICK_KEY } from '../heartbeat'
 
 export interface MotorHealthStatus {
   status: 'online' | 'offline'
@@ -18,12 +20,7 @@ export interface MotorHealthStatus {
   isRedisConnected: boolean
 }
 
-// TTL das chaves de heartbeat: 60s (motor publica a cada ~10s via HEARTBEAT_EVERY=5 — margem ampla)
 const HEARTBEAT_TTL_S = 60
-const HEALTH_KEY_LEGACY = 'market:tick:latest'  // compat. legado
-const HEARTBEAT_KEY = 'motor:heartbeat'          // consumido por health.ts
-const STATUS_KEY = 'motor:status'                // consumido por admin status
-const LAST_TICK_KEY = 'motor:last_tick'          // consumido por admin status
 
 let instance: MotorHealthService | null = null
 
@@ -36,7 +33,7 @@ export class MotorHealthService {
 
   async checkHealth(): Promise<MotorHealthStatus> {
     try {
-      const raw = await this.redis.get(HEALTH_KEY_LEGACY)
+      const raw = await this.redis.get(TICK_KEY)
 
       if (!raw) {
         return {
@@ -81,47 +78,21 @@ export class MotorHealthService {
 
   /**
    * Publica o heartbeat do motor a cada tick.
-   * Deve ser chamado SEMPRE (mesmo quando ticks vazio — sessão FECHADO ou halt global).
-   * Escreve 4 chaves Redis com TTL=30s para consumidores distintos.
+   * Deve ser chamado SEMPRE (mesmo quando ticks vazio — sessão CLOSED ou halt global).
+   * Delega para heartbeat.ts que é a fonte de verdade das chaves Redis.
+   *
+   * @param sessionPrisma Sessão canônica (PRE_OPENING, TRADING, CLOSING_CALL, AFTER_MARKET, CLOSED).
+   *   Consumida por OrderService._checkMarketSession() no Next.js via Redis key 'market:session'.
    */
-  async publishTick(): Promise<void> {
-    const nowMs = Date.now()
-    const nowIso = new Date(nowMs).toISOString()
-
-    try {
-      await Promise.all([
-        // Chave consumida por lib/monitoring/health.ts → checkMotor()
-        this.redis.set(HEARTBEAT_KEY, nowMs.toString(), 'EX', HEARTBEAT_TTL_S),
-        // Chave consumida por app/api/v1/admin/motor/status
-        this.redis.set(STATUS_KEY, 'ONLINE', 'EX', HEARTBEAT_TTL_S),
-        // Chave consumida por app/api/v1/admin/motor/status (lastTick)
-        this.redis.set(LAST_TICK_KEY, nowIso, 'EX', HEARTBEAT_TTL_S),
-        // Chave legada (compat.)
-        this.redis.set(HEALTH_KEY_LEGACY, nowMs.toString(), 'EX', HEARTBEAT_TTL_S),
-      ])
-    } catch (err) {
-      logger.error(JSON.stringify({
-        level: 'error',
-        code: 'SYS_001',
-        service: 'redis',
-        message: 'publishTick failed',
-        error: String(err),
-      }))
-    }
+  async publishTick(sessionPrisma?: string): Promise<void> {
+    await publishHeartbeat(this.redis, sessionPrisma)
   }
 
   /**
    * Marca o motor como OFFLINE explicitamente (graceful shutdown).
    */
   async publishOffline(): Promise<void> {
-    try {
-      await Promise.all([
-        this.redis.del(HEARTBEAT_KEY),
-        this.redis.set(STATUS_KEY, 'OFFLINE', 'EX', 60),
-      ])
-    } catch {
-      // fail-silent no shutdown
-    }
+    await doPublishOffline(this.redis)
   }
 
   static getInstance(redis: Redis): MotorHealthService {

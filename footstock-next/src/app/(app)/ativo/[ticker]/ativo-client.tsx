@@ -2,11 +2,14 @@
 
 import { TrendingUp } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { useQuery } from "@tanstack/react-query";
+import { YieldPendingBadge } from "@/components/dividends/YieldPendingBadge";
+import { YieldPendingTooltip } from "@/components/dividends/YieldPendingTooltip";
 
 interface AtivoClientProps {
   ticker: string;
   asset: {
-    name: string;
+    displayName: string;
     division: string;
     currentSupply: number;
     totalShares: number;
@@ -15,14 +18,42 @@ interface AtivoClientProps {
   };
 }
 
+/** Hook para buscar yield pendente do ticker atual (apenas JOGADOR tem dados) */
+function useYieldPending(ticker: string) {
+  return useQuery<{ totalPending: number }>({
+    queryKey: ["yield-pending", ticker],
+    queryFn: async () => {
+      const res = await fetch("/api/v1/dividends/yield-pending");
+      if (!res.ok) return { totalPending: 0 };
+      const json = await res.json();
+      const items: Array<{ ticker: string; totalPending: number }> =
+        json.data?.items ?? [];
+      const found = items.find((i) => i.ticker === ticker);
+      return { totalPending: found?.totalPending ?? 0 };
+    },
+    staleTime: 60_000,
+  });
+}
+
 export function AtivoClient({ ticker, asset }: AtivoClientProps) {
   const divisionLabel = asset.division === "SERIE_A" ? "Série A" : "Série B";
   const supplyDisplay = asset.currentSupply.toLocaleString("pt-BR");
   const tradingStatus = asset.isHalted ? "Suspensa" : "Negociação";
   const tradingStatusColor = asset.isHalted ? "text-[#F6465D]" : "text-[#2EBD85]";
 
+  const { data: yieldData } = useYieldPending(ticker);
+  const totalYieldPending = yieldData?.totalPending ?? 0;
+
   return (
     <div data-testid="ativo-page" className="px-4 pt-3">
+      {/* Yield Pendente — visível apenas para JOGADOR com yield acumulado */}
+      {totalYieldPending > 0 && (
+        <div className="mb-4 space-y-3" data-testid="yield-pending-section">
+          <YieldPendingBadge totalPending={totalYieldPending} showTooltip />
+          <YieldPendingTooltip ticker={ticker} totalPending={totalYieldPending} />
+        </div>
+      )}
+
       <Tabs defaultValue="grafico">
         <TabsList data-testid="ativo-tabs" className="w-full">
           <TabsTrigger data-testid="ativo-tab-grafico" value="grafico">Gráfico</TabsTrigger>
@@ -83,7 +114,7 @@ export function AtivoClient({ ticker, asset }: AtivoClientProps) {
             </div>
             <div className="flex justify-between py-1.5 border-b border-[rgba(240,185,11,.06)]">
               <span className="text-xs text-[#929AA5]">Clube</span>
-              <span className="text-xs font-bold text-[#EAECEF]">{asset.name}</span>
+              <span className="text-xs font-bold text-[#EAECEF]">{asset.displayName}</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-[rgba(240,185,11,.06)]">
               <span className="text-xs text-[#929AA5]">Divisão</span>

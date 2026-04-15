@@ -74,7 +74,7 @@ export class PositionRepository extends BaseRepository<unknown> {
         asset: {
           select: {
             ticker: true,
-            name: true,
+            displayName: true,
             currentPrice: true,
           },
         },
@@ -111,7 +111,7 @@ export class PositionRepository extends BaseRepository<unknown> {
       const entry: InternalPosition = {
         ticker: pos.asset.ticker,
         assetId: pos.assetId,
-        clubName: pos.asset.name,
+        clubName: pos.asset.displayName,
         qty: qtyNum,
         avgPrice,
         currentPrice,

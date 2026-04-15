@@ -1,17 +1,17 @@
 // ============================================================================
 // Foot Stock Motor — MarginCallChecker
 // Verifica margem de posições SHORT a cada tick e dispara alertas/liquidação.
-// Alert: perdas = 80% (restante < 20%) | Liquidação forçada: perdas = 100% (restante ≤ 0%)
+// Alert: perdas = 50% (restante < 50%) | Liquidação forçada: perdas = 80% (restante < 20%)
 // Rastreabilidade: INT-014 / TASK-4/ST003
 // ============================================================================
 
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Prisma } from '@prisma/client'
 import type Redis from 'ioredis'
 import { logger } from '../utils/logger'
 import type { PrismaPosition } from '../types/prisma.types'
 
-const MARGIN_ALERT_THRESHOLD = 0.20        // restante < 20% = 80% consumido — alerta (INTAKE canônico)
-const MARGIN_LIQUIDATION_THRESHOLD = 0.00  // restante ≤ 0% = 100% consumido — liquidação (INTAKE canônico)
+const MARGIN_ALERT_THRESHOLD = 0.50        // restante < 50% = 50% consumido — alerta (INTAKE canônico)
+const MARGIN_LIQUIDATION_THRESHOLD = 0.20  // restante < 20% = 80% consumido — liquidação forçada (INTAKE canônico)
 const ALERT_THROTTLE_TTL_SECONDS = 3600   // 1h entre alertas para a mesma posição
 
 export class MarginCallChecker {
@@ -81,7 +81,7 @@ export class MarginCallChecker {
       const pnl = (avgPrice - currentPrice) * position.quantity - interestAccrued
       const returnAmount = marginBlocked + pnl
 
-      await this.prisma.$transaction(async (tx) => {
+      await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const user = await tx.user.findUniqueOrThrow({ where: { id: position.userId } })
 
         const balanceBefore = Number(user.fsBalance)

@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import type { Candle } from '@/lib/utils/indicators'
 
-export type ChartPeriod = '1D' | '1W' | '1M' | '3M' | '1Y' | 'ALL'
+export type ChartPeriod = '1H' | '1D' | '1W' | '1S' | '1M' | '3M' | '1Y' | 'ALL'
 
 export interface OFIData {
   timestamp: string
@@ -46,11 +46,16 @@ export function usePriceHistory(ticker: string, period: ChartPeriod) {
           close: number
           volume: number
           ofi: number
+          source: 'GBM' | 'REAL'
         }>
+        _meta: {
+          delayed?: boolean
+          delayMinutes?: number
+        }
       }>
     },
-    staleTime: period === '1D' ? 60_000 : 300_000,
-    refetchInterval: period === '1D' ? 5 * 60 * 1000 : false,
+    staleTime: (period === '1H' || period === '1D') ? 60_000 : 300_000,
+    refetchInterval: (period === '1H' || period === '1D') ? 5 * 60 * 1000 : false,
     retry: 2,
     enabled: !!ticker,
   })
@@ -68,6 +73,9 @@ export function usePriceHistory(ticker: string, period: ChartPeriod) {
   const ofiData: OFIData[] =
     data?.data?.map((p) => ({ timestamp: p.timestamp, ofi: p.ofi })) ?? []
 
+  const isDelayed = data?._meta?.delayed ?? false
+  const delayMinutes = data?._meta?.delayMinutes ?? 0
+
   const rateError =
     isError && error && (error as RateError).code === 'RATE_001'
       ? (error as RateError)
@@ -81,6 +89,8 @@ export function usePriceHistory(ticker: string, period: ChartPeriod) {
     isLoading,
     isError,
     isRateLimited,
+    isDelayed,
+    delayMinutes,
     rateError,
     error,
     refetch,

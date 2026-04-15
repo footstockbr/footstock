@@ -7,7 +7,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import type Redis from 'ioredis'
-import type { PrismaClient } from '@prisma/client'
+import { type PrismaClient, Prisma } from '@prisma/client'
 import { ImpactCategory } from './types'
 import { logger } from '../utils/logger'
 import { newsQueue, type RawNewsItem } from './NewsQueue'
@@ -99,7 +99,7 @@ export class NewsClassifier {
       `
       // Formato compacto para o prompt: "URU3=flamengo,fla,mengao,urubu | POR4=palmeiras,porco,verdao"
       this.tickerMapLine = rows
-        .map(r => `${r.ticker}=${r.search_text.replace(/\s+/g, ',').split(',').slice(0, 6).join(',')}`)
+        .map((r: { ticker: string; search_text: string }) => `${r.ticker}=${r.search_text.replace(/\s+/g, ',').split(',').slice(0, 6).join(',')}`)
         .join(' | ')
       logger.info(`[NewsClassifier] Mapeamento real→ticker: ${rows.length} ativos carregados`)
     } catch (err) {

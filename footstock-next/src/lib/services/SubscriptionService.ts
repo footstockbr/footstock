@@ -8,6 +8,7 @@ import {
   isWithinCoolingOff,
   shouldEnterCancellationLock,
   getCancellationLockExpiry,
+  getForcedLiquidationAt,
   getRestrictedPositionTypes,
   calcBonusAmount,
   type SubscriptionForLogic,
@@ -119,9 +120,12 @@ export class SubscriptionService extends BaseService {
       refundRequested: subscription.refundRequested,
       isEligibleForRefund,
       daysUntilExpiry,
+      // T-021: usar bonusAmount armazenado (diferencial real) quando disponível
       bonusCredit: subscription.bonusScheduledAt
         ? {
-            amount: calcBonusAmount(subscription.planType as PlanType),
+            amount: subscription.bonusAmount
+              ? Number(subscription.bonusAmount)
+              : calcBonusAmount(subscription.planType as PlanType),
             scheduledAt: subscription.bonusScheduledAt.toISOString(),
             credited: subscription.bonusCreditedAt !== null,
           }
@@ -191,9 +195,10 @@ export class SubscriptionService extends BaseService {
 
     if (eligibleForRefund) {
       // Cancelamento simples com reembolso (arrependimento CDC Art. 49)
+      // T-021: nular bonusScheduledAt para cancelar bônus pendente dentro da carência
       await prisma.subscription.update({
         where: { id: subscription.id },
-        data: { cancelledAt: now, refundRequested: true },
+        data: { cancelledAt: now, refundRequested: true, bonusScheduledAt: null },
       })
       return {
         cancelledAt: now,
@@ -205,17 +210,25 @@ export class SubscriptionService extends BaseService {
 
     if (enterLock) {
       // CANCELLATION_LOCK — features bloqueadas imediatamente
-      const lockExpiresAt = getCancellationLockExpiry(now)
+      // T-021: nular bonusScheduledAt — CANCELLATION_LOCK conta como cancelamento de bônus
+      const lockStartedAt = now
+      const lockExpiresAt = getCancellationLockExpiry(lockStartedAt)   // T+7d
+      const forcedLiqAt = getForcedLiquidationAt(lockStartedAt)         // T+48h
+
       await prisma.subscription.update({
         where: { id: subscription.id },
         data: {
           status: 'CANCELLATION_LOCK',
           cancelledAt: now,
+          cancellationLockStartedAt: lockStartedAt,
           cancellationLockExpiresAt: lockExpiresAt,
+          forcedLiquidationAt: forcedLiqAt,
+          forcedLiquidationExecutedAt: null,
+          bonusScheduledAt: null, // T-021: cancelar bônus pendente
         },
       })
 
-      const hoursRemaining = 48
+      const hoursRemaining = Math.ceil((lockExpiresAt.getTime() - now.getTime()) / 3_600_000)
       return {
         cancelledAt: now,
         expiresAt: subscription.expiresAt!,
@@ -232,7 +245,7 @@ export class SubscriptionService extends BaseService {
     // Fallback: cancelamento simples sem reembolso e sem trava
     await prisma.subscription.update({
       where: { id: subscription.id },
-      data: { cancelledAt: now },
+      data: { cancelledAt: now, bonusScheduledAt: null }, // T-021: nular bônus pendente
     })
 
     return {
@@ -305,13 +318,14 @@ export class SubscriptionService extends BaseService {
       : 0
 
     await prisma.$transaction([
-      // Salvar previousPlanType para rastreabilidade
+      // Salvar previousPlanType para rastreabilidade + nular bonusScheduledAt (T-021)
       prisma.subscription.update({
         where: { id: subscription.id },
         data: {
           cancelledAt: now,
           refundRequested: true,
           previousPlanType: subscription.planType as never,
+          bonusScheduledAt: null, // T-021: cancelar bônus pendente na carência
         },
       }),
       // Estornar bônus se já creditado

@@ -37,9 +37,9 @@ function deriveClubIdFromEmail(email: string): string | null {
 async function getClubDisplayName(ticker: string): Promise<string> {
   const asset = await prisma.asset.findUnique({
     where: { ticker },
-    select: { name: true },
+    select: { displayName: true },
   })
-  return asset?.name ?? ticker
+  return asset?.displayName ?? ticker
 }
 
 // ---------------------------------------------------------------------------

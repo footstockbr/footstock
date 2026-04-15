@@ -4,7 +4,7 @@
 // Rastreabilidade: INT-012, INT-013 / TASK-3
 // ============================================================================
 
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Prisma } from '@prisma/client'
 import type Redis from 'ioredis'
 import { logger } from '../utils/logger'
 import { validateTransition } from './order-contract'
@@ -113,7 +113,7 @@ export class OrderMatcher {
     executionPrice: number,
   ): Promise<void> {
     try {
-      await this.prisma.$transaction(async (tx) => {
+      await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const user = await tx.user.findUniqueOrThrow({ where: { id: order.userId } })
 
         const operationValue = order.quantity * executionPrice
@@ -164,7 +164,7 @@ export class OrderMatcher {
     reason: string,
   ): Promise<void> {
     try {
-      await this.prisma.$transaction(async (tx) => {
+      await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         // Executar perna disparada
         const user = await tx.user.findUniqueOrThrow({ where: { id: executedLeg.userId } })
         const operationValue = executedLeg.quantity * executionPrice

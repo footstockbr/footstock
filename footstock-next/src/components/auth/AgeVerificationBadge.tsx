@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils'
 
 interface AgeVerificationBadgeProps {
   verified: boolean
-  method?: 'self_declaration' | 'date_only'
+  method?: 'self_declaration' | 'date_only' | 'flagcheck' | 'admin_override'
   className?: string
 }
 
@@ -13,6 +13,7 @@ interface AgeVerificationBadgeProps {
  */
 export function AgeVerificationBadge({
   verified,
+  method,
   className,
 }: AgeVerificationBadgeProps) {
   if (verified) {
@@ -23,7 +24,7 @@ export function AgeVerificationBadge({
           'bg-[rgba(34,197,94,.12)] text-[#2EBD85] border border-[rgba(34,197,94,.25)]',
           className
         )}
-        title="Maioridade confirmada por autodeclaração"
+        title={method === 'flagcheck' ? 'Maioridade confirmada via FlagCheck' : method === 'admin_override' ? 'Maioridade confirmada por administrador' : 'Maioridade confirmada por autodeclaração'}
       >
         <ShieldCheck className="w-3.5 h-3.5" aria-hidden="true" />
         <span>Maior de idade confirmado</span>

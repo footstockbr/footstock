@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function CriarLigaPage() {
   return (
-    <div className="px-4 pt-4 pb-10 max-w-lg mx-auto">
+    <div data-testid="page-ligas-criar" className="px-4 pt-4 pb-10 max-w-lg mx-auto">
       {/* Back nav */}
       <Link
         href="/ligas"

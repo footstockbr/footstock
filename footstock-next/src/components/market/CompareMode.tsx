@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, X } from 'lucide-react'
+import { useAnalytics } from '@/hooks/useAnalytics'
 
 interface AssetOption {
   ticker: string
@@ -28,6 +29,7 @@ export function CompareMode({
   const [selected, setSelected] = useState<string[]>([])
   const [search, setSearch] = useState('')
   const router = useRouter()
+  const { track } = useAnalytics()
 
   if (!canCompare) {
     return (
@@ -68,6 +70,13 @@ export function CompareMode({
   function handleConfirm() {
     if (selected.length > 0) {
       onCompare([baseTicker, ...selected])
+
+      // EVT-018: asset_comparison_used — rastreia uso do modo de comparacao
+      track('asset_comparison_used', {
+        primary_ticker: baseTicker,
+        comparison_count: (selected.length + 1) as 2 | 3 | 4,
+        plan: 'JOGADOR' as const,
+      })
     }
     onClose()
   }

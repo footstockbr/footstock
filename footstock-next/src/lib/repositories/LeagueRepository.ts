@@ -31,17 +31,21 @@ function calcEndsAt(duration: LeagueDuration, from: Date): Date {
   return d
 }
 
-/** Gera token assinado com HMAC-SHA256 (expiração 7 dias) */
-function generateInviteToken(payload: object): string {
+/** Gera token assinado com HMAC-SHA256 (expiração 30 dias) */
+function generateInviteToken(payload: object, leagueStartsAt?: Date): string {
   const secret = process.env.INVITE_TOKEN_SECRET ?? 'default-insecure-secret'
-  const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000
+  const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000
+  // Expira em 30 dias OU quando a liga iniciar (o que ocorrer primeiro)
+  const expiresAt = leagueStartsAt
+    ? Math.min(Date.now() + thirtyDaysMs, leagueStartsAt.getTime())
+    : Date.now() + thirtyDaysMs
   const data = Buffer.from(JSON.stringify({ ...payload, expiresAt })).toString('base64url')
   const sig = crypto.createHmac('sha256', secret).update(data).digest('base64url')
   return `${data}.${sig}`
 }
 
-/** Valida token assinado — retorna payload ou null se inválido/expirado */
-function validateInviteToken(token: string): { leagueId: string } | null {
+/** Verifica assinatura HMAC — retorna payload bruto ou null */
+function parseAndVerifyToken(token: string): Record<string, unknown> | null {
   try {
     const [data, sig] = token.split('.')
     if (!data || !sig) return null
@@ -50,7 +54,7 @@ function validateInviteToken(token: string): { leagueId: string } | null {
     if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null
     const parsed = JSON.parse(Buffer.from(data, 'base64url').toString())
     if (Date.now() > parsed.expiresAt) return null
-    return { leagueId: parsed.leagueId }
+    return parsed
   } catch {
     return null
   }
@@ -62,8 +66,10 @@ type DbLeague = {
   id: string; name: string; slug: string; type: string; division: string
   duration: string; sponsorId: string | null; createdBy: string | null
   startsAt: Date; endsAt: Date | null; status: string; createdAt: Date
+  permiteAlavancagem?: boolean
   _count?: { members: number }
-  sponsor?: { id: string; name: string; logoUrl?: string | null } | null
+  // Patrocinador: incluído somente se ativo (isActive=true). Caso inativo, aparece como null.
+  sponsor?: { id: string; name: string; logoUrl?: string | null; isActive?: boolean } | null
 }
 
 function serializeLeague(l: DbLeague, extra?: Partial<League>): League {
@@ -81,7 +87,9 @@ function serializeLeague(l: DbLeague, extra?: Partial<League>): League {
     status: l.status as League['status'],
     createdAt: l.createdAt.toISOString(),
     memberCount: l._count?.members,
-    sponsor: l.sponsor
+    permiteAlavancagem: l.permiteAlavancagem ?? false,
+    // Ocultar patrocinador inativo: não exibir no frontend se isActive=false
+    sponsor: l.sponsor && l.sponsor.isActive !== false
       ? { id: l.sponsor.id, name: l.sponsor.name }
       : null,
     ...extra,
@@ -98,6 +106,7 @@ export interface CreateLeagueDTO {
   emblemUrl?: string
   sponsorId?: string
   createdBy: string
+  permiteAlavancagem?: boolean
 }
 
 export class LeagueRepository {
@@ -121,7 +130,7 @@ export class LeagueRepository {
         take: limit,
         include: {
           _count: { select: { members: true } },
-          sponsor: { select: { id: true, name: true } },
+          sponsor: { select: { id: true, name: true, isActive: true } },
         },
       }),
       prisma.league.count({ where }),
@@ -192,6 +201,7 @@ export class LeagueRepository {
         startsAt: now,
         endsAt,
         status: 'ACTIVE',
+        permiteAlavancagem: data.permiteAlavancagem ?? false,
       },
       include: {
         _count: { select: { members: true } },
@@ -210,8 +220,11 @@ export class LeagueRepository {
 
     if (!league) throw new LeagueError(LEAGUE_ERRORS.NOT_FOUND)
 
-    if (league.type === 'AMIGOS' && league._count.members >= 20) {
-      throw new LeagueError(LEAGUE_ERRORS.FULL)
+    if (league.type === 'AMIGOS' && league._count.members >= league.maxMembers) {
+      throw new LeagueError({
+        ...LEAGUE_ERRORS.FULL,
+        message: `Liga cheia (${league._count.members}/${league.maxMembers} membros)`,
+      })
     }
 
     try {
@@ -236,27 +249,71 @@ export class LeagueRepository {
       },
     })
 
-    return members.map((m) => ({
-      rank: m.rank,
-      userId: m.userId,
-      userName: m.user.name,
-      userPlan: m.user.planType as PlanType,
-      score: (m.scoreBreakdown ?? {
-        rentabilidade: 0, sofisticacao: 0, diversificacao: 0,
-        consistencia: 0, bonusEducativo: 0, total: 0,
-        finalScore: Number(m.score), fatorEquidade: 1,
-      }) as unknown as LeagueMemberRanking['score'],
-      joinedAt: m.joinedAt.toISOString(),
-      isCurrentUser: currentUserId ? m.userId === currentUserId : false,
-    }))
+    return members.map((m) => {
+      const isCurrentUser = currentUserId ? m.userId === currentUserId : false
+      const isTop3 = m.rank <= 3
+
+      // Privacidade: rank 4+ recebe nome truncado (2 chars + asteriscos)
+      // Exceção: top 3 e o próprio usuário sempre veem nome completo
+      const displayName = isCurrentUser || isTop3
+        ? m.user.name
+        : m.user.name.slice(0, 2) + '*'.repeat(Math.max(0, m.user.name.length - 2))
+
+      return {
+        rank: m.rank,
+        userId: m.userId,
+        userName: displayName,
+        userPlan: m.user.planType as PlanType,
+        score: (m.scoreBreakdown ?? {
+          rentabilidade: 0, sofisticacao: 0, diversificacao: 0,
+          consistencia: 0, bonusEducativo: 0, total: 0,
+          finalScore: Number(m.score), fatorEquidade: 1,
+        }) as unknown as LeagueMemberRanking['score'],
+        joinedAt: m.joinedAt.toISOString(),
+        isCurrentUser,
+      }
+    })
   }
 
   async generateInviteToken(leagueId: string): Promise<string> {
-    return generateInviteToken({ leagueId, type: 'league-invite' })
+    const league = await prisma.league.findUnique({
+      where: { id: leagueId },
+      select: { startsAt: true, status: true },
+    })
+    // Se liga ainda não iniciou (status PENDING), token expira quando iniciar
+    const leagueStartsAt = league?.status === 'PENDING' ? league.startsAt : undefined
+
+    // Gerar nonce único — salvo em league.inviteCode para suportar revogação
+    const nonce = generateId(16)
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: { inviteCode: nonce },
+    })
+
+    return generateInviteToken({ leagueId, type: 'league-invite', nonce }, leagueStartsAt)
   }
 
-  validateInviteToken(token: string): { leagueId: string } | null {
-    return validateInviteToken(token)
+  /** Valida token e verifica nonce atual no banco — async para suportar revogação */
+  async validateInviteToken(token: string): Promise<{ leagueId: string } | null> {
+    const parsed = parseAndVerifyToken(token)
+    if (!parsed || typeof parsed.leagueId !== 'string' || typeof parsed.nonce !== 'string') {
+      return null
+    }
+    const league = await prisma.league.findUnique({
+      where: { id: parsed.leagueId },
+      select: { inviteCode: true },
+    })
+    // Nonce do token deve coincidir com o nonce atual no banco
+    if (!league?.inviteCode || league.inviteCode !== parsed.nonce) return null
+    return { leagueId: parsed.leagueId }
+  }
+
+  /** Revoga o link de convite atual — tokens antigos passam a ser inválidos */
+  async revokeInviteToken(leagueId: string): Promise<void> {
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: { inviteCode: null },
+    })
   }
 
   async findByUserId(userId: string): Promise<League[]> {

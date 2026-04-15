@@ -3,7 +3,7 @@
  */
 // ============================================================================
 // ScheduledOrderRunner — Testes Unitários
-// Cobre: executa em sessão NEGOCIACAO, pula em sessão FECHADO,
+// Cobre: executa em sessão TRADING, pula em sessão CLOSED,
 //        pula ordens com scheduledAt futuro, ticker sem preço,
 //        cálculo de taxa, executionDelay no payload do publish.
 // ============================================================================
@@ -49,7 +49,7 @@ function makeUser(overrides: Partial<any> = {}): any {
 }
 
 // ─── Mock SessionManager ──────────────────────────────────────────────────────
-function makeSessionManager(session: string = 'NEGOCIACAO'): any {
+function makeSessionManager(session: string = 'TRADING'): any {
   return {
     getCurrentSession: jest.fn().mockReturnValue(session),
   }
@@ -102,12 +102,12 @@ describe('ScheduledOrderRunner', () => {
     jest.clearAllMocks()
   })
 
-  describe('checkScheduledOrders — sessão NEGOCIACAO', () => {
-    test('executa ordens quando sessão é NEGOCIACAO', async () => {
+  describe('checkScheduledOrders — sessão TRADING', () => {
+    test('executa ordens quando sessão é TRADING', async () => {
       const order = makeScheduledOrder()
       prisma = makePrisma([order])
       redis = makeRedis()
-      sessionManager = makeSessionManager('NEGOCIACAO')
+      sessionManager = makeSessionManager('TRADING')
       runner = new ScheduledOrderRunner(prisma, redis, sessionManager)
 
       await runner.checkScheduledOrders({ CRAQUE10: 50 })
@@ -116,12 +116,12 @@ describe('ScheduledOrderRunner', () => {
     })
   })
 
-  describe('checkScheduledOrders — sessão FECHADO', () => {
-    test('pula execução quando sessão é FECHADO', async () => {
+  describe('checkScheduledOrders — sessão CLOSED', () => {
+    test('pula execução quando sessão é CLOSED', async () => {
       const order = makeScheduledOrder()
       prisma = makePrisma([order])
       redis = makeRedis()
-      sessionManager = makeSessionManager('FECHADO')
+      sessionManager = makeSessionManager('CLOSED')
       runner = new ScheduledOrderRunner(prisma, redis, sessionManager)
 
       await runner.checkScheduledOrders({ CRAQUE10: 50 })
@@ -133,7 +133,7 @@ describe('ScheduledOrderRunner', () => {
       const order = makeScheduledOrder()
       prisma = makePrisma([order])
       redis = makeRedis()
-      sessionManager = makeSessionManager('PRE_ABERTURA')
+      sessionManager = makeSessionManager('PRE_OPENING')
       runner = new ScheduledOrderRunner(prisma, redis, sessionManager)
 
       await runner.checkScheduledOrders({ CRAQUE10: 50 })
@@ -145,7 +145,7 @@ describe('ScheduledOrderRunner', () => {
       const order = makeScheduledOrder()
       prisma = makePrisma([order])
       redis = makeRedis()
-      sessionManager = makeSessionManager('CALL')
+      sessionManager = makeSessionManager('CLOSING_CALL')
       runner = new ScheduledOrderRunner(prisma, redis, sessionManager)
 
       await runner.checkScheduledOrders({ CRAQUE10: 50 })
@@ -158,7 +158,7 @@ describe('ScheduledOrderRunner', () => {
     test('query usa lte:now para filtrar ordens com scheduledAt no passado', async () => {
       prisma = makePrisma([])
       redis = makeRedis()
-      sessionManager = makeSessionManager('NEGOCIACAO')
+      sessionManager = makeSessionManager('TRADING')
       runner = new ScheduledOrderRunner(prisma, redis, sessionManager)
 
       await runner.checkScheduledOrders({})
@@ -178,7 +178,7 @@ describe('ScheduledOrderRunner', () => {
       const order = makeScheduledOrder({ asset: { ticker: 'SEM_PRECO' } })
       prisma = makePrisma([order])
       redis = makeRedis()
-      sessionManager = makeSessionManager('NEGOCIACAO')
+      sessionManager = makeSessionManager('TRADING')
       runner = new ScheduledOrderRunner(prisma, redis, sessionManager)
 
       await runner.checkScheduledOrders({ OUTRO_TICKER: 100 })
@@ -190,7 +190,7 @@ describe('ScheduledOrderRunner', () => {
       const order = makeScheduledOrder({ asset: { ticker: 'ZERADO' } })
       prisma = makePrisma([order])
       redis = makeRedis()
-      sessionManager = makeSessionManager('NEGOCIACAO')
+      sessionManager = makeSessionManager('TRADING')
       runner = new ScheduledOrderRunner(prisma, redis, sessionManager)
 
       await runner.checkScheduledOrders({ ZERADO: 0 })
@@ -203,7 +203,7 @@ describe('ScheduledOrderRunner', () => {
     test('retorna sem chamar $transaction quando não há ordens agendadas', async () => {
       prisma = makePrisma([])
       redis = makeRedis()
-      sessionManager = makeSessionManager('NEGOCIACAO')
+      sessionManager = makeSessionManager('TRADING')
       runner = new ScheduledOrderRunner(prisma, redis, sessionManager)
 
       await runner.checkScheduledOrders({ CRAQUE10: 50 })
@@ -219,7 +219,7 @@ describe('ScheduledOrderRunner', () => {
       const user = makeUser({ planType: 'CRAQUE', fsBalance: 5000 })
       prisma = makePrisma([order], user)
       redis = makeRedis()
-      sessionManager = makeSessionManager('NEGOCIACAO')
+      sessionManager = makeSessionManager('TRADING')
 
       let capturedFee: number | undefined
       prisma.$transaction.mockImplementation(async (fn: any) => {
@@ -250,7 +250,7 @@ describe('ScheduledOrderRunner', () => {
       const order = makeScheduledOrder({ scheduledAt })
       prisma = makePrisma([order])
       redis = makeRedis()
-      sessionManager = makeSessionManager('NEGOCIACAO')
+      sessionManager = makeSessionManager('TRADING')
       runner = new ScheduledOrderRunner(prisma, redis, sessionManager)
 
       await runner.checkScheduledOrders({ CRAQUE10: 50 })
@@ -273,7 +273,7 @@ describe('ScheduledOrderRunner', () => {
       const order = makeScheduledOrder({ scheduledAt })
       prisma = makePrisma([order])
       redis = makeRedis()
-      sessionManager = makeSessionManager('NEGOCIACAO')
+      sessionManager = makeSessionManager('TRADING')
       runner = new ScheduledOrderRunner(prisma, redis, sessionManager)
 
       await runner.checkScheduledOrders({ CRAQUE10: 50 })
@@ -292,7 +292,7 @@ describe('ScheduledOrderRunner', () => {
       const order = makeScheduledOrder({ status: 'OPEN' })
       prisma = makePrisma([order])
       redis = makeRedis()
-      sessionManager = makeSessionManager('NEGOCIACAO')
+      sessionManager = makeSessionManager('TRADING')
       runner = new ScheduledOrderRunner(prisma, redis, sessionManager)
 
       await runner.checkScheduledOrders({ CRAQUE10: 50 })
@@ -308,7 +308,7 @@ describe('ScheduledOrderRunner', () => {
 
       prisma = makePrisma([order], poorUser)
       redis = makeRedis()
-      sessionManager = makeSessionManager('NEGOCIACAO')
+      sessionManager = makeSessionManager('TRADING')
 
       prisma.$transaction.mockImplementation(async (fn: any) => {
         const tx = {

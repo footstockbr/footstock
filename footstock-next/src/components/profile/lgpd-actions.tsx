@@ -5,10 +5,12 @@ import Link from "next/link";
 import { Button, Card } from "@/components/ui";
 import { ROUTES } from "@/lib/constants/routes";
 import { DeleteAccountModal } from "./delete-account-modal";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 export function LGPDActions() {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [exportState, setExportState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const { track } = useAnalytics();
 
   const handleExport = async () => {
     setExportState("loading");
@@ -16,6 +18,8 @@ export function LGPDActions() {
       const res = await fetch("/api/v1/users/me/export");
       if (!res.ok) throw new Error();
       setExportState("done");
+      // EVT-037: data_export_requested
+      track("data_export_requested", {});
       setTimeout(() => setExportState("idle"), 4000);
     } catch {
       setExportState("error");

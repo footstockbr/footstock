@@ -2,15 +2,17 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ShieldBan, ShieldCheck, Filter, SlidersHorizontal } from 'lucide-react'
+import { ShieldBan, ShieldCheck, Filter, SlidersHorizontal, Tag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { AliasManagement } from '@/components/admin/AliasManagement'
 
 interface AssetItem {
   id: string
   ticker: string
   displayName: string
+  realName: string | null
   division: string
   currentPrice: number
   priceChange: number
@@ -40,6 +42,9 @@ export function ClubEditor({ canHalt }: ClubEditorProps) {
   const [adjustAsset, setAdjustAsset] = useState<{ id: string; ticker: string; currentPrice: number } | null>(null)
   const [adjustPrice, setAdjustPrice] = useState('')
   const [adjustReason, setAdjustReason] = useState('')
+
+  // Aliases panel: qual ticker está expandido
+  const [aliasTickerOpen, setAliasTickerOpen] = useState<string | null>(null)
 
   const { data: assets, isLoading } = useQuery({
     queryKey: ['admin-assets'],
@@ -260,80 +265,121 @@ export function ClubEditor({ canHalt }: ClubEditorProps) {
         <table className="w-full min-w-[640px] text-xs">
           <thead>
             <tr className="text-[#929AA5] border-b border-[rgba(240,185,11,.08)]">
-              <th className="text-left py-2 px-2 font-medium">Ticker</th>
+              <th className="text-left py-2 px-2 font-medium">Ticker / Clube Real</th>
+              <th className="text-left py-2 px-2 font-medium hidden md:table-cell">Nome Fictício</th>
               <th className="text-left py-2 px-2 font-medium hidden sm:table-cell">Divisão</th>
               <th className="text-right py-2 px-2 font-medium">Preço</th>
               <th className="text-right py-2 px-2 font-medium">Var%</th>
               <th className="text-center py-2 px-2 font-medium">Status</th>
               <th className="text-right py-2 px-2 font-medium">Halt</th>
               <th className="text-right py-2 px-2 font-medium">Preço</th>
+              <th className="text-center py-2 px-2 font-medium">Aliases</th>
             </tr>
           </thead>
           <tbody>
-            {displayed.map((asset) => (
-              <tr
-                key={asset.ticker}
-                className="border-b border-[rgba(240,185,11,.06)] last:border-0 hover:bg-[rgba(240,185,11,.03)]"
-              >
-                <td className="py-2.5 px-2 font-mono font-semibold text-[#c5b99a]">{asset.ticker}</td>
-                <td className="py-2.5 px-2 text-[#929AA5] hidden sm:table-cell">{asset.division}</td>
-                <td className="py-2.5 px-2 text-right text-[#c5b99a]">
-                  FS$ {asset.currentPrice.toFixed(2)}
-                </td>
-                <td className={cn(
-                  'py-2.5 px-2 text-right font-medium',
-                  asset.priceChange > 0 ? 'text-emerald-400' : asset.priceChange < 0 ? 'text-red-400' : 'text-[#929AA5]'
-                )}>
-                  {asset.priceChange > 0 ? '+' : ''}{asset.priceChange.toFixed(2)}%
-                </td>
-                <td className="py-2.5 px-2 text-center">
-                  <span className={cn(
-                    'text-[11px] font-medium px-1.5 py-0.5 rounded border',
-                    asset.isHalted
-                      ? 'bg-red-500/20 text-red-400 border-red-500/30'
-                      : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+            {displayed.map((asset) => {
+              const isAliasOpen = aliasTickerOpen === asset.ticker
+              return (
+                <tr
+                  key={asset.ticker}
+                  className="border-b border-[rgba(240,185,11,.06)] last:border-0 hover:bg-[rgba(240,185,11,.03)]"
+                >
+                  <td className="py-2.5 px-2">
+                    <span className="font-mono font-semibold text-[#c5b99a]">{asset.ticker}</span>
+                    {asset.realName && (
+                      <p className="text-[10px] text-[#707A8A] mt-0.5">{asset.realName}</p>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-2 text-[#929AA5] text-xs hidden md:table-cell">
+                    {asset.displayName}
+                  </td>
+                  <td className="py-2.5 px-2 text-[#929AA5] hidden sm:table-cell">{asset.division}</td>
+                  <td className="py-2.5 px-2 text-right text-[#c5b99a]">
+                    FS$ {asset.currentPrice.toFixed(2)}
+                  </td>
+                  <td className={cn(
+                    'py-2.5 px-2 text-right font-medium',
+                    asset.priceChange > 0 ? 'text-emerald-400' : asset.priceChange < 0 ? 'text-red-400' : 'text-[#929AA5]'
                   )}>
-                    {asset.isHalted ? 'Halted' : 'Ativo'}
-                  </span>
-                </td>
-                {/* Halt / Release */}
-                <td className="py-2.5 px-2 text-right">
-                  {asset.isHalted ? (
+                    {asset.priceChange > 0 ? '+' : ''}{asset.priceChange.toFixed(2)}%
+                  </td>
+                  <td className="py-2.5 px-2 text-center">
+                    <span className={cn(
+                      'text-[11px] font-medium px-1.5 py-0.5 rounded border',
+                      asset.isHalted
+                        ? 'bg-red-500/20 text-red-400 border-red-500/30'
+                        : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                    )}>
+                      {asset.isHalted ? 'Halted' : 'Ativo'}
+                    </span>
+                  </td>
+                  {/* Halt / Release */}
+                  <td className="py-2.5 px-2 text-right">
+                    {asset.isHalted ? (
+                      <button
+                        onClick={() => releaseMutation.mutate(asset.ticker)}
+                        disabled={!canHalt || releaseMutation.isPending}
+                        title={!canHalt ? 'Sem permissão' : undefined}
+                        className="min-h-[36px] min-w-[36px] inline-flex items-center gap-1 px-2.5 py-1 text-xs text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-500/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        Liberar
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmTicker(asset.ticker)}
+                        disabled={!canHalt}
+                        title={!canHalt ? 'Sem permissão' : undefined}
+                        className="min-h-[36px] min-w-[36px] inline-flex items-center gap-1 px-2.5 py-1 text-xs text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <ShieldBan className="h-3.5 w-3.5" />
+                        Halt
+                      </button>
+                    )}
+                  </td>
+                  {/* Ajustar Preço */}
+                  <td className="py-2.5 px-2 text-right">
                     <button
-                      onClick={() => releaseMutation.mutate(asset.ticker)}
-                      disabled={!canHalt || releaseMutation.isPending}
-                      title={!canHalt ? 'Sem permissão' : undefined}
-                      className="min-h-[36px] min-w-[36px] inline-flex items-center gap-1 px-2.5 py-1 text-xs text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-500/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <ShieldCheck className="h-3.5 w-3.5" />
-                      Liberar
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => setConfirmTicker(asset.ticker)}
+                      onClick={() => openAdjustModal(asset)}
                       disabled={!canHalt}
-                      title={!canHalt ? 'Sem permissão' : undefined}
-                      className="min-h-[36px] min-w-[36px] inline-flex items-center gap-1 px-2.5 py-1 text-xs text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      title={!canHalt ? 'Sem permissão' : 'Ajustar preço (DB + motor)'}
+                      className="min-h-[36px] min-w-[36px] inline-flex items-center gap-1 px-2.5 py-1 text-xs text-[#F0B90B] border border-[rgba(240,185,11,.3)] rounded-lg hover:bg-[rgba(240,185,11,.08)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
-                      <ShieldBan className="h-3.5 w-3.5" />
-                      Halt
+                      <SlidersHorizontal className="h-3.5 w-3.5" />
+                      Ajustar
                     </button>
-                  )}
-                </td>
-                {/* Ajustar Preço */}
-                <td className="py-2.5 px-2 text-right">
-                  <button
-                    onClick={() => openAdjustModal(asset)}
-                    disabled={!canHalt}
-                    title={!canHalt ? 'Sem permissão' : 'Ajustar preço (DB + motor)'}
-                    className="min-h-[36px] min-w-[36px] inline-flex items-center gap-1 px-2.5 py-1 text-xs text-[#F0B90B] border border-[rgba(240,185,11,.3)] rounded-lg hover:bg-[rgba(240,185,11,.08)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <SlidersHorizontal className="h-3.5 w-3.5" />
-                    Ajustar
-                  </button>
+                  </td>
+                  {/* Aliases */}
+                  <td className="py-2.5 px-2 text-center">
+                    <button
+                      onClick={() => setAliasTickerOpen(isAliasOpen ? null : asset.ticker)}
+                      className={cn(
+                        'min-h-[36px] min-w-[36px] inline-flex items-center gap-1 px-2.5 py-1 text-xs border rounded-lg transition-colors',
+                        isAliasOpen
+                          ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                          : 'text-[#929AA5] border-[rgba(240,185,11,.1)] hover:text-[#c5b99a]'
+                      )}
+                      aria-label={`Gerenciar aliases de ${asset.ticker}`}
+                      aria-expanded={isAliasOpen}
+                    >
+                      <Tag className="h-3.5 w-3.5" />
+                      Alias
+                    </button>
+                  </td>
+                </tr>
+              )
+            })}
+            {/* Painel de aliases inline (fora do map principal para evitar problemas de aninhamento) */}
+            {aliasTickerOpen && (
+              <tr key={`${aliasTickerOpen}-aliases-panel`}>
+                <td colSpan={9} className="px-2 pb-3 pt-0">
+                  <AliasManagement
+                    ticker={aliasTickerOpen}
+                    displayName={displayed.find((a) => a.ticker === aliasTickerOpen)?.displayName}
+                  />
                 </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>

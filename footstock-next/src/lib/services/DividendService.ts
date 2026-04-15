@@ -1,8 +1,9 @@
 // ============================================================================
 // Foot Stock — DividendService (module-16)
-// Cálculo de dividendos esportivos e financeiros com suporte a diferencial
-// de plano, idempotência mensal, batch com Promise.allSettled e retomada.
-// Rastreabilidade: INT-072, INT-073, INT-074
+// Orquestrador de dividendos. Mantém métodos legados (calcularDividendoEsportivo,
+// calcularDividendoFinanceiro) como wrappers dos novos serviços especializados.
+// Novos callers devem usar diretamente os serviços em services/dividends/.
+// Rastreabilidade: INT-072, INT-073, INT-074 / T-007
 // ============================================================================
 
 import { prisma } from '@/lib/prisma'
@@ -13,6 +14,8 @@ import { getWalletBalance } from '@/lib/services/WalletService'
 import { sendNotification } from '@/lib/services/NotificationService'
 import { dividendRepository } from '@/lib/repositories/DividendRepository'
 import type { Dividend } from '@prisma/client'
+import { sportingResultDividendService } from '@/lib/services/dividends/SportingResultDividendService'
+import { financialPeriodicDividendService } from '@/lib/services/dividends/FinancialPeriodicDividendService'
 
 // ---------------------------------------------------------------------------
 // Constantes
@@ -131,7 +134,7 @@ export class DividendService {
 
     // Buscar nome do clube
     const asset = await prisma.asset.findUnique({ where: { ticker } })
-    const clubName = asset?.name ?? ticker
+    const clubName = asset?.displayName ?? ticker
     const fator = sentimentFactor(sentiment)
 
     return processBatches(positions, async (pos) => {
@@ -318,7 +321,7 @@ export class DividendService {
             const ticker = key.replace('club:sentiment:', '')
             const asset = await prisma.asset.findUnique({ where: { ticker } })
             if (asset) {
-              results.push({ ticker, clubName: asset.name, sentiment })
+              results.push({ ticker, clubName: asset.displayName, sentiment })
             }
           }
         }
@@ -331,7 +334,7 @@ export class DividendService {
 
     // Fallback: buscar todos os ativos do DB (sem filtro de sentiment — Redis indisponível)
     const assets = await prisma.asset.findMany({ where: { isHalted: false } })
-    return assets.map(a => ({ ticker: a.ticker, clubName: a.name, sentiment: 1 }))
+    return assets.map(a => ({ ticker: a.ticker, clubName: a.displayName, sentiment: 1 }))
   }
 
   private async _saveCheckpoint(month: string, index: number): Promise<void> {
@@ -340,6 +343,35 @@ export class DividendService {
     } catch {
       // Checkpoint falha silenciosamente — idempotência já garantida pelo processedMonth
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // T-007: Delegadores para os novos serviços especializados
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Dispara dividendo de Resultado Esportivo (T-007 modalidade 1).
+   * Substitui calcularDividendoEsportivo para novos triggers.
+   */
+  async processarResultadoEsportivo(params: {
+    ticker: string
+    triggerEvent: 'VITORIA' | 'TITULO' | 'CAMPEONATO'
+    sentiment: number
+    matchDate?: Date
+  }): Promise<{ processed: number; failed: number }> {
+    const result = await sportingResultDividendService.process(params)
+    return { processed: result.processed, failed: result.failed }
+  }
+
+  /**
+   * Processa dividendo Financeiro Periódico com critérios corretos (T-007 modalidade 2).
+   * Usa FinancialPeriodicDividendService com filtros BULLISH + debtRatio + freeFloat.
+   */
+  async processarDividendoFinanceiroPeriodico(
+    processingMonth: string
+  ): Promise<{ processed: number; skipped: number }> {
+    const result = await financialPeriodicDividendService.process(processingMonth)
+    return { processed: result.processed, skipped: result.skipped }
   }
 }
 

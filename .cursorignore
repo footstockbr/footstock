@@ -1,0 +1,24 @@
+# Dependências e build caches
+**/node_modules/
+**/.next/
+**/.turbo/
+**/.swc/
+**/.cache/
+**/dist/
+**/build/
+**/out/
+**/.expo/
+**/.vercel/
+
+# Artefatos de teste e relatórios
+**/coverage/
+**/reports/
+**/.stryker-tmp/
+tests/load/results/
+output/
+
+# Backups/legado
+_*_legacy_backup/
+legacy-old/
+legacy-new/
+html-novo/

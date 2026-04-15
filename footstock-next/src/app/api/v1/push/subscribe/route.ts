@@ -13,6 +13,10 @@ const SubscribeSchema = z.object({
   userAgent: z.string().optional(),
 })
 
+const UnsubscribeSchema = z.object({
+  endpoint: z.string().url({ message: 'Formato inválido para o campo endpoint.' }),
+})
+
 // POST /api/v1/push/subscribe
 export async function POST(req: NextRequest) {
   const auth = await getAuthUser()
@@ -44,6 +48,32 @@ export async function POST(req: NextRequest) {
       auth: keys.auth,
       userAgent,
     })
+    return ok({ success: true })
+  } catch {
+    return errors.server()
+  }
+}
+
+// DELETE /api/v1/push/subscribe — remove inscricao (contrato canonico da spec)
+export async function DELETE(req: NextRequest) {
+  const auth = await getAuthUser()
+  if (!auth) return errors.unauthorized()
+
+  let body: unknown
+  try {
+    body = await req.json()
+  } catch {
+    return errors.validation('Corpo da requisição inválido.')
+  }
+
+  const parsed = UnsubscribeSchema.safeParse(body)
+  if (!parsed.success) {
+    return errors.validation('Campo obrigatório não informado.')
+  }
+
+  try {
+    // Idempotente: nao falha se subscription nao existia
+    await pushSubscriptionRepository.deleteByEndpoint(auth.user.id, parsed.data.endpoint)
     return ok({ success: true })
   } catch {
     return errors.server()

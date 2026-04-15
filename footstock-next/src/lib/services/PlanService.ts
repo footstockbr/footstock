@@ -11,6 +11,7 @@ import {
   calcSubscriptionAmount,
   isWithinCoolingOff,
   canUpgrade,
+  calcUpgradeBonusAmount,
   type SubscriptionForLogic,
 } from './plan-logic'
 import { throwPaymentError } from '@/lib/errors/payment-errors'
@@ -19,6 +20,8 @@ import type { PlanType } from '@/lib/enums'
 import { getGateway } from '@/lib/gateways/GatewayFactory'
 import { GatewayType } from '@/lib/gateways/IGateway'
 import type { GatewayCheckoutInput } from '@/lib/gateways/IGateway'
+import { leagueAutoEnrollService } from './LeagueAutoEnrollService'
+import { DAILY_ORDER_LIMITS_BY_PLAN, ALLOWED_ORDER_TYPES_BY_PLAN } from './plan-order-limits'
 
 export interface CheckoutDTO {
   planType: PlanType
@@ -80,10 +83,16 @@ export class PlanService extends BaseService {
     }
 
     if (user && !canUpgrade(user.planType as PlanType, dto.planType)) {
-      throw Object.assign(new Error('Não é possível fazer downgrade via checkout'), {
-        code: 'PAYMENT_054',
-        statusCode: 422,
+      // Permite downgrade via checkout apenas se assinatura atual está em CANCELLATION_LOCK
+      const lockedSub = await prisma.subscription.findFirst({
+        where: { userId, status: 'CANCELLATION_LOCK' },
       })
+      if (!lockedSub) {
+        throw Object.assign(new Error('Não é possível fazer downgrade via checkout'), {
+          code: 'PAYMENT_054',
+          statusCode: 422,
+        })
+      }
     }
 
     // Verificar assinatura ACTIVE existente do mesmo plano
@@ -184,14 +193,22 @@ export class PlanService extends BaseService {
     const previousPlanType = user?.planType ?? null
     const isUpgrade = previousPlanType !== null && previousPlanType !== subscription.planType
 
-    // Transaction atômica: ativar subscription + atualizar user + agendar bônus T+7
+    // Calcular bônus diferencial (apenas upgrades elegíveis)
+    const upgradeBonusAmount = isUpgrade
+      ? calcUpgradeBonusAmount(previousPlanType as PlanType, subscription.planType as PlanType)
+      : 0
+    const hasBonusToSchedule = isUpgrade && upgradeBonusAmount > 0
+    const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+
+    // Transaction atômica: ativar subscription + atualizar user + agendar bônus T+7 (apenas upgrades)
     await prisma.$transaction([
       prisma.subscription.update({
         where: { id: subscriptionId },
         data: {
           status:           'ACTIVE',
-          previousPlanType: isUpgrade ? previousPlanType : null, // G-02
-          bonusScheduledAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          previousPlanType: isUpgrade ? previousPlanType as never : null, // G-02
+          bonusScheduledAt: hasBonusToSchedule ? sevenDaysFromNow : null,
+          bonusAmount:      hasBonusToSchedule ? upgradeBonusAmount : null,
         },
       }),
       prisma.user.update({
@@ -206,6 +223,52 @@ export class PlanService extends BaseService {
       amount:   subscription.amount,
       subscriptionId,
     })
+
+    // Notificação de bônus agendado — apenas quando há upgrade com bônus elegível (T-021)
+    if (hasBonusToSchedule) {
+      const bonusDate = sevenDaysFromNow.toLocaleDateString('pt-BR', {
+        day: '2-digit', month: 'short', year: 'numeric',
+      })
+      await prisma.notification.create({
+        data: {
+          userId,
+          type: 'BONUS_SCHEDULED',
+          title: 'Bônus de upgrade agendado',
+          body: `Seu bônus de FS$ ${upgradeBonusAmount.toLocaleString('pt-BR')} será creditado em ${bonusDate}.`,
+          isRead: false,
+        },
+      }).catch((err) =>
+        console.error('[PlanService.upgradeUser] Erro ao criar notificação BONUS_SCHEDULED:', err)
+      )
+    }
+
+    // Auto-enroll na liga pública da nova divisão após upgrade.
+    // Operação best-effort — não reverte a transação em caso de falha.
+    leagueAutoEnrollService
+      .enrollUserInPublicLeague(userId, subscription.planType as PlanType)
+      .catch((err) =>
+        console.error('[PlanService.upgradeUser] Falha no auto-enroll de liga:', err)
+      )
+  }
+
+  /**
+   * Retorna o limite diário de criação de ordens para o plano informado.
+   * Retorna `null` para Lenda (ilimitado) e número inteiro para os demais.
+   */
+  getDailyOrderLimit(plan: string): number | null {
+    const limit = DAILY_ORDER_LIMITS_BY_PLAN[plan as PlanType]
+    if (limit === undefined || limit === Infinity) return null
+    return limit
+  }
+
+  /**
+   * Retorna os tipos de ordem permitidos para o plano informado.
+   * Jogador: ['MARKET']
+   * Craque: ['MARKET', 'LIMIT', 'SCHEDULED']
+   * Lenda: ['MARKET', 'LIMIT', 'OCO', 'SCHEDULED']
+   */
+  getAllowedOrderTypes(plan: string): string[] {
+    return ALLOWED_ORDER_TYPES_BY_PLAN[plan as PlanType] ?? ['MARKET']
   }
 
   /** Verifica se usuário está elegível para arrependimento (CDC Art. 49) */

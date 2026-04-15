@@ -3,6 +3,8 @@ import { Inter, Playfair_Display, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { DevOverlayProvider } from "@/components/dev/DevOverlayProvider";
 import { QueryProvider } from "@/components/providers/query-provider";
+import { AnalyticsProvider } from "@/components/providers/analytics-provider";
+import { CookieConsent } from "@/components/common/CookieConsent";
 import "./globals.css";
 
 const inter = Inter({
@@ -59,7 +61,10 @@ export default function RootLayout({
     >
       <body className="min-h-dvh bg-[#0B0E11] text-[#EAECEF] antialiased">
         <QueryProvider>
-          {children}
+          <AnalyticsProvider>
+            {children}
+            <CookieConsent />
+          </AnalyticsProvider>
           {process.env.NODE_ENV === "development" && <DevOverlayProvider />}
           <Toaster
             theme="dark"

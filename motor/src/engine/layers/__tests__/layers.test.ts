@@ -27,8 +27,13 @@ const mockState = (overrides: Partial<AssetState> = {}): AssetState => ({
   pendingBuyVolume: 1000,
   pendingSellVolume: 800,
   isPaused: false,
+  haltReason: null,
+  haltResumeAt: null,
   newsImpact: 0,
   newsImpactTicks: 0,
+  ofiState: 0,
+  dailyVolAccum: 0,
+  dailySigmaMultiplier: 1.0,
   ...overrides,
 })
 
@@ -44,6 +49,7 @@ const mockParams = (overrides: Partial<ClusterParams> = {}): ClusterParams => ({
   spread: 0.0005,
   maxTickChange: 0.0035,
   ofiDecay: 0.91,
+  alphaOfi: 0.0005,
   ...overrides,
 })
 

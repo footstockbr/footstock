@@ -93,8 +93,9 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
         Defina uma nova senha para a sua conta.
       </p>
 
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
+      <form data-testid="form-redefinir-senha" onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
         <Input
+          data-testid="form-redefinir-senha-password-input"
           label="Nova senha"
           type="password"
           autoFocus
@@ -103,13 +104,14 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
           {...register("newPassword")}
         />
         <Input
+          data-testid="form-redefinir-senha-confirm-input"
           label="Confirmar nova senha"
           type="password"
           placeholder="Repita a nova senha"
           error={errors.confirmPassword?.message}
           {...register("confirmPassword")}
         />
-        <Button type="submit" variant="primary" size="lg" fullWidth isLoading={isSubmitting}>
+        <Button data-testid="form-redefinir-senha-submit-button" type="submit" variant="primary" size="lg" fullWidth isLoading={isSubmitting}>
           Redefinir senha
         </Button>
       </form>

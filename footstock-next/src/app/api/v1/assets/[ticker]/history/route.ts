@@ -1,3 +1,4 @@
+// T-031: resolução de aliases de ticker (FLA3 → URU3) aplicada neste endpoint.
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getAuthUser } from '@/lib/auth'
@@ -6,9 +7,12 @@ import { errors } from '@/lib/api'
 import { tickerSchema } from '@/lib/validators/tickerSchema'
 import { PriceHistoryRepository } from '@/lib/repositories/PriceHistoryRepository'
 import type { ChartPeriod } from '@/lib/repositories/PriceHistoryRepository'
+import type { PlanType } from '@/lib/enums'
+import { DELAY_BY_PLAN } from '@/lib/constants/limits'
+import { AliasService } from '@/services/AliasService'
 
 const querySchema = z.object({
-  period: z.enum(['1D', '1W', '1M', '3M', '1Y', 'ALL']).default('1M'),
+  period: z.enum(['1H', '1D', '1W', '1S', '1M', '3M', '1Y', 'ALL']).default('1M'),
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
 })
@@ -20,6 +24,9 @@ export async function GET(
 ) {
   const authResult = await getAuthUser()
   if (!authResult) return errors.unauthorized()
+
+  const userPlan = (authResult.user as unknown as { planType: string }).planType as PlanType
+  const delayMs = DELAY_BY_PLAN[userPlan] ?? DELAY_BY_PLAN.JOGADOR
 
   const { ticker: rawTicker } = await params
   const tickerResult = tickerSchema.safeParse(rawTicker)
@@ -33,14 +40,23 @@ export async function GET(
       { status: 422 }
     )
   }
-  const ticker = tickerResult.data
+
+  // Resolver alias: FLA3 → URU3, URU3 → URU3, XYZ9 → null (T-031)
+  const resolvedTicker = await AliasService.resolve(tickerResult.data)
+  if (!resolvedTicker) {
+    return NextResponse.json(
+      { error: { code: 'ASSET_080', message: 'Ativo não encontrado.' } },
+      { status: 404 }
+    )
+  }
+  const ticker = resolvedTicker
 
   const parsed = querySchema.safeParse(
     Object.fromEntries(request.nextUrl.searchParams)
   )
   if (!parsed.success) {
     return NextResponse.json(
-      { error: { code: 'VAL_002', message: 'Período inválido. Use: 1D, 1W, 1M, 3M, 1Y ou ALL.' } },
+      { error: { code: 'VAL_002', message: 'Período inválido. Use: 1H, 1D, 1W, 1S, 1M, 3M, 1Y ou ALL.' } },
       { status: 400 }
     )
   }
@@ -60,13 +76,19 @@ export async function GET(
       )
     }
 
+    // Aplicar delay por plano: JOGADOR recebe dados com 1h de atraso (TASK-011)
+    const effectiveTo = delayMs > 0
+      ? new Date(Date.now() - delayMs)
+      : to ? new Date(to) : undefined
+
     const priceHistory = await PriceHistoryRepository.findByTicker(ticker, {
       period,
       from: from ? new Date(from) : undefined,
-      to: to ? new Date(to) : undefined,
+      to: effectiveTo,
     })
 
     const granularity = PriceHistoryRepository.getGranularity(period)
+    const isDelayed = delayMs > 0
 
     const response = NextResponse.json({
       data: priceHistory,
@@ -77,11 +99,13 @@ export async function GET(
         to: to ?? null,
         count: priceHistory.length,
         granularity,
+        delayed: isDelayed,
+        delayMinutes: isDelayed ? delayMs / 60_000 : 0,
       },
     })
 
-    // 1D → real-time, sem cache; outros → cache de 60s
-    if (period === '1D') {
+    // 1H/1D → real-time, sem cache; outros → cache de 60s
+    if (period === '1H' || period === '1D') {
       response.headers.set('Cache-Control', 'no-store')
     } else {
       response.headers.set('Cache-Control', 'public, s-maxage=60')

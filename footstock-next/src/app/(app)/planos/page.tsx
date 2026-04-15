@@ -6,7 +6,7 @@ import { PlanType } from "@/lib/constants/plans";
 import Link from "next/link";
 import { ROUTES } from "@/lib/constants/routes";
 import { getAuthUser } from "@/lib/auth";
-import { CheckoutButton } from "@/components/payments/CheckoutButton";
+import { PlanCTAButton } from "@/components/payments/PlanCTAButton";
 
 export const metadata: Metadata = {
   title: "Planos — Foot Stock",
@@ -28,17 +28,22 @@ const PLANS = [
     description: "Para comecar no mercado",
     badge: null,
     features: [
-      "Acesso ao mercado ao vivo",
+      "Saldo inicial FS$ 2.000",
+      "Ordens a mercado (2/dia)",
+      "Cotacoes com 1h de delay",
+      "Taxa operacional: 0,45%",
       "Portfolio basico",
-      "Dados com delay de 15 min",
       "Comunidade & forum",
       "1 liga simultanea",
     ],
     missing: [
-      "Dados em tempo real",
+      "Cotacoes em tempo real",
+      "Ordens Limitada & Agendada",
+      "Ordens OCO & Short Selling",
       "Assessor IA",
-      "Analises avancadas",
-      "Dividendos",
+      "Analises avancadas (MM, OFI)",
+      "Modo comparacao de clubes",
+      "Dividendos automaticos",
     ],
   },
   {
@@ -50,15 +55,25 @@ const PLANS = [
     description: "Para traders serios",
     badge: "Mais popular",
     features: [
-      "Tudo do Jogador",
-      "Dados em tempo real",
+      "Saldo inicial FS$ 5.000",
+      "Ordens a mercado (5/dia)",
+      "Ordens Limitada & Agendada",
+      "Cotacoes com 30 min de delay",
+      "Taxa operacional: 0,35%",
       "Assessor IA (50 msg/dia)",
       "Analises OFI & Kyle's \u03bb",
+      "Modo comparacao (ate 4 clubes)",
       "5 ligas simultaneas",
       "Dividendos automaticos",
       "Alertas de preco",
     ],
-    missing: [],
+    missing: [
+      "Cotacoes em tempo real",
+      "Ordens OCO (One Cancels Other)",
+      "Short Selling com margem",
+      "Alavancagem 2x",
+      "Assessor IA ilimitado",
+    ],
   },
   {
     type: PlanType.LENDA,
@@ -69,7 +84,14 @@ const PLANS = [
     description: "Experiencia completa",
     badge: "Premium",
     features: [
-      "Tudo do Craque",
+      "Saldo inicial FS$ 25.000",
+      "Ordens ilimitadas por dia",
+      "Cotacoes em tempo real",
+      "Taxa operacional: 0,25%",
+      "Ordens OCO (One Cancels Other)",
+      "Short Selling com margem 150%",
+      "Alavancagem 2x",
+      "Indicadores MM9 & MM21 exclusivos",
       "Assessor IA ilimitado",
       "Book de ordens completo",
       "Ligas ilimitadas",
@@ -185,15 +207,23 @@ export default async function PlanosPage() {
                 ))}
               </ul>
 
-              <Button
-                data-testid={`plano-cta-button-${plan.type.toLowerCase()}`}
-                variant={ctaVariant}
-                size="md"
-                fullWidth
-                disabled={ctaDisabled}
-              >
-                {ctaLabel}
-              </Button>
+              {isUpgrade && plan.type !== PlanType.JOGADOR ? (
+                <PlanCTAButton
+                  planType={plan.type as "CRAQUE" | "LENDA"}
+                  label={ctaLabel}
+                  data-testid={`plano-cta-button-${plan.type.toLowerCase()}`}
+                />
+              ) : (
+                <Button
+                  data-testid={`plano-cta-button-${plan.type.toLowerCase()}`}
+                  variant={ctaVariant}
+                  size="md"
+                  fullWidth
+                  disabled={ctaDisabled}
+                >
+                  {ctaLabel}
+                </Button>
+              )}
             </div>
           );
         })}
@@ -201,7 +231,7 @@ export default async function PlanosPage() {
 
       <div className="mt-6 text-center">
         <p className="text-xs text-[#707A8A]">
-          Pagamento seguro via Stripe · Cancele a qualquer momento
+          Pagamento seguro via Mercado Pago, PagSeguro ou PayPal · Cancele a qualquer momento
         </p>
         <Link href={ROUTES.CONTA} className="text-xs text-[#929AA5] underline mt-1 inline-block">
           Voltar para minha conta

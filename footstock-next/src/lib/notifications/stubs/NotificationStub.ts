@@ -8,6 +8,8 @@ export type NotificationType =
   | 'PAYMENT_FAILED'
   | 'PLAN_CANCEL_ALERT'
   | 'BONUS_CREDITED'
+  | 'BONUS_SCHEDULED'   // T-021: bônus agendado para T+7 dias
+  | 'BONUS_CANCELLED'   // T-021: bônus cancelado por arrependimento CDC
   | 'CANCELLATION_LOCK_ACTIVE'
   | 'CANCELLATION_LOCK_LIQUIDATED'
 

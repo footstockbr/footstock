@@ -3,10 +3,10 @@
 // Cron diário (03:00 UTC): credita bônus FS$ para assinantes em T+7 dias
 // G-02: crédito diferencial para upgrades (novo plano - plano anterior)
 // Idempotente: bonusCreditedAt IS NULL verificado antes de creditar
+// T-021: persiste Transaction de extrato (financialType=BONUS) e notificação real no banco
 // ============================================================================
 
 import { prisma } from '@/lib/prisma'
-import { NotificationStub } from '@/lib/notifications/stubs/NotificationStub'
 import { calcBonusAmount } from '@/lib/services/plan-logic'
 import type { PlanType } from '@/lib/enums'
 import type { ProcessResult } from './subscription-expiry'
@@ -26,7 +26,7 @@ function calcEffectiveBonusAmount(planType: PlanType, previousPlanType: PlanType
   return Math.max(0, differential)
 }
 
-/** Processa crédito de bônus FS$ após T+7 dias (novo + upgrade diferencial) */
+/** Processa crédito de bônus FS$ após T+7 dias (upgrade diferencial) */
 export async function processBonusCredits(): Promise<ProcessResult> {
   const now = new Date()
   const result: ProcessResult = { processed: 0, errors: 0, details: [] }
@@ -42,6 +42,7 @@ export async function processBonusCredits(): Promise<ProcessResult> {
       userId:           true,
       planType:         true,
       previousPlanType: true, // G-02: detectar upgrade
+      bonusAmount:      true, // T-021: valor imutável armazenado no agendamento
       bonusScheduledAt: true,
       cancelledAt:      true,
     },
@@ -49,47 +50,92 @@ export async function processBonusCredits(): Promise<ProcessResult> {
 
   for (const sub of pending) {
     try {
-      const isUpgrade    = sub.previousPlanType !== null
-      const bonusAmount  = calcEffectiveBonusAmount(
+      // Usar bonusAmount armazenado (imutável) ou calcular o diferencial como fallback
+      const storedAmount = sub.bonusAmount ? Number(sub.bonusAmount) : null
+      const bonusAmount = storedAmount ?? calcEffectiveBonusAmount(
         sub.planType         as PlanType,
-        sub.previousPlanType as PlanType | null
+        sub.previousPlanType as PlanType | null,
       )
 
       if (bonusAmount === 0) {
-        // Sem bônus a creditar (ex: downgrade inesperado)
+        // Sem bônus a creditar (ex: diferencial zero inesperado)
         await prisma.subscription.update({
           where: { id: sub.id },
           data:  { bonusCreditedAt: now },
         })
+        console.log('[bonus-credit] BONUS_ZERO_SKIP', { subscriptionId: sub.id, userId: sub.userId })
         result.details.push({ subscriptionId: sub.id, action: 'BONUS_ZERO_SKIP' })
         result.processed++
         continue
       }
 
-      await prisma.$transaction([
-        prisma.user.update({
+      const planLabel = sub.planType === 'CRAQUE' ? 'Craque' : 'Lenda'
+      let balanceBefore = 0
+      let balanceAfter  = 0
+
+      // Transação atômica: crédito + marcar creditado + registro de extrato
+      // Usa callback form para ler saldo DENTRO da transação (evita race condition)
+      await prisma.$transaction(async (tx) => {
+        const userInTx = await tx.user.findUnique({
+          where: { id: sub.userId },
+          select: { fsBalance: true },
+        })
+        balanceBefore = userInTx ? Number(userInTx.fsBalance) : 0
+        balanceAfter  = balanceBefore + bonusAmount
+
+        await tx.user.update({
           where: { id: sub.userId },
           data:  { fsBalance: { increment: bonusAmount } },
-        }),
-        prisma.subscription.update({
+        })
+        await tx.subscription.update({
           where: { id: sub.id },
           data:  { bonusCreditedAt: now },
-        }),
-      ])
-
-      // Notificação — email só se não cancelou no arrependimento
-      const channels = sub.cancelledAt ? ['in_app'] : ['in_app', 'email']
-      await NotificationStub.notify(sub.userId, 'BONUS_CREDITED', {
-        amount:      bonusAmount,
-        planName:    sub.planType,
-        isUpgrade,
-        channels,
+        })
+        // Extrato: lançamento BONUS no TransactionHistory (T-021)
+        await tx.transaction.create({
+          data: {
+            userId:        sub.userId,
+            financialType: 'BONUS',
+            totalAmount:   bonusAmount,
+            fsAmount:      bonusAmount,
+            balanceBefore,
+            balanceAfter,
+            // Campos de trade não se aplicam — nullable por M041
+            assetId:  null,
+            type:     null,
+            side:     null,
+            quantity: null,
+            price:    null,
+            fee:      null,
+          },
+        })
       })
 
-      const actionTag = isUpgrade
-        ? `DIFFERENTIAL_BONUS_CREDITED_${bonusAmount}FS`
-        : `BONUS_CREDITED_${bonusAmount}FS`
+      // Notificação real no banco (T-021 — não apenas stub)
+      await prisma.notification.create({
+        data: {
+          userId:  sub.userId,
+          type:    'BONUS_CREDITED',
+          title:   'Bônus creditado',
+          body:    `Bônus de upgrade para ${planLabel} de FS$ ${bonusAmount.toLocaleString('pt-BR')} creditado com sucesso.`,
+          isRead:  false,
+        },
+      }).catch((err) =>
+        console.error('[bonus-credit] Erro ao criar notificação BONUS_CREDITED:', err)
+      )
 
+      // Log estruturado (T-021 requisito de auditoria)
+      console.log('[bonus-credit] CREDITED', {
+        subscriptionId: sub.id,
+        userId:         sub.userId,
+        bonusAmount,
+        balanceBefore,
+        balanceAfter,
+        planType:       sub.planType,
+        previousPlan:   sub.previousPlanType,
+      })
+
+      const actionTag = `BONUS_CREDITED_${bonusAmount}FS`
       result.details.push({ subscriptionId: sub.id, action: actionTag })
       result.processed++
     } catch (err) {

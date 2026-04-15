@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withAdmin } from '@/app/api/middleware'
 import { prisma } from '@/lib/prisma'
+import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
 
 const patchSchema = z.object({
   commissionPercentage: z.number().min(0).max(1).optional(),
@@ -47,8 +48,19 @@ export const PATCH = withAdmin('financial:write')(async (request: NextRequest) =
         ...(parsed.data.active !== undefined               ? { active: parsed.data.active }                             : {}),
         ...(parsed.data.bankData !== undefined             ? { bankData: parsed.data.bankData }                         : {}),
       },
-      select: { id: true, code: true, commissionPercentage: true, active: true, updatedAt: true },
+      select: { id: true, code: true, commissionPercentage: true, active: true, updatedAt: true, affiliateType: true, userId: true },
     })
+
+    // EVT-043: affiliate_config_updated (server-side fallback — no admin UI form yet)
+    // TODO: Mover para componente client-side quando admin affiliate edit form existir
+    const fieldsUpdated = Object.keys(parsed.data).filter(
+      (k) => parsed.data[k as keyof typeof parsed.data] !== undefined
+    )
+    mixpanelServer.track(updated.userId, 'affiliate_config_updated', {
+      affiliateType: updated.affiliateType as string,
+      fieldsUpdated,
+    })
+
     return NextResponse.json({ success: true, data: updated })
   } catch {
     return NextResponse.json({ success: false, error: { code: 'NOT_FOUND', message: 'Afiliado não encontrado' } }, { status: 404 })

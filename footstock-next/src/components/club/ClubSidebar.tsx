@@ -73,13 +73,16 @@ export function ClubSidebar() {
     if (isLoggingOut) return;
     setIsLoggingOut(true);
     try {
+      // Logout via API para registrar no ClubAccessLog antes de invalidar sessão
+      await fetch('/api/v1/club/auth/logout', { method: 'POST', credentials: 'include' });
+      // Fallback: também limpar via Supabase no cliente
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       );
       await supabase.auth.signOut();
       document.cookie = "fs-admin-role=; path=/; max-age=0";
-      router.replace(ROUTES.LOGIN);
+      router.replace('/club/login');
     } catch {
       setIsLoggingOut(false);
     }
@@ -88,7 +91,7 @@ export function ClubSidebar() {
   return (
     <>
       {/* ── Sidebar — desktop ───────────────────────────────────────────────── */}
-      <aside className="hidden md:flex w-64 h-dvh flex-shrink-0 border-r border-[rgba(240,185,11,.1)] flex-col bg-[#0B0E11]/70 sticky top-0">
+      <aside data-testid="club-sidebar" className="hidden md:flex w-64 h-dvh flex-shrink-0 border-r border-[rgba(240,185,11,.1)] flex-col bg-[#0B0E11]/70 sticky top-0">
         <div className="h-14 flex items-center px-4 border-b border-[rgba(240,185,11,.1)] gap-2">
           <Image
             src="/logo-foot.png"
@@ -102,7 +105,7 @@ export function ClubSidebar() {
           </div>
         </div>
 
-        <nav className="flex-1 py-2 overflow-y-auto" aria-label="Navegação do portal do clube">
+        <nav data-testid="club-sidebar-nav" className="flex-1 py-2 overflow-y-auto" aria-label="Navegação do portal do clube">
           {NAV_ITEMS.map((item) => {
             const isActive = item.exact
               ? currentPath === item.href
@@ -112,6 +115,7 @@ export function ClubSidebar() {
               <Link
                 key={item.href}
                 href={item.href}
+                data-testid={`club-sidebar-nav-item-${item.label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "-")}`}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
                   "flex items-center gap-3 px-4 py-2.5 text-sm transition-colors",
@@ -128,8 +132,9 @@ export function ClubSidebar() {
           })}
         </nav>
 
-        <div className="border-t border-[rgba(240,185,11,.1)] p-3 space-y-1">
+        <div data-testid="club-sidebar-footer" className="border-t border-[rgba(240,185,11,.1)] p-3 space-y-1">
           <Link
+            data-testid="club-sidebar-back-mercado-link"
             href={ROUTES.MERCADO}
             className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-[#929AA5] hover:text-[#EAECEF] hover:bg-[#1E2329] transition-colors min-h-[44px]"
           >
@@ -137,6 +142,7 @@ export function ClubSidebar() {
             <span>Voltar ao mercado</span>
           </Link>
           <button
+            data-testid="club-sidebar-logout-button"
             type="button"
             onClick={() => void handleLogout()}
             disabled={isLoggingOut}

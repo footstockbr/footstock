@@ -7,6 +7,10 @@ jest.mock('@/lib/auth', () => ({
   hasPlan: jest.fn(),
 }))
 
+jest.mock('@/lib/middleware/requireActiveSubscription', () => ({
+  requireActiveSubscription: jest.fn().mockResolvedValue(null),
+}))
+
 jest.mock('@/lib/repositories/LeagueRepository', () => ({
   leagueRepository: {
     findAll: jest.fn(),
@@ -38,7 +42,7 @@ const LEAGUE_STUB = {
   id: 'league-1',
   name: 'Liga Teste',
   type: 'PUBLICA',
-  division: 'ABERTA',
+  division: 'OPEN',
   duration: '1M',
   status: 'ACTIVE',
   slug: 'liga-teste',
@@ -93,16 +97,14 @@ describe('POST /api/v1/leagues', () => {
     expect(json.error.code).toBe(LEAGUE_ERRORS.PLAN_RESTRICTION.code)
   })
 
-  it('returns LEAGUE_050 when CRAQUE tries to create PRO league', async () => {
+  it('returns LEAGUE_ADMIN_ONLY when any user tries to create PRO league via public endpoint', async () => {
     mockGetAuthUser.mockResolvedValue(AUTH_CRAQUE)
-    // For PRO type: route only checks hasPlan(planType, 'LENDA') — CRAQUE does not have LENDA
-    mockHasPlan.mockReturnValue(false)
 
     const res = await POST(makePostRequest({ name: 'Liga PRO', type: 'PRO', division: 'OURO', duration: '1M' }))
     const json = await res.json()
 
     expect(res.status).toBe(403)
-    expect(json.error.code).toBe(LEAGUE_ERRORS.PLAN_RESTRICTION.code)
+    expect(json.error.code).toBe('LEAGUE_ADMIN_ONLY')
   })
 
   it('creates PUBLICA league for JOGADOR and adds creator as member', async () => {
@@ -127,14 +129,16 @@ describe('POST /api/v1/leagues', () => {
     expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ type: 'AMIGOS', createdBy: 'u2' }))
   })
 
-  it('creates PRO league for LENDA', async () => {
+  it('returns LEAGUE_ADMIN_ONLY even for LENDA when creating PRO via public endpoint', async () => {
     mockGetAuthUser.mockResolvedValue(AUTH_LENDA)
     mockHasPlan.mockReturnValue(true)
 
     const res = await POST(makePostRequest({ name: 'Liga PRO', type: 'PRO', division: 'OURO', duration: 'TEMPORADA' }))
+    const json = await res.json()
 
-    expect(res.status).toBe(201)
-    expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ type: 'PRO', createdBy: 'u3' }))
+    expect(res.status).toBe(403)
+    expect(json.error.code).toBe('LEAGUE_ADMIN_ONLY')
+    expect(mockCreate).not.toHaveBeenCalled()
   })
 
   it('returns 422 when repository throws LeagueError FULL', async () => {

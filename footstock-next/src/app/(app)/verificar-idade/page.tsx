@@ -26,7 +26,7 @@ export default function VerificarIdadePage() {
   }, [state.success, router])
 
   return (
-    <div className="min-h-dvh bg-[#0B0E11] flex flex-col items-center justify-center px-6 text-center gap-6">
+    <div className="min-h-dvh bg-[#0B0E11] flex flex-col items-center justify-center px-6 text-center gap-6" data-testid="page-verificar-idade">
       <div className="w-16 h-16 rounded-full bg-[rgba(240,185,11,.12)] flex items-center justify-center">
         <Shield className="h-8 w-8 text-[#F0B90B]" aria-hidden="true" />
       </div>

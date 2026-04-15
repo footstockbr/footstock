@@ -27,7 +27,7 @@ export function ProfileInfo({ user }: ProfileInfoProps) {
           <p className="text-xs text-[#929AA5] truncate">{user.email}</p>
           {user.favoriteClub && (
             <p className="text-xs text-[#929AA5] mt-1">
-              ⚽ {club?.name ?? user.favoriteClub}
+              ⚽ {club?.displayName ?? user.favoriteClub}
             </p>
           )}
         </div>

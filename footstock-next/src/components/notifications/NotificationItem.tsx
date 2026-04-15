@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { useAnalytics } from '@/hooks/useAnalytics'
 import {
   CheckCircle,
   XCircle,
@@ -17,10 +18,17 @@ import {
   ShieldAlert,
   Bell,
   Users,
+  KeyRound,
+  Download,
+  Trash2,
+  ShieldX,
+  Wrench,
+  UserPlus,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { NotificationDTO, NotificationType } from '@/types'
+import type { NotificationType as AnalyticsNotificationType } from '@/lib/analytics'
 
 interface NotificationConfig {
   icon: LucideIcon
@@ -31,7 +39,8 @@ interface NotificationConfig {
 const NOTIFICATION_CONFIG: Record<string, NotificationConfig> = {
   ORDER_EXECUTED: { icon: CheckCircle, colorClass: 'text-emerald-400', href: '/carteira' },
   ORDER_CANCELLED: { icon: XCircle, colorClass: 'text-red-400', href: '/carteira' },
-  MARGIN_CALL_ALERT: { icon: AlertTriangle, colorClass: 'text-orange-400', href: '/carteira?tab=shorts' },
+  MARGIN_CALL_WARNING: { icon: AlertTriangle, colorClass: 'text-yellow-400', href: '/carteira?tab=shorts' },
+  MARGIN_CALL_ALERT: { icon: AlertTriangle, colorClass: 'text-orange-500', href: '/carteira?tab=shorts' },
   CIRCUIT_BREAKER: { icon: Zap, colorClass: 'text-red-500', href: '/noticias' },
   NEWS_FAVORITE_CLUB: { icon: Newspaper, colorClass: 'text-[#F0B90B]', href: '/noticias' },
   PAYMENT_CONFIRMED: { icon: CreditCard, colorClass: 'text-emerald-400', href: '/planos' },
@@ -45,6 +54,13 @@ const NOTIFICATION_CONFIG: Record<string, NotificationConfig> = {
   AFFILIATE_INVITE_JOINED: { icon: Users, colorClass: 'text-emerald-400', href: '/perfil?tab=afiliados' },
   CANCELLATION_LOCK_ACTIVE: { icon: Lock, colorClass: 'text-orange-400', href: '/carteira?tab=posicoes' },
   CANCELLATION_LOCK_LIQUIDATED: { icon: ShieldAlert, colorClass: 'text-red-500', href: '/carteira?tab=posicoes' },
+  // T-014: 7 novos tipos
+  PASSWORD_RESET: { icon: KeyRound, colorClass: 'text-blue-400', href: null },
+  LGPD_EXPORT_READY: { icon: Download, colorClass: 'text-emerald-400', href: null },
+  ACCOUNT_DELETED: { icon: Trash2, colorClass: 'text-red-400', href: null },
+  BRUTE_FORCE_BLOCKED: { icon: ShieldX, colorClass: 'text-red-500', href: null },
+  SYSTEM_MAINTENANCE: { icon: Wrench, colorClass: 'text-yellow-400', href: null },
+  REFERRAL_JOINED: { icon: UserPlus, colorClass: 'text-emerald-400', href: '/perfil?tab=afiliados' },
 }
 
 const FALLBACK_CONFIG: NotificationConfig = {
@@ -72,15 +88,31 @@ interface NotificationItemProps {
 
 export function NotificationItem({ notification, onMarkAsRead, onClose }: NotificationItemProps) {
   const router = useRouter()
+  const { track } = useAnalytics()
   const config = NOTIFICATION_CONFIG[notification.type as NotificationType] ?? FALLBACK_CONFIG
   const Icon = config.icon
 
   async function handleClick() {
     onMarkAsRead(notification.id)
+
+    // EVT-034: notification_clicked — rastreia clique em notificacao
+    const createdAtMs = new Date(notification.createdAt).getTime()
+    const timeToClickSeconds = Math.round((Date.now() - createdAtMs) / 1000)
+    track('notification_clicked', {
+      notification_type: notification.type as AnalyticsNotificationType,
+      time_to_click_seconds: timeToClickSeconds,
+      plan: 'JOGADOR' as const,
+    })
+
     if (config.href) {
       onClose()
       router.push(config.href)
     } else {
+      // EVT-035: notification_dismissed — rastreia notificacao descartada (clique sem navegacao)
+      track('notification_dismissed', {
+        notification_type: notification.type as AnalyticsNotificationType,
+        plan: 'JOGADOR' as const,
+      })
       onClose()
     }
   }

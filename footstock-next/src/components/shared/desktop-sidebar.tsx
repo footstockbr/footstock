@@ -17,6 +17,7 @@ const BASE_NAV_ITEMS = [
   { href: ROUTES.LIGAS, label: "Ligas" },
   { href: ROUTES.COMUNIDADE, label: "Comunidade" },
   { href: ROUTES.ASSESSOR, label: "Assessor IA" },
+  { href: ROUTES.GLOSSARIO, label: "Glossário" },
   { href: ROUTES.PERFIL, label: "Perfil" },
 ];
 
@@ -43,9 +44,9 @@ function DesktopSidebar() {
   }
 
   return (
-    <aside className="hidden md:flex md:w-64 md:flex-col md:flex-shrink-0 md:h-dvh md:sticky md:top-0 md:border-r md:border-[rgba(240,185,11,.1)] md:bg-[#0B0E11]/70">
+    <aside data-testid="sidebar" className="hidden md:flex md:w-64 md:flex-col md:flex-shrink-0 md:h-dvh md:sticky md:top-0 md:border-r md:border-[rgba(240,185,11,.1)] md:bg-[#0B0E11]/70">
       <div className="h-14 border-b border-[rgba(240,185,11,.1)] px-4 flex items-center">
-        <Link href={ROUTES.MERCADO} className="flex items-center gap-2">
+        <Link data-testid="sidebar-logo" href={ROUTES.MERCADO} className="flex items-center gap-2">
           <Image
             src="/logo-foot.png"
             alt="Foot Stock"
@@ -58,7 +59,7 @@ function DesktopSidebar() {
         </Link>
       </div>
 
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto" aria-label="Menu principal desktop">
+      <nav data-testid="sidebar-nav" className="flex-1 p-3 space-y-1 overflow-y-auto" aria-label="Menu principal desktop">
         {BASE_NAV_ITEMS.map((item) => {
           const isActive =
             currentPath === item.href ||
@@ -67,6 +68,13 @@ function DesktopSidebar() {
             <Link
               key={item.href}
               href={item.href}
+              data-testid={`sidebar-nav-item-${item.label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "-")}`}
+              data-tour={
+                item.label === "Glossário" ? "glossary-link" :
+                item.label === "Carteira" ? "portfolio-tab" :
+                item.label === "Ligas" ? "leagues-tab" :
+                undefined
+              }
               aria-current={isActive ? "page" : undefined}
               className={cn(
                 "flex items-center rounded-md px-3 py-2 text-sm min-h-[44px] transition-colors",
@@ -82,8 +90,9 @@ function DesktopSidebar() {
 
       </nav>
 
-      <div className="mt-auto border-t border-[rgba(240,185,11,.1)] p-3">
+      <div data-testid="sidebar-footer" className="mt-auto border-t border-[rgba(240,185,11,.1)] p-3">
         <button
+          data-testid="sidebar-logout-button"
           type="button"
           onClick={() => void handleLogout()}
           disabled={isLoggingOut}

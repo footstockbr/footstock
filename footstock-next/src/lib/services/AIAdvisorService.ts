@@ -261,7 +261,7 @@ Retorne APENAS JSON válido, sem markdown, sem explicações adicionais:
       // ignorar falha de cache
     }
 
-    // RESOLVED: registrar AI_CONSULTED em league_score_events para ligas ativas do usuário
+    // Registra AI_ASSESSOR_CONSULTED (2 pts, Pilar 2) para ligas ativas do usuário
     // Deduplica por (leagueId, userId, eventType, period) — no máximo 1 evento/dia/liga
     void this.registerAIConsultedEvent(userId, ticker).catch(() => {
       // silencioso — falha no registro não deve bloquear a resposta ao usuário
@@ -271,46 +271,15 @@ Retorne APENAS JSON válido, sem markdown, sem explicações adicionais:
   }
 
   /**
-   * Registra o evento AI_CONSULTED (2 pts, Pilar 2) para todas as ligas ativas do usuário.
-   * Usa upsert com @@unique([leagueId, userId, eventType, period]) para deduplicação diária.
+   * Registra o evento AI_ASSESSOR_CONSULTED (2 pts, Pilar 2) para todas as ligas ativas do usuário.
+   * Deduplicação diária via LeagueEventRecorder.
    */
   private async registerAIConsultedEvent(userId: string, ticker: string): Promise<void> {
-    const today = new Date().toISOString().slice(0, 10) // "YYYY-MM-DD"
-
-    // Busca ligas ativas onde o usuário é membro
-    const memberships = await prisma.leagueMember.findMany({
-      where: {
-        userId,
-        league: { status: 'ACTIVE' },
-      },
-      select: { leagueId: true },
-    })
-
-    if (memberships.length === 0) return
-
-    // upsert para cada liga (ignora conflito de unicidade — idempotente)
-    await Promise.allSettled(
-      memberships.map(({ leagueId }) =>
-        prisma.leagueScoreEvent.upsert({
-          where: {
-            leagueId_userId_eventType_period: {
-              leagueId,
-              userId,
-              eventType: 'AI_CONSULTED',
-              period: today,
-            },
-          },
-          update: {}, // já existe — não atualizar nada
-          create: {
-            leagueId,
-            userId,
-            eventType: 'AI_CONSULTED',
-            points: 2,
-            period: today,
-            metadata: { ticker },
-          },
-        })
-      )
+    const { leagueEventRecorder } = await import('./leagues/LeagueEventRecorder')
+    await leagueEventRecorder.recordForAllActiveLeagues(
+      userId,
+      'AI_ASSESSOR_CONSULTED',
+      { ticker }
     )
   }
 }

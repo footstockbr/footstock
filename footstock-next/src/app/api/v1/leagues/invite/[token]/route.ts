@@ -7,6 +7,9 @@ import { leagueRepository } from '@/lib/repositories/LeagueRepository'
 import { LeagueError, LEAGUE_ERRORS } from '@/lib/errors/leagueErrors'
 import { notificationService } from '@/lib/services/NotificationService'
 import { prisma } from '@/lib/prisma'
+import { requireActiveSubscription } from '@/lib/middleware/requireActiveSubscription'
+import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
+import type { UserPlan } from '@/lib/analytics'
 
 export async function POST(
   _request: NextRequest,
@@ -15,9 +18,13 @@ export async function POST(
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()
 
+  // Aceitação de convites bloqueada em CANCELLATION_LOCK
+  const lockGuard = await requireActiveSubscription(auth.user.id, 'JOIN_LEAGUE')
+  if (lockGuard) return lockGuard
+
   try {
     const { token } = await params
-    const payload = leagueRepository.validateInviteToken(token)
+    const payload = await leagueRepository.validateInviteToken(token)
 
     if (!payload) {
       return apiError(
@@ -42,6 +49,13 @@ export async function POST(
     }
 
     await leagueRepository.addMember(leagueId, auth.user.id)
+
+    // EVT-027: league_joined — rastreia entrada em liga via convite
+    mixpanelServer.trackLeagueJoined(auth.user.id, {
+      league_type: league.type as 'PUBLIC' | 'FRIENDS' | 'PRO',
+      via_invite_link: true,
+      plan: (auth.user.planType ?? 'JOGADOR') as UserPlan,
+    })
 
     // Notificar o criador que um amigo entrou
     if (league.createdBy && league.createdBy !== auth.user.id) {

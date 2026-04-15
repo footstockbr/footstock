@@ -42,6 +42,8 @@ enum FinancialType {
   MARGIN_BLOCKED
   SHORT_CLOSE
   LEVERAGE_INTEREST
+  BALANCE_RESET
+  FEE
 }
 
 enum OrderSide {
@@ -96,6 +98,9 @@ enum NotificationType {
   // Trava de cancelamento
   CANCELLATION_LOCK_ACTIVE
   CANCELLATION_LOCK_LIQUIDATED
+  // Saldo zero — T-019
+  BALANCE_ZERO
+  BALANCE_RESET
 }
 
 enum ImpactCategory {
@@ -159,10 +164,21 @@ enum SubscriptionPeriod {
 }
 
 enum SessionType {
-  PRE_MARKET
-  REGULAR
+  PRE_OPENING
+  TRADING
+  CLOSING_CALL
   AFTER_MARKET
   CLOSED
+}
+
+model MarketSessionLog {
+  id           String      @id @default(cuid())
+  fromSession  SessionType @map("from_session")
+  toSession    SessionType @map("to_session")
+  transitionAt DateTime    @default(now()) @map("transition_at") @db.Timestamptz
+
+  @@index([transitionAt])
+  @@map("market_session_log")
 }
 
 enum ConsentPurpose {
@@ -226,6 +242,8 @@ model User {
   affiliateReferrals     AffiliateTransaction[] @relation("AffiliateReferredUser")
   pushSubscriptions      PushSubscription[]
   leagueScoreEvents LeagueScoreEvent[] // RESOLVED: relação para eventos de pontuação de ligas
+  balanceResetLogs  BalanceResetLog[]   @relation("BalanceResetTarget")
+  adminBalanceResets BalanceResetLog[]  @relation("BalanceResetAdmin")
 
   @@map("users")
 }
@@ -233,7 +251,8 @@ model User {
 model Asset {
   id             String   @id @default(cuid())
   ticker         String   @unique
-  name           String
+  displayName    String   @map("name")
+  realName       String?  @map("real_name")
   clubSlug       String   @unique @map("club_slug")
   division       Division
   cluster        String // A_TOP | A_MID | A_SMALL | B_LIQUID | B_ILLIQ
@@ -265,8 +284,23 @@ model Asset {
   transactions Transaction[]
   sponsors     Sponsor[]
   adminActions AdminMarketAction[]
+  aliases      AssetAlias[]
 
   @@map("assets")
+}
+
+model AssetAlias {
+  id          String   @id @default(cuid())
+  alias       String   @unique
+  assetTicker String   @map("asset_ticker")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  asset Asset @relation(fields: [assetTicker], references: [ticker])
+
+  @@index([alias, isActive])
+  @@map("asset_aliases")
 }
 
 model Order {
@@ -495,7 +529,7 @@ model League {
   name       String
   slug       String     @unique
   type       LeagueType
-  division   String     @default("BRONZE") // BRONZE | PRATA | OURO | ABERTA
+  division   String     @default("BRONZE") // BRONZE | PRATA | OURO | OPEN
   duration   String     // 1S | 1M | TEMPORADA
   status     String     @default("ACTIVE") // ACTIVE | FINISHED
   maxMembers Int        @default(20) @map("max_members")
@@ -894,4 +928,22 @@ model PushSubscription {
 
   @@index([userId, active])
   @@map("push_subscriptions")
+}
+
+// T-019: Registro de resets de saldo pelo administrador
+model BalanceResetLog {
+  id              String   @id @default(cuid())
+  userId          String   @map("user_id")
+  adminId         String   @map("admin_id")
+  previousBalance Decimal  @map("previous_balance") @db.Decimal(18, 2)
+  newBalance      Decimal  @map("new_balance") @db.Decimal(18, 2)
+  planType        PlanType @map("plan_type")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  user  User @relation("BalanceResetTarget", fields: [userId], references: [id])
+  admin User @relation("BalanceResetAdmin", fields: [adminId], references: [id])
+
+  @@index([userId])
+  @@index([adminId])
+  @@map("balance_reset_logs")
 }

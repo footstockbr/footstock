@@ -21,6 +21,8 @@ export type PlanFeature =
   | 'leagues_pro'
   | 'priority_support'
   | 'no_ads'
+  | 'technical_indicators_advanced' // MM9/MM21 — Lenda only (TASK-011)
+  | 'asset_comparison_mode'         // Modo comparacao — Craque+ (TASK-011)
 
 /** Mapa de features por plano — hierarquia JOGADOR < CRAQUE < LENDA */
 const PLAN_FEATURES: Record<PlanType, PlanFeature[]> = {
@@ -33,6 +35,7 @@ const PLAN_FEATURES: Record<PlanType, PlanFeature[]> = {
     'portfolio_metrics',
     'export_data',
     'no_ads',
+    'asset_comparison_mode',
   ],
   LENDA: [
     'realtime_prices',
@@ -47,6 +50,8 @@ const PLAN_FEATURES: Record<PlanType, PlanFeature[]> = {
     'leagues_pro',
     'priority_support',
     'no_ads',
+    'technical_indicators_advanced',
+    'asset_comparison_mode',
   ],
 }
 

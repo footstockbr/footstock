@@ -73,7 +73,7 @@ export interface AssetFinancials {
 export interface Asset {
   id: string;
   ticker: string;
-  name: string;
+  displayName: string;
   division: Division;
   currentPrice: number;
   fairValue: number;
@@ -95,7 +95,7 @@ export type AssetSummary = Pick<
   Asset,
   | 'id'
   | 'ticker'
-  | 'name'
+  | 'displayName'
   | 'division'
   | 'currentPrice'
   | 'change24h'
@@ -225,7 +225,7 @@ export interface League {
   description?: string;
   type: LeagueType;
   status?: 'ACTIVE' | 'FINISHED';
-  division?: 'ABERTA' | 'BRONZE' | 'PRATA' | 'OURO';
+  division?: 'BRONZE' | 'PRATA' | 'OURO' | 'OPEN';
   duration?: LeagueDuration;
   memberCount?: number;
   endsAt?: string | null;
@@ -276,6 +276,7 @@ export interface ScoreBreakdown {
   total: number;
   finalScore: number;
   fatorEquidade: number;
+  equityFactorApplied?: boolean;
 }
 
 export interface LeagueMemberRanking {
