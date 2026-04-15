@@ -85,7 +85,10 @@ export async function GET() {
       },
     })
   } catch (err) {
-    console.error('[motor/status] Redis read failed:', err instanceof Error ? err.message : err)
+    const errMsg = err instanceof Error ? err.message : String(err)
+    console.error('[motor/status] Redis read failed:', errMsg)
+    const redisUrl = process.env.REDIS_CLOUD_URL || process.env.REDIS_URL || ''
+    const hostMatch = redisUrl.match(/@([^/]+)/)
     return NextResponse.json({
       data: {
         status: 'DEGRADED',
@@ -93,7 +96,7 @@ export async function GET() {
         lastTick: null,
         uptime: null,
         haltedTickers: [],
-        _debug: 'redis_error',
+        _debug: `redis_error: ${errMsg}, host:${hostMatch?.[1] ?? 'none'}, ioredis:${redis.status}, env:${process.env.REDIS_CLOUD_URL ? 'CLOUD' : 'URL'}`,
       },
     })
   }
