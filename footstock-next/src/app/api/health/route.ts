@@ -29,9 +29,16 @@ export async function GET() {
       const pong = await redis.ping()
       if (pong === 'PONG') {
         redisStatus = 'ok'
-        // Also check motor heartbeat
-        const motorStatus = await redis.get('motor:status')
-        redisDetail = `motor:${motorStatus ?? 'null'}, ioredis:${redis.status}`
+        // Diagnostic: check motor heartbeat + cross-instance marker
+        const [motorStatus, marker, allKeys] = await Promise.all([
+          redis.get('motor:status'),
+          redis.get('_diag:identity'),
+          redis.keys('motor:*'),
+        ])
+        // Mask REDIS_URL but show host:port for debugging
+        const urlMatch = (process.env.REDIS_URL ?? '').match(/@([^/]+)/)
+        const redisHost = urlMatch ? urlMatch[1] : 'unknown'
+        redisDetail = `motor:${motorStatus ?? 'null'}, marker:${marker ?? 'null'}, keys:[${allKeys.join(',')}], host:${redisHost}, ioredis:${redis.status}`
       } else {
         redisStatus = 'error'
         redisDetail = `ping returned: ${pong}`
