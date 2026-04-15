@@ -91,7 +91,7 @@ export async function GET() {
         lastTick: lastTick ?? null,
         uptime: calcUptime(startedAt ?? null),
         haltedTickers,
-        _debug: `raw:${statusRaw}, ioredis:${redis.status}`,
+        // _debug: `raw:${statusRaw}, ioredis:${redis.status}`,
       },
     })
   } catch (err) {
@@ -104,7 +104,7 @@ export async function GET() {
         lastTick: null,
         uptime: null,
         haltedTickers: [],
-        _debug: `redis_error: ${errMsg}, ioredis:${redis.status}`,
+        // _debug: `redis_error: ${errMsg}, ioredis:${redis.status}`,
       },
     })
   }
