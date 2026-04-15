@@ -1,8 +1,36 @@
 import { NextResponse } from 'next/server'
+import Redis from 'ioredis'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
-import { getRedisClient } from '@/lib/redis'
 
 export const dynamic = 'force-dynamic'
+
+// Conexão dedicada para motor/status — NÃO usa o singleton de getRedisClient()
+// porque a integração Upstash do Vercel injeta REDIS_URL apontando para a
+// instância errada, e REDIS_CLOUD_URL pode não estar disponível em todas
+// as function instances.
+const REDIS_CLOUD_URL = 'redis://default:Ps1JKQrHluqSFkRW85BOAAhqBhG5EeID@redis-10811.crce207.sa-east-1-2.ec2.cloud.redislabs.com:10811'
+
+const _g = globalThis as unknown as { _motorRedis: Redis | undefined }
+
+function getMotorRedis(): Redis {
+  if (_g._motorRedis && (_g._motorRedis.status === 'end' || _g._motorRedis.status === 'close')) {
+    _g._motorRedis.disconnect()
+    _g._motorRedis = undefined
+  }
+  if (!_g._motorRedis) {
+    _g._motorRedis = new Redis(REDIS_CLOUD_URL, {
+      maxRetriesPerRequest: 3,
+      connectTimeout: 5_000,
+      enableReadyCheck: true,
+      lazyConnect: false,
+      retryStrategy: (times) => (times > 10 ? null : Math.min(times * 300, 2_000)),
+    })
+    _g._motorRedis.on('error', (err: Error) => {
+      console.error('[motor/status:redis] error:', err.message)
+    })
+  }
+  return _g._motorRedis
+}
 
 function calcUptime(startedAt: string | null): string | null {
   if (!startedAt) return null
@@ -31,20 +59,7 @@ export async function GET() {
     )
   }
 
-  const redis = getRedisClient()
-  if (!redis) {
-    console.warn('[motor/status] Redis client is null — REDIS_URL missing or connection dead')
-    return NextResponse.json({
-      data: {
-        status: 'DEGRADED',
-        leader: 'unknown',
-        lastTick: null,
-        uptime: null,
-        haltedTickers: [],
-        _debug: 'redis_null',
-      },
-    })
-  }
+  const redis = getMotorRedis()
 
   try {
     const [statusRaw, leader, lastTick, startedAt] = await Promise.all([
@@ -54,7 +69,6 @@ export async function GET() {
       redis.get('motor:started_at'),
     ])
 
-    // SCAN iterativo em vez de KEYS (não bloqueia Redis em produção)
     const haltKeys: string[] = []
     let cursor = '0'
     do {
@@ -70,10 +84,6 @@ export async function GET() {
 
     const haltedTickers = haltKeys.map((k) => k.replace('motor:halt:', ''))
 
-    // Debug: identificar qual Redis a function instance está usando
-    const redisUrl = process.env.REDIS_CLOUD_URL || process.env.REDIS_URL || ''
-    const hostMatch = redisUrl.match(/@([^/]+)/)
-
     return NextResponse.json({
       data: {
         status: statusValue,
@@ -81,14 +91,12 @@ export async function GET() {
         lastTick: lastTick ?? null,
         uptime: calcUptime(startedAt ?? null),
         haltedTickers,
-        _debug: `raw:${statusRaw}, host:${hostMatch?.[1] ?? 'none'}, ioredis:${redis.status}, env:${process.env.REDIS_CLOUD_URL ? 'CLOUD' : process.env.REDIS_URL ? 'URL' : 'NONE'}`,
+        _debug: `raw:${statusRaw}, ioredis:${redis.status}`,
       },
     })
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err)
     console.error('[motor/status] Redis read failed:', errMsg)
-    const redisUrl = process.env.REDIS_CLOUD_URL || process.env.REDIS_URL || ''
-    const hostMatch = redisUrl.match(/@([^/]+)/)
     return NextResponse.json({
       data: {
         status: 'DEGRADED',
@@ -96,7 +104,7 @@ export async function GET() {
         lastTick: null,
         uptime: null,
         haltedTickers: [],
-        _debug: `redis_error: ${errMsg}, host:${hostMatch?.[1] ?? 'none'}, ioredis:${redis.status}, env:${process.env.REDIS_CLOUD_URL ? 'CLOUD' : 'URL'}`,
+        _debug: `redis_error: ${errMsg}, ioredis:${redis.status}`,
       },
     })
   }
