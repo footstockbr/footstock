@@ -8,8 +8,6 @@ import { ClubEditor } from '@/components/admin/ClubEditor'
 import { NewsInjector } from '@/components/admin/NewsInjector'
 import { ImpactMatrix } from '@/components/admin/ImpactMatrix'
 import { MotorCamadas } from '@/components/admin/MotorCamadas'
-import { HaltControl } from './HaltControl'
-import { AssetsTable } from './AssetsTable'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { hasAdminRole } from '@/lib/utils/admin-roles'
@@ -239,8 +237,6 @@ export default function MotorPageClient({ adminRole }: MotorPageClientProps) {
       {activeTab === 'estado' && (
         <div data-testid="admin-motor-tab-estado-content" className="space-y-4">
           <MotorStateCard />
-          <AssetsTable />
-          <HaltControl adminRole={adminRole} />
           <ClubEditor canHalt={canHalt} />
           <AuditLog />
         </div>

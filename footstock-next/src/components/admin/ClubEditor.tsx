@@ -16,9 +16,16 @@ interface AssetItem {
   division: string
   currentPrice: number
   priceChange: number
+  volume24h: number
   isHalted: boolean
   haltReason: string | null
   sentiment: string
+}
+
+const SENTIMENT_LABEL: Record<string, { label: string; color: string }> = {
+  BULLISH: { label: 'Bullish', color: '#2EBD85' },
+  BEARISH: { label: 'Bearish', color: '#F6465D' },
+  NEUTRAL: { label: 'Neutro', color: '#929AA5' },
 }
 
 async function fetchAssets(): Promise<AssetItem[]> {
@@ -63,6 +70,7 @@ export function ClubEditor({ canHalt }: ClubEditorProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: 'Halt manual via painel admin' }),
+        credentials: 'include',
       }).then((r) => { if (!r.ok) throw new Error('Erro ao haltear'); return r.json() }),
     onSuccess: (_, ticker) => {
       showToast(`${ticker} halted com sucesso`)
@@ -74,7 +82,7 @@ export function ClubEditor({ canHalt }: ClubEditorProps) {
 
   const releaseMutation = useMutation({
     mutationFn: (ticker: string) =>
-      fetch(`/api/v1/admin/assets/${ticker}/halt`, { method: 'DELETE' })
+      fetch(`/api/v1/admin/assets/${ticker}/halt`, { method: 'DELETE', credentials: 'include' })
         .then((r) => { if (!r.ok) throw new Error('Erro ao liberar'); return r.json() }),
     onSuccess: (_, ticker) => {
       showToast(`${ticker} liberado`)
@@ -89,6 +97,7 @@ export function ClubEditor({ canHalt }: ClubEditorProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'ADJUST_PRICE', assetId, reason, payload: { newPrice } }),
+        credentials: 'include',
       }).then(async (r) => {
         if (!r.ok) {
           const body = await r.json().catch(() => ({}))
@@ -262,17 +271,19 @@ export function ClubEditor({ canHalt }: ClubEditorProps) {
       </div>
 
       <div className="overflow-x-auto rounded-lg">
-        <table className="w-full min-w-[640px] text-xs">
+        <table className="w-full min-w-[720px] text-xs">
           <thead>
             <tr className="text-[#929AA5] border-b border-[rgba(240,185,11,.08)]">
-              <th className="text-left py-2 px-2 font-medium">Ticker / Clube Real</th>
-              <th className="text-left py-2 px-2 font-medium hidden md:table-cell">Nome Fictício</th>
-              <th className="text-left py-2 px-2 font-medium hidden sm:table-cell">Divisão</th>
-              <th className="text-right py-2 px-2 font-medium">Preço</th>
+              <th className="text-left py-2 px-2 font-medium">Ticker</th>
+              <th className="text-left py-2 px-2 font-medium hidden md:table-cell">Nome</th>
+              <th className="text-left py-2 px-2 font-medium hidden sm:table-cell">Div.</th>
+              <th className="text-right py-2 px-2 font-medium">Preco</th>
               <th className="text-right py-2 px-2 font-medium">Var%</th>
+              <th className="text-right py-2 px-2 font-medium hidden lg:table-cell">Vol 24h</th>
+              <th className="text-center py-2 px-2 font-medium hidden lg:table-cell">Sent.</th>
               <th className="text-center py-2 px-2 font-medium">Status</th>
               <th className="text-right py-2 px-2 font-medium">Halt</th>
-              <th className="text-right py-2 px-2 font-medium">Preço</th>
+              <th className="text-right py-2 px-2 font-medium">Preco</th>
               <th className="text-center py-2 px-2 font-medium">Aliases</th>
             </tr>
           </thead>
@@ -302,6 +313,14 @@ export function ClubEditor({ canHalt }: ClubEditorProps) {
                     asset.priceChange > 0 ? 'text-emerald-400' : asset.priceChange < 0 ? 'text-red-400' : 'text-[#929AA5]'
                   )}>
                     {asset.priceChange > 0 ? '+' : ''}{asset.priceChange.toFixed(2)}%
+                  </td>
+                  <td className="py-2.5 px-2 text-right text-[#929AA5] hidden lg:table-cell">
+                    {(asset.volume24h ?? 0).toLocaleString('pt-BR')}
+                  </td>
+                  <td className="py-2.5 px-2 text-center hidden lg:table-cell">
+                    <span className="text-[11px] font-medium" style={{ color: (SENTIMENT_LABEL[asset.sentiment] ?? SENTIMENT_LABEL.NEUTRAL).color }}>
+                      {(SENTIMENT_LABEL[asset.sentiment] ?? SENTIMENT_LABEL.NEUTRAL).label}
+                    </span>
                   </td>
                   <td className="py-2.5 px-2 text-center">
                     <span className={cn(
@@ -372,7 +391,7 @@ export function ClubEditor({ canHalt }: ClubEditorProps) {
             {/* Painel de aliases inline (fora do map principal para evitar problemas de aninhamento) */}
             {aliasTickerOpen && (
               <tr key={`${aliasTickerOpen}-aliases-panel`}>
-                <td colSpan={9} className="px-2 pb-3 pt-0">
+                <td colSpan={11} className="px-2 pb-3 pt-0">
                   <AliasManagement
                     ticker={aliasTickerOpen}
                     displayName={displayed.find((a) => a.ticker === aliasTickerOpen)?.displayName}
