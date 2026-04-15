@@ -11,6 +11,7 @@ interface MotorStatusData {
   lastTick: string | null
   uptime: string | null
   haltedTickers: string[]
+  _debug?: string
 }
 
 async function fetchMotorStatus(): Promise<MotorStatusData> {
@@ -35,7 +36,7 @@ const STATUS_STYLES = {
 }
 
 export function MotorStateCard() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['motor-status'],
     queryFn: fetchMotorStatus,
     refetchInterval: 15_000,
@@ -96,6 +97,14 @@ export function MotorStateCard() {
           <span className="text-[#c5b99a]">{data?.uptime ?? 'N/D'}</span>
         </div>
       </div>
+
+      {/* Diagnostic info — TEMPORARY */}
+      {(data?._debug || error) && (
+        <div className="mt-2 p-2 rounded bg-zinc-800/50 text-[10px] font-mono text-zinc-500 break-all">
+          {data?._debug && <div>debug: {data._debug}</div>}
+          {error && <div>error: {String(error)}</div>}
+        </div>
+      )}
 
       {data?.haltedTickers && data.haltedTickers.length > 0 && (
         <div className="mt-3 pt-3 border-t border-[rgba(240,185,11,.08)]">
