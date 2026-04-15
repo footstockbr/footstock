@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
+import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { getRedisClient } from '@/lib/redis'
-import { withAdmin } from '@/app/api/middleware'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,7 +14,23 @@ function calcUptime(startedAt: string | null): string | null {
 }
 
 // GET /api/v1/admin/motor/status — Monitor+
-export const GET = withAdmin('motor:read')(async (_request: NextRequest) => {
+export async function GET() {
+  const auth = await getAuthUser()
+
+  if (!auth) {
+    return NextResponse.json(
+      { success: false, error: { code: 'AUTH-010', message: 'Sessão inválida.' } },
+      { status: 401 }
+    )
+  }
+
+  if (!hasAdminRole(auth.user.adminRole, 'MONITOR')) {
+    return NextResponse.json(
+      { success: false, error: { code: 'ADMIN-050', message: 'Permissão insuficiente.' } },
+      { status: 403 }
+    )
+  }
+
   const redis = getRedisClient()
   if (!redis) {
     console.warn('[motor/status] Redis client is null — REDIS_URL missing or connection dead')
@@ -54,11 +70,6 @@ export const GET = withAdmin('motor:read')(async (_request: NextRequest) => {
 
     const haltedTickers = haltKeys.map((k) => k.replace('motor:halt:', ''))
 
-    // Debug: qual Redis está conectado
-    const redisUrl = process.env.REDIS_CLOUD_URL || process.env.REDIS_URL || ''
-    const hostMatch = redisUrl.match(/@([^/]+)/)
-    const redisHost = hostMatch ? hostMatch[1] : 'unknown'
-
     return NextResponse.json({
       data: {
         status: statusValue,
@@ -66,7 +77,6 @@ export const GET = withAdmin('motor:read')(async (_request: NextRequest) => {
         lastTick: lastTick ?? null,
         uptime: calcUptime(startedAt ?? null),
         haltedTickers,
-        _debug: `raw:${statusRaw}, host:${redisHost}, ioredis:${redis.status}`,
       },
     })
   } catch (err) {
@@ -82,4 +92,4 @@ export const GET = withAdmin('motor:read')(async (_request: NextRequest) => {
       },
     })
   }
-})
+}
