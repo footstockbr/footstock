@@ -47,7 +47,7 @@ export function MarketPageClient() {
   useEffect(() => {
     async function fetchAssets() {
       try {
-        const res = await fetch("/api/v1/assets");
+        const res = await fetch("/api/v1/assets", { credentials: "include" });
         if (!res.ok) {
           setIsLoading(false);
           return;

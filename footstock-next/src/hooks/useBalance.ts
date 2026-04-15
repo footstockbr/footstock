@@ -17,7 +17,7 @@ export function useBalance(): BalanceState {
 
     async function fetchBalance() {
       try {
-        const res = await fetch('/api/v1/me', { cache: 'no-store' })
+        const res = await fetch('/api/v1/me', { cache: 'no-store', credentials: 'include' })
         if (!res.ok) return
         const json = await res.json()
         if (!cancelled) {

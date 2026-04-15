@@ -46,7 +46,7 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
 
   async function checkConsentAndInit() {
     try {
-      const res = await fetch('/api/v1/me', { cache: 'no-store' })
+      const res = await fetch('/api/v1/me', { cache: 'no-store', credentials: 'include' })
       if (!res.ok) return // Usuario nao logado — nao inicializa
 
       const json = await res.json()
