@@ -1,36 +1,8 @@
 import { NextResponse } from 'next/server'
-import Redis from 'ioredis'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
+import { getRedisClient } from '@/lib/redis'
 
 export const dynamic = 'force-dynamic'
-
-// Conexão dedicada para motor/status — NÃO usa o singleton de getRedisClient()
-// porque a integração Upstash do Vercel injeta REDIS_URL apontando para a
-// instância errada, e REDIS_CLOUD_URL pode não estar disponível em todas
-// as function instances.
-const REDIS_CLOUD_URL = 'redis://default:Ps1JKQrHluqSFkRW85BOAAhqBhG5EeID@redis-10811.crce207.sa-east-1-2.ec2.cloud.redislabs.com:10811'
-
-const _g = globalThis as unknown as { _motorRedis: Redis | undefined }
-
-function getMotorRedis(): Redis {
-  if (_g._motorRedis && (_g._motorRedis.status === 'end' || _g._motorRedis.status === 'close')) {
-    _g._motorRedis.disconnect()
-    _g._motorRedis = undefined
-  }
-  if (!_g._motorRedis) {
-    _g._motorRedis = new Redis(REDIS_CLOUD_URL, {
-      maxRetriesPerRequest: 3,
-      connectTimeout: 5_000,
-      enableReadyCheck: true,
-      lazyConnect: false,
-      retryStrategy: (times) => (times > 10 ? null : Math.min(times * 300, 2_000)),
-    })
-    _g._motorRedis.on('error', (err: Error) => {
-      console.error('[motor/status:redis] error:', err.message)
-    })
-  }
-  return _g._motorRedis
-}
 
 function calcUptime(startedAt: string | null): string | null {
   if (!startedAt) return null
@@ -59,7 +31,19 @@ export async function GET() {
     )
   }
 
-  const redis = getMotorRedis()
+  const redis = getRedisClient()
+
+  if (!redis) {
+    return NextResponse.json({
+      data: {
+        status: 'DEGRADED' as const,
+        leader: 'unknown',
+        lastTick: null,
+        uptime: null,
+        haltedTickers: [],
+      },
+    })
+  }
 
   try {
     const [statusRaw, leader, lastTick, startedAt] = await Promise.all([
