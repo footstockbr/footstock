@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getRedisClient } from '@/lib/redis'
 import { withAdmin } from '@/app/api/middleware'
 
+export const dynamic = 'force-dynamic'
+
 function calcUptime(startedAt: string | null): string | null {
   if (!startedAt) return null
   const diff = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)
