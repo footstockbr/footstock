@@ -1,23 +1,9 @@
 import 'server-only'
 
-import { jwtVerify, createRemoteJWKSet } from 'jose'
 import { cookies } from 'next/headers'
 import { createSupabaseServerClient } from '@/lib/supabase'
 import { prisma } from '@/lib/prisma'
 import type { User, AdminRole } from '@/types'
-
-// ─── JWKS cache — carregado uma vez por instância, depois 100% local ──────────
-//
-// O Supabase usa ES256 (ECC P-256). A verificação com HS256 shared secret não
-// funciona para esse algoritmo. createRemoteJWKSet faz fetch do JWKS na primeira
-// chamada e cacheia em memória — sem rate-limiting nas chamadas subsequentes.
-//
-// Isso resolve o problema de 401 esporádico causado pelo rate-limit do Supabase
-// quando múltiplas rotas chamam getUser() simultaneamente no carregamento da página.
-
-const SUPABASE_JWKS = createRemoteJWKSet(
-  new URL(`${process.env.NEXT_PUBLIC_SUPABASE_URL!}/auth/v1/.well-known/jwks.json`)
-)
 
 // ─── Obter usuário autenticado a partir da sessão Supabase ─────────────────────
 
@@ -36,27 +22,26 @@ export async function getAuthUser(): Promise<{ user: User; supabaseId: string } 
       }
     }
 
-    // 1. Ler sessão do cookie — sem chamada de rede ao Supabase Auth
+    // Usar getUser() em vez de getSession()+jwtVerify():
+    // - getUser() valida o token com Supabase Auth (network call)
+    // - Se o token expirou, tenta refresh automaticamente
+    // - createSupabaseServerClient() tem setAll funcional (persiste cookies refreshados)
+    //
+    // O root middleware.ts já faz refresh preventivo em todas as requests,
+    // mas esta chamada serve como safety net para Server Components que
+    // podem ser renderizados sem passar pelo middleware (e.g., revalidation).
     const supabase = await createSupabaseServerClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.access_token) return null
+    const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+    if (!supabaseUser?.id) return null
 
-    // 2. Verificar JWT via JWKS (ES256) — sem chamada de rede após o primeiro fetch
-    const { payload } = await jwtVerify(session.access_token, SUPABASE_JWKS, {
-      issuer: `${process.env.NEXT_PUBLIC_SUPABASE_URL!}/auth/v1`,
-      audience: 'authenticated',
-      algorithms: ['ES256'],
-    })
-    if (!payload.sub) return null
-
-    // 3. Buscar usuário no banco
+    // Buscar usuário no banco — adminRole e planType SEMPRE do banco
     const dbUser = await prisma.user.findUnique({
-      where: { id: payload.sub },
+      where: { id: supabaseUser.id },
     })
     if (!dbUser) return null
 
     return {
-      supabaseId: payload.sub,
+      supabaseId: supabaseUser.id,
       user: serializeUser(dbUser),
     }
   } catch {

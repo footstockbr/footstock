@@ -64,13 +64,17 @@ export function withAuth(handler: RouteHandler) {
         // Fallback: cookie de sessão Supabase (browser fetch sem Bearer header)
         try {
           const cookieStore = await cookies()
+          // Collect cookies set during token refresh to apply to the response later
+          const pendingCookies: { name: string; value: string; options?: Record<string, unknown> }[] = []
           const supabaseCookie = createServerClient(
             env.NEXT_PUBLIC_SUPABASE_URL,
             env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
             {
               cookies: {
                 getAll: () => cookieStore.getAll(),
-                setAll: () => { /* noop */ },
+                setAll(cookiesToSet) {
+                  pendingCookies.push(...cookiesToSet)
+                },
               },
             }
           )
@@ -82,7 +86,13 @@ export function withAuth(handler: RouteHandler) {
                 dbUser.adminRole && dbUser.planType !== 'JOGADOR'
                   ? await prisma.user.update({ where: { id: dbUser.id }, data: { planType: 'JOGADOR' } })
                   : dbUser
-              return handler(req, { user: normalizedUser as unknown as User })
+              const response = await handler(req, { user: normalizedUser as unknown as User })
+              // Apply refreshed session cookies to the response so the browser
+              // receives updated tokens (prevents stale token → 401 loop).
+              for (const { name, value, options } of pendingCookies) {
+                response.cookies.set(name, value, options as Record<string, string>)
+              }
+              return response
             }
           }
         } catch { /* cookie auth indisponível — continua para 401 */ }
