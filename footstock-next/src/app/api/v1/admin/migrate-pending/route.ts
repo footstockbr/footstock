@@ -4,16 +4,14 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
 export async function POST(request: NextRequest) {
-  const auth = await getAuthUser()
-  if (!auth) {
+  // Auth via CRON_SECRET (same as cron endpoints) — no session needed
+  const authHeader = request.headers.get('authorization')
+  const cronSecret = process.env.CRON_SECRET
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-  if (!hasAdminRole(auth.user.adminRole, 'SUPER_ADMIN')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const results: string[] = []
