@@ -12,7 +12,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "validate": "npm run lint && npm run typecheck",
-    "prebuild": "npx prisma migrate deploy || echo '[prebuild] Migration skipped — set DIRECT_URL for production migrations'",
+    "prebuild": "prisma generate",
     "postinstall": "prisma generate",
     "test": "jest",
     "test:integration": "jest tests/integration",
