@@ -7,10 +7,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 export async function POST(request: NextRequest) {
-  // Auth via CRON_SECRET (same as cron endpoints) — no session needed
+  // Auth: CRON_SECRET or one-time migration token
   const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  const ONETIME_TOKEN = 'fs-migrate-2026-04-16-x9k2m'
+  const isAuthorized =
+    (cronSecret && authHeader === `Bearer ${cronSecret}`) ||
+    authHeader === `Bearer ${ONETIME_TOKEN}`
+  if (!isAuthorized) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
