@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { Prisma } from '@prisma/client'
+import { Prisma, AdminRole as PrismaAdminRole } from '@prisma/client'
 import { getAuthUser, hasAdminRole, serializeUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { list, errors, parsePagination, buildPagination } from '@/lib/api'
@@ -50,23 +50,23 @@ export async function GET(request: NextRequest) {
       console.error('Failed to log data access:', logError)
     }
 
-    // Build where filter with proper Prisma typing
-    const where: Prisma.UserWhereInput = {
-      ...(planType && { planType }),
-      ...(adminRole
-        ? { adminRole }
-        : hasAdmin === 'true'
-          ? { adminRole: { in: ['SUPER_ADMIN', 'ADMINISTRADOR', 'MONITOR', 'EDITOR', 'MODERADOR'] } }
-          : {}),
-      ...(userType && { userType }),
-      ...(status === 'suspended' && { suspendedAt: { not: null } }),
-      ...(status === 'active' && { suspendedAt: null }),
-      ...(search && {
-        OR: [
-          { name: { contains: search, mode: 'insensitive' as const } },
-          { email: { contains: search, mode: 'insensitive' as const } },
-        ],
-      }),
+    // Build where filter imperatively to avoid union-type conflicts with Prisma
+    const where: Prisma.UserWhereInput = {}
+
+    if (planType) where.planType = planType
+    if (adminRole) {
+      where.adminRole = adminRole
+    } else if (hasAdmin === 'true') {
+      where.adminRole = { in: ['SUPER_ADMIN', 'ADMINISTRADOR', 'MONITOR', 'EDITOR', 'MODERADOR'] as PrismaAdminRole[] }
+    }
+    if (userType) where.userType = userType
+    if (status === 'suspended') where.suspendedAt = { not: null }
+    if (status === 'active') where.suspendedAt = null
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+      ]
     }
 
     const [users, total] = await Promise.all([
