@@ -210,7 +210,9 @@ export function UserList({ currentAdminRole }: { currentAdminRole?: string | nul
                 <thead>
                   <tr className="border-b border-[rgba(240,185,11,.08)]">
                     <th scope="col" className="text-left py-3 px-4 text-xs text-[#929AA5] font-medium">Usuário</th>
-                    <th scope="col" className="text-left py-3 px-4 text-xs text-[#929AA5] font-medium">Plano</th>
+                    {activeTab === 'usuarios' && (
+                      <th scope="col" className="text-left py-3 px-4 text-xs text-[#929AA5] font-medium">Plano</th>
+                    )}
                     <th scope="col" className="text-left py-3 px-4 text-xs text-[#929AA5] font-medium">Status</th>
                     <th scope="col" className="text-left py-3 px-4 text-xs text-[#929AA5] font-medium">Role Admin</th>
                     <th scope="col" className="text-left py-3 px-4 text-xs text-[#929AA5] font-medium">Cadastro</th>
@@ -226,11 +228,13 @@ export function UserList({ currentAdminRole }: { currentAdminRole?: string | nul
                           <p className="text-xs text-[#929AA5]">{user.email}</p>
                         </div>
                       </td>
-                      <td className="py-3 px-4">
-                        <Badge variant={PLAN_BADGE_VARIANTS[user.planType]} size="xs">
-                          {PLAN_LABELS[user.planType] ?? user.planType}
-                        </Badge>
-                      </td>
+                      {activeTab === 'usuarios' && (
+                        <td className="py-3 px-4">
+                          <Badge variant={PLAN_BADGE_VARIANTS[user.planType]} size="xs">
+                            {PLAN_LABELS[user.planType] ?? user.planType}
+                          </Badge>
+                        </td>
+                      )}
                       <td className="py-3 px-4">
                         <span className={`text-xs font-medium ${user.status === 'active' ? 'text-[#4ade80]' : 'text-[#F6465D]'}`}>
                           {user.status === 'active' ? 'Ativo' : 'Suspenso'}
@@ -285,9 +289,13 @@ export function UserList({ currentAdminRole }: { currentAdminRole?: string | nul
 
                     {/* Meta */}
                     <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                      <Badge variant={PLAN_BADGE_VARIANTS[user.planType]} size="xs">
-                        {PLAN_LABELS[user.planType] ?? user.planType}
-                      </Badge>
+                      {activeTab === 'usuarios' ? (
+                        <Badge variant={PLAN_BADGE_VARIANTS[user.planType]} size="xs">
+                          {PLAN_LABELS[user.planType] ?? user.planType}
+                        </Badge>
+                      ) : (
+                        <span className="text-[10px] text-[#929AA5]">{user.adminRole ?? '—'}</span>
+                      )}
                       <span className="text-[9px] font-mono font-bold text-[#2EBD85]">
                         +FS${(user.fsBalance ?? 0).toLocaleString('pt-BR')}
                       </span>
