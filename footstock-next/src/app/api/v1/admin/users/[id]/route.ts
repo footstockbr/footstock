@@ -8,6 +8,7 @@ const AdminUpdateUserSchema = z.object({
   name: z.string().min(2).max(120).optional(),
   planType: z.enum(['JOGADOR', 'CRAQUE', 'LENDA']).optional(),
   adminRole: z.enum(['SUPER_ADMIN', 'ADMINISTRADOR', 'MONITOR', 'EDITOR', 'MODERADOR', 'CLUB_PARTNER']).nullable().optional(),
+  userType: z.enum(['NORMAL', 'TIME_PARCEIRO', 'INFLUENCIADOR']).optional(),
 })
 
 // GET /api/v1/admin/users/:id — ADMIN+
