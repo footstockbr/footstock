@@ -3,6 +3,8 @@ import { Trophy } from 'lucide-react'
 import { prisma } from '@/lib/prisma'
 import AdminClubesClient, { type AssetRow } from './AdminClubesClient'
 
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
   title: 'Clubes — Admin · FootStock',
 }

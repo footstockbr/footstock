@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { AfiliadosNovoButton } from "@/components/admin/AfiliadosNovoButton";
 import { CopyCodeButton } from "@/components/admin/CopyCodeButton";
 
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
   title: "Afiliados — Admin · FootStock",
 };
