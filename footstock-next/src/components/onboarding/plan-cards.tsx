@@ -119,12 +119,12 @@ export function PlanCards({ onSelect, onSkip, currentPlan }: PlanCardsProps) {
           </div>
           <div className="text-right">
             <span className="text-base font-bold text-[#EAECEF]">
-              R$&nbsp;19,90
+              R$&nbsp;2,00
             </span>
             <span className="text-xs text-[#929AA5]">/mês</span>
             <p className="text-[10px] text-[#2EBD85]">
-              ou R$&nbsp;191/ano
-              <span className="ml-1 opacity-80">(-20%)</span>
+              ou R$&nbsp;18/ano
+              <span className="ml-1 opacity-80">(-25%)</span>
             </p>
           </div>
         </div>
@@ -168,7 +168,7 @@ export function PlanCards({ onSelect, onSkip, currentPlan }: PlanCardsProps) {
           </div>
           <div className="text-right">
             <span className="text-base font-bold text-[#EAECEF]">
-              R$&nbsp;39,90
+              R$&nbsp;3,00
             </span>
             <span className="text-xs text-[#929AA5]">/mês</span>
           </div>

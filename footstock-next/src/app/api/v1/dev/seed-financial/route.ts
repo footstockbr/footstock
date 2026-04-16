@@ -36,8 +36,8 @@ export async function POST() {
 
     const PLAN_PRICES: Record<string, number> = {
       JOGADOR: 0,
-      CRAQUE: 1990,
-      LENDA: 3990,
+      CRAQUE: 200,
+      LENDA: 300,
     }
 
     const GATEWAYS = ['stripe', 'mercadopago', 'pix', 'paypal', 'pagseguro']
@@ -119,10 +119,10 @@ export async function POST() {
     // 3. Pagamentos adicionais para variedade
     const additionalPayments = [
       { gateway: 'stripe', amount: 5000 },
-      { gateway: 'mercadopago', amount: 3990 },
-      { gateway: 'pix', amount: 1990 },
-      { gateway: 'paypal', amount: 3990 },
-      { gateway: 'pagseguro', amount: 1990 },
+      { gateway: 'mercadopago', amount: 300 },
+      { gateway: 'pix', amount: 200 },
+      { gateway: 'paypal', amount: 300 },
+      { gateway: 'pagseguro', amount: 200 },
     ]
 
     for (const payment of additionalPayments) {

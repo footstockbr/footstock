@@ -58,8 +58,8 @@ export function calcUpgradeBonusAmount(fromPlan: PlanType, toPlan: PlanType): nu
 export function calcSubscriptionAmount(planType: PlanType, period: 'monthly' | 'yearly'): number {
   const amounts: Record<PlanType, Record<'monthly' | 'yearly', number>> = {
     JOGADOR: { monthly: 0, yearly: 0 },
-    CRAQUE:  { monthly: 1990, yearly: 17910 }, // R$19,90 / R$179,10 (-25%)
-    LENDA:   { monthly: 3990, yearly: 35910 }, // R$39,90 / R$359,10 (-25%)
+    CRAQUE:  { monthly: 200, yearly: 1800 }, // R$2,00 / R$18,00 (-25%)
+    LENDA:   { monthly: 300, yearly: 2700 }, // R$3,00 / R$27,00 (-25%)
   }
   return amounts[planType][period]
 }
