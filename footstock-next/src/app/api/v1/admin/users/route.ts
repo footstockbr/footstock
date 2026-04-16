@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
     const where = {
       ...(planType && { planType }),
       ...(adminRole && { adminRole }),
-      ...(hasAdmin === 'true' && { adminRole: { not: null } }),
+      ...(hasAdmin === 'true' && { adminRole: { in: ['SUPER_ADMIN', 'ADMINISTRADOR', 'MONITOR', 'EDITOR', 'MODERADOR'] } }),
       ...(userType && { userType }),
       ...(status === 'suspended' && { suspendedAt: { not: null } }),
       ...(status === 'active' && { suspendedAt: null }),
