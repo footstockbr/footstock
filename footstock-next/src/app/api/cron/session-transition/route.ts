@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     console.error('[cron/session-transition] Erro:', err)
     return NextResponse.json(
-      { error: 'SYS_001', message: 'Erro ao verificar transicao de sessao' },
+      { error: 'SYS_001', message: 'Erro ao verificar transição de sessão' },
       { status: 500 }
     )
   }

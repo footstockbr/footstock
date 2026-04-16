@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { digestService } from '@/lib/services/DigestService'
 import { notificationRepository } from '@/lib/repositories/NotificationRepository'
 import { pushService } from '@/lib/services/PushService'
+import { quietHoursService } from '@/lib/services/QuietHoursService'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -62,15 +63,18 @@ export async function GET(req: NextRequest) {
           .send({ type: 'broadcast', event: 'NEW_NOTIFICATION', payload: notification })
       } catch { /* graceful */ }
 
-      // Push (fora de quiet hours — este cron roda hourly, mas só envia se habilitado)
-      try {
-        await pushService.sendToUser(userId, {
-          title,
-          body,
-          url: '/carteira?tab=dividendos',
-          tag: 'DIVIDEND_CREDITED',
-        })
-      } catch { /* graceful */ }
+      // Push: só enviar fora do horário de silêncio (DIVIDEND_CREDITED respeita quiet hours)
+      const inQuietHours = quietHoursService.isQuietHour('DIVIDEND_CREDITED')
+      if (!inQuietHours) {
+        try {
+          await pushService.sendToUser(userId, {
+            title,
+            body,
+            url: '/carteira?tab=dividendos',
+            tag: 'DIVIDEND_CREDITED',
+          })
+        } catch { /* graceful */ }
+      }
 
       sent++
     } catch (err) {

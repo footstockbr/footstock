@@ -6,10 +6,12 @@ import type { NotificationType } from '@/types'
 
 // Tipos urgentes — ignoram quiet hours e preferências de canal (exceto opt-out explícito)
 export const URGENT_TYPES = new Set<NotificationType>([
-  'ORDER_EXECUTED',       // transacional imediato
-  'MARGIN_CALL_ALERT',    // 80% — crítico
-  'CIRCUIT_BREAKER',      // halt de mercado
-  'PAYMENT_FAILED',       // falha financeira
+  'ORDER_EXECUTED',             // transacional imediato
+  'MARGIN_CALL_ALERT',          // 80% — crítico
+  'CIRCUIT_BREAKER',            // halt de mercado
+  'PAYMENT_FAILED',             // falha financeira
+  'PAYMENT_CONFIRMED',          // NOTIF-005: "Quiet hours: Não aplicável (transacional)"
+  'PLAN_CANCEL_ALERT',          // NOTIF-007: "Quiet hours: Não aplicável (transacional crítico)"
   'CANCELLATION_LOCK_ACTIVE',
   'CANCELLATION_LOCK_LIQUIDATED',
   'ADMIN_BROADCAST',
@@ -23,8 +25,6 @@ const QUIET_HOURS_TYPES = new Set<NotificationType>([
   'ORDER_CANCELLED',
   'MARGIN_CALL_WARNING',  // 50% — aviso, pode esperar
   'NEWS_FAVORITE_CLUB',
-  'PAYMENT_CONFIRMED',
-  'PLAN_CANCEL_ALERT',
   'DIVIDEND_CREDITED',
   'BONUS_CREDITED',
   'LEAGUE_RESULT',

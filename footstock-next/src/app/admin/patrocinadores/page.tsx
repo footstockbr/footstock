@@ -1112,8 +1112,8 @@ export default function PatrocinadoresPage() {
               </div>
             </div>
 
-            {/* ── Premiacao ── */}
-            <div className="section-divider">Premiacao</div>
+            {/* ── Premiação ── */}
+            <div className="section-divider">Premiação</div>
             <div className="prize-section" data-testid="modal-liga-prizes-section">
               {leagueForm.prizes.map((prize, index) => (
                 <div key={index} className="prize-line" data-testid={`modal-liga-prize-${prize.position}`}>

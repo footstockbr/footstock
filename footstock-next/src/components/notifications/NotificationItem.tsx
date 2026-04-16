@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useAnalytics } from '@/hooks/useAnalytics'
+import { usePlanGuard } from '@/hooks/usePlanGuard'
 import {
   CheckCircle,
   XCircle,
@@ -61,6 +62,16 @@ const NOTIFICATION_CONFIG: Record<string, NotificationConfig> = {
   BRUTE_FORCE_BLOCKED: { icon: ShieldX, colorClass: 'text-red-500', href: null },
   SYSTEM_MAINTENANCE: { icon: Wrench, colorClass: 'text-yellow-400', href: null },
   REFERRAL_JOINED: { icon: UserPlus, colorClass: 'text-emerald-400', href: '/perfil?tab=afiliados' },
+  // GAP-02: tipos adicionados em T-019 e T-023 sem config visual
+  BONUS_SCHEDULED: { icon: Gift, colorClass: 'text-yellow-400', href: '/carteira' },
+  BONUS_CANCELLED: { icon: XCircle, colorClass: 'text-red-400', href: '/planos' },
+  BALANCE_ZERO: { icon: AlertCircle, colorClass: 'text-orange-500', href: '/mercado' },
+  BALANCE_RESET: { icon: TrendingUp, colorClass: 'text-blue-400', href: '/carteira' },
+  AGE_VERIFICATION_PENDING: { icon: ShieldAlert, colorClass: 'text-yellow-400', href: '/perfil' },
+  AGE_VERIFICATION_COMPLETED: { icon: CheckCircle, colorClass: 'text-emerald-400', href: '/perfil' },
+  // T-028: moderação de fórum
+  POST_FLAGGED: { icon: AlertTriangle, colorClass: 'text-yellow-400', href: '/admin/moderacao' },
+  POST_REJECTED: { icon: XCircle, colorClass: 'text-red-400', href: '/forum' },
 }
 
 const FALLBACK_CONFIG: NotificationConfig = {
@@ -89,6 +100,7 @@ interface NotificationItemProps {
 export function NotificationItem({ notification, onMarkAsRead, onClose }: NotificationItemProps) {
   const router = useRouter()
   const { track } = useAnalytics()
+  const { plan } = usePlanGuard()
   const config = NOTIFICATION_CONFIG[notification.type as NotificationType] ?? FALLBACK_CONFIG
   const Icon = config.icon
 
@@ -101,7 +113,7 @@ export function NotificationItem({ notification, onMarkAsRead, onClose }: Notifi
     track('notification_clicked', {
       notification_type: notification.type as AnalyticsNotificationType,
       time_to_click_seconds: timeToClickSeconds,
-      plan: 'JOGADOR' as const,
+      plan,
     })
 
     if (config.href) {
@@ -111,7 +123,7 @@ export function NotificationItem({ notification, onMarkAsRead, onClose }: Notifi
       // EVT-035: notification_dismissed — rastreia notificacao descartada (clique sem navegacao)
       track('notification_dismissed', {
         notification_type: notification.type as AnalyticsNotificationType,
-        plan: 'JOGADOR' as const,
+        plan,
       })
       onClose()
     }

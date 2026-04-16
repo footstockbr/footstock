@@ -49,19 +49,19 @@ export function LeverageToggle({
   if (!isLenda) {
     return (
       <div
-        className="flex items-center justify-between rounded-lg border border-[rgba(240,185,11,.15)] bg-[rgba(240,185,11,.04)] p-3"
+        className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[rgba(240,185,11,.15)] bg-[rgba(240,185,11,.04)] p-3"
         data-testid="leverage-toggle-locked"
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           <Lock className="h-4 w-4 text-[#F0B90B] flex-shrink-0" aria-hidden="true" />
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-medium text-[#EAECEF]">Alavancagem 2x</p>
             <p className="text-xs text-[#929AA5]">Requer plano Lenda</p>
           </div>
         </div>
         <Link
           href="/planos"
-          className="shrink-0 rounded-md bg-[#F0B90B] px-3 py-1 text-xs font-semibold text-[#0B0E11] transition-colors hover:bg-[#F0B90B]/90"
+          className="shrink-0 rounded-md bg-[#F0B90B] px-3 py-1.5 text-xs font-semibold text-[#0B0E11] transition-colors hover:bg-[#F0B90B]/90 whitespace-nowrap"
           onClick={() => {
             // EVT-019: plan_upgrade_clicked
             track('plan_upgrade_clicked', {
@@ -100,13 +100,13 @@ export function LeverageToggle({
           aria-checked={enabled}
           aria-label="Ativar alavancagem 2x"
           onClick={() => onToggle(!enabled)}
-          className={`relative h-6 w-11 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[rgba(240,185,11,.5)] ${
+          className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[rgba(240,185,11,.5)] ${
             enabled ? 'bg-[#F0B90B]' : 'bg-[#2B3139]'
           }`}
         >
           <span
-            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-              enabled ? 'translate-x-5' : 'translate-x-0.5'
+            className={`inline-block h-5 w-5 rounded-full bg-white shadow-md transition-transform ${
+              enabled ? 'translate-x-[22px]' : 'translate-x-[2px]'
             }`}
           />
         </button>

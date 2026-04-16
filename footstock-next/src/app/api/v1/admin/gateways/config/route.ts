@@ -175,7 +175,7 @@ async function getHandler(req: NextRequest) {
   } catch (error) {
     console.error('[admin/gateways/config][GET] error:', error)
     return NextResponse.json(
-      { success: false, error: { code: 'SYS_001', message: 'Erro interno ao carregar configuracao de gateways' } },
+      { success: false, error: { code: 'SYS_001', message: 'Erro interno ao carregar configuração de gateways' } },
       { status: 500 }
     )
   }
@@ -295,7 +295,7 @@ async function patchHandler(req: NextRequest) {
   } catch (error) {
     console.error('[admin/gateways/config][PATCH] error:', error)
     return NextResponse.json(
-      { success: false, error: { code: 'SYS_001', message: 'Erro interno ao salvar configuracao de gateways' } },
+      { success: false, error: { code: 'SYS_001', message: 'Erro interno ao salvar configuração de gateways' } },
       { status: 500 }
     )
   }

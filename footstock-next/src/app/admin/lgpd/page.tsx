@@ -352,7 +352,7 @@ export default function AdminLgpdPage() {
                 </table>
                 {data.deletions.length === 0 && (
                   <p style={{ color: '#707A8A', fontSize: '13px', textAlign: 'center', padding: '32px 0' }}>
-                    Nenhuma exclusao ou suspensao registrada.
+                    Nenhuma exclusão ou suspensão registrada.
                   </p>
                 )}
               </div>

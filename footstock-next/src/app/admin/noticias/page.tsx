@@ -426,7 +426,7 @@ export default function NoticiasPage() {
 
         {filteredNews.length === 0 && !loading && (
           <div data-testid="admin-noticias-empty" style={{ color: '#8f95a5', textAlign: 'center', padding: '20px' }}>
-            Nenhuma noticia neste filtro
+            Nenhuma notícia neste filtro
           </div>
         )}
       </div>

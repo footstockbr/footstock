@@ -46,7 +46,7 @@ export default async function AdminAfiliadosPage() {
             <Network className="h-5 w-5 text-[#F0B90B]" />
             Afiliados
           </h1>
-          <p className="text-sm text-[#929AA5]">Programa de indicacao e comissoes</p>
+          <p className="text-sm text-[#929AA5]">Programa de indicação e comissões</p>
         </div>
         <AfiliadosNovoButton />
       </div>
@@ -74,8 +74,8 @@ export default async function AdminAfiliadosPage() {
           <thead>
             <tr className="border-b border-[rgba(240,185,11,.08)]">
               <th className="text-left py-2 text-xs text-[#929AA5] font-medium">Afiliado</th>
-              <th className="text-left py-2 text-xs text-[#929AA5] font-medium">Codigo</th>
-              <th className="text-right py-2 text-xs text-[#929AA5] font-medium">Conversoes</th>
+              <th className="text-left py-2 text-xs text-[#929AA5] font-medium">Código</th>
+              <th className="text-right py-2 text-xs text-[#929AA5] font-medium">Conversões</th>
               <th className="text-right py-2 text-xs text-[#929AA5] font-medium">Receita</th>
               <th className="text-right py-2 text-xs text-[#929AA5] font-medium">Status</th>
             </tr>

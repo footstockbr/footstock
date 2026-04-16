@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error('[cron/moderation-cleanup] Erro:', error)
     return NextResponse.json(
-      { success: false, error: 'Erro interno no cleanup de moderacao' },
+      { success: false, error: 'Erro interno no cleanup de moderação' },
       { status: 500 }
     )
   }

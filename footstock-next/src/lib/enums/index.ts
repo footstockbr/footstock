@@ -203,6 +203,10 @@ export const NOTIFICATION_TYPE = {
   AGE_VERIFICATION_PENDING: 'AGE_VERIFICATION_PENDING',
   /** Verificação de maioridade concluída com sucesso (T-023) */
   AGE_VERIFICATION_COMPLETED: 'AGE_VERIFICATION_COMPLETED',
+  /** Post do fórum aguarda revisão do moderador (T-028) */
+  POST_FLAGGED: 'POST_FLAGGED',
+  /** Post do fórum rejeitado pelo moderador — notifica o autor (T-028) */
+  POST_REJECTED: 'POST_REJECTED',
 } as const;
 export type NotificationType = (typeof NOTIFICATION_TYPE)[keyof typeof NOTIFICATION_TYPE];
 

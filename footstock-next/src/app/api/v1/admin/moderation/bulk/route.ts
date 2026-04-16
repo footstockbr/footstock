@@ -52,11 +52,11 @@ export async function POST(request: NextRequest) {
     const { postIds, action } = body
 
     if (!Array.isArray(postIds) || postIds.length === 0) {
-      return errors.validation('postIds deve ser um array nao-vazio')
+      return errors.validation('postIds deve ser um array não-vazio')
     }
 
     if (postIds.length > 100) {
-      return errors.validation('Maximo de 100 posts por operacao')
+      return errors.validation('Máximo de 100 posts por operação')
     }
 
     if (!postIds.every((id: unknown) => typeof id === 'string')) {
@@ -115,11 +115,11 @@ export async function DELETE(request: NextRequest) {
     const { postIds } = body
 
     if (!Array.isArray(postIds) || postIds.length === 0) {
-      return errors.validation('postIds deve ser um array nao-vazio')
+      return errors.validation('postIds deve ser um array não-vazio')
     }
 
     if (postIds.length > 100) {
-      return errors.validation('Maximo de 100 posts por operacao')
+      return errors.validation('Máximo de 100 posts por operação')
     }
 
     if (!postIds.every((id: unknown) => typeof id === 'string')) {

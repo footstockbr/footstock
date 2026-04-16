@@ -41,7 +41,7 @@ export default async function NoticiasPage() {
       {newsList.length === 0 ? (
         <div className="text-center py-12">
           <Newspaper className="h-10 w-10 text-[#707A8A] mx-auto mb-3" />
-          <p className="text-sm text-[#929AA5]">Nenhuma noticia publicada ainda.</p>
+          <p className="text-sm text-[#929AA5]">Nenhuma notícia publicada ainda.</p>
         </div>
       ) : (
         <div data-testid="noticias-list" className="flex flex-col gap-3">

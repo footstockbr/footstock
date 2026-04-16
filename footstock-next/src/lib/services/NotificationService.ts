@@ -27,6 +27,8 @@ export const PUSH_ENABLED_TYPES = new Set<NotificationType>([
   'CANCELLATION_LOCK_LIQUIDATED',
   'ADMIN_BROADCAST',
   'SYSTEM_MAINTENANCE',
+  'AFFILIATE_COMMISSION_EARNED', // NOTIF-016: push obrigatório (spec)
+  'AFFILIATE_INVITE_JOINED',     // NOTIF-017: push obrigatório (spec)
 ])
 
 // Tipos que só têm canal email (sem in-app)

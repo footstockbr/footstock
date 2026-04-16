@@ -69,7 +69,7 @@ export type LeagueStatus = 'PENDING' | 'ACTIVE' | 'FINISHED'
 export type ScorePillar = 'RENTABILIDADE' | 'SOFISTICACAO' | 'DIVERSIFICACAO' | 'CONSISTENCIA' | 'BONUS_EDUCATIVO'
 export type PostStatus = 'ACTIVE' | 'REMOVED' | 'FLAGGED'
 
-// module-19: 25 tipos de notificação (NOTIFICATION-SPEC v2.0 — T-014, T-023)
+// module-19: 31 tipos de notificação (NOTIFICATION-SPEC v2.0 — T-014, T-019, T-021, T-023, T-028)
 export type NotificationType =
   | 'ORDER_EXECUTED'
   | 'ORDER_CANCELLED'
@@ -82,6 +82,8 @@ export type NotificationType =
   | 'PLAN_CANCEL_ALERT'
   | 'DIVIDEND_CREDITED'
   | 'BONUS_CREDITED'
+  | 'BONUS_SCHEDULED'              // T-021: bônus agendado em T+7
+  | 'BONUS_CANCELLED'              // T-021: bônus cancelado (CDC Art. 49)
   | 'LEAGUE_RESULT'
   | 'ADMIN_BROADCAST'
   | 'CANCELLATION_LOCK_ACTIVE'
@@ -96,6 +98,10 @@ export type NotificationType =
   | 'REFERRAL_JOINED'
   | 'AGE_VERIFICATION_PENDING'     // T-023: FlagCheck indisponivel no cadastro
   | 'AGE_VERIFICATION_COMPLETED'   // T-023: verificacao concluida com sucesso
+  | 'BALANCE_ZERO'                 // T-019: saldo FS$ zerou
+  | 'BALANCE_RESET'                // T-019: saldo resetado pelo admin
+  | 'POST_FLAGGED'                 // T-028: post aguarda revisao (para MODERADOR+)
+  | 'POST_REJECTED'                // T-028: post rejeitado (para o autor)
 
 export interface NotificationDTO {
   id: string

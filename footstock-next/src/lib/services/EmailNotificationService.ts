@@ -11,11 +11,12 @@ interface EmailPayload {
 }
 
 // Tipos que disparam email (baseado em NOTIFICATION-SPEC.md)
+// ADMIN_BROADCAST removido: spec define apenas canal in-app (sem base legal para email broadcast)
+// BONUS_CREDITED adicionado: NOTIF-009 define template de email obrigatório
 const EMAIL_CHANNEL_TYPES = new Set<NotificationType>([
   'PAYMENT_CONFIRMED',
   'PAYMENT_FAILED',
   'PLAN_CANCEL_ALERT',
-  'ADMIN_BROADCAST',
   'CANCELLATION_LOCK_ACTIVE',
   'CANCELLATION_LOCK_LIQUIDATED',
   'PASSWORD_RESET',
@@ -24,6 +25,7 @@ const EMAIL_CHANNEL_TYPES = new Set<NotificationType>([
   'BRUTE_FORCE_BLOCKED',
   'MARGIN_CALL_ALERT',     // 80% — crítico
   'MARGIN_CALL_WARNING',   // 50% — aviso
+  'BONUS_CREDITED',        // NOTIF-009: email de confirmação após T+7 dias
 ])
 
 class EmailNotificationService {
@@ -121,7 +123,6 @@ class EmailNotificationService {
       PAYMENT_CONFIRMED: 'Pagamento confirmado — FootStock',
       PAYMENT_FAILED: 'Não conseguimos processar seu pagamento',
       PLAN_CANCEL_ALERT: 'Sua assinatura FootStock foi cancelada',
-      ADMIN_BROADCAST: `[FootStock] ${data.title}`,
       CANCELLATION_LOCK_ACTIVE: 'Atenção: Trava de cancelamento ativada',
       CANCELLATION_LOCK_LIQUIDATED: 'Suas posições foram liquidadas automaticamente',
       PASSWORD_RESET: 'Redefinição de senha solicitada',
@@ -130,6 +131,7 @@ class EmailNotificationService {
       BRUTE_FORCE_BLOCKED: 'Atividade suspeita detectada na sua conta',
       MARGIN_CALL_ALERT: '⚠️ Alerta crítico de margem — Ação necessária',
       MARGIN_CALL_WARNING: 'Aviso de margem — FootStock',
+      BONUS_CREDITED: 'Seu bônus foi creditado — FootStock', // NOTIF-009
     }
 
     await this.send({

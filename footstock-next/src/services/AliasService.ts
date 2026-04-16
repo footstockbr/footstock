@@ -60,10 +60,10 @@ export const AliasService = {
 
     // 2. Verifica se já é ticker canônico ativo
     const canonical = await prisma.asset.findUnique({
-      where: { ticker, isActive: true },
-      select: { ticker: true },
+      where: { ticker },
+      select: { ticker: true, isActive: true },
     })
-    if (canonical) {
+    if (canonical?.isActive) {
       await redis.setex(cacheKey, CACHE_TTL, canonical.ticker).catch(() => {})
       return canonical.ticker
     }

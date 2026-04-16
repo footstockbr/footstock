@@ -164,7 +164,7 @@ export function ComunidadeClient({ currentUserId }: ComunidadeClientProps) {
           onClick={() => setShowForm((p) => !p)}
         >
           <MessageCircle className="h-4 w-4 mr-2" />
-          {showForm ? "Cancelar" : "Nova publicacao"}
+          {showForm ? "Cancelar" : "Nova publicação"}
         </Button>
 
         {/* ─── Form de criação com character counter ───────────────────────── */}
@@ -257,7 +257,7 @@ export function ComunidadeClient({ currentUserId }: ComunidadeClientProps) {
           <div className="text-center py-12">
             <MessageCircle className="h-10 w-10 text-[#707A8A] mx-auto mb-3" />
             <p className="text-sm text-[#929AA5]">
-              Nenhuma publicacao ainda. Seja o primeiro!
+              Nenhuma publicação ainda. Seja o primeiro!
             </p>
           </div>
         ) : (
