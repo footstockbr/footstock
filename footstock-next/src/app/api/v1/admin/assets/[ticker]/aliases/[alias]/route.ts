@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — DELETE /api/v1/admin/assets/[ticker]/aliases/[alias] (T-031)
+// FootStock — DELETE /api/v1/admin/assets/[ticker]/aliases/[alias] (T-031)
 // Admin: remove (desativa) um alias de ativo.
 //
 // Permissão: SUPER_ADMIN

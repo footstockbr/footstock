@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Admin ClubUser CRUD
+// FootStock — Admin ClubUser CRUD
 // POST: Criar representante de clube (SUPER_ADMIN only)
 // GET: Listar representantes com filtro por clube
 // Rastreabilidade: TASK-015 sub-item 4, US-025

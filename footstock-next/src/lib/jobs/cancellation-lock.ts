@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Job: cancellation-lock (T+48h)
+// FootStock — Job: cancellation-lock (T+48h)
 // Cron a cada hora: liquida posições RESTRITAS (SHORT, OCO, alavancadas)
 // quando forcedLiquidationAt <= now e lock ainda ativo (não cancela assinatura)
 // Idempotente via forcedLiquidationExecutedAt — não reprocessa o mesmo lock

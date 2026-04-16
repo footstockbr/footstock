@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/users/me/export/download
+// FootStock — GET /api/v1/users/me/export/download
 // Serve o arquivo ZIP de export gerado pelo DataExportService
 // Rastreabilidade: INT-103, US-027, TASK-4/ST001
 // ============================================================================

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — SportingResultDividendService (T-007)
+// FootStock — SportingResultDividendService (T-007)
 // Modalidade 1: Dividendo de Resultado Esportivo.
 // Disparado quando uma notícia classificada como MATCH_RESULT com
 // sentiment > 0.5 é processada, indicando vitória do clube.

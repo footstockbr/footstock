@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
 
 const AdminUpdateUserSchema = z.object({
+  name: z.string().min(2).max(120).optional(),
   planType: z.enum(['JOGADOR', 'CRAQUE', 'LENDA']).optional(),
   adminRole: z.enum(['SUPER_ADMIN', 'ADMINISTRADOR', 'MONITOR', 'EDITOR', 'MODERADOR', 'CLUB_PARTNER']).nullable().optional(),
 })
@@ -72,6 +73,50 @@ export async function PATCH(
     })
 
     return ok(serializeUser(updated))
+  } catch {
+    return errors.server()
+  }
+}
+
+// DELETE /api/v1/admin/users/:id — ADMIN+ (soft delete)
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await getAuthUser()
+  if (!auth) return errors.unauthorized()
+
+  if (!hasAdminRole(auth.user.adminRole, 'ADMINISTRADOR')) {
+    return errors.forbidden()
+  }
+
+  const { id } = await params
+
+  try {
+    const user = await prisma.user.findUnique({ where: { id } })
+    if (!user) return errors.notFound('Usuário não encontrado.')
+
+    if (user.suspendedAt && user.suspensionReason === 'DELETED_BY_ADMIN') {
+      return errors.conflict('USER_ALREADY_DELETED', 'Usuário já foi deletado.')
+    }
+
+    await prisma.user.update({
+      where: { id },
+      data: {
+        suspendedAt: new Date(),
+        suspensionReason: 'DELETED_BY_ADMIN',
+      },
+    })
+
+    await prisma.adminMarketAction.create({
+      data: {
+        adminId: auth.user.id,
+        action: 'DELETE_USER',
+        details: { userId: id, userName: user.name },
+      },
+    })
+
+    return ok({ deleted: true })
   } catch {
     return errors.server()
   }

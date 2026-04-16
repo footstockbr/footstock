@@ -34,14 +34,14 @@ export function CancellationLockBanner({ cancellationLockExpiresAt, forcedLiquid
           </p>
           {forcedLiqPending && (
             <p className="text-amber-800 text-xs">
-              Suas posicoes restritas (short, alavancadas, OCO) serao encerradas automaticamente em{' '}
+              Suas posições restritas (short, alavancadas, OCO) serão encerradas automaticamente em{' '}
               <CancellationCountdown expiresAt={forcedLiquidationAt!} />.{' '}
-              Voce pode fecha-las antes disso.
+              Você pode fechá-las antes disso.
             </p>
           )}
           {!forcedLiqPending && (
             <p className="text-amber-800 text-xs">
-              Posicoes restritas ja foram encerradas. Sua conta sera finalizada no prazo acima.
+              Posições restritas já foram encerradas. Sua conta será finalizada no prazo acima.
             </p>
           )}
         </div>

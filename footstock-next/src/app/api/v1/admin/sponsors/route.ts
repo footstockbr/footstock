@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/admin/sponsors  (lista todos)
+// FootStock — GET /api/v1/admin/sponsors  (lista todos)
 //             POST /api/v1/admin/sponsors  (cria patrocinador)
 // Fonte: module-24/TASK-3/ST002
 // ============================================================================

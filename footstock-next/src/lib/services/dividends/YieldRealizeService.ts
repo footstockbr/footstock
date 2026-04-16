@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — YieldRealizeService (T-007)
+// FootStock — YieldRealizeService (T-007)
 // Realiza o yield diferencial pendente quando JOGADOR vende posição.
 // Proporcional: se vende 50% das ações, realiza 50% do pendente.
 // Rastreabilidade: T-007 §4

@@ -1,7 +1,7 @@
 'use client'
 
 // ============================================================================
-// Foot Stock — SessionIndicator
+// FootStock — SessionIndicator
 // Badge colorido da sessão de mercado atual com countdown e auto-refresh 15s.
 // ============================================================================
 

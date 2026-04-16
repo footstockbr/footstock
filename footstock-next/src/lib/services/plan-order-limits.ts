@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Limites diários de ordens e taxas por plano
+// FootStock — Limites diários de ordens e taxas por plano
 // Re-exporta constants do module-2 e define limites diários específicos de ordens.
 // Rastreabilidade: INT-019 / TASK-0/ST001
 // ============================================================================

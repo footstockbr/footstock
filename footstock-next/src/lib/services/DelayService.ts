@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — DelayService
+// FootStock — DelayService
 // Aplica delay de cotação por plano do usuário.
 // DELAY_BY_PLAN está em milissegundos: JOGADOR=1h, CRAQUE=30min, LENDA=0.
 // ============================================================================

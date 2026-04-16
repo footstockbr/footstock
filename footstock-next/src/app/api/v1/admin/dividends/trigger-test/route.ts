@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — POST /api/v1/admin/dividends/trigger-test
+// FootStock — POST /api/v1/admin/dividends/trigger-test
 // Disparo manual de cálculo de dividendo esportivo para testes (admin only).
 // Rastreabilidade: INT-072
 // ============================================================================

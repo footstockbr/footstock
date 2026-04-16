@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — AIRateLimiter (module-21/TASK-1/ST001)
+// FootStock — AIRateLimiter (module-21/TASK-1/ST001)
 // Rate limiting por userId via Redis INCR + TTL (10 req/hora)
 // Padrão idêntico ao forumRateLimit — fail-open quando Redis indisponível
 // ============================================================================

@@ -6,13 +6,13 @@ import { GLOSSARY_TERMS, type GlossaryTerm } from "@/lib/data/glossary";
 import { useAnalytics } from "@/hooks/useAnalytics";
 
 const CATEGORY_LABELS: Record<string, string> = {
-  "indicadores-tecnicos": "Indicadores Tecnicos",
+  "indicadores-tecnicos": "Indicadores Técnicos",
   "valuation-e-fundamentos": "Valuation e Fundamentos",
   "tipos-de-ordem": "Tipos de Ordem",
   "carteira-e-rentabilidade": "Carteira e Rentabilidade",
-  "sentimento-e-analise": "Sentimento e Analise",
-  "mercado-e-pregao": "Mercado e Pregao",
-  "divisoes-e-clubes": "Divisoes e Clubes",
+  "sentimento-e-analise": "Sentimento e Análise",
+  "mercado-e-pregao": "Mercado e Pregão",
+  "divisoes-e-clubes": "Divisões e Clubes",
   "planos-e-funcionalidades": "Planos e Funcionalidades",
 };
 
@@ -97,7 +97,7 @@ export default function GlossarioPage() {
     <div data-testid="page-glossario" className="px-4 pt-4">
       <h1 className="text-lg font-bold text-[#EAECEF] mb-1 flex items-center gap-2">
         <BookOpen className="h-5 w-5 text-[#F0B90B]" />
-        Glossario
+        Glossário
       </h1>
       <p className="text-sm text-[#929AA5] mb-4">
         {GLOSSARY_TERMS.length} termos de mercado financeiro

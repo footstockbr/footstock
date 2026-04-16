@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Job: cancellation-expiry (T+7d)
+// FootStock — Job: cancellation-expiry (T+7d)
 // Cron diário às 02:00 UTC-3: finaliza CANCELLATION_LOCK expirado
 // Encerra TODAS posições remanescentes (incluindo LONG não alavancadas)
 // Aplica floor de saldo em FS$0 antes do reset final para FS$2000

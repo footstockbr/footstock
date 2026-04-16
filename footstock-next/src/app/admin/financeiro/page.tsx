@@ -7,7 +7,7 @@ import type { Metadata } from 'next'
 import FinanceiroPageClient from './FinanceiroPageClient'
 
 export const metadata: Metadata = {
-  title: 'Financeiro | Admin | Foot Stock',
+  title: 'Financeiro | Admin | FootStock',
   description: 'Receita, assinaturas e gateways de pagamento',
 }
 

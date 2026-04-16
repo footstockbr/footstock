@@ -48,7 +48,7 @@ export function TransactionHistory() {
       <EmptyState
         icon={<TrendingDown />}
         title="Extrato vazio"
-        description="Suas transacoes aparecerao aqui apos a primeira operacao"
+        description="Suas transações aparecerão aqui após a primeira operação"
       />
     )
   }

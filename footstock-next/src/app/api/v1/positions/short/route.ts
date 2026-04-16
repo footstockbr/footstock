@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — POST /api/v1/positions/short
+// FootStock — POST /api/v1/positions/short
 // Abre posição SHORT com margem 150%. Exclusivo para plano LENDA.
 // Rastreabilidade: INT-014 / TASK-4/ST003
 // ============================================================================

@@ -1,7 +1,7 @@
 'use client'
 
 // ============================================================================
-// Foot Stock — ShortForm
+// FootStock — ShortForm
 // Formulário para abrir e fechar posições SHORT (Lenda only).
 // Margem: 150% do valor nocional. Aluguel: 0,5%/dia.
 // Rastreabilidade: INT-014 / TASK-4/ST003

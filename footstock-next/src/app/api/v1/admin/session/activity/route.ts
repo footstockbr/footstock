@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — POST /api/v1/admin/session/activity
+// FootStock — POST /api/v1/admin/session/activity
 // Renova TTL de inatividade no Redis para o admin autenticado.
 // Rastreabilidade: INT-087, TASK-1/ST006
 // ============================================================================

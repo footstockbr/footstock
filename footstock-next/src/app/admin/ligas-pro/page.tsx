@@ -144,7 +144,7 @@ export default function AdminLigasProPage() {
             Ligas PRO
           </h1>
           <p className="text-sm text-[#929AA5] mt-0.5">
-            Criacao e gestao de ligas PRO com patrocinadores, trofeus e toggle de alavancagem.
+            Criação e gestão de ligas PRO com patrocinadores, troféus e toggle de alavancagem.
           </p>
         </div>
         <button
@@ -286,12 +286,12 @@ export default function AdminLigasProPage() {
               className="flex-1 py-2 rounded-lg bg-[#F0B90B] text-black text-sm font-semibold disabled:opacity-60 hover:bg-[#d4a017] transition-colors"
               data-testid="btn-confirm-create-pro-league"
             >
-              {loading ? 'Criando...' : 'Confirmar criacao'}
+              {loading ? 'Criando...' : 'Confirmar criação'}
             </button>
           </div>
 
           <p className="text-xs text-gray-600 text-center">
-            A liga PRO sera visivel publicamente apos a criacao.
+            A liga PRO será visível publicamente após a criação.
           </p>
         </form>
       )}

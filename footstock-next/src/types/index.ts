@@ -1,4 +1,4 @@
-// Foot Stock — Tipos centralizados
+// FootStock — Tipos centralizados
 // Gerado por /back-end-build em 2026-03-28
 
 // ─── Resposta padrão da API ────────────────────────────────────────────────────

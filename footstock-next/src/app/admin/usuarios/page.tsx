@@ -5,7 +5,7 @@ import { UserList } from '@/components/admin/UserList'
 import { AdminUsuariosStats } from '@/components/admin/AdminUsuariosStats'
 
 export const metadata: Metadata = {
-  title: 'Gestão de Usuários | Admin | Foot Stock',
+  title: 'Gestão de Usuários | Admin | FootStock',
   description: 'Gestão, moderação e controle de contas de usuários',
 }
 

@@ -7,7 +7,7 @@ export function formatBRL(value: number): string {
 }
 
 /**
- * Formata valor em moeda fictícia FS$ (Foot Stock)
+ * Formata valor em moeda fictícia FS$ (FootStock)
  * Ex: 1234.5 → "FS$ 1.234,50"
  */
 export function formatFS(value: number | null | undefined): string {

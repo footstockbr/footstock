@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Job: credit-dividends (module-16)
+// FootStock — Job: credit-dividends (module-16)
 // Credita dividendos PENDING cujo prazo (scheduledFor) foi atingido.
 // Chama WalletService.credit() e emite DIVIDEND_CREDITED.
 // Rastreabilidade: INT-073

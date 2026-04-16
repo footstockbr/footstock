@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — IGateway: contrato comum para todos os gateways de pagamento
+// FootStock — IGateway: contrato comum para todos os gateways de pagamento
 // PCI-DSS: dados de cartão NUNCA passam por esta interface
 // ============================================================================
 

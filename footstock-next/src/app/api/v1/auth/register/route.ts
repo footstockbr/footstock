@@ -321,7 +321,7 @@ export async function POST(req: NextRequest) {
         user.id,
         NOTIFICATION_TYPE.REFERRAL_JOINED,
         {
-          title: 'Bem-vindo ao Foot Stock!',
+          title: 'Bem-vindo ao FootStock!',
           body: 'Você se cadastrou via indicação e recebeu bônus de boas-vindas. Explore o mercado!',
           metadata: { referralCode: user.referredByCode },
         }

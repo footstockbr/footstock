@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — NewsInjectionService
+// FootStock — NewsInjectionService
 // Injeção manual de notícias pelo admin com RBAC e auditoria.
 // Rastreabilidade: INT-049
 // ============================================================================

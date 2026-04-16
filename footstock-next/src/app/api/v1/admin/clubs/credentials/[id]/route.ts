@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Admin ClubUser CRUD (por ID)
+// FootStock — Admin ClubUser CRUD (por ID)
 // GET: Detalhes de um representante
 // PATCH: Atualizar dados (email, senha, nome)
 // PUT /deactivate e /reactivate: handled via PATCH { isActive }

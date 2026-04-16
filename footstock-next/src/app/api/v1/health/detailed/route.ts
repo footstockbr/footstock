@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/health/detailed — Health Check Detalhado (admin)
+// FootStock — GET /api/v1/health/detailed — Health Check Detalhado (admin)
 // Requer role Monitor (admin:dashboard). Retorna latências em ms para diagnóstico.
 // SYS_002 (503) se componente crítico falhar. AUTH_001 (403) sem autorização.
 // Rastreabilidade: INT-110, module-27/TASK-2

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/admin/nsm — Dashboard North Star Metric
+// FootStock — GET /api/v1/admin/nsm — Dashboard North Star Metric
 // Requer role Monitor (admin:dashboard).
 // Retorna dados agregados — NUNCA expõe dados de usuários individuais.
 // Rastreabilidade: INT-115, module-27/TASK-3

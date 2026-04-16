@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — retryWithBackoff
+// FootStock — retryWithBackoff
 // Utilitário de retry com exponential backoff para erros transitórios.
 // Rastreabilidade: T-032 / Locking Otimista
 // ============================================================================

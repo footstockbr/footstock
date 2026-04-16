@@ -10,7 +10,7 @@ import AssessorClient from "./AssessorClient";
 import type { PlanType } from "@/types";
 
 export const metadata: Metadata = {
-  title: "Assessor IA — Foot Stock",
+  title: "Assessor IA — FootStock",
 };
 
 export default async function AssessorPage() {

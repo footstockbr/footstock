@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { ResetPasswordForm } from "@/components/auth/reset-password-form";
 
 export const metadata: Metadata = {
-  title: "Redefinir Senha — Foot Stock",
-  description: "Defina uma nova senha para a sua conta Foot Stock.",
+  title: "Redefinir Senha — FootStock",
+  description: "Defina uma nova senha para a sua conta FootStock.",
   robots: { index: false, follow: false },
 };
 

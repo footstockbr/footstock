@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — NewsInjectContract
+// FootStock — NewsInjectContract
 // Mapeia sentiment para duração de ticks do efeito da notícia.
 // ============================================================================
 

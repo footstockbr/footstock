@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — dividends/index (T-007)
+// FootStock — dividends/index (T-007)
 // Barrel de exportação dos serviços de dividendos especializados.
 // ============================================================================
 

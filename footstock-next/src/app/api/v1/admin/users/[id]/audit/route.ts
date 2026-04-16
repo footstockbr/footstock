@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Admin: Auditoria de transações de usuário
+// FootStock — Admin: Auditoria de transações de usuário
 // GET /api/v1/admin/users/[id]/audit
 // Rastreabilidade: INT-021 / TASK-5/ST002
 // ============================================================================

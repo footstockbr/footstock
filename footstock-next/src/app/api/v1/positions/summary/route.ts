@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/positions/summary
+// FootStock — GET /api/v1/positions/summary
 // Resumo de patrimônio total com P&L e diversificação (module-15 — ST003).
 // Rastreabilidade: INT-023
 // ============================================================================

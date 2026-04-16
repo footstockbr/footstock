@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — MercadoPagoGateway: redirect checkout + HMAC webhook
+// FootStock — MercadoPagoGateway: redirect checkout + HMAC webhook
 // PCI-DSS: dados de cartão NUNCA passam por este gateway — redirect apenas
 // Referência: PAYMENT_020 (amount inválido), PAYMENT_050 (gateway indisponível),
 //             PAYMENT_051 (URL inválida), PAYMENT_001 (HMAC inválido)
@@ -61,7 +61,7 @@ export class MercadoPagoGateway implements IGateway {
           body: JSON.stringify({
             items: [{
               id: input.subscriptionId,
-              title: `Foot Stock - Plano ${input.planType}`,
+              title: `FootStock - Plano ${input.planType}`,
               quantity: 1,
               unit_price: input.amount / 100,
               currency_id: 'BRL',

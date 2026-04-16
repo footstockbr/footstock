@@ -18,7 +18,7 @@ const LeagueTabs = dynamic(
 )
 
 export const metadata: Metadata = {
-  title: 'Ligas — Foot Stock',
+  title: 'Ligas — FootStock',
   description: 'Participe de ligas públicas ou crie sua própria liga com amigos.',
 }
 

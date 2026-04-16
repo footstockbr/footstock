@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Redis Rate Limit Utilities (TASK-026)
+// FootStock — Redis Rate Limit Utilities (TASK-026)
 // Padrão sliding window + atomic INCR helper.
 // A implementação principal (SlidingWindowRateLimiter) vive em src/lib/redis.ts.
 // ============================================================================

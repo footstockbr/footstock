@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET/PATCH /api/v1/admin/moderation/content-rules (T-028)
+// FootStock — GET/PATCH /api/v1/admin/moderation/content-rules (T-028)
 // Leitura e toggle das 5 regras de moderação de conteúdo configuráveis.
 // Invalidação de cache Redis após toggle.
 // ============================================================================

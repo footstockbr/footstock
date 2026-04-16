@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — SSE Endpoint /api/v1/news/stream (Should)
+// FootStock — SSE Endpoint /api/v1/news/stream (Should)
 // Subscreve o canal Redis news:inject e faz stream para o cliente.
 // ============================================================================
 

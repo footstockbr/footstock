@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Tipos TypeScript do módulo Assessor IA (module-21)
+// FootStock — Tipos TypeScript do módulo Assessor IA (module-21)
 // Fonte: module-21/TASK-2/ST001
 // ============================================================================
 

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — /club/calendario — Calendário de eventos e partidas
+// FootStock — /club/calendario — Calendário de eventos e partidas
 // Auth obrigatória CLUB_PARTNER via (portal)/layout.tsx + withClubAuth().
 // Exibe próximas partidas. Integração com feed de calendário em fase futura.
 // Rastreabilidade: US-025, US-036, FDD painel-admin §2.12, MILESTONE-9
@@ -11,7 +11,7 @@ import { withClubAuth } from '@/lib/auth/club-auth'
 import { prisma } from '@/lib/prisma'
 
 export const metadata: Metadata = {
-  title: 'Calendário — Portal do Clube — Foot Stock',
+  title: 'Calendário — Portal do Clube — FootStock',
 }
 
 export default async function ClubCalendarioPage() {

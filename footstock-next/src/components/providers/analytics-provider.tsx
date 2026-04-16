@@ -1,7 +1,7 @@
 'use client'
 
 // ============================================================================
-// Foot Stock — AnalyticsProvider
+// FootStock — AnalyticsProvider
 // Inicializacao condicional Mixpanel baseada em consentimento LGPD
 // Rastreabilidade: ANALYTICS-SPEC.md, T-029
 // ============================================================================

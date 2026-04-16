@@ -149,8 +149,8 @@ export function ComunidadeClient({ currentUserId }: ComunidadeClientProps) {
   return (
     <Tabs defaultValue="forum">
       <TabsList className="w-full">
-        <TabsTrigger value="forum">Forum</TabsTrigger>
-        <TabsTrigger value="glossario">Glossario</TabsTrigger>
+        <TabsTrigger value="forum">Fórum</TabsTrigger>
+        <TabsTrigger value="glossario">Glossário</TabsTrigger>
       </TabsList>
 
       {/* ─── FORUM TAB ─────────────────────────────────────────────────────── */}
@@ -173,11 +173,11 @@ export function ComunidadeClient({ currentUserId }: ComunidadeClientProps) {
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value.slice(0, MAX_CHARS))}
-              placeholder="O que esta acontecendo no mercado?"
+              placeholder="O que está acontecendo no mercado?"
               rows={3}
               maxLength={MAX_CHARS}
               className="w-full bg-transparent text-sm text-[#EAECEF] placeholder:text-[#707A8A] resize-none focus:outline-none"
-              aria-label="Conteudo do post"
+              aria-label="Conteúdo do post"
             />
             <div className="flex items-center justify-between mt-3 pt-3 border-t border-[rgba(240,185,11,.1)]">
               <div className="flex items-center gap-2">
@@ -402,7 +402,7 @@ export function ComunidadeClient({ currentUserId }: ComunidadeClientProps) {
             </div>
           ))}
           <p className="text-xs text-center text-[#707A8A] mt-2">
-            {GLOSSARY_TERMS.length} termos disponiveis no glossario completo
+            {GLOSSARY_TERMS.length} termos disponíveis no glossário completo
           </p>
         </div>
       </TabsContent>

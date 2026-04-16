@@ -1,7 +1,7 @@
 'use client'
 
 // ============================================================================
-// Foot Stock — AssessorClient (module-21)
+// FootStock — AssessorClient (module-21)
 // UI interativa do Assessor IA — seleção de ticker + exibição de análise
 // Conectada a GET /api/v1/ai/analyze?ticker=XXX
 // ============================================================================
@@ -410,7 +410,7 @@ export default function AssessorClient({ planType }: AssessorClientProps) {
           {/* Disclaimer educacional */}
           <p className="text-[10px] text-[#707A8A] text-center px-2 leading-relaxed">
             Esta análise é gerada por IA com fins educacionais e não constitui recomendação de investimento real.
-            O Foot Stock é um simulador financeiro com moeda virtual.
+            O FootStock é um simulador financeiro com moeda virtual.
           </p>
         </div>
       )}

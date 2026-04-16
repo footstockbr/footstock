@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — ModerationEngine (T-028)
+// FootStock — ModerationEngine (T-028)
 // Sanitização sempre ativa + 5 regras de conteúdo configuráveis
 //
 // Pipeline:

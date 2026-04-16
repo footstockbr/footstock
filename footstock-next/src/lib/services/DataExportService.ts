@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — DataExportService
+// FootStock — DataExportService
 // Direito à portabilidade LGPD (TASK-2/ST003)
 // Gera ZIP (JSON+CSV) e envia por email via Resend
 // Rastreabilidade: INT-103, US-027
@@ -136,9 +136,9 @@ async function sendExportEmail(to: string, downloadUrl: string, expiresAt: Date)
   const expiresStr = expiresAt.toLocaleDateString('pt-BR')
 
   await resend.emails.send({
-    from: `Foot Stock <${from}>`,
+    from: `FootStock <${from}>`,
     to,
-    subject: 'Seus dados do Foot Stock estão prontos',
+    subject: 'Seus dados do FootStock estão prontos',
     html: `
       <h2>Seus dados estão prontos para download</h2>
       <p>Você solicitou a exportação dos seus dados pessoais conforme a LGPD.</p>

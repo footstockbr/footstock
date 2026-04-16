@@ -7,7 +7,7 @@ import type { Metadata } from 'next'
 import { ConfiguracoesClient } from './ConfiguracoesClient'
 
 export const metadata: Metadata = {
-  title: 'Configurações | Admin | Foot Stock',
+  title: 'Configurações | Admin | FootStock',
   description: 'Configurações avançadas — exclusivo SUPER_ADMIN',
   robots: 'noindex, nofollow',
 }

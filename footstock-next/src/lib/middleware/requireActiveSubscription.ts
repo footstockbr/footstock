@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — requireActiveSubscription middleware
+// FootStock — requireActiveSubscription middleware
 // Bloqueia ações PREMIUM quando assinatura está em CANCELLATION_LOCK
 // Usa matriz de capacidades: bloqueia criação de risco, permite redução de risco
 // ============================================================================

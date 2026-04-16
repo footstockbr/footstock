@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — /api/cron/subscription-expiry (0 2 * * *)
+// FootStock — /api/cron/subscription-expiry (0 2 * * *)
 // Autenticado por CRON_SECRET — resposta 401 silenciosa se inválido
 // ============================================================================
 

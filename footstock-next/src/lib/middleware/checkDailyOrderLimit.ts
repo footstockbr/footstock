@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Middleware: checkDailyOrderLimit
+// FootStock — Middleware: checkDailyOrderLimit
 // Verifica limites diários de ordens por plano via Redis (chave BRT).
 // Executado em todo POST /api/v1/orders antes da criação.
 // Rastreabilidade: T-020 / INT-019

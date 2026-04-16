@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Stub de notificações (G-003)
+// FootStock — Stub de notificações (G-003)
 // TODO: substituir por NotificationService real de module-19 quando disponível
 // ============================================================================
 

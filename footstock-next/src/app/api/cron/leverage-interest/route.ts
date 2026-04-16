@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — /api/cron/leverage-interest (30 7 * * *)
+// FootStock — /api/cron/leverage-interest (30 7 * * *)
 // Juros diários sobre posições LONG alavancadas (plano Lenda).
 // Autenticado por CRON_SECRET — 401 silencioso se inválido.
 // Rastreabilidade: T-003 / INT-TRD-005

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — WalletService (module-16)
+// FootStock — WalletService (module-16)
 // Crédito e consulta de saldo FS$ do usuário via Prisma.
 // Rastreabilidade: INT-072, INT-073
 // ============================================================================

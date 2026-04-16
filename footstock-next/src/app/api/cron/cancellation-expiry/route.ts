@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — /api/cron/cancellation-expiry (0 5 * * * — diário às 05:00 UTC = 02:00 UTC-3)
+// FootStock — /api/cron/cancellation-expiry (0 5 * * * — diário às 05:00 UTC = 02:00 UTC-3)
 // T+7d: cancela definitivamente assinaturas em CANCELLATION_LOCK expiradas
 // Encerra TODAS posições, aplica floor FS$0, reseta saldo para FS$2000
 // ============================================================================

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — MarketEngineService
+// FootStock — MarketEngineService
 // Serviço de leitura do estado do mercado para uso no Next.js.
 // Não tem acesso direto ao MarketEngine (processo separado no Railway).
 // Lê do banco via Prisma e verifica liderança via Redis.

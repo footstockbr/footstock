@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — ForumService
+// FootStock — ForumService
 // Sanitização de PII + verificação de palavras bloqueadas
 // Fonte: module-18/TASK-1/ST003
 // ============================================================================

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET + PATCH /api/v1/admin/assets/[ticker]
+// FootStock — GET + PATCH /api/v1/admin/assets/[ticker]
 // Leitura e edição de um ativo (clube) pelo admin.
 //
 // SEGURANÇA:
@@ -25,6 +25,13 @@ const assetUpdateSchema = z.object({
   // realName: nome real do clube (server-only, admin only, NUNCA expor em endpoints públicos)
   realName: z.string().min(2, 'Nome real muito curto').max(100).optional().nullable(),
   division: z.enum(['SERIE_A', 'SERIE_B']).optional(),
+  cluster: z.enum(['A_TOP', 'A_MID', 'A_SMALL', 'B_LIQUID', 'B_ILLIQ']).optional(),
+  currentSupply: z
+    .number()
+    .int('Supply atual deve ser inteiro')
+    .nonnegative('Supply atual nao pode ser negativo')
+    .optional(),
+  isActive: z.boolean().optional(),
   colorPrimary: z.string().regex(HEX_COLOR, 'Cor primária inválida (use #RRGGBB)').optional(),
   colorSecondary: z.string().regex(HEX_COLOR, 'Cor secundária inválida (use #RRGGBB)').optional(),
   logoUrl: z.string().url('URL de logo inválida').optional().nullable(),
@@ -43,6 +50,8 @@ const assetUpdateSchema = z.object({
     .optional(),
   // searchText: aliases internos de busca — server-only, NUNCA retornar ao cliente
   searchText: z.string().max(1000).optional(),
+  // coachName: nome do tecnico/treinador — usado para matching de noticias
+  coachName: z.string().max(100).optional().nullable(),
 })
 
 // Helper dev-mode: aceita cookie fs-admin-role quando não há sessão real
@@ -136,7 +145,9 @@ export async function GET(request: NextRequest, { params }: AssetParams) {
       haltReason: asset.haltReason ?? null,
       sentiment: asset.sentiment,
       financials: asset.financials,
-      // searchText: aliases internos (SUPER_ADMIN only — NUNCA expor no endpoint público)
+      // coachName: nome do tecnico (SUPER_ADMIN only)
+      coachName: asset.coachName ?? null,
+      // searchText: aliases internos (SUPER_ADMIN only — NUNCA expor no endpoint publico)
       searchText: asset.searchText,
       // aliases: mapeamentos de ticker do mundo real para este ticker fictício
       aliases: asset.aliases.map((a) => a.alias),
@@ -181,7 +192,7 @@ export async function PATCH(request: NextRequest, { params }: AssetParams) {
       )
     }
 
-    const { displayName, realName, division, colorPrimary, colorSecondary, logoUrl, totalShares, fairValue, ipoPrice, searchText } =
+    const { displayName, realName, division, cluster, currentSupply, isActive, colorPrimary, colorSecondary, logoUrl, totalShares, fairValue, ipoPrice, searchText, coachName } =
       parsed.data
 
     // Construir updateData apenas com campos fornecidos
@@ -189,12 +200,16 @@ export async function PATCH(request: NextRequest, { params }: AssetParams) {
     if (displayName !== undefined) updateData.displayName = displayName
     if (realName !== undefined) updateData.realName = realName ?? null
     if (division !== undefined) updateData.division = division
+    if (cluster !== undefined) updateData.cluster = cluster
+    if (currentSupply !== undefined) updateData.currentSupply = BigInt(currentSupply)
+    if (isActive !== undefined) updateData.isActive = isActive
     if (colorPrimary !== undefined) updateData.colorPrimary = colorPrimary
     if (colorSecondary !== undefined) updateData.colorSecondary = colorSecondary
     if (logoUrl !== undefined) updateData.logoUrl = logoUrl ?? null
     if (totalShares !== undefined) updateData.totalShares = BigInt(totalShares)
     if (fairValue !== undefined) updateData.fairValue = fairValue
     if (searchText !== undefined) updateData.searchText = searchText
+    if (coachName !== undefined) updateData.coachName = coachName ?? null
 
     // ipoPrice vive dentro de financials (JSON patch)
     if (ipoPrice !== undefined) {

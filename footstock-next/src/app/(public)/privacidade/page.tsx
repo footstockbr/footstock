@@ -1,8 +1,8 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Política de Privacidade — Foot Stock',
-  description: 'Saiba como o Foot Stock coleta, usa e protege seus dados pessoais conforme a LGPD.',
+  title: 'Política de Privacidade — FootStock',
+  description: 'Saiba como o FootStock coleta, usa e protege seus dados pessoais conforme a LGPD.',
 }
 
 export default function PrivacidadePage() {
@@ -14,7 +14,7 @@ export default function PrivacidadePage() {
       <section className="mb-8">
         <h2 className="text-lg font-semibold text-[#F0B90B] mb-3">1. Quem somos</h2>
         <p className="text-sm text-[#929AA5] leading-relaxed">
-          O Foot Stock é uma plataforma educacional de simulação financeira com temática esportiva.
+          O FootStock é uma plataforma educacional de simulação financeira com temática esportiva.
           Operamos como controlador dos dados pessoais coletados em conformidade com a Lei Geral de
           Proteção de Dados (LGPD — Lei 13.709/2018) e o ECA Digital (Lei 14.790/2023).
         </p>

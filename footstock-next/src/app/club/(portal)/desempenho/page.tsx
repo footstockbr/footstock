@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — /club/desempenho — Histórico de preço e desempenho do ativo
+// FootStock — /club/desempenho — Histórico de preço e desempenho do ativo
 // Auth obrigatória CLUB_PARTNER via (portal)/layout.tsx + withClubAuth().
 // Exibe: preço atual, variações, histórico via PriceHistory, últimas ordens.
 // Rastreabilidade: US-025, US-036, FDD painel-admin §2.12, MILESTONE-9
@@ -11,7 +11,7 @@ import { withClubAuth } from '@/lib/auth/club-auth'
 import { prisma } from '@/lib/prisma'
 
 export const metadata: Metadata = {
-  title: 'Desempenho — Portal do Clube — Foot Stock',
+  title: 'Desempenho — Portal do Clube — FootStock',
 }
 
 function formatFS(value: number): string {
@@ -109,7 +109,7 @@ export default async function ClubDesempenhoPage() {
       {/* KPIs de preço */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-[#1E2329] rounded-xl border border-[#2B3139] p-4">
-          <p className="text-[10px] text-[#929AA5] mb-1">Preco atual</p>
+          <p className="text-[10px] text-[#929AA5] mb-1">Preço atual</p>
           <p className="text-xl font-bold text-[#EAECEF]">{formatFS(currentPrice)}</p>
           <span className={`text-xs font-semibold mt-1 block ${isPositive ? 'text-[#4ade80]' : 'text-[#F6465D]'}`}>
             {isPositive
@@ -120,9 +120,9 @@ export default async function ClubDesempenhoPage() {
         </div>
 
         <div className="bg-[#1E2329] rounded-xl border border-[#2B3139] p-4">
-          <p className="text-[10px] text-[#929AA5] mb-1">Volume medio (30d)</p>
+          <p className="text-[10px] text-[#929AA5] mb-1">Volume médio (30d)</p>
           <p className="text-xl font-bold text-[#EAECEF]">{Math.round(avgVolume).toLocaleString('pt-BR')}</p>
-          <span className="text-[10px] text-[#929AA5] mt-1 block">unidades / sessao</span>
+          <span className="text-[10px] text-[#929AA5] mt-1 block">unidades / sessão</span>
         </div>
 
         <div className="bg-[#1E2329] rounded-xl border border-[#2B3139] p-4">

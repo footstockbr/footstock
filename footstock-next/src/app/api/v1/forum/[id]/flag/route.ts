@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — POST /api/v1/forum/:id/flag
+// FootStock — POST /api/v1/forum/:id/flag
 // Denúncia de post — incrementa flagCount, auto-delete com Rule 1
 // Fonte: module-18/TASK-5/ST002
 // ============================================================================

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Cores canônicas dos indicadores técnicos
+// FootStock — Cores canônicas dos indicadores técnicos
 // Fonte: FDD ui-mercado-ativos, USER-STORIES US-013, TASK-011
 // ============================================================================
 

@@ -60,7 +60,7 @@ const envSchema = z.object({
 
   // WebAuthn (Passwordless)
   WEBAUTHN_RP_ID: z.string().min(1).optional().default('localhost'),
-  WEBAUTHN_RP_NAME: z.string().min(1).optional().default('Foot Stock'),
+  WEBAUTHN_RP_NAME: z.string().min(1).optional().default('FootStock'),
   WEBAUTHN_ORIGIN: z.string().url().optional().default('http://localhost:3000'),
 
   // IA (Anthropic Claude)

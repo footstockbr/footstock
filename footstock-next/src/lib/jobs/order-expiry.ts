@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Job: expiração de ordens LIMIT/OCO/SCHEDULED após 30 dias
+// FootStock — Job: expiração de ordens LIMIT/OCO/SCHEDULED após 30 dias
 // Executado diariamente às 00:05 BRT pelo scheduler (lib/jobs/scheduler.ts).
 // Rastreabilidade: INT-012, INT-013 / TASK-3/ST004
 // ============================================================================

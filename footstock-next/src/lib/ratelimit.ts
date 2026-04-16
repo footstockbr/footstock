@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Rate Limiting centralizado (ioredis sliding window)
+// FootStock — Rate Limiting centralizado (ioredis sliding window)
 // Substitui @upstash/ratelimit — mesma semântica, sem limite de comandos/dia.
 // ============================================================================
 

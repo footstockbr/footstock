@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — POST /api/v1/admin/assets/[ticker]/aliases (T-031)
+// FootStock — POST /api/v1/admin/assets/[ticker]/aliases (T-031)
 // Admin: adiciona alias a um ativo canônico.
 //
 // Permissão: SUPER_ADMIN

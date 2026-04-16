@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — /api/cron/data-retention (0 0 * * *)
+// FootStock — /api/cron/data-retention (0 0 * * *)
 // Cron diário (00:00 BRT): retenção de dados LGPD
 // Autenticado por CRON_SECRET
 // Rastreabilidade: INT-108, TASK-3/ST001

@@ -38,7 +38,7 @@ type: image
 extension: png
 aspect_ratio: 1:1
 dimensions: 32x32
-description: Logo símbolo do Foot Stock. Bola de futebol estilizada com elementos financeiros, fundo transparente, design minimalista premium.
+description: Logo símbolo do FootStock. Bola de futebol estilizada com elementos financeiros, fundo transparente, design minimalista premium.
 context: Header do app, ícone de navegação
 style: Minimalista, linhas finas, dourado sobre preto
 mood: Premium, esportivo, financeiro
@@ -48,13 +48,13 @@ avoid: Texto, complexidade excessiva, gradientes ruidosos
         */}
         <Image
           src="/logo-foot.png"
-          alt="Foot Stock"
+          alt="FootStock"
           width={32}
           height={32}
           className="w-8 h-8 object-contain"
         />
         <span className="text-base font-bold text-[#EAECEF] tracking-tight hidden sm:block">
-          Foot Stock
+          FootStock
         </span>
       </Link>
 

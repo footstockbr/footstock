@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — TransactionService
+// FootStock — TransactionService
 // Execução atômica de ordens via Prisma transaction + extrato e posições.
 // Rastreabilidade: INT-011, INT-018 / TASK-2
 // ============================================================================

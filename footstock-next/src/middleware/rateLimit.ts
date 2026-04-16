@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Rate Limit Helpers (TASK-026)
+// FootStock — Rate Limit Helpers (TASK-026)
 // Utilitários compartilhados: headers, normalização de IP, factory helpers.
 // ============================================================================
 

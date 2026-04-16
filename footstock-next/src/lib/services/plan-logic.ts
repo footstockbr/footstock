@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — plan-logic: 13 funções puras de negócio de planos
+// FootStock — plan-logic: 13 funções puras de negócio de planos
 // Sem side effects, sem banco — input → output puros, testáveis isoladamente
 // Todos os cálculos de data em UTC para evitar bugs de timezone
 // ============================================================================

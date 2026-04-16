@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GlossaryInteractionRepository
+// FootStock — GlossaryInteractionRepository
 // Registro fire-and-forget de interações com o glossário (InfoIcons)
 // Fonte: module-18/TASK-6/ST003
 // ============================================================================

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/cron/monthly-dividends (0 9 1 * *)
+// FootStock — GET /api/cron/monthly-dividends (0 9 1 * *)
 // Handler Vercel Cron para dividendo financeiro mensal.
 // Autenticado por CRON_SECRET no header Authorization.
 // Rastreabilidade: INT-073

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Validador Zod de criação de ordens
+// FootStock — Validador Zod de criação de ordens
 // Valida DTOs de criação de ordem com regras estruturais e cruzadas.
 // Rastreabilidade: INT-011..015, INT-019 / TASK-1/ST001
 // ============================================================================

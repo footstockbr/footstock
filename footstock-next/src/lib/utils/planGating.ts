@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Gating centralizado de indicadores técnicos por plano
+// FootStock — Gating centralizado de indicadores técnicos por plano
 // Fonte: FDD ui-mercado-ativos CTA-003, USER-STORIES US-013, TASK-011
 // ============================================================================
 

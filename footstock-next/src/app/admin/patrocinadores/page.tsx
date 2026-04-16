@@ -23,6 +23,11 @@ interface SponsorBanner {
   ctaText: string
   ctaColor: string
   linkUrl: string | null
+  startDate: string | null
+  endDate: string | null
+  imageDesktopUrl: string | null
+  imageMobileUrl: string | null
+  imageVerticalUrl: string | null
 }
 
 interface PrizeLine {
@@ -58,6 +63,11 @@ const EMPTY_BANNER: Omit<SponsorBanner, 'id' | 'clicks' | 'impressions'> = {
   ctaText: 'Saiba mais',
   ctaColor: '#00B1EA',
   linkUrl: '',
+  startDate: null,
+  endDate: null,
+  imageDesktopUrl: null,
+  imageMobileUrl: null,
+  imageVerticalUrl: null,
 }
 
 const DEFAULT_PRIZES: PrizeLine[] = [
@@ -169,6 +179,11 @@ export default function PatrocinadoresPage() {
       ctaText: b.ctaText,
       ctaColor: b.ctaColor,
       linkUrl: b.linkUrl ?? '',
+      startDate: b.startDate ? b.startDate.split('T')[0] : null,
+      endDate: b.endDate ? b.endDate.split('T')[0] : null,
+      imageDesktopUrl: b.imageDesktopUrl,
+      imageMobileUrl: b.imageMobileUrl,
+      imageVerticalUrl: b.imageVerticalUrl,
     })
     setBannerModal(true)
   }
@@ -176,12 +191,21 @@ export default function PatrocinadoresPage() {
   const saveBanner = async () => {
     setSavingBanner(true)
     try {
+      const payload = {
+        ...bannerForm,
+        startDate: bannerForm.startDate ? new Date(bannerForm.startDate + 'T00:00:00Z').toISOString() : null,
+        endDate: bannerForm.endDate ? new Date(bannerForm.endDate + 'T23:59:59Z').toISOString() : null,
+        imageDesktopUrl: bannerForm.imageDesktopUrl || null,
+        imageMobileUrl: bannerForm.imageMobileUrl || null,
+        imageVerticalUrl: bannerForm.imageVerticalUrl || null,
+      }
+
       if (editingBanner) {
         const res = await fetch(`/api/v1/admin/sponsors/banners/${editingBanner.id}`, {
           method: 'PATCH',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(bannerForm),
+          body: JSON.stringify(payload),
         })
         if (!res.ok) throw new Error('Erro ao salvar')
       } else {
@@ -189,7 +213,7 @@ export default function PatrocinadoresPage() {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(bannerForm),
+          body: JSON.stringify(payload),
         })
         if (!res.ok) throw new Error('Erro ao criar')
       }
@@ -582,6 +606,11 @@ export default function PatrocinadoresPage() {
                   <div style={{ fontSize: '9px', color: 'var(--muted)' }}>
                     {banner.company} · {banner.position}
                   </div>
+                  <div style={{ fontSize: '9px', color: 'var(--muted)', marginTop: '2px' }} data-testid={`banner-dates-${banner.id}`}>
+                    {banner.startDate ? banner.startDate.split('T')[0] : 'Sem inicio'}{' '}
+                    {'→'}{' '}
+                    {banner.endDate ? banner.endDate.split('T')[0] : <span style={{ color: 'var(--accent)' }}>(Indefinido)</span>}
+                  </div>
                 </div>
               </div>
 
@@ -817,7 +846,7 @@ export default function PatrocinadoresPage() {
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Posicao</label>
+                <label className="form-label">Posição</label>
                 <select
                   className="form-input"
                   value={bannerForm.position}
@@ -853,6 +882,86 @@ export default function PatrocinadoresPage() {
                 onChange={(e) => setBannerForm((f) => ({ ...f, ctaText: e.target.value }))}
                 placeholder="Ex: Saiba mais"
                 data-testid="modal-banner-cta-text-input"
+              />
+            </div>
+
+            {/* Datas de exibicao */}
+            <div className="section-divider">Periodo de Exibicao</div>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Data de Inicio</label>
+                <input
+                  className="form-input"
+                  type="date"
+                  value={bannerForm.startDate ?? ''}
+                  onChange={(e) => setBannerForm((f) => ({ ...f, startDate: e.target.value || null }))}
+                  data-testid="modal-banner-start-date"
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Data Final</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <input
+                    className="form-input"
+                    type="date"
+                    value={bannerForm.endDate ?? ''}
+                    onChange={(e) => setBannerForm((f) => ({ ...f, endDate: e.target.value || null }))}
+                    disabled={bannerForm.endDate === null}
+                    style={{ opacity: bannerForm.endDate === null ? 0.5 : 1 }}
+                    data-testid="modal-banner-end-date"
+                  />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--muted)', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={bannerForm.endDate === null}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setBannerForm((f) => ({ ...f, endDate: null }))
+                        } else {
+                          setBannerForm((f) => ({ ...f, endDate: '' }))
+                        }
+                      }}
+                      data-testid="modal-banner-indefinido-checkbox"
+                    />
+                    Indefinido
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Imagens responsivas */}
+            <div className="section-divider">Imagens do Banner</div>
+            <div className="form-group">
+              <label className="form-label">Desktop (800x100)</label>
+              <input
+                className="form-input"
+                type="url"
+                value={bannerForm.imageDesktopUrl ?? ''}
+                onChange={(e) => setBannerForm((f) => ({ ...f, imageDesktopUrl: e.target.value || null }))}
+                placeholder="https://cdn.example.com/banner-desktop.png"
+                data-testid="modal-banner-image-desktop-input"
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Mobile (400x80)</label>
+              <input
+                className="form-input"
+                type="url"
+                value={bannerForm.imageMobileUrl ?? ''}
+                onChange={(e) => setBannerForm((f) => ({ ...f, imageMobileUrl: e.target.value || null }))}
+                placeholder="https://cdn.example.com/banner-mobile.png"
+                data-testid="modal-banner-image-mobile-input"
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Vertical / Sidebar (160x600)</label>
+              <input
+                className="form-input"
+                type="url"
+                value={bannerForm.imageVerticalUrl ?? ''}
+                onChange={(e) => setBannerForm((f) => ({ ...f, imageVerticalUrl: e.target.value || null }))}
+                placeholder="https://cdn.example.com/banner-vertical.png"
+                data-testid="modal-banner-image-vertical-input"
               />
             </div>
 
@@ -1051,7 +1160,7 @@ export default function PatrocinadoresPage() {
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Plano Minimo</label>
+                <label className="form-label">Plano Mínimo</label>
                 <select
                   className="form-input"
                   value={leagueForm.minPlan}

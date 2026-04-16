@@ -19,10 +19,10 @@ export interface ExtratoTransaction {
 }
 
 const FINANCIAL_TYPE_CONFIG: Record<string, { label: string; colorClass: string; amountPrefix: string }> = {
-  TRADE:            { label: 'Negociacao',        colorClass: '',             amountPrefix: '' },
+  TRADE:            { label: 'Negociação',        colorClass: '',             amountPrefix: '' },
   FEE:              { label: 'Taxa Operacional',   colorClass: 'text-[#F0B90B]', amountPrefix: '-' },
-  BONUS:            { label: 'Bonus',              colorClass: 'text-[#2EBD85]', amountPrefix: '+' },
-  DEPOSIT:          { label: 'Deposito',           colorClass: 'text-[#2EBD85]', amountPrefix: '+' },
+  BONUS:            { label: 'Bônus',              colorClass: 'text-[#2EBD85]', amountPrefix: '+' },
+  DEPOSIT:          { label: 'Depósito',           colorClass: 'text-[#2EBD85]', amountPrefix: '+' },
   WITHDRAWAL:       { label: 'Saque',              colorClass: 'text-[#F6465D]', amountPrefix: '-' },
   SHORT_INTEREST:   { label: 'Juros Short',        colorClass: 'text-[#F6465D]', amountPrefix: '-' },
   MARGIN_BLOCKED:   { label: 'Margem Bloqueada',   colorClass: 'text-[#929AA5]', amountPrefix: '-' },

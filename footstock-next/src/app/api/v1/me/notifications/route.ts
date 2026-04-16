@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/me/notifications
+// FootStock — GET /api/v1/me/notifications
 // Lista notificações do usuário autenticado com suporte a:
 //   ?unread=true      → filtra apenas não lidas
 //   ?count=true       → retorna apenas contagem (sem payload completo)

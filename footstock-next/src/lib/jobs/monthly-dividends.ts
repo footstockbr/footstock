@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Job: monthly-dividends (module-16)
+// FootStock — Job: monthly-dividends (module-16)
 // Módulo reutilizável para calcular dividendos financeiros mensais.
 // Testável sem HTTP (importado pelo handler do Vercel Cron).
 // Rastreabilidade: INT-073

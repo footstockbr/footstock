@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — YieldDifferentialService (T-007)
+// FootStock — YieldDifferentialService (T-007)
 // Consultas e gestão do yield diferencial acumulado pelo JOGADOR.
 // Permite que o frontend exiba o total pendente por posição/ticker.
 // Rastreabilidade: T-007 §4

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — AliasService (T-031)
+// FootStock — AliasService (T-031)
 // Resolução de aliases de ticker com cache Redis.
 //
 // Resolve códigos do mundo real (FLA3) para tickers canônicos (URU3).

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Analytics Wrapper (Mixpanel)
+// FootStock — Analytics Wrapper (Mixpanel)
 // Rastreabilidade: ANALYTICS-SPEC.md, T-029
 // IMPORTANTE: Inicializar SOMENTE apos consentimento analytics (LGPD)
 // TODO: DPA com Mixpanel necessario para LGPD — PENDING

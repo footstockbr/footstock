@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Bank Data Encryption (AES-256-GCM)
+// FootStock — Bank Data Encryption (AES-256-GCM)
 // Criptografia em repouso para dados bancários de afiliados e clubes parceiros.
 // Rastreabilidade: TASK-3/ST003, US-037, GAP-001 (auditoria module-25)
 // ============================================================================

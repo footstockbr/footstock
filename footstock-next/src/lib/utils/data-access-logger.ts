@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — HOF: withDataAccessLog
+// FootStock — HOF: withDataAccessLog
 // Registra automaticamente acessos a dados pessoais (LGPD Art. 37)
 // Fire-and-forget: não bloqueia a response principal
 // Rastreabilidade: INT-105, TASK-3/ST002

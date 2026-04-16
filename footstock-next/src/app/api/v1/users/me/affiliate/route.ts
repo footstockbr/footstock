@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/users/me/affiliate
+// FootStock — GET /api/v1/users/me/affiliate
 // Retorna dados do programa de afiliados do usuário autenticado.
 // Todo usuário cadastrado tem um AffiliateCode (criado automaticamente no registro).
 // ============================================================================

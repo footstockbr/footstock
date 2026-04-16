@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — SessionService (client-side)
+// FootStock — SessionService (client-side)
 // Helper para consumo do endpoint /api/v1/market/session.
 // Service puro sem estado — sem React.
 // ============================================================================

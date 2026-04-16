@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — /club/holders — Distribuição de holders (anonimizado)
+// FootStock — /club/holders — Distribuição de holders (anonimizado)
 // Auth obrigatória CLUB_PARTNER via (portal)/layout.tsx + withClubAuth().
 // REGRA LGPD (ADMIN_051): NUNCA expor PII. Apenas dados agregados.
 // Rastreabilidade: US-025, US-036, FDD painel-admin §2.12, MILESTONE-9
@@ -11,7 +11,7 @@ import { withClubAuth } from '@/lib/auth/club-auth'
 import { prisma } from '@/lib/prisma'
 
 export const metadata: Metadata = {
-  title: 'Holders — Portal do Clube — Foot Stock',
+  title: 'Holders — Portal do Clube — FootStock',
 }
 
 function formatFS(value: number): string {
@@ -122,7 +122,7 @@ export default async function ClubHoldersPage() {
       <div className="bg-[#1E2329] rounded-xl border border-[#2B3139] p-5">
         <h2 className="text-sm font-semibold text-[#EAECEF] mb-4 flex items-center gap-2">
           <BarChart3 className="h-4 w-4 text-[#F0B90B]" />
-          Distribuicao por tamanho de posicao
+          Distribuição por tamanho de posição
         </h2>
         <div className="space-y-3">
           {distribution.map((r) => (
@@ -146,7 +146,7 @@ export default async function ClubHoldersPage() {
       <div className="bg-[#1E2329] rounded-xl border border-[#2B3139] p-5">
         <h2 className="text-sm font-semibold text-[#EAECEF] mb-4 flex items-center gap-2">
           <TrendingUp className="h-4 w-4 text-[#F0B90B]" />
-          Distribuicao por plano
+          Distribuição por plano
         </h2>
         <div className="space-y-2.5">
           {[
@@ -168,7 +168,7 @@ export default async function ClubHoldersPage() {
       {/* Top 5 posições (anonimizadas) */}
       {top5.length > 0 && (
         <div className="bg-[#1E2329] rounded-xl border border-[#2B3139] p-5">
-          <h2 className="text-sm font-semibold text-[#EAECEF] mb-4">Top 5 posicoes (anonimizadas)</h2>
+          <h2 className="text-sm font-semibold text-[#EAECEF] mb-4">Top 5 posições (anonimizadas)</h2>
           <div className="space-y-2.5">
             {top5.map((p) => (
               <div key={p.rank} className="flex items-center justify-between text-xs">

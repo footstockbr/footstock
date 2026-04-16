@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — AIResponseParser (module-21/TASK-2/ST002)
+// FootStock — AIResponseParser (module-21/TASK-2/ST002)
 // Parser robusto de resposta da IA com 3 estratégias de extração + fallback
 // ============================================================================
 

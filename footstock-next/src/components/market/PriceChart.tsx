@@ -94,7 +94,7 @@ export function PriceChart({
   onPeriodChange,
   onChartReady,
 }: PriceChartProps) {
-  const [internalPeriod, setInternalPeriod] = useState<ChartPeriod>('1M')
+  const [internalPeriod, setInternalPeriod] = useState<ChartPeriod>('1H')
   const activePeriod = externalPeriod ?? internalPeriod
 
   const [chartType, setChartType] = useState<'line' | 'candle'>('line')
@@ -214,7 +214,7 @@ export function PriceChart({
     if (!chart) return
 
     if (mainSeriesRef.current) {
-      chart.removeSeries(mainSeriesRef.current)
+      try { chart.removeSeries(mainSeriesRef.current) } catch { /* series already removed */ }
       mainSeriesRef.current = null
     }
 
@@ -520,7 +520,7 @@ export function PriceChart({
 
       <div className="flex flex-wrap items-center gap-2 mt-2 px-1">
         {/* Period buttons */}
-        <div className="flex gap-1">
+        <div className="flex gap-1" data-testid="price-chart-interval-select">
           {PERIODS.map((p) => (
             <button
               key={p}

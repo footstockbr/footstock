@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/club/metrics
+// FootStock — GET /api/v1/club/metrics
 // Retorna métricas agregadas e anonimizadas do clube autenticado.
 // NUNCA expõe dados individuais de usuários (ADMIN_051).
 // clubId extraído da sessão — nunca de query params (prevenção IDOR).

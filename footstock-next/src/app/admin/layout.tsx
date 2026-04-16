@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Admin Layout (Server Component)
+// FootStock — Admin Layout (Server Component)
 // Verifica sessão admin e renderiza layout com sidebar + timer de inatividade 30min.
 // Rastreabilidade: INT-085, INT-087, TASK-1/ST005
 // ============================================================================
@@ -14,7 +14,7 @@ import type { Metadata } from "next";
 import { ROUTES } from "@/lib/constants/routes";
 
 export const metadata: Metadata = {
-  title: { default: "Admin | Foot Stock", template: "%s | Admin Foot Stock" },
+  title: { default: "Admin | FootStock", template: "%s | Admin FootStock" },
   robots: "noindex, nofollow",
 };
 

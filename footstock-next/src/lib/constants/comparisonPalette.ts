@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Paleta alternativa para modo comparação
+// FootStock — Paleta alternativa para modo comparação
 // 8 cores perceptualmente distintas usadas quando cores de clubes colidem
 // ============================================================================
 

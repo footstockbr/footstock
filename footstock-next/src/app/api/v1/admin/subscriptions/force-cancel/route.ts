@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — POST /api/v1/admin/subscriptions/force-cancel
+// FootStock — POST /api/v1/admin/subscriptions/force-cancel
 // SuperAdmin: força cancelamento imediato por razão de compliance
 // Casos de uso: suspeita de fraude, violação de TOS, ordem judicial
 // Auditoria obrigatória: toda execução registrada em admin_market_actions

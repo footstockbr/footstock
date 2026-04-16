@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Motor Status Contract
+// FootStock — Motor Status Contract
 // Contrato de integração: módulos que consomem o status do motor.
 //
 // CONTRATO PARA module-14 (OrderForm):

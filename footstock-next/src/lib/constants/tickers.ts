@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — TICKERS_40
+// FootStock — TICKERS_40
 // Lista canônica dos 40 tickers disponíveis na plataforma
 // Fonte: module-18/TASK-7/ST005
 // ============================================================================

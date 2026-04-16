@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Job: juros diários sobre posições LONG alavancadas (2x)
+// FootStock — Job: juros diários sobre posições LONG alavancadas (2x)
 // Executado diariamente às 07:30 BRT (após o interest-accrual das SHORT).
 // Rastreabilidade: T-003 / INT-TRD-005
 // ============================================================================

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — WebhookAuditService: log de auditoria PCI-DSS
+// FootStock — WebhookAuditService: log de auditoria PCI-DSS
 // Referência: PAYMENT_001/002 (rejected), retenção 90 dias (INT-108)
 // ============================================================================
 

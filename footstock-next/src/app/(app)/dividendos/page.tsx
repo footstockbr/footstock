@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { DividendosClient } from './dividendos-client'
 
 export const metadata: Metadata = {
-  title: 'Dividendos — Foot Stock',
+  title: 'Dividendos — FootStock',
 }
 
 export default function DividendosPage() {

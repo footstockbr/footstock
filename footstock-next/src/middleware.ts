@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Root Middleware (Next.js 16)
+// FootStock — Root Middleware (Next.js 16)
 // Refreshes Supabase auth sessions on every request.
 // Without this, access tokens expire after 1 hour and are never refreshed
 // server-side, causing 401s on all authenticated API calls.

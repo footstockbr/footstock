@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Order Contract: State Machine Formal
+// FootStock — Order Contract: State Machine Formal
 // Source of truth para todas as transições de status de ordens.
 // Rastreabilidade: INT-011, INT-012, INT-013 / TASK-0/ST002
 // ============================================================================

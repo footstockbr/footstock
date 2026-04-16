@@ -1,7 +1,7 @@
 'use client'
 
 // ============================================================================
-// Foot Stock — useMarketSession + useCountdown
+// FootStock — useMarketSession + useCountdown
 // Polling do endpoint /api/v1/market/session a cada 15s.
 // useCountdown decrementa localmente a cada 1s entre polls para evitar
 // polling a cada segundo.

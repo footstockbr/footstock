@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — POST /api/v1/payments/pix-checkout
+// FootStock — POST /api/v1/payments/pix-checkout
 // Cria QR Code Pix via Mercado Pago (ou PagSeguro com sandbox Pix)
 // Aviso obrigatório: Pix não é recorrente — renovação manual a cada ciclo
 // ============================================================================
@@ -86,7 +86,7 @@ export const POST = withAuth(async (req: NextRequest, { user }: AuthContext) => 
         payment_method_id:  'pix',
         payer:              { email: userRecord.email },
         external_reference: subscriptionId,
-        description:        `Foot Stock - Plano ${planType}`,
+        description:        `FootStock - Plano ${planType}`,
         notification_url:   `${appUrl}/api/v1/payments/webhook`,
         date_of_expiration: new Date(Date.now() + 30 * 60 * 1000).toISOString(), // 30 min
       }),

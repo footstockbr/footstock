@@ -138,7 +138,7 @@ export function MarketPageClient() {
           className="flex items-center gap-2 text-sm text-[#F6465D] bg-[rgba(246,70,93,.08)] border-b border-[rgba(246,70,93,.2)] px-4 py-2.5"
         >
           <span aria-hidden="true" className="flex-shrink-0">&#9888;</span>
-          Saldo zerado — venda posicoes para negociar novamente.
+          Saldo zerado — venda posições para negociar novamente.
         </div>
       )}
 

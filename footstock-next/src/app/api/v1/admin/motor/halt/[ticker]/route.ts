@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — POST/DELETE /api/v1/admin/motor/halt/:ticker
+// FootStock — POST/DELETE /api/v1/admin/motor/halt/:ticker
 // Suspende ou libera um ativo via Redis (motor:halt:{ticker}).
 // POST → suspende. DELETE → libera. Requer: assets:halt.
 // Rastreabilidade: INT-086, TASK-3/ST002

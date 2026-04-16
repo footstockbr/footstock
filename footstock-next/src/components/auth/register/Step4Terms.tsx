@@ -117,7 +117,7 @@ export function Step4Terms({ data, onComplete }: Step4Props) {
 
       const finalData = { ...data, consents }
       onComplete(finalData)
-      toast.success('Conta criada com sucesso! Bem-vindo ao Foot Stock.')
+      toast.success('Conta criada com sucesso! Bem-vindo ao FootStock.')
       setTimeout(() => router.replace(ROUTES.ONBOARDING), 1000)
     } catch {
       toast.error('Erro ao criar conta. Tente novamente.')
@@ -151,7 +151,7 @@ export function Step4Terms({ data, onComplete }: Step4Props) {
           onChange={() => toggleConsent('terms')}
         />
         <p className="text-xs text-[#707A8A] ml-7">
-          O Foot Stock é uma plataforma educacional de simulação financeira. É necessário ter 18 anos
+          O FootStock é uma plataforma educacional de simulação financeira. É necessário ter 18 anos
           ou mais para se cadastrar.
         </p>
       </fieldset>

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — SessionManager (Next.js)
+// FootStock — SessionManager (Next.js)
 // Detecta sessão de mercado atual baseada no horário BRT via date-fns-tz.
 // Espelha a lógica do motor Railway — ambos retornam o mesmo resultado
 // pois a detecção é determinística (baseada em relógio BRT).

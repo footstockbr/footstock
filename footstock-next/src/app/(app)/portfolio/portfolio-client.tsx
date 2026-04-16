@@ -82,7 +82,7 @@ export function PortfolioClient() {
             className="flex items-center gap-2 text-sm text-[#F6465D] bg-[rgba(246,70,93,.08)] border border-[rgba(246,70,93,.2)] rounded-lg px-3 py-2.5 mb-4"
           >
             <span aria-hidden="true" className="flex-shrink-0">&#9888;</span>
-            <span>Saldo zerado — venda posicoes para negociar novamente.</span>
+            <span>Saldo zerado — venda posições para negociar novamente.</span>
           </div>
         )}
 
@@ -97,27 +97,27 @@ export function PortfolioClient() {
               value={isLoading ? "" : formatFS(totalValue)}
               subValue={isLoading ? "" : `${formatPct(pnlPct)} total`}
               subValueColor={pnlColor}
-              tooltip="Soma do saldo disponivel + valor atual de todas as posicoes abertas"
+              tooltip="Soma do saldo disponível + valor atual de todas as posições abertas"
               isLoading={isLoading}
             />
             <StatCard
               label={<>P&L Hoje <GlossaryInfoIcon fieldKey="pnl" size={12} /></>}
               value={isLoading ? "" : `${pnlTodaySign}${formatFS(Math.abs(data?.pnlToday ?? 0))}`}
-              subValue={isLoading ? "" : `${data?.todayTransactionsCount ?? 0} operacoes`}
+              subValue={isLoading ? "" : `${data?.todayTransactionsCount ?? 0} operações`}
               subValueColor={pnlTodayColor}
-              tooltip="Lucro ou prejuizo acumulado nas operacoes do dia (Profit & Loss)"
+              tooltip="Lucro ou prejuízo acumulado nas operações do dia (Profit & Loss)"
               isLoading={isLoading}
             />
             <StatCard
-              label="Saldo Disponivel"
+              label="Saldo Disponível"
               value={isLoading ? "" : formatFS(data?.balance ?? 0)}
-              tooltip="Valor em FS$ livre para novas operacoes de compra"
+              tooltip="Valor em FS$ livre para novas operações de compra"
               isLoading={isLoading}
             />
             <StatCard
-              label="Em Posicoes"
+              label="Em Posições"
               value={isLoading ? "" : formatFS(data?.positionsValue ?? 0)}
-              tooltip="Valor total alocado em acoes de clubes que voce possui atualmente"
+              tooltip="Valor total alocado em ações de clubes que você possui atualmente"
               isLoading={isLoading}
             />
           </div>
@@ -127,7 +127,7 @@ export function PortfolioClient() {
 
         <Tabs defaultValue="posicoes">
           <TabsList data-testid="portfolio-tabs" className="w-full">
-            <TabsTrigger data-testid="portfolio-tab-posicoes" value="posicoes">Posicoes</TabsTrigger>
+            <TabsTrigger data-testid="portfolio-tab-posicoes" value="posicoes">Posições</TabsTrigger>
             <TabsTrigger data-testid="portfolio-tab-ordens" value="ordens">Ordens</TabsTrigger>
             <TabsTrigger data-testid="portfolio-tab-extrato" value="extrato">Extrato</TabsTrigger>
           </TabsList>
@@ -183,8 +183,8 @@ export function PortfolioClient() {
             ) : (
               <EmptyState
                 icon={<Briefcase />}
-                title="Sua carteira esta vazia"
-                description="Explore o mercado e faca sua primeira operacao"
+                title="Sua carteira está vazia"
+                description="Explore o mercado e faça sua primeira operação"
                 action={{
                   label: "Ir ao Mercado",
                   onClick: () => { router.push(ROUTES.MERCADO); },

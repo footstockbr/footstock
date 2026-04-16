@@ -1,6 +1,6 @@
 "use client";
 // ============================================================================
-// Foot Stock — AdminLayoutClient
+// FootStock — AdminLayoutClient
 // Timer de inatividade 30min: renova TTL Redis a cada interação, redireciona ao expirar.
 // Rastreabilidade: INT-087, TASK-1/ST006
 // ============================================================================

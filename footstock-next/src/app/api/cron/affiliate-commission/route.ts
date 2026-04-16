@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/cron/affiliate-commission
+// FootStock — GET /api/cron/affiliate-commission
 // Cron job diário: processa comissões PENDING de afiliados para PAID.
 // Autenticado via CRON_SECRET header (Vercel Cron).
 // Idempotente: transações já PAID ou PROCESSING não são reprocessadas.

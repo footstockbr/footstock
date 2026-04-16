@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — North Star Metric (NSM)
+// FootStock — North Star Metric (NSM)
 // Cálculo: ordens com status FILLED no dia corrente (BRT).
 // Meta: 500 ordens/dia. Alerta: < 200 às 20h BRT.
 // Cache Redis: TTL 5min (intraday), 31 dias (histórico).

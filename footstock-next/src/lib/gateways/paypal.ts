@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — PayPalGateway: redirect checkout + Verify API webhook
+// FootStock — PayPalGateway: redirect checkout + Verify API webhook
 // PCI-DSS: dados de cartão NUNCA passam por este gateway — redirect apenas
 // Referência: PAYMENT_020 (amount inválido), PAYMENT_050 (gateway indisponível),
 //             PAYMENT_051 (URL inválida), PAYMENT_053 (credenciais inválidas)
@@ -98,12 +98,12 @@ export class PayPalGateway implements IGateway {
               currency_code: input.currency ?? 'BRL',
               value: (input.amount / 100).toFixed(2),
             },
-            description: `Foot Stock - Plano ${input.planType}`,
+            description: `FootStock - Plano ${input.planType}`,
           }],
           application_context: {
             return_url: input.successUrl,
             cancel_url: input.failureUrl,
-            brand_name: 'Foot Stock',
+            brand_name: 'FootStock',
             user_action: 'PAY_NOW',
           },
         }),

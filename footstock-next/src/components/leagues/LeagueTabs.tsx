@@ -84,7 +84,7 @@ function SponsoredLeagueList({
   if (leagues.length === 0) {
     return (
       <p className="text-center text-sm text-gray-500 py-10">
-        Nenhuma liga patrocinada disponivel no momento.
+        Nenhuma liga patrocinada disponível no momento.
       </p>
     )
   }

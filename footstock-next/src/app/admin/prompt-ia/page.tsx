@@ -7,7 +7,7 @@ import type { Metadata } from 'next'
 import { PromptIAClient } from './PromptIAClient'
 
 export const metadata: Metadata = {
-  title: 'Prompt Assessor IA | Admin | Foot Stock',
+  title: 'Prompt Assessor IA | Admin | FootStock',
   description: 'Configuração do prompt do assessor de IA — exclusivo SUPER_ADMIN',
   robots: 'noindex, nofollow',
 }

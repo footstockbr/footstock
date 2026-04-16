@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Club Portal Types
+// FootStock — Club Portal Types
 // Rastreabilidade: INT-084, US-025, US-036, TASK-015, module-25-club-portal
 // ============================================================================
 

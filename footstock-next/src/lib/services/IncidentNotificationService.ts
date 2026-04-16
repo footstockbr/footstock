@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — IncidentNotificationService
+// FootStock — IncidentNotificationService
 // Template de notificação ANPD 72h + registro de incidentes (TASK-3/ST004)
 // Rastreabilidade: INT-135, INT-136, US-M13-003
 // Referência: Resolução CD/ANPD nº 2/2022
@@ -74,7 +74,7 @@ export class IncidentNotificationService {
     return `
 RELATÓRIO DE INCIDENTE — ANPD
 ================================
-CONTROLADOR: Foot Stock App
+CONTROLADOR: FootStock App
 CNPJ: [CNPJ — preencher antes do envio]
 DPO: [Nome do DPO] | privacy@footstock.com.br
 
@@ -113,7 +113,7 @@ Link peticionamento: https://www.gov.br/anpd/peticionamento
         const from = process.env.RESEND_FROM_EMAIL ?? 'noreply@footstock.app'
 
         await resend.emails.send({
-          from: `Sistema Foot Stock <${from}>`,
+          from: `Sistema FootStock <${from}>`,
           to: 'privacy@footstock.com.br',
           subject: `[URGENTE] Incidente de Segurança — prazo ANPD ${deadlineAt.toLocaleDateString('pt-BR')}`,
           text: report,

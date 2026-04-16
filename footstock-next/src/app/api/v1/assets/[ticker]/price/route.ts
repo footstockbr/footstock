@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/assets/:ticker/price (T-022)
+// FootStock — GET /api/v1/assets/:ticker/price (T-022)
 // Retorna o preço atual do ativo com delay server-side por plano.
 // Endpoint explícito de preço — nunca retorna preço real para JOGADOR/CRAQUE.
 // ============================================================================

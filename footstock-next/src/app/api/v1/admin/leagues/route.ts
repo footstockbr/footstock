@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — POST /api/v1/admin/leagues
+// FootStock — POST /api/v1/admin/leagues
 // Criação de ligas PRO pelo admin. Usuários comuns NÃO podem criar ligas PRO.
 // Fonte: T-017
 // ============================================================================

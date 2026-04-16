@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — DividendService (module-16)
+// FootStock — DividendService (module-16)
 // Orquestrador de dividendos. Mantém métodos legados (calcularDividendoEsportivo,
 // calcularDividendoFinanceiro) como wrappers dos novos serviços especializados.
 // Novos callers devem usar diretamente os serviços em services/dividends/.

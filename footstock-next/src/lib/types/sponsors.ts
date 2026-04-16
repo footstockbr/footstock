@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Tipos de Patrocinadores e Banners
+// FootStock — Tipos de Patrocinadores e Banners
 // Fonte: module-24/TASK-3
 // ============================================================================
 

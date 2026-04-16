@@ -1,7 +1,7 @@
 'use client'
 
 // ============================================================================
-// Foot Stock — AffiliatePortalClient
+// FootStock — AffiliatePortalClient
 // Portal completo do afiliado: métricas, histórico de transações, link copiável,
 // formulário de dados bancários.
 // Rastreabilidade: T-001 (Gap 6), US-036, US-037

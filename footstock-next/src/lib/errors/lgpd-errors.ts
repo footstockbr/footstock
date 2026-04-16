@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Erros LGPD
+// FootStock — Erros LGPD
 // Códigos de erro prefixo LGPD/RATE — alinhados com ERROR-CATALOG.md
 // ============================================================================
 

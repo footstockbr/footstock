@@ -96,7 +96,7 @@ export function ClubSidebar() {
         <div className="h-14 flex items-center px-4 border-b border-[rgba(240,185,11,.1)] gap-2">
           <Image
             src="/logo-foot.png"
-            alt="Foot Stock"
+            alt="FootStock"
             width={24}
             height={24}
             className="h-6 w-6 object-contain"
@@ -166,7 +166,7 @@ export function ClubSidebar() {
           <div className="flex items-center gap-2 min-w-0">
             <Image
               src="/logo-foot.png"
-              alt="Foot Stock"
+              alt="FootStock"
               width={20}
               height={20}
               className="h-5 w-5 object-contain flex-shrink-0"

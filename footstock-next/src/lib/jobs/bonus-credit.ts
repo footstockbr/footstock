@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Job: bonus-credit
+// FootStock — Job: bonus-credit
 // Cron diário (03:00 UTC): credita bônus FS$ para assinantes em T+7 dias
 // G-02: crédito diferencial para upgrades (novo plano - plano anterior)
 // Idempotente: bonusCreditedAt IS NULL verificado antes de creditar

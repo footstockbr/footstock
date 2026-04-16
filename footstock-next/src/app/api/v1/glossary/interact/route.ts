@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — POST /api/v1/glossary/interact
+// FootStock — POST /api/v1/glossary/interact
 // Registra interação fire-and-forget com termo do glossário (InfoIcon click)
 // Fonte: module-18/TASK-6/ST004
 // ============================================================================

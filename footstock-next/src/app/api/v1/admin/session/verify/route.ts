@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/admin/session/verify
+// FootStock — GET /api/v1/admin/session/verify
 // Verifica se sessão atual tem adminRole no banco. Inicializa TTL Redis.
 // Rastreabilidade: INT-085, INT-087, TASK-1/ST007
 // ============================================================================

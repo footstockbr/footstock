@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — /api/v1/admin/lgpd/export-report
+// FootStock — /api/v1/admin/lgpd/export-report
 // Gera relatorio LGPD em JSON para download pelo DPO.
 // Protegido por withAdmin('admin:audit').
 // Rastreabilidade: G023

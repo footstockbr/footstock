@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — /api/cron/interest-accrual (0 7 * * *)
+// FootStock — /api/cron/interest-accrual (0 7 * * *)
 // Acúmulo de juros diário sobre posições SHORT abertas.
 // Autenticado por CRON_SECRET — resposta 401 silenciosa se inválido.
 // Rastreabilidade: INT-014 / TASK-4/ST002

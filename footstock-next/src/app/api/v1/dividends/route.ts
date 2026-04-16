@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/dividends
+// FootStock — GET /api/v1/dividends
 // Histórico paginado de dividendos do usuário autenticado.
 // Suporta filtros por type (3 modalidades + legado) e status (incluindo BLOCKED_PLAN).
 // Rastreabilidade: INT-072, INT-073 / T-007

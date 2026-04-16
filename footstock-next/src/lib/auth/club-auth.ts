@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Club Auth Helpers
+// FootStock — Club Auth Helpers
 // Contexto de autenticação para o portal de clubes parceiros.
 // adminRole lido do banco (nunca do JWT). clubId extraído de user_metadata
 // ou derivado do email — NUNCA de query params (prevenção IDOR/ADMIN_051).

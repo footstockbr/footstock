@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET + PATCH /api/v1/club/affiliate/bank
+// FootStock — GET + PATCH /api/v1/club/affiliate/bank
 // Dados bancários do clube parceiro para repasse de royalties.
 // Dados criptografados via AES-256-GCM em repouso.
 // Rastreabilidade: US-036 [SUCCESS] cenário 2, GAP-002 (auditoria module-25)

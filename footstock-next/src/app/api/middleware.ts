@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Auth Middleware Helpers para Route Handlers (Next.js 15)
+// FootStock — Auth Middleware Helpers para Route Handlers (Next.js 15)
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'

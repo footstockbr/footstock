@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — DELETE /api/v1/positions/short/[id]
+// FootStock — DELETE /api/v1/positions/short/[id]
 // Fecha posição SHORT e retorna P&L calculado.
 // Rastreabilidade: INT-014 / TASK-4/ST003
 // ============================================================================

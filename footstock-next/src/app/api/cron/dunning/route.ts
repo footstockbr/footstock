@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — /api/cron/dunning (0 4 * * *)
+// FootStock — /api/cron/dunning (0 4 * * *)
 // Retentativas automáticas D+1/D+3/D+7 + limpeza de logs de webhook (90 dias)
 // Autenticado por CRON_SECRET — resposta 401 silenciosa se inválido
 // ============================================================================

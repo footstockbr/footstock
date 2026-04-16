@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — PATCH /api/v1/users/me/consents/[purpose]
+// FootStock — PATCH /api/v1/users/me/consents/[purpose]
 // Concede ou revoga consentimento por finalidade.
 // Rastreabilidade: INT-102, US-026, US-M13-001, TASK-1/ST003
 // ============================================================================

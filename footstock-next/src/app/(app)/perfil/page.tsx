@@ -12,7 +12,7 @@ import { NotificationPreferences } from "@/components/notifications/Notification
 import { ROUTES } from "@/lib/constants/routes";
 
 export const metadata: Metadata = {
-  title: "Meu Perfil — Foot Stock",
+  title: "Meu Perfil — FootStock",
   description: "Gerencie seu perfil, plano e privacidade.",
 };
 
@@ -50,7 +50,7 @@ export default async function PerfilPage() {
         data-testid="link-trofeus"
       >
         <div>
-          <p className="text-sm font-semibold text-[#EAECEF]">Meus Trofeus</p>
+          <p className="text-sm font-semibold text-[#EAECEF]">Meus Troféus</p>
           <p className="text-xs text-gray-500 mt-0.5">Conquistas em Ligas PRO</p>
         </div>
         <span className="text-[#F0B90B] text-lg">&#9654;</span>

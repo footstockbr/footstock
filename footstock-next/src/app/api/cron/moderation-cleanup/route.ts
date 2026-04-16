@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — /api/cron/moderation-cleanup
+// FootStock — /api/cron/moderation-cleanup
 // Cron: a cada 24h (recomendado 0 3 * * * UTC = 00:00 BRT)
 // Hard-deleta posts reprovados (isDeleted=true) com mais de 10 dias
 // Autenticado por CRON_SECRET

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — /api/cron/session-transition (* * * * *)
+// FootStock — /api/cron/session-transition (* * * * *)
 // Verifica transicao de sessao de mercado a cada minuto.
 // Se houve transicao, registra em market_session_log (auditoria).
 // Idempotente: se ja esta na sessao correta, nao gera log duplicado.

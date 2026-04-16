@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/cron/credit-dividends (0 9 * * *)
+// FootStock — GET /api/cron/credit-dividends (0 9 * * *)
 // Handler Vercel Cron para crédito diário de dividendos PENDING prontos.
 // Roda APÓS expire-dividends (09:00 vs 08:00 UTC).
 // Rastreabilidade: INT-073

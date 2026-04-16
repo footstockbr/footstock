@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — ShortService
+// FootStock — ShortService
 // Short selling com margem 150%, aluguel diário 0,5% e fechamento com P&L.
 // Rastreabilidade: INT-014 / TASK-4
 // ============================================================================

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/public/banners?position={position}
+// FootStock — GET /api/v1/public/banners?position={position}
 // Retorna banner ativo para a posição solicitada.
 // Cache Redis TTL 5 minutos por posição.
 // Fonte: module-24/TASK-3/ST003

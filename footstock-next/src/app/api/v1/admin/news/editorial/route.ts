@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — /api/v1/admin/news/editorial
+// FootStock — /api/v1/admin/news/editorial
 // CRUD editorial para notícias do módulo admin (não injeta no motor).
 // Rastreabilidade: INTAKE admin notícias editoriais
 // ============================================================================

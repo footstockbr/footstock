@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — RBAC Matrix (5 roles x 21 recursos)
+// FootStock — RBAC Matrix (5 roles x 21 recursos)
 // ============================================================================
 
 import type { AdminRole } from '@/lib/enums'

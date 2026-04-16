@@ -1,8 +1,9 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/banners?position={position}
-// Retorna banner ativo para a posição solicitada.
-// Se nenhum banner ativo: retorna 204 (frontend omite o espaço).
-// Cache Redis TTL 5 minutos por posição.
+// FootStock — GET /api/v1/banners?position={position}
+// Retorna banners ativos para a posicao solicitada (filtrados por data).
+// Se nenhum banner ativo: retorna 204 (frontend omite o espaco).
+// Retorna array `data` para suportar auto-rotacao no frontend.
+// Cache Redis TTL 5 minutos por posicao.
 // Fonte: T-017
 // ============================================================================
 
@@ -25,74 +26,107 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   if (!parsed.success) {
     return NextResponse.json(
-      { success: false, error: `Posição inválida. Use: ${BANNER_POSITIONS.join(', ')}` },
+      { success: false, error: `Posicao invalida. Use: ${BANNER_POSITIONS.join(', ')}` },
       { status: 422 }
     )
   }
 
   const { position } = parsed.data
-  const cacheKey = `banner:v2:active:${position}`
+  const cacheKey = `banner:v3:active:${position}`
 
   // 1) Tentar cache Redis
   try {
     const cached = await redis.get(cacheKey)
     if (cached !== null) {
       const data = JSON.parse(cached)
-      if (!data) return new NextResponse(null, { status: 204 })
+      if (!data || (Array.isArray(data) && data.length === 0)) {
+        return new NextResponse(null, { status: 204 })
+      }
       return NextResponse.json({ success: true, data })
     }
   } catch {
-    // Redis indisponível — buscar no DB
+    // Redis indisponivel — buscar no DB
   }
 
-  // 2) Buscar banner ativo no banco
-  const banner = await prisma.sponsorBanner.findFirst({
+  // 2) Buscar todos os banners ativos para esta posicao (filtrado por data)
+  const now = new Date()
+  const banners = await prisma.sponsorBanner.findMany({
     where: {
       position,
       isActive: true,
-      // Patrocinador ativo (se vinculado)
+      // Filtro de data: startDate <= now AND (endDate IS NULL OR endDate >= now)
       OR: [
-        { sponsorId: null },
-        { sponsor: { isActive: true } },
+        { startDate: null },
+        { startDate: { lte: now } },
+      ],
+      AND: [
+        {
+          OR: [
+            { endDate: null },
+            { endDate: { gte: now } },
+          ],
+        },
+        // Patrocinador ativo (se vinculado)
+        {
+          OR: [
+            { sponsorId: null },
+            { sponsor: { isActive: true } },
+          ],
+        },
       ],
     },
-    orderBy: { impressions: 'asc' }, // round-robin: menor número de impressões primeiro
+    orderBy: { impressions: 'asc' }, // round-robin: menor impressoes primeiro
     select: {
-      id:       true,
-      position: true,
-      imageUrl: true,
-      linkUrl:  true,
-      title:    true,
-      width:    true,
-      height:   true,
-      sponsor:  { select: { id: true, name: true } },
+      id:               true,
+      position:         true,
+      imageUrl:         true,
+      linkUrl:          true,
+      title:            true,
+      company:          true,
+      color:            true,
+      ctaText:          true,
+      ctaColor:         true,
+      width:            true,
+      height:           true,
+      imageDesktopUrl:  true,
+      imageMobileUrl:   true,
+      imageVerticalUrl: true,
+      sponsor:          { select: { id: true, name: true } },
     },
   })
 
-  if (!banner) {
+  if (banners.length === 0) {
     try {
-      await redis.set(cacheKey, 'null', 'EX', CACHE_TTL)
+      await redis.set(cacheKey, '[]', 'EX', CACHE_TTL)
     } catch { /* ignorar */ }
     return new NextResponse(null, { status: 204 })
   }
 
-  // Incrementar impressões de forma assíncrona (não bloqueia a resposta)
+  // Incrementar impressoes do primeiro banner (round-robin)
   prisma.sponsorBanner.update({
-    where: { id: banner.id },
+    where: { id: banners[0].id },
     data: { impressions: { increment: 1 } },
   }).catch(() => null)
 
-  const result = {
-    id:          banner.id,
-    position:    banner.position,
-    imageUrl:    banner.imageUrl,
-    linkUrl:     banner.linkUrl,
-    altText:     banner.title,
-    width:       banner.width,
-    height:      banner.height,
-    sponsorId:   banner.sponsor?.id ?? null,
-    sponsorName: banner.sponsor?.name ?? null,
-  }
+  const result = banners.map((banner) => ({
+    id:               banner.id,
+    position:         banner.position,
+    imageUrl:         banner.imageUrl,
+    linkUrl:          banner.linkUrl,
+    altText:          banner.title,
+    title:            banner.title,
+    company:          banner.company,
+    color:            banner.color,
+    ctaText:          banner.ctaText,
+    ctaColor:         banner.ctaColor,
+    width:            banner.width,
+    height:           banner.height,
+    imageDesktopUrl:  banner.imageDesktopUrl,
+    imageMobileUrl:   banner.imageMobileUrl,
+    imageVerticalUrl: banner.imageVerticalUrl,
+    sponsorId:        banner.sponsor?.id ?? null,
+    sponsorName:      banner.sponsor?.name ?? null,
+  }))
 
   try {
     await redis.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL)

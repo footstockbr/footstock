@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Admin Market Actions Endpoint
+// FootStock — Admin Market Actions Endpoint
 // POST /api/v1/admin/market — publica ação no canal motor:control via Redis
 // GET  /api/v1/admin/market — histórico das últimas 100 ações
 // ============================================================================

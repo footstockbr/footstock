@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — /club — Dashboard do Clube Parceiro
+// FootStock — /club — Dashboard do Clube Parceiro
 // Autenticação exclusiva CLUB_PARTNER via withClubAuth().
 // Dados SEMPRE agregados — nenhum dado individual ou PII exposto (ADMIN_051).
 // KPIs: totalFans, fansByPlan (donut), currentPrice, priceChange24h,
@@ -14,7 +14,7 @@ import { withClubAuth } from '@/lib/auth/club-auth'
 import { prisma } from '@/lib/prisma'
 
 export const metadata: Metadata = {
-  title: 'Portal do Clube — Foot Stock',
+  title: 'Portal do Clube — FootStock',
 }
 
 function formatFS(value: number): string {
@@ -313,10 +313,10 @@ export default async function ClubPortalPage() {
         <div className="bg-[#1E2329] rounded-xl border border-[#2B3139] p-4">
           <div className="flex items-center gap-2 mb-2">
             <Wallet className="h-4 w-4 text-[#F0B90B]" />
-            <span className="text-[10px] text-[#929AA5]">Preco atual</span>
+            <span className="text-[10px] text-[#929AA5]">Preço atual</span>
           </div>
           <p className="text-xl font-bold text-[#EAECEF]">{formatFS(currentPrice)}</p>
-          <p className="text-[10px] text-[#929AA5] mt-0.5">por acao</p>
+          <p className="text-[10px] text-[#929AA5] mt-0.5">por ação</p>
         </div>
 
         <div className="bg-[#1E2329] rounded-xl border border-[#2B3139] p-4">
@@ -326,7 +326,7 @@ export default async function ClubPortalPage() {
             ) : (
               <TrendingDown className="h-4 w-4 text-[#F6465D]" />
             )}
-            <span className="text-[10px] text-[#929AA5]">Variacao 24h</span>
+            <span className="text-[10px] text-[#929AA5]">Variação 24h</span>
           </div>
           <p className={`text-xl font-bold ${pricePositive ? 'text-[#4ade80]' : 'text-[#F6465D]'}`}>
             {pricePositive ? '+' : ''}{priceChange24h.toFixed(1)}%
@@ -340,7 +340,7 @@ export default async function ClubPortalPage() {
         <div className="bg-[#1E2329] rounded-xl border border-[#2B3139] p-4">
           <div className="flex items-center gap-2 mb-2">
             <Wallet className="h-4 w-4 text-[#F0B90B]" />
-            <span className="text-[10px] text-[#929AA5]">Carteira media</span>
+            <span className="text-[10px] text-[#929AA5]">Carteira média</span>
           </div>
           <p className="text-lg font-bold text-[#EAECEF]">{formatCompact(avgPortfolioValue)}</p>
           <p className="text-[10px] text-[#929AA5] mt-0.5">por investidor</p>
@@ -349,7 +349,7 @@ export default async function ClubPortalPage() {
         <div className="bg-[#1E2329] rounded-xl border border-[#2B3139] p-4">
           <div className="flex items-center gap-2 mb-2">
             <BarChart3 className="h-4 w-4 text-[#F0B90B]" />
-            <span className="text-[10px] text-[#929AA5]">Acoes em circulacao</span>
+            <span className="text-[10px] text-[#929AA5]">Ações em circulação</span>
           </div>
           <p className="text-lg font-bold text-[#EAECEF]">{totalSharesNum.toLocaleString('pt-BR')}</p>
           <p className="text-[10px] text-[#929AA5] mt-0.5">total float</p>
@@ -361,7 +361,7 @@ export default async function ClubPortalPage() {
             <span className="text-[10px] text-[#929AA5]">Maior holder</span>
           </div>
           <p className="text-lg font-bold text-[#EAECEF]">{topHolderPercentage.toFixed(1)}%</p>
-          <p className="text-[10px] text-[#929AA5] mt-0.5">do total (anonimo)</p>
+          <p className="text-[10px] text-[#929AA5] mt-0.5">do total (anônimo)</p>
         </div>
 
         <div className="bg-[#1E2329] rounded-xl border border-[#2B3139] p-4">
@@ -376,7 +376,7 @@ export default async function ClubPortalPage() {
 
       {/* Distribuição por plano — donut */}
       <div className="bg-[#1E2329] rounded-xl border border-[#2B3139] p-5">
-        <h2 className="text-sm font-semibold text-[#EAECEF] mb-4">Distribuicao por plano</h2>
+        <h2 className="text-sm font-semibold text-[#EAECEF] mb-4">Distribuição por plano</h2>
         <DonutChart
           jogador={fansByPlan.JOGADOR}
           craque={fansByPlan.CRAQUE}
@@ -411,7 +411,7 @@ export default async function ClubPortalPage() {
             </div>
           </div>
         ) : (
-          <p className="text-xs text-[#929AA5]">Dados insuficientes para exibir o grafico.</p>
+          <p className="text-xs text-[#929AA5]">Dados insuficientes para exibir o gráfico.</p>
         )}
       </div>
 
@@ -420,7 +420,7 @@ export default async function ClubPortalPage() {
         <Info className="h-4 w-4 text-[#3B82F6] flex-shrink-0 mt-0.5" />
         <p className="text-xs text-[#929AA5]">
           <span className="text-[#EAECEF] font-medium">Dados informativos apenas</span> — sem repasse financeiro ao clube.
-          As metricas exibidas neste portal sao exclusivamente informativas e nao representam
+          As métricas exibidas neste portal são exclusivamente informativas e não representam
           nenhum tipo de receita, royalties ou repasse financeiro da plataforma para o clube.
         </p>
       </div>
@@ -429,8 +429,8 @@ export default async function ClubPortalPage() {
       <div className="flex items-start gap-2 p-3 rounded-lg bg-[rgba(240,185,11,.06)] border border-[rgba(240,185,11,.12)]">
         <Shield className="h-4 w-4 text-[#F0B90B] flex-shrink-0 mt-0.5" />
         <p className="text-xs text-[#929AA5]">
-          Todos os dados exibidos sao <span className="text-[#EAECEF]">exclusivamente agregados</span>.
-          Nenhum dado individual, nome ou informacao pessoal dos torcedores e exposto neste portal.
+          Todos os dados exibidos são <span className="text-[#EAECEF]">exclusivamente agregados</span>.
+          Nenhum dado individual, nome ou informação pessoal dos torcedores é exposto neste portal.
         </p>
       </div>
     </div>

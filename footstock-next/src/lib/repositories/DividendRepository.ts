@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — DividendRepository (module-16)
+// FootStock — DividendRepository (module-16)
 // Repositório de dividendos com métodos de idempotência e consultas específicas.
 // Rastreabilidade: INT-072, INT-073
 // ============================================================================

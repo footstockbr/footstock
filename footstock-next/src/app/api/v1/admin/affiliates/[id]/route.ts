@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — PATCH /api/v1/admin/affiliates/:id
+// FootStock — PATCH /api/v1/admin/affiliates/:id
 // Editar percentual de comissão, dados bancários e status.
 // RESOLVED: G002
 // ============================================================================

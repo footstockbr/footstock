@@ -124,7 +124,7 @@ export function OrderHistory() {
         <EmptyState
           title="Nenhuma ordem encontrada"
           description={statusFilter === 'ALL'
-            ? 'Voce ainda nao enviou nenhuma ordem.'
+            ? 'Você ainda não enviou nenhuma ordem.'
             : `Nenhuma ordem com status "${STATUS_LABELS[statusFilter] ?? statusFilter}".`
           }
         />

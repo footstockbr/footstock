@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — AIAdvisorService Tests (module-21/TASK-1/ST002+ST004 + TASK-2/ST003)
+// FootStock — AIAdvisorService Tests (module-21/TASK-1/ST002+ST004 + TASK-2/ST003)
 // Cobre: analyze (planos Craque/Lenda), cache Redis, timeout, fetchContext
 // ============================================================================
 

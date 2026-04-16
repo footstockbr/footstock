@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — BaseRepository<T> genérico com Prisma
+// FootStock — BaseRepository<T> genérico com Prisma
 // ============================================================================
 
 import { PAGE_SIZE } from '@/lib/constants/limits'

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — NSM Report Job (cron diário 20h BRT)
+// FootStock — NSM Report Job (cron diário 20h BRT)
 // Calcula NSM do dia, persiste histórico no Redis, dispara alerta Sentry se crítico.
 // Chamado via GET /api/v1/cron/nsm (protegido por CRON_SECRET).
 // Rastreabilidade: INT-115, module-27/TASK-3

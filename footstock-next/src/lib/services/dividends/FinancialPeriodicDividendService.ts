@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — FinancialPeriodicDividendService (T-007)
+// FootStock — FinancialPeriodicDividendService (T-007)
 // Modalidade 2: Dividendo Financeiro Periódico.
 // Executa mensalmente (1º dia útil, 02:00 UTC-3).
 // Critérios de elegibilidade do clube: sentiment=BULLISH + debtRatio < 0.3

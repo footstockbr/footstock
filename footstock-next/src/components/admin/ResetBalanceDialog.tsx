@@ -75,7 +75,7 @@ export function ResetBalanceDialog({
         </div>
 
         <p className="text-xs text-[#707A8A] mb-5">
-          Esta acao e registrada no log de auditoria. O usuario sera notificado.
+          Esta ação é registrada no log de auditoria. O usuário será notificado.
         </p>
 
         <div className="flex gap-3">

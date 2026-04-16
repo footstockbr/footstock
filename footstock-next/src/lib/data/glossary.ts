@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Glossário com 116 termos em 8 categorias
+// FootStock — Glossário com 116 termos em 8 categorias
 // Dados estáticos em memória — sem banco de dados
 // Fonte: module-18/TASK-3/ST001
 // ============================================================================
@@ -295,7 +295,7 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
   {
     slug: 'short-trading',
     title: 'Short',
-    definition: 'Operação de venda a descoberto: vender um ativo que não se possui, apostando na queda do preço para recomprá-lo mais barato. No Foot Stock, é uma funcionalidade exclusiva do plano Lenda.',
+    definition: 'Operação de venda a descoberto: vender um ativo que não se possui, apostando na queda do preço para recomprá-lo mais barato. No FootStock, é uma funcionalidade exclusiva do plano Lenda.',
     category: GLOSSARY_CATEGORY.TIPOS_DE_ORDEM,
     relatedTerms: ['long-trading', 'margem', 'posicao'],
   },
@@ -309,7 +309,7 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
   {
     slug: 'alavancagem-trading',
     title: 'Alavancagem',
-    definition: 'Uso de capital emprestado para ampliar o potencial de retorno (e de perda) de uma operação. No Foot Stock, o plano Lenda permite alavancagem de 2x.',
+    definition: 'Uso de capital emprestado para ampliar o potencial de retorno (e de perda) de uma operação. No FootStock, o plano Lenda permite alavancagem de 2x.',
     category: GLOSSARY_CATEGORY.TIPOS_DE_ORDEM,
     relatedTerms: ['margem', 'margin-call'],
   },
@@ -653,7 +653,7 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
   {
     slug: 'brasileirao-serie-a',
     title: 'Brasileirão Série A',
-    definition: 'Campeonato Brasileiro de Futebol — primeira divisão. Disputado por 20 clubes em turno único, com impacto direto no preço dos ativos dos clubes no Foot Stock.',
+    definition: 'Campeonato Brasileiro de Futebol — primeira divisão. Disputado por 20 clubes em turno único, com impacto direto no preço dos ativos dos clubes no FootStock.',
     category: GLOSSARY_CATEGORY.DIVISOES_CLUBES,
     relatedTerms: ['g4', 'rebaixamento'],
   },
@@ -709,14 +709,14 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
   {
     slug: 'derby',
     title: 'Derby',
-    definition: 'Confronto entre clubes da mesma cidade ou região. No Foot Stock, derbies são marcados como eventos de alta volatilidade no motor de precificação.',
+    definition: 'Confronto entre clubes da mesma cidade ou região. No FootStock, derbies são marcados como eventos de alta volatilidade no motor de precificação.',
     category: GLOSSARY_CATEGORY.DIVISOES_CLUBES,
     relatedTerms: ['classico'],
   },
   {
     slug: 'fair-play-financeiro',
     title: 'Fair Play Financeiro',
-    definition: 'Regulamento que exige equilíbrio entre receitas e gastos dos clubes. Sanções por descumprimento afetam negativamente o ativo do clube no Foot Stock.',
+    definition: 'Regulamento que exige equilíbrio entre receitas e gastos dos clubes. Sanções por descumprimento afetam negativamente o ativo do clube no FootStock.',
     category: GLOSSARY_CATEGORY.DIVISOES_CLUBES,
     relatedTerms: ['receita-de-bilheteria', 'direitos-de-tv'],
   },
@@ -730,7 +730,7 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
   {
     slug: 'direitos-de-tv',
     title: 'Direitos de TV',
-    definition: 'Receita obtida pelos clubes pela transmissão de jogos. Clubes com maiores direitos de TV tendem a ter ativos mais valorizados e estáveis no Foot Stock.',
+    definition: 'Receita obtida pelos clubes pela transmissão de jogos. Clubes com maiores direitos de TV tendem a ter ativos mais valorizados e estáveis no FootStock.',
     category: GLOSSARY_CATEGORY.DIVISOES_CLUBES,
     relatedTerms: ['fair-play-financeiro'],
   },
@@ -749,18 +749,18 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
     relatedTerms: ['passe'],
   },
 
-  // ─── Motor Foot Stock (14 termos) ─────────────────────────────────────────
+  // ─── Motor FootStock (14 termos) ─────────────────────────────────────────
   {
     slug: 'preco-fs',
     title: 'Preço FS$',
-    definition: 'Preço de um ativo no Foot Stock, denominado em FS$ (moeda virtual). Determinado pelo Motor de Precificação com base em resultados esportivos, sentimento e volume.',
+    definition: 'Preço de um ativo no FootStock, denominado em FS$ (moeda virtual). Determinado pelo Motor de Precificação com base em resultados esportivos, sentimento e volume.',
     category: GLOSSARY_CATEGORY.PLANOS_FUNCIONALIDADES,
     relatedTerms: ['motor-de-precificacao', 'tick-size'],
   },
   {
     slug: 'tick-size',
     title: 'Tick Size',
-    definition: 'Menor variação de preço possível em um ativo do Foot Stock. Define a granularidade das variações de preço no motor.',
+    definition: 'Menor variação de preço possível em um ativo do FootStock. Define a granularidade das variações de preço no motor.',
     category: GLOSSARY_CATEGORY.PLANOS_FUNCIONALIDADES,
     relatedTerms: ['preco-fs'],
   },
@@ -781,28 +781,28 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
   {
     slug: 'motor-de-precificacao',
     title: 'Motor de Precificação',
-    definition: 'Sistema central do Foot Stock que calcula o preço dos ativos a cada tick, combinando resultados esportivos, notícias, volume de negociação e sentimento do mercado.',
+    definition: 'Sistema central do FootStock que calcula o preço dos ativos a cada tick, combinando resultados esportivos, notícias, volume de negociação e sentimento do mercado.',
     category: GLOSSARY_CATEGORY.PLANOS_FUNCIONALIDADES,
     relatedTerms: ['sentimento-de-mercado', 'impacto-de-noticia', 'preco-fs'],
   },
   {
     slug: 'fs-moeda',
     title: 'FS$',
-    definition: 'Moeda virtual do Foot Stock. Todos os ativos são precificados e negociados em FS$. Novos usuários entram no plano Jogador com FS$ 2.000 de saldo inicial.',
+    definition: 'Moeda virtual do FootStock. Todos os ativos são precificados e negociados em FS$. Novos usuários entram no plano Jogador com FS$ 2.000 de saldo inicial.',
     category: GLOSSARY_CATEGORY.PLANOS_FUNCIONALIDADES,
     relatedTerms: ['preco-fs', 'plano-jogador'],
   },
   {
     slug: 'portfolio-fs',
     title: 'Portfólio',
-    definition: 'Conjunto de posições abertas e histórico de trades de um usuário no Foot Stock. Inclui ativos comprados, posições short (Lenda) e resultado geral.',
+    definition: 'Conjunto de posições abertas e histórico de trades de um usuário no FootStock. Inclui ativos comprados, posições short (Lenda) e resultado geral.',
     category: GLOSSARY_CATEGORY.PLANOS_FUNCIONALIDADES,
     relatedTerms: ['posicao'],
   },
   {
     slug: 'taxa-aluguel-short',
     title: 'Taxa de Aluguel de Short',
-    definition: 'Taxa diária cobrada sobre posições de venda a descoberto no Foot Stock (0,5%/dia). Exclusiva do plano Lenda.',
+    definition: 'Taxa diária cobrada sobre posições de venda a descoberto no FootStock (0,5%/dia). Exclusiva do plano Lenda.',
     category: GLOSSARY_CATEGORY.PLANOS_FUNCIONALIDADES,
     relatedTerms: ['short-trading', 'plano-lenda'],
   },
@@ -830,21 +830,21 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
   {
     slug: 'plano-jogador',
     title: 'Plano Jogador',
-    definition: 'Plano gratuito do Foot Stock. Permite negociação básica com até 2 ordens por dia, ordens a mercado e cotações com atraso de 1 hora.',
+    definition: 'Plano gratuito do FootStock. Permite negociação básica com até 2 ordens por dia, ordens a mercado e cotações com atraso de 1 hora.',
     category: GLOSSARY_CATEGORY.PLANOS_FUNCIONALIDADES,
     relatedTerms: ['plano-craque', 'plano-lenda', 'fs-moeda'],
   },
   {
     slug: 'plano-craque',
     title: 'Plano Craque',
-    definition: 'Plano intermediário do Foot Stock. Oferece até 5 ordens por dia, ordens limitadas/agendadas, cotações com atraso de 30 minutos e acesso a ligas privadas.',
+    definition: 'Plano intermediário do FootStock. Oferece até 5 ordens por dia, ordens limitadas/agendadas, cotações com atraso de 30 minutos e acesso a ligas privadas.',
     category: GLOSSARY_CATEGORY.PLANOS_FUNCIONALIDADES,
     relatedTerms: ['plano-jogador', 'plano-lenda'],
   },
   {
     slug: 'plano-lenda',
     title: 'Plano Lenda',
-    definition: 'Plano premium do Foot Stock. Dados em tempo real, ordens ilimitadas, short selling, alavancagem 2x, assessor IA e todas as funcionalidades da plataforma.',
+    definition: 'Plano premium do FootStock. Dados em tempo real, ordens ilimitadas, short selling, alavancagem 2x, assessor IA e todas as funcionalidades da plataforma.',
     category: GLOSSARY_CATEGORY.PLANOS_FUNCIONALIDADES,
     relatedTerms: ['plano-craque', 'short-trading', 'alavancagem-trading'],
   },

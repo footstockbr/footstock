@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Job: financialDividendCron (T-007)
+// FootStock — Job: financialDividendCron (T-007)
 // Processa dividendos financeiros periódicos com as 3 modalidades corretas.
 // Usa FinancialPeriodicDividendService (T-007) em vez do legado.
 // Rastreabilidade: T-007 §3

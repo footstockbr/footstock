@@ -115,7 +115,7 @@ type: image
 extension: png
 aspect_ratio: 1:1
 dimensions: 56x56
-description: Logo Foot Stock mini para o formulário de login. Versão compacta da marca.
+description: Logo FootStock mini para o formulário de login. Versão compacta da marca.
 context: Cabeçalho do formulário de login
 style: Premium, ouro
 mood: Confiante
@@ -125,14 +125,14 @@ avoid: Texto no logo
         */}
         <Image
           src="/logo-foot.png"
-          alt="Foot Stock"
+          alt="FootStock"
           width={56}
           height={56}
           className="w-14 h-14 object-contain mb-1"
           priority
         />
         <h1 className="text-xl font-bold text-[#EAECEF]">
-          Entrar no Foot Stock
+          Entrar no FootStock
         </h1>
         <p className="text-sm text-[#707A8A]">O mercado do futebol brasileiro</p>
       </div>

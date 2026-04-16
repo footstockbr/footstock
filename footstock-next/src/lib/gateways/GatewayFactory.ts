@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GatewayFactory: instância singleton por tipo de gateway
+// FootStock — GatewayFactory: instância singleton por tipo de gateway
 // Detecta gateway por header do webhook para roteamento unificado
 // Referência: PAYMENT_052 (gateway não suportado)
 // ============================================================================

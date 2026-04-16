@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/admin/affiliates/:id/transactions
+// FootStock — GET /api/v1/admin/affiliates/:id/transactions
 // Histórico de comissões de um afiliado.
 // RESOLVED: G002
 // ============================================================================

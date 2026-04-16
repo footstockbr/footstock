@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — API Response Types
+// FootStock — API Response Types
 // ============================================================================
 
 import { ERROR_CODES } from '@/lib/constants/errors';

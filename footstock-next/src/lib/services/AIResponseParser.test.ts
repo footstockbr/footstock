@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — AIResponseParser Tests (module-21/TASK-2/ST002)
+// FootStock — AIResponseParser Tests (module-21/TASK-2/ST002)
 // Cobre: 3 estratégias de extração + fallback genérico + isFallback()
 // ============================================================================
 

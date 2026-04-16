@@ -201,12 +201,12 @@ export function AssetsTable({ adminRole }: AssetsTableProps) {
           <thead>
             <tr className="border-b border-[rgba(240,185,11,.08)] text-[#929AA5]">
               <th className="text-left py-2 px-2 font-medium">Ticker</th>
-              <th className="text-right py-2 px-2 font-medium">Preco atual</th>
+              <th className="text-right py-2 px-2 font-medium">Preço atual</th>
               <th className="text-right py-2 px-2 font-medium">Desvio FV%</th>
               <th className="text-right py-2 px-2 font-medium">Volume 24h</th>
               <th className="text-center py-2 px-2 font-medium">Sentimento</th>
               <th className="text-center py-2 px-2 font-medium">Status</th>
-              {canHalt && <th className="text-center py-2 px-2 font-medium w-[80px]">Acao</th>}
+              {canHalt && <th className="text-center py-2 px-2 font-medium w-[80px]">Ação</th>}
             </tr>
           </thead>
           <tbody>

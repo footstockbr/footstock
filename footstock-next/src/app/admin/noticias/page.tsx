@@ -187,7 +187,7 @@ export default function NoticiasPage() {
 
   const saveCreate = async () => {
     if (!createForm.title.trim() || !createForm.content.trim()) {
-      alert('Titulo e conteudo sao obrigatorios')
+      alert('Título e conteúdo são obrigatórios')
       return
     }
     setSavingCreate(true)
@@ -282,7 +282,7 @@ export default function NoticiasPage() {
 
       <div className="section-header" data-testid="admin-noticias-header">
         <div>
-          <div className="section-title">Noticias</div>
+          <div className="section-title">Notícias</div>
           <div className="section-sub">{publishCount} publicadas · {draftCount} rascunhos · {archivedCount} arquivadas</div>
         </div>
         <button
@@ -361,7 +361,7 @@ export default function NoticiasPage() {
                         className="badge"
                         data-testid={`admin-noticias-source-badge-${item.id}`}
                         style={{ color: '#929aa5', display: 'flex', alignItems: 'center', gap: '4px' }}
-                        title="Noticia de fonte externa — titulo e conteudo protegidos"
+                        title="Notícia de fonte externa — título e conteúdo protegidos"
                       >
                         <Lock size={10} />
                         {item.source}
@@ -475,7 +475,7 @@ export default function NoticiasPage() {
                 }}
               >
                 <Lock size={14} />
-                Titulo e conteudo protegidos contra edicao para manter credibilidade da fonte original. Impacto, sentimento e time podem ser ajustados.
+                Título e conteúdo protegidos contra edição para manter credibilidade da fonte original. Impacto, sentimento e time podem ser ajustados.
               </div>
             )}
 
@@ -498,7 +498,7 @@ export default function NoticiasPage() {
 
             <div style={{ marginBottom: '16px' }}>
               <label style={labelStyle}>
-                Titulo
+                Título
                 {isExternalSource(editingItem) && <Lock size={10} style={{ display: 'inline', marginLeft: '6px', verticalAlign: 'middle' }} />}
               </label>
               <input
@@ -513,7 +513,7 @@ export default function NoticiasPage() {
 
             <div style={{ marginBottom: '16px' }}>
               <label style={labelStyle}>
-                Conteudo
+                Conteúdo
                 {isExternalSource(editingItem) && <Lock size={10} style={{ display: 'inline', marginLeft: '6px', verticalAlign: 'middle' }} />}
               </label>
               <textarea
@@ -612,12 +612,12 @@ export default function NoticiasPage() {
             </div>
 
             <div style={{ marginBottom: '16px' }}>
-              <label style={labelStyle}>Conteudo *</label>
+              <label style={labelStyle}>Conteúdo *</label>
               <textarea
                 value={createForm.content}
                 onChange={(e) => setCreateForm({ ...createForm, content: e.target.value })}
                 style={{ ...inputStyle, minHeight: '120px', fontFamily: 'inherit', resize: 'vertical' }}
-                placeholder="Descreva a noticia em detalhes..."
+                placeholder="Descreva a notícia em detalhes..."
                 data-testid="admin-noticias-create-modal-content-input"
               />
             </div>
@@ -669,11 +669,11 @@ export default function NoticiasPage() {
                 value={createForm.source}
                 onChange={(e) => setCreateForm({ ...createForm, source: e.target.value })}
                 style={inputStyle}
-                placeholder="Deixe vazio para noticia editorial. Ex: Globo Esporte, ESPN"
+                placeholder="Deixe vazio para notícia editorial. Ex: Globo Esporte, ESPN"
                 data-testid="admin-noticias-create-modal-source-input"
               />
               <div style={{ fontSize: '10px', color: '#929aa5', marginTop: '4px' }}>
-                Se preenchido, titulo e conteudo ficarao protegidos contra edicao futura.
+                Se preenchido, título e conteúdo ficarão protegidos contra edição futura.
               </div>
             </div>
 

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Transaction Contract: Invariantes de Atomicidade
+// FootStock — Transaction Contract: Invariantes de Atomicidade
 // Garante integridade financeira na cadeia de transações.
 // Rastreabilidade: INT-011, INT-018 / TASK-0/ST003
 // ============================================================================

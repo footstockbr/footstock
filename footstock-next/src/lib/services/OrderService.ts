@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — OrderService
+// FootStock — OrderService
 // Criação, listagem, detalhe e cancelamento de ordens com 5 camadas de validação.
 // Rastreabilidade: INT-011..020 / TASK-1
 // ============================================================================

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Admin: Banimento permanente de usuário
+// FootStock — Admin: Banimento permanente de usuário
 // POST /api/v1/admin/users/[id]/ban   → bane o usuário
 // DELETE /api/v1/admin/users/[id]/ban → remove o banimento
 // Recurso: users:suspend — disponível para SUPER_ADMIN e ADMINISTRADOR

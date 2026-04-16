@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/assets/search?q=FLA3 (T-031)
+// FootStock — GET /api/v1/assets/search?q=FLA3 (T-031)
 // Busca de ativos com suporte a aliases de ticker.
 //
 // Fluxo de resolução:

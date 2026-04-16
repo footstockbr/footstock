@@ -53,7 +53,7 @@ export function ProfileSelector({ onSelect, isLoading }: ProfileSelectorProps) {
     <div className="flex flex-col gap-4">
       <div className="text-center mb-2">
         <h1 className="text-xl font-bold text-[#EAECEF]">
-          Bem-vindo ao Foot Stock!
+          Bem-vindo ao FootStock!
         </h1>
         <p className="text-sm text-[#929AA5] mt-1">
           Como você se descreveria?

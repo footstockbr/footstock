@@ -65,7 +65,7 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
   const isLenda = hasAccess('LENDA')
 
   const [orderType, setOrderType] = useState(allowedTypes[0])
-  const [quantity, setQuantity] = useState('')
+  const [quantity, setQuantity] = useState('100')
   const [price, setPrice] = useState('')
   const [stopLossPrice, setStopLossPrice] = useState('')
   const [takeProfitPrice, setTakeProfitPrice] = useState('')
@@ -126,29 +126,29 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
     const errs: Record<string, string> = {}
     const qty = Number(quantity)
 
-    if (!qty || qty < 1 || !Number.isInteger(qty)) {
-      errs.quantity = 'Quantidade deve ser um numero inteiro positivo.'
+    if (!qty || qty < 100 || !Number.isInteger(qty) || qty % 100 !== 0) {
+      errs.quantity = 'Quantidade deve ser múltiplo de 100 (mínimo 100).'
     }
 
     if (orderType === 'LIMIT') {
       if (!Number(price) || Number(price) <= 0) {
-        errs.price = 'Preco limite obrigatorio.'
+        errs.price = 'Preço limite obrigatório.'
       }
     }
 
     if (orderType === 'OCO') {
-      if (!Number(price) || Number(price) <= 0) errs.price = 'Preco obrigatorio.'
-      if (!Number(stopLossPrice) || Number(stopLossPrice) <= 0) errs.stopLossPrice = 'Stop Loss obrigatorio.'
-      if (!Number(takeProfitPrice) || Number(takeProfitPrice) <= 0) errs.takeProfitPrice = 'Take Profit obrigatorio.'
+      if (!Number(price) || Number(price) <= 0) errs.price = 'Preço obrigatório.'
+      if (!Number(stopLossPrice) || Number(stopLossPrice) <= 0) errs.stopLossPrice = 'Stop Loss obrigatório.'
+      if (!Number(takeProfitPrice) || Number(takeProfitPrice) <= 0) errs.takeProfitPrice = 'Take Profit obrigatório.'
 
       if (Number(price) > 0 && Number(stopLossPrice) > 0 && Number(takeProfitPrice) > 0) {
         if (side === 'BUY') {
           if (!(Number(stopLossPrice) < Number(price) && Number(price) < Number(takeProfitPrice))) {
-            errs.stopLossPrice = 'BUY OCO: Stop Loss < Preco < Take Profit.'
+            errs.stopLossPrice = 'BUY OCO: Stop Loss < Preço < Take Profit.'
           }
         } else {
           if (!(Number(takeProfitPrice) < Number(price) && Number(price) < Number(stopLossPrice))) {
-            errs.stopLossPrice = 'SELL OCO: Take Profit < Preco < Stop Loss.'
+            errs.stopLossPrice = 'SELL OCO: Take Profit < Preço < Stop Loss.'
           }
         }
       }
@@ -156,7 +156,7 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
 
     if (orderType === 'SCHEDULED') {
       if (!scheduledAt) {
-        errs.scheduledAt = 'Data de agendamento obrigatoria.'
+        errs.scheduledAt = 'Data de agendamento obrigatória.'
       } else if (new Date(scheduledAt) <= new Date()) {
         errs.scheduledAt = 'Data deve ser no futuro.'
       }
@@ -251,7 +251,7 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
         </h2>
         {currentPrice > 0 && (
           <span className="text-sm text-[#929AA5]">
-            Preco atual: <span className="text-[#EAECEF] font-mono">FS$ {currentPrice.toFixed(2)}</span>
+            Preço atual: <span className="text-[#EAECEF] font-mono">FS$ {currentPrice.toFixed(2)}</span>
           </span>
         )}
       </div>
@@ -263,7 +263,7 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
             ? 'Ordens ilimitadas hoje'
             : ordersRemaining > 0
               ? `${ordersRemaining} ordem${ordersRemaining !== 1 ? 's' : ''} restante${ordersRemaining !== 1 ? 's' : ''} hoje`
-              : 'Limite diario atingido'}
+              : 'Limite diário atingido'}
         </span>
         {fsBalance !== null && (
           <span className={`flex items-center gap-1 font-mono ${fsBalance <= 0 ? 'text-[#F6465D] font-semibold' : 'text-[#929AA5]'}`}>
@@ -281,7 +281,7 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
           className="flex items-center gap-2 text-sm text-[#F6465D] bg-[rgba(246,70,93,.08)] border border-[rgba(246,70,93,.2)] p-3 rounded-lg"
         >
           <AlertCircle className="h-4 w-4 flex-shrink-0" />
-          <span>Saldo zerado — venda posicoes para negociar novamente.</span>
+          <span>Saldo zerado — venda posições para negociar novamente.</span>
         </div>
       )}
 
@@ -304,24 +304,61 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
         ))}
       </div>
 
-      {/* Quantity */}
-      <Input
-        label="Quantidade"
-        labelExtra={<InfoTip text="Numero inteiro de acoes que deseja negociar nesta ordem" />}
-        type="number"
-        min={1}
-        step={1}
-        value={quantity}
-        onChange={(e) => setQuantity(e.target.value)}
-        error={errors.quantity}
-        required
-      />
+      {/* Quantity — lote de 100 com botoes +/- */}
+      <div className="flex flex-col gap-1">
+        <label htmlFor="order-quantity" className="text-sm text-[#EAECEF] font-medium flex items-center gap-1">
+          Quantidade (lotes de 100)
+          <InfoTip text="Ações são negociadas em lotes de 100. Mínimo: 100 ações." />
+        </label>
+        <div className="flex items-center gap-0">
+          <button
+            type="button"
+            data-testid="order-quantity-minus"
+            disabled={Number(quantity) <= 100}
+            onClick={() => setQuantity(String(Math.max(100, Number(quantity) - 100)))}
+            className="h-11 w-11 flex items-center justify-center rounded-l-md border border-r-0 border-[rgba(240,185,11,.18)] bg-[rgba(240,185,11,.04)] text-[#EAECEF] text-lg font-bold hover:bg-[rgba(240,185,11,.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            aria-label="Diminuir quantidade"
+          >
+            -
+          </button>
+          <input
+            id="order-quantity"
+            data-testid="order-quantity-input"
+            type="number"
+            min={100}
+            step={100}
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            onBlur={() => {
+              const val = Number(quantity)
+              if (!val || val < 100) setQuantity('100')
+              else if (val % 100 !== 0) setQuantity(String(Math.round(val / 100) * 100))
+            }}
+            className="h-11 flex-1 min-w-0 border-y border-[rgba(240,185,11,.18)] bg-[rgba(240,185,11,.04)] text-[#EAECEF] text-sm text-center font-mono px-2 focus:outline-none focus:border-[rgba(240,185,11,.5)] focus:ring-2 focus:ring-[rgba(240,185,11,.15)] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            required
+            aria-invalid={!!errors.quantity}
+            aria-describedby={errors.quantity ? 'order-quantity-error' : undefined}
+          />
+          <button
+            type="button"
+            data-testid="order-quantity-plus"
+            onClick={() => setQuantity(String(Number(quantity) + 100))}
+            className="h-11 w-11 flex items-center justify-center rounded-r-md border border-l-0 border-[rgba(240,185,11,.18)] bg-[rgba(240,185,11,.04)] text-[#EAECEF] text-lg font-bold hover:bg-[rgba(240,185,11,.1)] transition-colors"
+            aria-label="Aumentar quantidade"
+          >
+            +
+          </button>
+        </div>
+        {errors.quantity && (
+          <p id="order-quantity-error" role="alert" className="text-sm text-[#F6465D]">{errors.quantity}</p>
+        )}
+      </div>
 
       {/* Price (LIMIT, OCO) */}
       {(orderType === 'LIMIT' || orderType === 'OCO') && (
         <Input
-          label="Preco (FS$)"
-          labelExtra={<InfoTip text="Preco maximo (compra) ou minimo (venda) que voce aceita para esta ordem" />}
+          label="Preço (FS$)"
+          labelExtra={<InfoTip text="Preço máximo (compra) ou mínimo (venda) que você aceita para esta ordem" />}
           type="number"
           min={0.01}
           step={0.01}
@@ -365,7 +402,7 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
         <div className="flex flex-col gap-1">
           <label htmlFor="order-scheduled-at" className="text-sm text-[#EAECEF] font-medium">
             <Clock className="inline h-3.5 w-3.5 mr-1" aria-hidden="true" />
-            Data de execucao
+            Data de execução
           </label>
           <input
             id="order-scheduled-at"
@@ -399,14 +436,14 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
       {estimatedCost && (
         <div className="bg-[#1E2329] rounded-lg p-3 space-y-1 text-sm">
           <div className="flex justify-between text-[#929AA5]">
-            <span className="flex items-center gap-1">Valor da operacao <InfoTip text="Quantidade x preco unitario (sem taxas)" /></span>
+            <span className="flex items-center gap-1">Valor da operação <InfoTip text="Quantidade x preço unitário (sem taxas)" /></span>
             <span className="font-mono text-[#EAECEF]">FS$ {estimatedCost.operationValue.toFixed(2)}</span>
           </div>
           {estimatedCost.leverageEnabled && (
             <div className="flex justify-between text-[#929AA5]">
               <span className="flex items-center gap-1">
-                Credito da plataforma (2x)
-                <InfoTip text="A plataforma financia 50% do nocional. Sobre este valor incidem juros diarios de 0,2%." />
+                Crédito da plataforma (2x)
+                <InfoTip text="A plataforma financia 50% do nocional. Sobre este valor incidem juros diários de 0,2%." />
               </span>
               <span className="font-mono text-[#F0B90B]">FS$ {(estimatedCost.operationValue / 2).toFixed(2)}</span>
             </div>
@@ -416,24 +453,24 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
               Taxa estimada
               <InfoTip text={
                 side === 'SELL'
-                  ? 'Taxa fixa cobrada sobre o valor da operacao. Deduzida dos rendimentos da venda.'
-                  : 'Taxa fixa cobrada pela plataforma sobre o valor da operacao'
+                  ? 'Taxa fixa cobrada sobre o valor da operação. Deduzida dos rendimentos da venda.'
+                  : 'Taxa fixa cobrada pela plataforma sobre o valor da operação'
               } />
             </span>
             <span className="font-mono text-[#EAECEF]">FS$ {estimatedCost.fee.toFixed(2)}</span>
           </div>
           {side === 'SELL' && (
             <p className="text-[10px] text-[#707A8A] leading-relaxed">
-              Taxa deduzida dos rendimentos. Voce recebera FS$ {(estimatedCost.operationValue - estimatedCost.fee).toFixed(2)}.
+              Taxa deduzida dos rendimentos. Você receberá FS$ {(estimatedCost.operationValue - estimatedCost.fee).toFixed(2)}.
             </p>
           )}
           {side === 'BUY' && (
             <div className="flex justify-between text-[#EAECEF] font-medium border-t border-[#2B3139] pt-1">
               <span className="flex items-center gap-1">
-                {estimatedCost.leverageEnabled ? 'Capital proprio necessario' : 'Total estimado'}
+                {estimatedCost.leverageEnabled ? 'Capital próprio necessário' : 'Total estimado'}
                 <InfoTip text={estimatedCost.leverageEnabled
-                  ? 'Seu capital proprio: 50% do nocional + taxa. O restante e credito virtual da plataforma.'
-                  : 'Valor da operacao + taxa operacional'
+                  ? 'Seu capital próprio: 50% do nocional + taxa. O restante é crédito virtual da plataforma.'
+                  : 'Valor da operação + taxa operacional'
                 } />
               </span>
               <span className="font-mono">FS$ {estimatedCost.total.toFixed(2)}</span>
@@ -452,7 +489,7 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
       {isMarketDisabled && (
         <div className="flex items-center gap-2 text-sm text-[#F0B90B] bg-[rgba(240,185,11,.08)] p-2 rounded">
           <AlertCircle className="h-4 w-4 flex-shrink-0" />
-          Ordens a mercado so podem ser enviadas durante a sessao de negociacao.
+          Ordens a mercado só podem ser enviadas durante a sessão de negociação.
         </div>
       )}
       {atDailyLimit && (
@@ -462,13 +499,13 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
           className="flex items-center gap-2 text-sm text-[#F6465D] bg-[rgba(246,70,93,.08)] border border-[rgba(246,70,93,.2)] p-3 rounded-lg"
         >
           <AlertCircle className="h-4 w-4 flex-shrink-0" />
-          Limite diario atingido. Retorne amanha.
+          Limite diário atingido. Retorne amanhã.
         </div>
       )}
 
       {/* Submit */}
       <div
-        title={isBalanceZero ? 'Saldo FS$ zerado. Venda posicoes para recuperar saldo e negociar novamente.' : undefined}
+        title={isBalanceZero ? 'Saldo FS$ zerado. Venda posições para recuperar saldo e negociar novamente.' : undefined}
         className="w-full"
       >
         <Button

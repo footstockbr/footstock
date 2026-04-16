@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET + PATCH /api/v1/affiliate/me/bank
+// FootStock — GET + PATCH /api/v1/affiliate/me/bank
 // Leitura e atualização de dados bancários do influenciador afiliado.
 // bankData armazenado como JSON criptografado; conta/CNPJ mascarados na leitura.
 // Rastreabilidade: INT-084, US-036, TASK-3/ST003

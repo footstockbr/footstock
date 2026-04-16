@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
   const planType = searchParams.get('planType') as PlanType | null
   const adminRole = searchParams.get('adminRole') as AdminRole | null
   const userType = searchParams.get('userType')
+  const hasAdmin = searchParams.get('hasAdmin') // 'true' = only users with any adminRole
   const status = searchParams.get('status') // 'active' | 'suspended'
   const search = searchParams.get('search')
   const { page, limit, skip } = parsePagination(searchParams)
@@ -51,6 +52,7 @@ export async function GET(request: NextRequest) {
     const where = {
       ...(planType && { planType }),
       ...(adminRole && { adminRole }),
+      ...(hasAdmin === 'true' && { adminRole: { not: null } }),
       ...(userType && { userType }),
       ...(status === 'suspended' && { suspendedAt: { not: null } }),
       ...(status === 'active' && { suspendedAt: null }),

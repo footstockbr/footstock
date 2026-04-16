@@ -1,7 +1,7 @@
 'use client'
 
 // ============================================================================
-// Foot Stock — useMotorStatus
+// FootStock — useMotorStatus
 // Polling do endpoint /api/v1/health/motor a cada 10s.
 // Frequência alinhada ao intervalo de publicação do heartbeat do motor.
 // Fail-safe: assume offline quando fetch falha.

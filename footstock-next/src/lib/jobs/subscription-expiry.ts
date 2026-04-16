@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Job: subscription-expiry
+// FootStock — Job: subscription-expiry
 // Cron diário (02:00 UTC): suspensão + downgrade automático para Jogador
 // G-01: reminder proativo de renovação 7 dias antes do vencimento
 // Idempotente: skip silencioso se já EXPIRED/JOGADOR

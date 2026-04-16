@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Club Portal Layout
+// FootStock — Club Portal Layout
 // Protege toda a subárvore /club/(portal)/* via withClubAuth().
 // Apenas usuários CLUB_PARTNER autenticados chegam até aqui.
 // ============================================================================
@@ -9,7 +9,7 @@ import { ClubSidebar } from '@/components/club/ClubSidebar'
 import { withClubAuth } from '@/lib/auth/club-auth'
 
 export const metadata: Metadata = {
-  title: 'Portal do Clube — Foot Stock',
+  title: 'Portal do Clube — FootStock',
 }
 
 export default async function ClubPortalLayout({ children }: { children: React.ReactNode }) {

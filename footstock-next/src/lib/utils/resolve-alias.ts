@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — resolveAlias
+// FootStock — resolveAlias
 // Resolver de aliases de ticker: converte códigos do mundo real (FLA3) para
 // tickers canônicos do sistema (URU3) de forma transparente.
 //

@@ -7,7 +7,7 @@ import { AfiliadosNovoButton } from "@/components/admin/AfiliadosNovoButton";
 import { CopyCodeButton } from "@/components/admin/CopyCodeButton";
 
 export const metadata: Metadata = {
-  title: "Afiliados — Admin · Foot Stock",
+  title: "Afiliados — Admin · FootStock",
 };
 
 export default async function AdminAfiliadosPage() {
@@ -56,12 +56,12 @@ export default async function AdminAfiliadosPage() {
           subValue={`de ${totalCount} cadastrados`}
         />
         <StatCard
-          label="Conversoes (30d)"
+          label="Conversões (30d)"
           value={String(conversions30d)}
-          subValue="ultimos 30 dias"
+          subValue="últimos 30 dias"
         />
         <StatCard
-          label="Comissoes Pagas"
+          label="Comissões Pagas"
           value={`FS$ ${paidSum.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           subValue="total pago"
         />

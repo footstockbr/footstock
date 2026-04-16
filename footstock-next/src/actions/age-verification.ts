@@ -38,7 +38,7 @@ export async function verifyAgeAction(
 
   if (age < 18) {
     return actionError(
-      'Você precisa ter 18 anos ou mais para usar o Foot Stock.'
+      'Você precisa ter 18 anos ou mais para usar o FootStock.'
     )
   }
 

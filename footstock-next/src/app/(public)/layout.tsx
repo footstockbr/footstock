@@ -19,14 +19,14 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
             href={ROUTES.HOME}
             className="text-sm font-semibold text-[#F0B90B] hover:text-[#FCD535] transition-colors"
           >
-            ← Foot Stock
+            ← FootStock
           </Link>
         </div>
       </header>
       <main className="max-w-3xl mx-auto px-4 py-10">{children}</main>
       <footer className="border-t border-[rgba(240,185,11,.12)] px-4 py-6 mt-10">
         <div className="max-w-3xl mx-auto text-xs text-[#707A8A] text-center">
-          © {new Date().getFullYear()} Foot Stock. Plataforma educacional de simulação financeira.
+          © {new Date().getFullYear()} FootStock. Plataforma educacional de simulação financeira.
         </div>
       </footer>
     </div>

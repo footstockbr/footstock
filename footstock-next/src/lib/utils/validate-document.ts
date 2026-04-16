@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Validação de CPF/CNPJ
+// FootStock — Validação de CPF/CNPJ
 // Utilitário centralizado para validação de documentos brasileiros.
 // Rastreabilidade: GAP-012, GAP-016 (auditoria module-25)
 // ============================================================================

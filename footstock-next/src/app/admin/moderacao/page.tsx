@@ -439,8 +439,8 @@ export default function AdminModeracaoPage() {
       <div data-testid="admin-moderacao-header" className="fade-in">
         <div className="section-header mb-4">
           <div>
-            <div className="section-title">Moderacao</div>
-            <div className="section-sub">{posts.length} posts {isRemovedFilter ? 'reprovados' : 'aguardando revisao'}</div>
+            <div className="section-title">Moderação</div>
+            <div className="section-sub">{posts.length} posts {isRemovedFilter ? 'reprovados' : 'aguardando revisão'}</div>
           </div>
           {recentActions.length > 0 && (
             <button
@@ -734,7 +734,7 @@ export default function AdminModeracaoPage() {
                       borderRadius: '4px',
                     }}
                   >
-                    Limpeza automatica: posts reprovados sao deletados apos 10 dias
+                    Limpeza automática: posts reprovados são deletados após 10 dias
                   </span>
                 )}
               </div>
@@ -843,7 +843,7 @@ export default function AdminModeracaoPage() {
                               }}
                             >
                               <Clock size={12} style={{ display: 'inline', marginRight: '4px' }} />
-                              <span>Historico: </span>
+                              <span>Histórico: </span>
                               {post.moderationActions.slice(0, 2).map((action, idx) => (
                                 <span key={idx} style={{ marginRight: '8px' }}>
                                   {action.action === 'APPROVED' && 'Aprovado'}
@@ -1050,11 +1050,11 @@ export default function AdminModeracaoPage() {
             </div>
 
             <div data-testid="admin-moderacao-auto-deteccao-card" className="card">
-              <div className="card-title">AUTO-DETECCAO</div>
+              <div className="card-title">AUTO-DETECÇÃO</div>
               <div style={{ fontSize: '11px', color: 'var(--text)', lineHeight: '1.6' }}>
-                Posts contendo palavras da lista sao automaticamente marcados como{' '}
+                Posts contendo palavras da lista são automaticamente marcados como{' '}
                 <span style={{ color: 'var(--orange)', fontWeight: '700' }}>suspeitos</span> e
-                adicionados a fila de revisao. Moderadores sao notificados em tempo real.
+                adicionados à fila de revisão. Moderadores são notificados em tempo real.
               </div>
             </div>
           </div>
@@ -1176,7 +1176,7 @@ export default function AdminModeracaoPage() {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
               <h2 style={{ color: '#eaecef', fontSize: '16px', fontWeight: 700 }}>
-                Historico do Usuario
+                Histórico do Usuário
               </h2>
               <button
                 data-testid="admin-moderacao-user-history-close-button"
@@ -1199,7 +1199,7 @@ export default function AdminModeracaoPage() {
               </div>
             ) : userHistory.length === 0 ? (
               <div data-testid="admin-moderacao-user-history-empty" style={{ color: '#929aa5', textAlign: 'center', padding: '20px' }}>
-                Sem historico de moderacao
+                Sem histórico de moderação
               </div>
             ) : (
               <div className="space-y-2">
@@ -1282,14 +1282,14 @@ export default function AdminModeracaoPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
               <AlertTriangle size={20} style={{ color: '#f6465d' }} />
               <h2 style={{ color: '#eaecef', fontSize: '16px', fontWeight: 700, margin: 0 }}>
-                Confirmar exclusao permanente
+                Confirmar exclusão permanente
               </h2>
             </div>
 
             <p style={{ color: '#929aa5', fontSize: '13px', lineHeight: '1.5', marginBottom: '20px' }}>
-              Voce esta prestes a deletar permanentemente{' '}
+              Você está prestes a deletar permanentemente{' '}
               <strong style={{ color: '#f6465d' }}>{selectedPostIds.size}</strong>{' '}
-              post{selectedPostIds.size !== 1 ? 's' : ''}. Esta acao e irreversivel e os dados serao
+              post{selectedPostIds.size !== 1 ? 's' : ''}. Esta ação é irreversível e os dados serão
               removidos do banco de dados.
             </p>
 

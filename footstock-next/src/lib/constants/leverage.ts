@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Constantes de Alavancagem
+// FootStock — Constantes de Alavancagem
 // Módulo puro sem imports de Prisma/Redis — seguro para uso em client e server.
 // Rastreabilidade: T-003 / INT-TRD-005
 // ============================================================================

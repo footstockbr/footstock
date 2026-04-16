@@ -1,7 +1,7 @@
 'use client'
 
 // ============================================================================
-// Foot Stock — MotorOfflineBanner
+// FootStock — MotorOfflineBanner
 // Banner vermelho exibido quando o motor Railway está offline.
 // Sticky no topo, abaixo do AppHeader, z-index 40.
 // ============================================================================

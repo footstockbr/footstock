@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Redis Client (footstock-next)
+// FootStock — Redis Client (footstock-next)
 // Substitui @upstash/redis: usa ioredis com conexão persistente.
 // Resiliente a cold starts em ambiente serverless (Vercel).
 // ============================================================================

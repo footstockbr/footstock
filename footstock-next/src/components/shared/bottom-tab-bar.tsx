@@ -103,7 +103,7 @@ function BottomTabBar() {
       </nav>
 
       {/* Drawer — Mais */}
-      <Drawer isOpen={moreOpen} onClose={() => setMoreOpen(false)} title="Mais — Foot Stock">
+      <Drawer isOpen={moreOpen} onClose={() => setMoreOpen(false)} title="Mais — FootStock">
         <nav data-testid="drawer-mais-nav" className="flex flex-col gap-1">
           {DRAWER_ITEMS.map((item) => (
             <Link

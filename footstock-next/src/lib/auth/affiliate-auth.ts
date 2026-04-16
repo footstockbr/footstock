@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Affiliate Auth
+// FootStock — Affiliate Auth
 // Helper server-side para validar sessão de afiliado (INFLUENCIADOR ou TIME_PARCEIRO).
 // ATENÇÃO: Todo usuário recebe um AffiliateCode no cadastro (commissionPercentage=0).
 // Para acesso ao painel /affiliate, userType DEVE ser TIME_PARCEIRO ou INFLUENCIADOR.

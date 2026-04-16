@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/dividends/yield-pending
+// FootStock — GET /api/v1/dividends/yield-pending
 // Retorna resumo de yield diferencial pendente por ticker para o JOGADOR autenticado.
 // Retorna lista vazia para CRAQUE/LENDA (não acumulam pending).
 // Rastreabilidade: T-007 §4 / §6

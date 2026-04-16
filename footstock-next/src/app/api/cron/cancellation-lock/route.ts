@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — /api/cron/cancellation-lock (0 * * * * — a cada hora)
+// FootStock — /api/cron/cancellation-lock (0 * * * * — a cada hora)
 // T+48h: liquida posições RESTRITAS (SHORT, OCO, alavancadas)
 // NÃO cancela assinatura — apenas liquida posições restritas
 // Ver /api/cron/cancellation-expiry para o T+7d (cancelamento definitivo)

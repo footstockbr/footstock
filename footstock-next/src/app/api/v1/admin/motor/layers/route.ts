@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Admin: Motor Layer Configuration
+// FootStock — Admin: Motor Layer Configuration
 // GET   /api/v1/admin/motor/layers → retorna config atual (motor:read)
 // PATCH /api/v1/admin/motor/layers → atualiza config (motor:control)
 // Persiste em Redis key motor:layers:config:v1

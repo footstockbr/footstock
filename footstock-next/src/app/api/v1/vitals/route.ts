@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — POST /api/v1/vitals
+// FootStock — POST /api/v1/vitals
 // Recebe Core Web Vitals do cliente via navigator.sendBeacon (fire-and-forget).
 // Armazena contadores agregados no Redis com TTL de 7 dias.
 // Sem autenticação — endpoint de analytics público (dados não são PII).

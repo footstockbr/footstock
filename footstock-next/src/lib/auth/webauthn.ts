@@ -13,7 +13,7 @@ import type {
 // ─── Configuração do Relying Party ────────────────────────────────────────────
 
 const RP_ID = process.env.WEBAUTHN_RP_ID ?? 'localhost'
-const RP_NAME = process.env.WEBAUTHN_RP_NAME ?? 'Foot Stock'
+const RP_NAME = process.env.WEBAUTHN_RP_NAME ?? 'FootStock'
 
 function getOrigin(): string {
   if (process.env.WEBAUTHN_ORIGIN) return process.env.WEBAUTHN_ORIGIN

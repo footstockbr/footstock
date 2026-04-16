@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/ai/analyze/rate-status
+// FootStock — GET /api/v1/ai/analyze/rate-status
 // Retorna status atual do rate limit sem incrementar o contador
 // Usado pelo RateLimitBadge via polling (30s)
 // Fonte: module-21/TASK-1/ST003 + TASK-3/ST001

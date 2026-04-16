@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — /api/cron/bonus-credit (0 3 * * *)
+// FootStock — /api/cron/bonus-credit (0 3 * * *)
 // Credita bônus FS$ T+7 — autenticado por CRON_SECRET
 // ============================================================================
 

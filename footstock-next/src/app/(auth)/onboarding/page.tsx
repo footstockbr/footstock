@@ -118,7 +118,7 @@ export default function OnboardingPage() {
         <Image
           src="/logo-foot.png"
           className="h-10 w-auto"
-          alt="Foot Stock"
+          alt="FootStock"
           width={40}
           height={40}
           onError={(e) => {

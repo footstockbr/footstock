@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Validadores HMAC por gateway de pagamento
+// FootStock — Validadores HMAC por gateway de pagamento
 // PCI-DSS: usa timingSafeEqual para prevenir timing attacks
 // Referência: PAYMENT_001 (HMAC inválido), PAYMENT_002 (timestamp expirado)
 // ============================================================================

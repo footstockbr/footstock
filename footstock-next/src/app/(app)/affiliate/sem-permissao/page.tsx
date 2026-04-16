@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — /affiliate/sem-permissao
+// FootStock — /affiliate/sem-permissao
 // Página 403: usuário autenticado sem elegibilidade de afiliado.
 // ============================================================================
 
@@ -8,7 +8,7 @@ import Link from 'next/link'
 import { ROUTES } from '@/lib/constants/routes'
 
 export const metadata: Metadata = {
-  title: 'Acesso Restrito — Foot Stock',
+  title: 'Acesso Restrito — FootStock',
 }
 
 export default function AfiliadoSemPermissaoPage() {

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/me  PATCH /api/v1/me
+// FootStock — GET /api/v1/me  PATCH /api/v1/me
 // Retorna e atualiza dados do usuário autenticado.
 // withDataAccessLog registra acesso a PII (LGPD Art. 37)
 // RESOLVED: mass assignment — PATCH usa allowlist via updateProfileSchema

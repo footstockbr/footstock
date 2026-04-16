@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/cron/expire-dividends (0 8 * * *)
+// FootStock — GET /api/cron/expire-dividends (0 8 * * *)
 // Handler Vercel Cron para expiração diária de dividendos PENDING.
 // Roda ANTES do credit-dividends (08:00 vs 09:00 UTC) para evitar crédito
 // de dividendos que já deveriam expirar.

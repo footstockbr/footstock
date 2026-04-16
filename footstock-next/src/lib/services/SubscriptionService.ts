@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — SubscriptionService: CRUD de assinaturas com CANCELLATION_LOCK
+// FootStock — SubscriptionService: CRUD de assinaturas com CANCELLATION_LOCK
 // ============================================================================
 
 import { prisma } from '@/lib/prisma'

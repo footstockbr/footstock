@@ -1,7 +1,7 @@
 'use client'
 
 // ============================================================================
-// Foot Stock — LeverageToggle
+// FootStock — LeverageToggle
 // Toggle de alavancagem 2x — exclusivo para usuários Lenda em ordens BUY.
 // Mostra estimativa de juros diários e aviso de risco antes de ativar.
 // Rastreabilidade: T-003 / INT-TRD-005
@@ -88,7 +88,7 @@ export function LeverageToggle({
           <div>
             <p className="text-sm font-medium text-[#EAECEF]">Alavancagem 2x</p>
             <p className="text-xs text-[#929AA5]">
-              Opera com o dobro do capital disponivel
+              Opera com o dobro do capital disponível
             </p>
           </div>
         </div>
@@ -117,12 +117,12 @@ export function LeverageToggle({
         <div className="border-t border-[rgba(240,185,11,.15)] pt-2 space-y-2">
           {/* Estimativa de juros */}
           <div className="flex justify-between text-xs text-[#929AA5]">
-            <span>Credito utilizado (50% da operacao):</span>
+            <span>Crédito utilizado (50% da operação):</span>
             <span className="font-mono text-[#EAECEF]">FS$ {leverageAmount.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-xs text-[#929AA5]">
             <span>
-              Juros diarios estimados ({(LEVERAGE_DAILY_INTEREST_RATE * 100).toFixed(1)}%/dia):
+              Juros diários estimados ({(LEVERAGE_DAILY_INTEREST_RATE * 100).toFixed(1)}%/dia):
             </span>
             <span className="font-mono text-[#F6465D]">
               -FS$ {dailyInterestEstimate.toFixed(4)}
@@ -136,8 +136,8 @@ export function LeverageToggle({
               aria-hidden="true"
             />
             <p className="text-xs text-[#F6465D]">
-              O credito de alavancagem e virtual e sem conversao para reais. Perdas superiores a
-              80% do credito resultam em liquidacao automatica da posicao.
+              O crédito de alavancagem é virtual e sem conversão para reais. Perdas superiores a
+              80% do crédito resultam em liquidação automática da posição.
             </p>
           </div>
         </div>

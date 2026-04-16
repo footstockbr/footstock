@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — ClubLoginClient — Client component for club partner login
+// FootStock — ClubLoginClient — Client component for club partner login
 // Extracted from page.tsx to allow useSearchParams inside Suspense boundary.
 // Rastreabilidade: FDD painel-admin §2.12, MILESTONE-9 TASK-1/ST001-ST002
 // ============================================================================
@@ -160,7 +160,7 @@ export default function ClubLoginClient() {
 
         {/* Informação de acesso */}
         <p className="mt-6 text-center text-xs text-[#4B5563]">
-          Acesso concedido apenas pelo administrador do Foot Stock.
+          Acesso concedido apenas pelo administrador do FootStock.
           <br />
           Em caso de dúvidas, entre em contato com o suporte.
         </p>

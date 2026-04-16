@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — DunningService: retentativas automáticas D+1/D+3/D+7 (Should)
+// FootStock — DunningService: retentativas automáticas D+1/D+3/D+7 (Should)
 // Cron diário: detecta subscriptions expiradas involuntariamente e reenvia link de cobrança
 // Referência: PAYMENT_060 (máximo de tentativas), INT-070
 // ============================================================================

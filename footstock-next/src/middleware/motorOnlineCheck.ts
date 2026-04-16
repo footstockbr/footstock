@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Motor Online Check Middleware
+// FootStock — Motor Online Check Middleware
 // Helper reutilizável para verificar se o motor de mercado está online.
 //
 // Fontes de "offline":

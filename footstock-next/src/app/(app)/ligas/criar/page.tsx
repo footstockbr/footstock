@@ -4,7 +4,7 @@ import { ArrowLeft, Trophy, Info } from 'lucide-react'
 import { CreateLeagueForm } from '@/components/leagues/CreateLeagueForm'
 
 export const metadata: Metadata = {
-  title: 'Criar Liga — Foot Stock',
+  title: 'Criar Liga — FootStock',
   description: 'Crie sua própria liga e convide amigos para competir.',
 }
 

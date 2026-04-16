@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/cron/nsm — Trigger NSM Report
+// FootStock — GET /api/v1/cron/nsm — Trigger NSM Report
 // Protegido por Bearer CRON_SECRET.
 // Dispara runNSMReport() e retorna resultado.
 // Schedule: 0 23 * * * UTC = 20:00 BRT (via vercel.json)

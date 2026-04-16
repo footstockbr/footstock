@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Geração de código único de afiliado
+// FootStock — Geração de código único de afiliado
 // Formato: NAME_PREFIX(5) + RANDOM_SUFFIX(4) = 9 chars uppercase alphanumeric
 // Ex: PEDRO7K4M, JOAO91BX, MARIA3ZP
 // ============================================================================

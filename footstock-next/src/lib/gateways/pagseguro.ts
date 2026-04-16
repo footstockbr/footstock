@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — PagSeguroGateway: redirect checkout + HMAC webhook
+// FootStock — PagSeguroGateway: redirect checkout + HMAC webhook
 // PCI-DSS: dados de cartão NUNCA passam por este gateway — redirect apenas
 // Referência: PAYMENT_020 (amount inválido), PAYMENT_050 (gateway indisponível),
 //             PAYMENT_051 (URL inválida), PAYMENT_053 (token inválido)
@@ -59,7 +59,7 @@ export class PagSeguroGateway implements IGateway {
           reference_id: input.subscriptionId,
           customer: { email: input.userEmail },
           items: [{
-            name: `Foot Stock - Plano ${input.planType}`,
+            name: `FootStock - Plano ${input.planType}`,
             quantity: 1,
             unit_amount: input.amount, // centavos
           }],

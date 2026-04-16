@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — MixpanelServerService (server-side)
+// FootStock — MixpanelServerService (server-side)
 // Eventos sensiveis: orders, payments, compliance, affiliate, notifications
 // Rastreabilidade: ANALYTICS-SPEC.md, T-029
 // IMPORTANTE: Nunca duplicar eventos client/server

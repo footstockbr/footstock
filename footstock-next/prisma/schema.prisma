@@ -323,6 +323,8 @@ model Asset {
   colorPrimary   String   @map("color_primary")
   colorSecondary String   @map("color_secondary")
   logoUrl        String?  @map("logo_url")
+  /// Nome do tecnico/treinador atual — usado para matching de noticias (server-side APENAS).
+  coachName      String?  @map("coach_name")
   /// Aliases internos de busca (nomes reais, apelidos, siglas) — uso server-side APENAS.
   /// NUNCA retornar ao cliente. Permite pesquisar "Flamengo" e encontrar URU3.
   searchText     String   @default("") @map("search_text")
@@ -599,23 +601,28 @@ model NewsSourceWhitelist {
 }
 
 model SponsorBanner {
-  id          String   @id @default(cuid())
-  title       String
-  company     String
-  position    String   @default("home_top")
-  imageUrl    String?  @map("image_url")
-  linkUrl     String?  @map("link_url")
-  width       Int?
-  height      Int?
-  isActive    Boolean  @default(true) @map("is_active")
-  clicks      Int      @default(0)
-  impressions Int      @default(0)
-  color       String   @default("#00B1EA")
-  ctaText     String   @default("Saiba mais") @map("cta_text")
-  ctaColor    String   @default("#00B1EA") @map("cta_color")
-  sponsorId   String?  @map("sponsor_id")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id              String    @id @default(cuid())
+  title           String
+  company         String
+  position        String    @default("home_top")
+  imageUrl        String?   @map("image_url")
+  linkUrl         String?   @map("link_url")
+  width           Int?
+  height          Int?
+  isActive        Boolean   @default(true) @map("is_active")
+  clicks          Int       @default(0)
+  impressions     Int       @default(0)
+  color           String    @default("#00B1EA")
+  ctaText         String    @default("Saiba mais") @map("cta_text")
+  ctaColor        String    @default("#00B1EA") @map("cta_color")
+  sponsorId       String?   @map("sponsor_id")
+  startDate       DateTime? @map("start_date")
+  endDate         DateTime? @map("end_date")
+  imageDesktopUrl String?   @map("image_desktop_url")
+  imageMobileUrl  String?   @map("image_mobile_url")
+  imageVerticalUrl String?  @map("image_vertical_url")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   sponsor     Sponsor? @relation(fields: [sponsorId], references: [id], onDelete: SetNull)
   leagues     League[]

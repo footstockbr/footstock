@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — AutoModeration
+// FootStock — AutoModeration
 // 5 regras de auto-moderação configuráveis via Redis
 // Fonte: module-18/TASK-4/ST001
 // ============================================================================

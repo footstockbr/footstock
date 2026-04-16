@@ -1,7 +1,7 @@
 'use client'
 
 // ============================================================================
-// Foot Stock — Admin LGPD / DPO Dashboard
+// FootStock — Admin LGPD / DPO Dashboard
 // Rastreabilidade: G023, LGPD Art. 18, Art. 23
 // Acesso: admin:audit (SUPER_ADMIN, ADMINISTRADOR)
 // ============================================================================

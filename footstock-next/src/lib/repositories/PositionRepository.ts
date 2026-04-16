@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — PositionRepository (module-15)
+// FootStock — PositionRepository (module-15)
 // Cálculo de P&L, histórico real (LOCF) e resumo de patrimônio.
 // REGRA: NUNCA usar Math.random() em cálculos financeiros.
 // Rastreabilidade: INT-034, INT-035

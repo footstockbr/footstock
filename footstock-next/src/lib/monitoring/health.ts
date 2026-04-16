@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Health Check Utilities
+// FootStock — Health Check Utilities
 // Checks independentes e paralelos para db, redis e motor.
 // Rastreabilidade: INT-110, module-27/TASK-2
 // ============================================================================

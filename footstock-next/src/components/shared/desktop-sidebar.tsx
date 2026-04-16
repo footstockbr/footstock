@@ -49,13 +49,13 @@ function DesktopSidebar() {
         <Link data-testid="sidebar-logo" href={ROUTES.MERCADO} className="flex items-center gap-2">
           <Image
             src="/logo-foot.png"
-            alt="Foot Stock"
+            alt="FootStock"
             width={24}
             height={24}
             className="h-6 w-6 object-contain"
             priority
           />
-          <span className="text-sm font-semibold text-[#EAECEF]">Foot Stock</span>
+          <span className="text-sm font-semibold text-[#EAECEF]">FootStock</span>
         </Link>
       </div>
 

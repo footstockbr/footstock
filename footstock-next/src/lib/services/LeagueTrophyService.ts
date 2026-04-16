@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — LeagueTrophyService
+// FootStock — LeagueTrophyService
 // Concessão de troféus virtuais ao encerrar ligas PRO.
 // Troféus são puramente cosméticos — valor monetário zero.
 // Fonte: T-017

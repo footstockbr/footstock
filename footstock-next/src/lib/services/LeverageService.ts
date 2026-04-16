@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — LeverageService
+// FootStock — LeverageService
 // Alavancagem 2x exclusiva do plano Lenda.
 // Gerencia validação, juros diários e liquidação automática de posições LONG.
 // Rastreabilidade: T-003 / INT-TRD-005

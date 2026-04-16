@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Mensagens do sistema (PT-BR)
+// FootStock — Mensagens do sistema (PT-BR)
 // ============================================================================
 
 export const MESSAGES = {
@@ -9,7 +9,7 @@ export const MESSAGES = {
     REGISTER_SUCCESS: 'Conta criada com sucesso! Verifique seu e-mail.',
     REGISTER_FAILED: 'Não foi possível criar a conta. Tente novamente.',
     REGISTER_WELCOME: 'Cadastro realizado!',
-    REGISTER_WELCOME_DESCRIPTION: 'Bem-vindo ao Foot Stock.',
+    REGISTER_WELCOME_DESCRIPTION: 'Bem-vindo ao FootStock.',
     REGISTER_CONNECTION_ERROR: 'Erro de conexão. Tente novamente.',
     LOGOUT_SUCCESS: 'Você saiu da sua conta.',
     SESSION_EXPIRED: 'Sua sessão expirou. Faça login novamente.',

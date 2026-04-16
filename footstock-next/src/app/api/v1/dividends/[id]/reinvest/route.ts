@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — POST /api/v1/dividends/{id}/reinvest
+// FootStock — POST /api/v1/dividends/{id}/reinvest
 // Reinvestimento manual de dividendo PENDING (apenas Jogador, dentro de 7 dias).
 // Rastreabilidade: INT-073
 // ============================================================================

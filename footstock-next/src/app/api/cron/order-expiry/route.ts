@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — /api/cron/order-expiry (0 6 * * *)
+// FootStock — /api/cron/order-expiry (0 6 * * *)
 // Expira ordens LIMIT/OCO/SCHEDULED com mais de 30 dias.
 // Autenticado por CRON_SECRET — resposta 401 silenciosa se inválido.
 // Rastreabilidade: INT-012, INT-013 / TASK-3/ST004

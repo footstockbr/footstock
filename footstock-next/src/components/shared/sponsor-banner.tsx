@@ -1,7 +1,7 @@
 'use client'
 
 // ============================================================================
-// Foot Stock — SponsorBanner
+// FootStock — SponsorBanner
 // Exibe banner publicitário de um patrocinador ativo para a posição solicitada.
 // Busca GET /api/v1/public/banners?position={position} (cache Redis 5min).
 // Posições e dimensões (FDD painel-admin §2.12 / module-24 TASK-3):

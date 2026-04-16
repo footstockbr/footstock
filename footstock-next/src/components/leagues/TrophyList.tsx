@@ -43,7 +43,7 @@ export function TrophyList() {
 
   if (loading) {
     return (
-      <ul aria-label="Carregando trofeus" className="space-y-3">
+      <ul aria-label="Carregando troféus" className="space-y-3">
         {[1, 2, 3].map((i) => (
           <li key={i} aria-hidden className="h-20 rounded-xl bg-white/5 animate-pulse" />
         ))}
@@ -54,7 +54,7 @@ export function TrophyList() {
   if (error) {
     return (
       <p className="text-center text-sm text-red-400 py-6">
-        Erro ao carregar trofeus. Tente novamente.
+        Erro ao carregar troféus. Tente novamente.
       </p>
     )
   }
@@ -63,7 +63,7 @@ export function TrophyList() {
     return (
       <div className="text-center py-8 space-y-2">
         <p className="text-sm text-gray-500">
-          Participe de Ligas PRO para conquistar trofeus.
+          Participe de Ligas PRO para conquistar troféus.
         </p>
       </div>
     )
@@ -72,9 +72,9 @@ export function TrophyList() {
   return (
     <div className="space-y-3">
       <p className="text-xs text-gray-600 text-center">
-        Trofeus sao cosmeticos — sem valor monetario.
+        Troféus são cosméticos — sem valor monetário.
       </p>
-      <ul className="space-y-2" aria-label="Meus trofeus">
+      <ul className="space-y-2" aria-label="Meus troféus">
         {trophies.map((t) => (
           <li key={t.id}>
             <TrophyCard

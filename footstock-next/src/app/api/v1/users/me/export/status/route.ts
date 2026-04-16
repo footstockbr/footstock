@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/users/me/export/status
+// FootStock — GET /api/v1/users/me/export/status
 // Consulta o status do último job de export do usuário.
 // Rastreabilidade: INT-103, TASK-2/ST002
 // ============================================================================

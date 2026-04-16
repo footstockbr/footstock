@@ -22,6 +22,12 @@ const bannerUpdateSchema = z.object({
   sponsorId: z.string().cuid('sponsorId inválido').nullish(),
   width:     z.number().int().positive().nullish(),
   height:    z.number().int().positive().nullish(),
+  // Campos de data e imagens responsivas
+  startDate:        z.string().datetime({ offset: true }).nullish(),
+  endDate:          z.string().datetime({ offset: true }).nullish(),
+  imageDesktopUrl:  z.string().url('imageDesktopUrl inválida').nullish(),
+  imageMobileUrl:   z.string().url('imageMobileUrl inválida').nullish(),
+  imageVerticalUrl: z.string().url('imageVerticalUrl inválida').nullish(),
 })
 
 interface BannerParams {
@@ -76,7 +82,7 @@ export async function PATCH(request: NextRequest, { params }: BannerParams) {
         { status: 422 }
       )
     }
-    const { title, company, position, isActive, color, ctaText, ctaColor, linkUrl, imageUrl, sponsorId, width, height } = parsed.data
+    const { title, company, position, isActive, color, ctaText, ctaColor, linkUrl, imageUrl, sponsorId, width, height, startDate, endDate, imageDesktopUrl, imageMobileUrl, imageVerticalUrl } = parsed.data
     const updateData: Record<string, unknown> = {}
     if (title !== undefined) updateData.title = title
     if (company !== undefined) updateData.company = company
@@ -90,6 +96,11 @@ export async function PATCH(request: NextRequest, { params }: BannerParams) {
     if (sponsorId !== undefined) updateData.sponsorId = sponsorId ?? null
     if (width !== undefined) updateData.width = width ?? null
     if (height !== undefined) updateData.height = height ?? null
+    if (startDate !== undefined) updateData.startDate = startDate ? new Date(startDate) : null
+    if (endDate !== undefined) updateData.endDate = endDate ? new Date(endDate) : null
+    if (imageDesktopUrl !== undefined) updateData.imageDesktopUrl = imageDesktopUrl ?? null
+    if (imageMobileUrl !== undefined) updateData.imageMobileUrl = imageMobileUrl ?? null
+    if (imageVerticalUrl !== undefined) updateData.imageVerticalUrl = imageVerticalUrl ?? null
 
     const banner = await prisma.sponsorBanner.update({
       where: { id },

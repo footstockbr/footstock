@@ -1,7 +1,7 @@
 'use client'
 
 // ============================================================================
-// Foot Stock — MotorStatusContext
+// FootStock — MotorStatusContext
 // Propaga o status do motor para toda a árvore de componentes.
 // O OrderForm (module-14) DEVE importar useMotorStatusContext() e
 // desabilitar o botão "Confirmar Ordem" quando isOffline === true.

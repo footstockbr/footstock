@@ -8,6 +8,8 @@ import { UserActions } from './UserActions'
 import type { AdminUserItem } from '@/lib/types/admin'
 import { PLAN_LABELS, PLAN_BADGE_VARIANTS } from '@/lib/constants/admin-ui'
 
+type FilterTab = 'usuarios' | 'administrativo' | 'times'
+
 interface UserFilters {
   search: string
   planType: string
@@ -19,6 +21,7 @@ interface UserFilters {
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 export function UserList({ currentAdminRole }: { currentAdminRole?: string | null }) {
+  const [activeTab, setActiveTab] = useState<FilterTab>('usuarios')
   const [filters, setFilters] = useState<UserFilters>({ search: '', planType: '', adminRole: '', status: '', userType: '' })
   const [searchInput, setSearchInput] = useState('') // valor imediato do input
   const [page, setPage] = useState(1)
@@ -33,15 +36,33 @@ export function UserList({ currentAdminRole }: { currentAdminRole?: string | nul
     return () => clearTimeout(timer)
   }, [searchInput])
 
+  function handleTabChange(tab: FilterTab) {
+    setActiveTab(tab)
+    setPage(1)
+  }
+
   const buildUrl = useCallback(() => {
-    const params = new URLSearchParams({ page: String(page) })
+    const params = new URLSearchParams({ page: String(page), limit: '15' })
     if (filters.search) params.set('search', filters.search)
     if (filters.planType) params.set('planType', filters.planType)
-    if (filters.adminRole) params.set('adminRole', filters.adminRole)
     if (filters.status) params.set('status', filters.status)
-    if (filters.userType) params.set('userType', filters.userType)
+
+    // Tab-driven filters override the dropdown filters for userType/adminRole
+    if (activeTab === 'usuarios') {
+      params.set('userType', 'NORMAL')
+    } else if (activeTab === 'administrativo') {
+      params.set('hasAdmin', 'true')
+    } else if (activeTab === 'times') {
+      params.set('userType', 'TIME_PARCEIRO')
+    }
+
+    // Only pass dropdown adminRole when not overridden by tab
+    if (activeTab === 'usuarios' && filters.adminRole) {
+      params.set('adminRole', filters.adminRole)
+    }
+
     return `/api/v1/admin/users?${params}`
-  }, [filters, page])
+  }, [filters, page, activeTab])
 
   const { data, error, isLoading, mutate } = useSWR(buildUrl(), fetcher, {
     keepPreviousData: true,
@@ -57,8 +78,41 @@ export function UserList({ currentAdminRole }: { currentAdminRole?: string | nul
 
   const selectClass = 'h-10 min-h-[44px] w-full rounded-lg border border-[rgba(240,185,11,.18)] bg-[#181A20] px-3 text-sm text-[#EAECEF] focus:outline-none focus:border-[#F0B90B]'
 
+  const tabClass = (tab: FilterTab) =>
+    [
+      'h-9 px-4 rounded-lg text-sm font-medium transition-colors min-h-[44px]',
+      activeTab === tab
+        ? 'bg-[#F0B90B] text-[#0B0E11]'
+        : 'border border-[rgba(240,185,11,.18)] text-[#929AA5] hover:text-[#EAECEF] hover:border-[rgba(240,185,11,.4)]',
+    ].join(' ')
+
   return (
     <div data-testid="admin-user-list">
+      {/* Tabs de filtro */}
+      <div className="flex items-center gap-2 mb-3">
+        <button
+          data-testid="admin-user-filter-usuarios"
+          onClick={() => handleTabChange('usuarios')}
+          className={tabClass('usuarios')}
+        >
+          Usuários
+        </button>
+        <button
+          data-testid="admin-user-filter-administrativo"
+          onClick={() => handleTabChange('administrativo')}
+          className={tabClass('administrativo')}
+        >
+          Administrativo
+        </button>
+        <button
+          data-testid="admin-user-filter-times"
+          onClick={() => handleTabChange('times')}
+          className={tabClass('times')}
+        >
+          Times
+        </button>
+      </div>
+
       {/* Barra de busca */}
       <div className="flex items-center gap-3 mb-3">
         <div className="relative flex-1">

@@ -6,7 +6,7 @@ import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 export const metadata: Metadata = {
-  title: "Noticias — Foot Stock",
+  title: "Notícias — FootStock",
 };
 
 type Sentiment = "BULLISH" | "BEARISH" | "NEUTRAL";

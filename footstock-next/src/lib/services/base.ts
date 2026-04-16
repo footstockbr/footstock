@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — BaseService com error handling padronizado
+// FootStock — BaseService com error handling padronizado
 // ============================================================================
 
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client'

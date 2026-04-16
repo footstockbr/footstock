@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — PlanService: orquestra checkout, upgrade e validação de arrependimento
+// FootStock — PlanService: orquestra checkout, upgrade e validação de arrependimento
 // Usa IGatewayAdapter para desacoplar de module-12
 // ============================================================================
 

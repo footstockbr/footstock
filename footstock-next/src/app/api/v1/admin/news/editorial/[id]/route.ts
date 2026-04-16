@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — /api/v1/admin/news/editorial/[id]
+// FootStock — /api/v1/admin/news/editorial/[id]
 // Atualização e exclusão de notícia editorial no painel admin.
 // ============================================================================
 

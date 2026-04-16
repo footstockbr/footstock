@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Job: expire-dividends (module-16)
+// FootStock — Job: expire-dividends (module-16)
 // Expira dividendos PENDING após 7 dias SEM creditar saldo nem emitir notificação.
 // Rastreabilidade: INT-073 / RN-DIV-001
 // ============================================================================

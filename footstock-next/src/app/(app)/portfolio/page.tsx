@@ -3,7 +3,7 @@ import { PortfolioClient } from "./portfolio-client";
 import { SponsorBanner } from "@/components/shared/sponsor-banner";
 
 export const metadata: Metadata = {
-  title: "Carteira — Foot Stock",
+  title: "Carteira — FootStock",
 };
 
 export default function PortfolioPage() {

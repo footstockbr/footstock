@@ -25,7 +25,7 @@ const FIELD_META: { key: keyof PromptConfig; label: string; description: string;
   },
   {
     key: 'context',
-    label: 'Contexto do Foot Stock',
+    label: 'Contexto do FootStock',
     description: 'Informações sobre a plataforma, moeda virtual, mecânica do mercado e propósito educacional.',
     rows: 5,
   },

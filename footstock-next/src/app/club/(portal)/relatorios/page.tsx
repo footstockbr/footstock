@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — /club/relatorios — Relatórios consolidados do clube
+// FootStock — /club/relatorios — Relatórios consolidados do clube
 // Auth obrigatória CLUB_PARTNER via (portal)/layout.tsx + withClubAuth().
 // Exibe resumo mensal e anual com KPIs de volume, torcedores, crescimento.
 // Rastreabilidade: US-025, US-036, FDD painel-admin §2.12, MILESTONE-9
@@ -11,7 +11,7 @@ import { withClubAuth } from '@/lib/auth/club-auth'
 import { prisma } from '@/lib/prisma'
 
 export const metadata: Metadata = {
-  title: 'Relatórios — Portal do Clube — Foot Stock',
+  title: 'Relatórios — Portal do Clube — FootStock',
 }
 
 function formatFS(value: number): string {
@@ -169,7 +169,7 @@ export default async function ClubRelatoriosPage() {
       {/* Histórico mensal */}
       {monthlyRows.length > 0 && (
         <div className="bg-[#1E2329] rounded-xl border border-[#2B3139] p-5">
-          <h2 className="text-sm font-semibold text-[#EAECEF] mb-4">Historico mensal (ultimos 6 meses)</h2>
+          <h2 className="text-sm font-semibold text-[#EAECEF] mb-4">Histórico mensal (últimos 6 meses)</h2>
           <div className="space-y-2">
             <div className="grid grid-cols-4 text-[10px] text-[#4B5563] font-semibold uppercase mb-2">
               <span>Mês</span>

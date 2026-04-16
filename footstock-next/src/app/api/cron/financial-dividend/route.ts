@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/cron/financial-dividend
+// FootStock — GET /api/cron/financial-dividend
 // Vercel Cron: executa dividendo financeiro periódico (1º dia útil, 02:00 UTC-3).
 // Schedule: "0 5 1-7 * *" (05:00 UTC = 02:00 BRT, dias 1-7 do mês)
 // Autenticado por CRON_SECRET no header Authorization.

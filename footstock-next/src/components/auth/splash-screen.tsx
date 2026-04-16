@@ -34,7 +34,7 @@ function SplashScreen({ onComplete }: SplashScreenProps) {
       data-testid="splash-screen"
       className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B0E11]"
       role="status"
-      aria-label="Carregando Foot Stock"
+      aria-label="Carregando FootStock"
       style={{
         animation: "splash-bg-fade 2.8s ease-in-out forwards",
       }}
@@ -53,7 +53,7 @@ type: image
 extension: png
 aspect_ratio: 1:1
 dimensions: 80x80
-description: Logo principal do Foot Stock para a splash screen. Bola de futebol estilizada com elementos de mercado financeiro (gráfico, ticker), fundo transparente, design premium.
+description: Logo principal do FootStock para a splash screen. Bola de futebol estilizada com elementos de mercado financeiro (gráfico, ticker), fundo transparente, design premium.
 context: Tela de splash (carregamento inicial do app)
 style: Premium, minimalista, ouro sobre preto
 mood: Confiante, premium, esportivo-financeiro
@@ -63,14 +63,14 @@ avoid: Texto, cores frias, complexidade excessiva
         */}
         <img
           src="/logo-foot.png"
-          alt="Foot Stock"
+          alt="FootStock"
           width={80}
           height={80}
           className="w-20 h-20 object-contain"
         />
         <div className="flex flex-col items-center gap-1">
           <h1 className="text-2xl font-bold text-[#EAECEF] tracking-tight">
-            Foot Stock
+            FootStock
           </h1>
           <p className="text-sm text-[#707A8A]">O mercado do futebol</p>
         </div>

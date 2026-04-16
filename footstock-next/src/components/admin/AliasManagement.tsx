@@ -1,7 +1,7 @@
 'use client'
 
 // ============================================================================
-// Foot Stock — AliasManagement (T-031)
+// FootStock — AliasManagement (T-031)
 // Módulo admin para gerenciamento de aliases de ticker.
 //
 // Funcionalidades:

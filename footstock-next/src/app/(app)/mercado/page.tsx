@@ -3,7 +3,7 @@ import { MarketPageClient } from "./market-page-client";
 import { SponsorBanner } from "@/components/shared/sponsor-banner";
 
 export const metadata: Metadata = {
-  title: "Mercado — Foot Stock",
+  title: "Mercado — FootStock",
   description: "Acompanhe os preços em tempo real dos 40 clubes brasileiros.",
 };
 

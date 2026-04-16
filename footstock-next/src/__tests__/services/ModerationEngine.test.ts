@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — ModerationEngine.test.ts (T-028)
+// FootStock — ModerationEngine.test.ts (T-028)
 // Testes unitários: sanitização PII + engine de regras de conteúdo
 // ============================================================================
 

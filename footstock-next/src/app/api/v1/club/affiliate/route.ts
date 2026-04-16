@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/club/affiliate
+// FootStock — GET /api/v1/club/affiliate
 // Royalties e métricas de afiliado do clube parceiro.
 // Rastreabilidade: US-036 [SUCCESS] cenário 1, GAP-003 (auditoria module-25)
 // ============================================================================

@@ -15,7 +15,7 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { ticker } = await params;
-  return { title: `${ticker} — Foot Stock` };
+  return { title: `${ticker} — FootStock` };
 }
 
 export default async function AtivoPage({ params }: Props) {

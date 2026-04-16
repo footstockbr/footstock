@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — resolveTickerFromText
+// FootStock — resolveTickerFromText
 // Utilitário server-side APENAS para mapear nomes reais de times → ticker.
 //
 // SEGURANÇA: Este arquivo usa 'server-only' para garantir que os aliases de
@@ -88,28 +88,34 @@ export async function resolveTickerFromText(text: string): Promise<string | null
   const lower = text.toLowerCase()
 
   // -------------------------------------------------------------------------
-  // Passo 1: Buscar aliases no DB (searchText de cada ativo ativo)
+  // Passo 1: Buscar aliases no DB (searchText + coachName de cada ativo ativo)
   // -------------------------------------------------------------------------
   try {
     const assets = await prisma.asset.findMany({
-      select: { ticker: true, searchText: true },
-      where: { isActive: true, searchText: { not: '' } },
+      select: { ticker: true, searchText: true, coachName: true },
+      where: { isActive: true },
     })
 
     for (const asset of assets) {
+      // Match por coachName (tecnico) — prioridade alta, nome especifico
+      if (asset.coachName) {
+        const coachLower = asset.coachName.trim().toLowerCase()
+        if (coachLower.length > 2 && lower.includes(coachLower)) return asset.ticker
+      }
+
+      // Match por searchText aliases
       if (!asset.searchText) continue
-      // searchText: vírgula ou ponto-e-vírgula ou pipe como separador
       const parts = asset.searchText
         .split(/[,;|]+/)
         .map((s) => s.trim().toLowerCase())
-        .filter((s) => s.length > 2) // ignora aliases muito curtos (ruído)
+        .filter((s) => s.length > 2)
 
       for (const part of parts) {
         if (lower.includes(part)) return asset.ticker
       }
     }
   } catch {
-    // DB indisponível: cair no fallback
+    // DB indisponivel: cair no fallback
   }
 
   // -------------------------------------------------------------------------

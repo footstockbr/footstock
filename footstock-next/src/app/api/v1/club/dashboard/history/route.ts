@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/club/dashboard/history
+// FootStock — GET /api/v1/club/dashboard/history
 // Série histórica de fansByPlan e currentPrice para o clube autenticado.
 // Período default: 30d. Dados SEMPRE agregados (ADMIN_051).
 // Rastreabilidade: TASK-015 sub-item 3, US-025

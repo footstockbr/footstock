@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Erros de pagamento e assinatura (PAYMENT_ do ERROR-CATALOG)
+// FootStock — Erros de pagamento e assinatura (PAYMENT_ do ERROR-CATALOG)
 // ============================================================================
 
 /** Classe base para erros de pagamento */

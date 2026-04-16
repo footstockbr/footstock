@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — useAnalytics hook (re-export do provider)
+// FootStock — useAnalytics hook (re-export do provider)
 // Rastreabilidade: ANALYTICS-SPEC.md, T-029
 // ============================================================================
 

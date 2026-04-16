@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Mapa de features por plano de assinatura
+// FootStock — Mapa de features por plano de assinatura
 // ============================================================================
 
 import type { PlanType } from '@/lib/enums'

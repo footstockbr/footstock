@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Portal do Afiliado (/affiliate)
+// FootStock — Portal do Afiliado (/affiliate)
 // Acesso restrito: apenas TIME_PARCEIRO e INFLUENCIADOR (withAffiliateAuth).
 // Usuários NORMAL são redirecionados para /affiliate/sem-permissao (403).
 // Rastreabilidade: T-001 (Gap 6), US-036, US-037, RF-017
@@ -10,7 +10,7 @@ import { withAffiliateAuth } from '@/lib/auth/affiliate-auth'
 import { AffiliatePortalClient } from '@/components/affiliate/AffiliatePortalClient'
 
 export const metadata: Metadata = {
-  title: 'Portal do Afiliado — Foot Stock',
+  title: 'Portal do Afiliado — FootStock',
   description: 'Acompanhe suas comissões, indicações e dados bancários.',
 }
 

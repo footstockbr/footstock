@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Constantes de segurança PCI-DSS para gateways de pagamento
+// FootStock — Constantes de segurança PCI-DSS para gateways de pagamento
 // NUNCA expor ou armazenar os campos FORBIDDEN_FIELDS
 // ============================================================================
 

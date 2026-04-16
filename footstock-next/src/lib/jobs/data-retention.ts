@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Job: data-retention
+// FootStock — Job: data-retention
 // Cron diário (00:00 BRT): aplica política de retenção de dados LGPD
 // GUARDRAIL: NUNCA deletar transactions, orders, payments (obrigação fiscal 5 anos)
 // Rastreabilidade: INT-108, TASK-3/ST001

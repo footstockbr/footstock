@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — ConsentService
+// FootStock — ConsentService
 // Gerenciamento de consentimentos LGPD por finalidade (TASK-1/ST002)
 // Rastreabilidade: INT-102, US-026, US-M13-001
 // ============================================================================

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Sentry Wrapper Centralizado
+// FootStock — Sentry Wrapper Centralizado
 // Contextos customizados, helpers de captura e constantes de alerta.
 // Rastreabilidade: INT-110, module-27/TASK-1
 // ============================================================================

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — SSE Endpoint /api/v1/market/stream (T-022)
+// FootStock — SSE Endpoint /api/v1/market/stream (T-022)
 // Subscreve no canal Redis market:tick e faz stream para o cliente.
 //
 // Delay server-side por plano (nunca bypassável pelo cliente):

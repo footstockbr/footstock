@@ -12,7 +12,7 @@ import { prisma } from "@/lib/prisma";
 import { LogoutButton } from "@/components/conta/LogoutButton";
 
 export const metadata: Metadata = {
-  title: "Minha Conta — Foot Stock",
+  title: "Minha Conta — FootStock",
 };
 
 export default async function ContaPage() {

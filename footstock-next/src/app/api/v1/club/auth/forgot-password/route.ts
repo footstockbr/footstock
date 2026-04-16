@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — POST /api/v1/club/auth/forgot-password
+// FootStock — POST /api/v1/club/auth/forgot-password
 // Reset de senha para representantes de clubes parceiros.
 // Usa Supabase Auth (mesmo mecanismo, email separado).
 // Rastreabilidade: TASK-015 sub-item 6, US-025

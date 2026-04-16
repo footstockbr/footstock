@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — UserService
+// FootStock — UserService
 // Operações de saldo com locking otimista via campo `version`.
 // Rastreabilidade: T-032 / Locking Otimista
 //

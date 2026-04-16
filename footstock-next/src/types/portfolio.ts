@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Types do módulo Portfolio Dashboard (module-15)
+// FootStock — Types do módulo Portfolio Dashboard (module-15)
 // ============================================================================
 
 /** Resumo de patrimônio do portfólio do usuário */

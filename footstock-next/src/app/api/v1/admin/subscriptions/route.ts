@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/admin/subscriptions
+// FootStock — GET /api/v1/admin/subscriptions
 // Métricas de assinaturas: contagem por status, renovações agendadas, coorte.
 // RESOLVED: G004 — endpoint criado para sub-aba Assinaturas do módulo Financeiro
 // ============================================================================

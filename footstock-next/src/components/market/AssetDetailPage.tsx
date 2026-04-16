@@ -81,7 +81,7 @@ interface AssetDetailPageProps {
 
 export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps) {
   const tick = useMarketTick(asset.ticker)
-  const [currentPeriod, setCurrentPeriod] = useState<ChartPeriod>('1M')
+  const [currentPeriod, setCurrentPeriod] = useState<ChartPeriod>('1H')
   const [orderFormOpen, setOrderFormOpen] = useState<{ side: 'BUY' | 'SELL' } | null>(null)
   const [shortFormOpen, setShortFormOpen] = useState(false)
   const [compareOpen, setCompareOpen] = useState(false)
@@ -155,9 +155,9 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
   }
 
   return (
-    <div className="flex flex-col pb-32 md:pb-0">
+    <div data-testid="asset-detail-page" className="flex flex-col pb-32 md:pb-0">
       {/* Header */}
-      <header className="flex items-center gap-3 p-4 border-b border-[rgba(240,185,11,.08)]">
+      <header data-testid="asset-detail-header" className="flex items-center gap-3 p-4 border-b border-[rgba(240,185,11,.08)]">
         <div
           className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-black text-white shrink-0 border border-[rgba(240,185,11,.12)]"
           style={{
@@ -175,7 +175,7 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
         <div className="ml-auto text-right">
           <p className="text-xl font-mono font-bold text-[#EAECEF] inline-flex items-center gap-1">
             FS${currentPrice.toFixed(2)}
-            <span title="Ultimo preco negociado do ativo em tempo real" aria-label="Ultimo preco negociado" className="cursor-help">
+            <span title="Último preço negociado do ativo em tempo real" aria-label="Último preço negociado" className="cursor-help">
               <Info className="w-3 h-3 text-[#707A8A]" />
             </span>
           </p>
@@ -185,7 +185,7 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
             }`}
           >
             {change24h >= 0 ? '+' : ''}{change24h.toFixed(2)}%
-            <span title="Variacao percentual do preco nas ultimas 24 horas" aria-label="Variacao 24h" className="cursor-help">
+            <span title="Variação percentual do preço nas últimas 24 horas" aria-label="Variação 24h" className="cursor-help">
               <Info className="w-3 h-3 text-[#707A8A]" />
             </span>
           </p>
@@ -266,7 +266,7 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
             <OrderBook ticker={asset.ticker} />
           </TabsContent>
 
-          <TabsContent value="stats">
+          <TabsContent value="stats" data-testid="asset-detail-stats">
             <AssetStats
               asset={asset}
               fairValuePremium={asset.fairValuePremium}
@@ -282,6 +282,56 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
             />
           </TabsContent>
         </Tabs>
+      </div>
+
+      {/* Desktop buy/sell/short buttons — visible only on md+ */}
+      <div className="hidden md:block px-4 mt-4">
+        {isHalted ? (
+          <div className="w-full py-3 rounded-xl bg-[rgba(246,70,93,.1)] border border-[rgba(246,70,93,.25)] text-center">
+            <p className="text-xs font-bold text-[#F6465D]">Negociação suspensa</p>
+            <p className="text-[10px] text-[#929AA5] mt-0.5">Circuit breaker ativo — aguarde a retomada</p>
+          </div>
+        ) : isMotorOffline ? (
+          <div className="w-full py-3 rounded-xl text-center" style={{ backgroundColor: 'rgba(249,115,22,0.12)', border: '1px solid rgba(249,115,22,0.3)' }}>
+            <p className="text-xs font-bold" style={{ color: '#f97316' }}>Mercado em manutenção</p>
+            <p className="text-[10px] text-[#929AA5] mt-0.5">Ordens suspensas temporariamente</p>
+          </div>
+        ) : (
+          <>
+            {isBuyBlocked && (
+              <div role="alert" className="mb-2 flex items-center gap-2 text-xs text-[#F6465D] bg-[rgba(246,70,93,.08)] border border-[rgba(246,70,93,.2)] rounded-lg px-3 py-2">
+                <span className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true">&#9888;</span>
+                Saldo zerado — venda posições para negociar.
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button
+                data-testid="buy-btn-desktop"
+                onClick={() => !isBuyBlocked && setOrderFormOpen({ side: 'BUY' })}
+                disabled={isBuyBlocked}
+                title={isBuyBlocked ? 'Saldo FS$ zerado. Venda posições para negociar novamente.' : undefined}
+                className={`flex-1 py-3 rounded-xl font-bold text-sm transition-opacity ${isBuyBlocked ? 'bg-[#2EBD85]/40 text-[#0B0E11]/60 cursor-not-allowed' : 'bg-[#2EBD85] text-[#0B0E11]'}`}
+              >
+                Comprar
+              </button>
+              <button
+                data-testid="sell-btn-desktop"
+                onClick={() => setOrderFormOpen({ side: 'SELL' })}
+                className="flex-1 py-3 rounded-xl bg-[#F6465D] text-white font-bold text-sm"
+              >
+                Vender
+              </button>
+              <button
+                data-testid="short-btn-desktop"
+                onClick={() => setShortFormOpen(true)}
+                className="px-3 py-3 rounded-xl bg-[#2B3139] text-[#F6465D] font-bold text-xs border border-[#F6465D]/40"
+                title="Short Selling (Lenda)"
+              >
+                Short
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* OrderForm modal (module-14) */}
@@ -349,7 +399,7 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
               className="mb-2 flex items-center gap-2 text-xs text-[#F6465D] bg-[rgba(246,70,93,.08)] border border-[rgba(246,70,93,.2)] rounded-lg px-3 py-2"
             >
               <span className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true">&#9888;</span>
-              Saldo zerado — venda posicoes para negociar.
+              Saldo zerado — venda posições para negociar.
             </div>
           )}
           <div className="flex gap-2">
@@ -357,7 +407,7 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
               data-testid="buy-btn"
               onClick={() => !isBuyBlocked && setOrderFormOpen({ side: 'BUY' })}
               disabled={isBuyBlocked}
-              title={isBuyBlocked ? 'Saldo FS$ zerado. Venda posicoes para negociar novamente.' : undefined}
+              title={isBuyBlocked ? 'Saldo FS$ zerado. Venda posições para negociar novamente.' : undefined}
               className={`flex-1 py-3 rounded-xl font-bold text-sm transition-opacity ${isBuyBlocked ? 'bg-[#2EBD85]/40 text-[#0B0E11]/60 cursor-not-allowed' : 'bg-[#2EBD85] text-[#0B0E11]'}`}
             >
               Comprar

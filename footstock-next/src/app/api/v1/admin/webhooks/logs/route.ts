@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/admin/webhooks/logs
+// FootStock — GET /api/v1/admin/webhooks/logs
 // Endpoint paginado de auditoria de webhooks — protegido por withAdmin
 // ============================================================================
 

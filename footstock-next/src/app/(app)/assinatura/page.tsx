@@ -10,7 +10,7 @@ import { PLAN_LABELS, SUBSCRIPTION_STATUS, getGatewayMeta } from '@/lib/constant
 import { formatDateLong, formatBRLFromCents } from '@/lib/utils/format'
 
 export const metadata: Metadata = {
-  title: 'Minha Assinatura — Foot Stock',
+  title: 'Minha Assinatura — FootStock',
 }
 
 const PLAN_ICONS = { JOGADOR: Star, CRAQUE: Zap, LENDA: Crown }
@@ -142,8 +142,8 @@ export default async function AssinaturaPage() {
             <div>
               <p className="text-sm font-medium text-[#F6465D]">Cancelamento em andamento</p>
               <p className="text-xs text-[#929AA5] mt-0.5">
-                Conta encerrada em {subscription.cancellationLock.hoursRemaining}h caso nao revertida.
-                Voce pode reverter o cancelamento abaixo.
+                Conta encerrada em {subscription.cancellationLock.hoursRemaining}h caso não revertida.
+                Você pode reverter o cancelamento abaixo.
               </p>
             </div>
           </div>

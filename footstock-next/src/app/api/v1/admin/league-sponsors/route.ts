@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/admin/league-sponsors
+// FootStock — GET /api/v1/admin/league-sponsors
 // Lista patrocinadores (modelo Sponsor) para seleção em ligas PRO.
 // Retorna somente ativos por padrão; ?all=true retorna todos.
 // Fonte: T-017

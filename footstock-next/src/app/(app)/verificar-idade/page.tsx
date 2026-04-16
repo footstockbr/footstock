@@ -34,7 +34,7 @@ export default function VerificarIdadePage() {
       <div>
         <h1 className="text-2xl font-bold text-[#EAECEF] mb-2">Verificação de Idade</h1>
         <p className="text-sm text-[#929AA5] max-w-xs">
-          O Foot Stock é destinado a maiores de 18 anos. Confirme sua data de nascimento para continuar.
+          O FootStock é destinado a maiores de 18 anos. Confirme sua data de nascimento para continuar.
         </p>
       </div>
 

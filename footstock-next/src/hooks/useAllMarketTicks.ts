@@ -1,7 +1,7 @@
 'use client'
 
 // ============================================================================
-// Foot Stock — useAllMarketTicks
+// FootStock — useAllMarketTicks
 // Assina o SSE /api/v1/market/stream e retorna map ticker → preço atualizado.
 // Atualiza automaticamente a cada tick do motor (a cada ~2s).
 // Substituição do one-time fetch da MarketPageClient para preços em tempo real.

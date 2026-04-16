@@ -20,16 +20,16 @@ type Step = 'confirm' | 'acknowledge' | 'done'
 
 const CONSEQUENCES_BY_PLAN: Record<string, string[]> = {
   LENDA: [
-    'Novas ordens, shorts e alavancagem serao bloqueados imediatamente',
-    'Acesso ao AI Assessor sera bloqueado imediatamente',
-    'Inscricao em novas ligas sera bloqueada imediatamente',
-    'Suas posicoes short, alavancadas e ordens OCO serao encerradas automaticamente em 48 horas',
-    'Seu saldo FS$ sera ajustado para FS$2.000 apos 7 dias',
+    'Novas ordens, shorts e alavancagem serão bloqueados imediatamente',
+    'Acesso ao AI Assessor será bloqueado imediatamente',
+    'Inscrição em novas ligas será bloqueada imediatamente',
+    'Suas posições short, alavancadas e ordens OCO serão encerradas automaticamente em 48 horas',
+    'Seu saldo FS$ será ajustado para FS$2.000 após 7 dias',
   ],
   CRAQUE: [
-    'Novas ordens limitadas e agendadas serao bloqueadas imediatamente',
-    'Inscricao em novas ligas sera bloqueada imediatamente',
-    'Seu saldo FS$ sera ajustado para FS$2.000 apos 7 dias',
+    'Novas ordens limitadas e agendadas serão bloqueadas imediatamente',
+    'Inscrição em novas ligas será bloqueada imediatamente',
+    'Seu saldo FS$ será ajustado para FS$2.000 após 7 dias',
   ],
   JOGADOR: [],
 }
@@ -103,7 +103,7 @@ export function CancellationModal({ isOpen, onClose, planType }: Props) {
               Cancelar assinatura
             </h2>
             <p className="text-sm text-gray-600 mb-4">
-              Ao cancelar, voce perdera os seguintes beneficios:
+              Ao cancelar, você perderá os seguintes benefícios:
             </p>
 
             {consequences.length > 0 && (
@@ -118,7 +118,7 @@ export function CancellationModal({ isOpen, onClose, planType }: Props) {
             )}
 
             <p className="text-xs text-gray-500 mb-6">
-              Voce tera 7 dias para reverter o cancelamento antes que a conta seja definitivamente encerrada.
+              Você terá 7 dias para reverter o cancelamento antes que a conta seja definitivamente encerrada.
             </p>
 
             <div className="flex gap-3">
@@ -146,10 +146,10 @@ export function CancellationModal({ isOpen, onClose, planType }: Props) {
             </h2>
 
             <div className="rounded-md bg-amber-50 border border-amber-200 p-4 mb-4">
-              <p className="text-sm text-amber-900 font-medium mb-1">O que acontece apos o cancelamento:</p>
+              <p className="text-sm text-amber-900 font-medium mb-1">O que acontece após o cancelamento:</p>
               <ul className="text-xs text-amber-800 space-y-1 list-disc list-inside">
-                <li>Posicoes restritas encerradas automaticamente em 48 horas</li>
-                <li>Conta definitivamente encerrada em 7 dias se nao reverter</li>
+                <li>Posições restritas encerradas automaticamente em 48 horas</li>
+                <li>Conta definitivamente encerrada em 7 dias se não reverter</li>
                 <li>Saldo FS$ ajustado para FS$2.000 no encerramento</li>
               </ul>
             </div>
@@ -162,7 +162,7 @@ export function CancellationModal({ isOpen, onClose, planType }: Props) {
                 className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-gray-300 text-red-600 focus:ring-red-500"
               />
               <span className="text-sm text-gray-700">
-                Entendo e estou ciente das consequencias do cancelamento descritas acima.
+                Entendo e estou ciente das consequências do cancelamento descritas acima.
               </span>
             </label>
 
@@ -203,16 +203,16 @@ export function CancellationModal({ isOpen, onClose, planType }: Props) {
 
             {lockInfo?.isEligibleForRefund ? (
               <p className="text-sm text-gray-600 mb-6">
-                Sua assinatura foi cancelada dentro do periodo de arrependimento (CDC Art. 49).
-                O reembolso sera processado em ate 7 dias uteis.
+                Sua assinatura foi cancelada dentro do período de arrependimento (CDC Art. 49).
+                O reembolso será processado em até 7 dias úteis.
               </p>
             ) : (
               <div className="text-sm text-gray-600 mb-6 space-y-2">
                 <p>Seu cancelamento foi registrado. O que acontece agora:</p>
                 <ul className="text-left space-y-1 text-xs text-gray-700 list-disc list-inside">
-                  <li>Posicoes restritas serao encerradas automaticamente em 48 horas</li>
-                  <li>Voce pode reverter o cancelamento a qualquer momento nos proximos 7 dias</li>
-                  <li>Apos 7 dias sem reversao, a conta sera definitivamente encerrada</li>
+                  <li>Posições restritas serão encerradas automaticamente em 48 horas</li>
+                  <li>Você pode reverter o cancelamento a qualquer momento nos próximos 7 dias</li>
+                  <li>Após 7 dias sem reversão, a conta será definitivamente encerrada</li>
                 </ul>
               </div>
             )}

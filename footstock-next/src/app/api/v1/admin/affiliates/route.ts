@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET/POST /api/v1/admin/affiliates
+// FootStock — GET/POST /api/v1/admin/affiliates
 // Listagem e criação de afiliados. Requer: financial:read (GET) / financial:write (POST).
 // RESOLVED: G002 — módulo afiliados implementado conforme FDD RF-PA-011
 // ============================================================================

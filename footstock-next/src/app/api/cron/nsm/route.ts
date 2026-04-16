@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Cron NSM (North Star Metric)
+// FootStock — Cron NSM (North Star Metric)
 // Conta ordens FILLED do dia, persiste historico, alerta admin se < 50%.
 // Executar diariamente via Vercel Cron ou similar.
 // Protegido por Bearer CRON_SECRET.

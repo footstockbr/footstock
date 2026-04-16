@@ -18,23 +18,23 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { ticker: rawTicker } = await params
   const tickerResult = tickerSchema.safeParse(rawTicker)
   if (!tickerResult.success) {
-    return { title: 'Ativo não encontrado | Foot Stock' }
+    return { title: 'Ativo não encontrado | FootStock' }
   }
   const ticker = tickerResult.data
 
   try {
     const asset = await prisma.asset.findUnique({ where: { ticker } })
-    if (!asset) return { title: 'Ativo não encontrado | Foot Stock' }
+    if (!asset) return { title: 'Ativo não encontrado | FootStock' }
     return {
-      title: `${asset.ticker} — ${asset.displayName} | Foot Stock`,
+      title: `${asset.ticker} — ${asset.displayName} | FootStock`,
       description: `Cotações, gráficos e análise de ${asset.displayName}. Preço atual: FS$${asset.currentPrice.toNumber().toFixed(2)}`,
       openGraph: {
-        title: `${asset.displayName} | Foot Stock`,
+        title: `${asset.displayName} | FootStock`,
         description: `Acompanhe ${asset.ticker} no simulador de trading de futebol.`,
       },
     }
   } catch {
-    return { title: 'Foot Stock' }
+    return { title: 'FootStock' }
   }
 }
 

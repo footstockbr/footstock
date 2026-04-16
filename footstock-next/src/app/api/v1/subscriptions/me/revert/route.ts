@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — PUT /api/v1/subscriptions/me/revert
+// FootStock — PUT /api/v1/subscriptions/me/revert
 // Reverte CANCELLATION_LOCK → ACTIVE dentro da janela de 7 dias
 // Idempotente: usa updateMany com predicados estritos para evitar race conditions
 // ============================================================================

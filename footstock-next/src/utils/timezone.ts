@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Utilitários de fuso horário
+// FootStock — Utilitários de fuso horário
 // Centraliza cálculos relativos ao fuso America/Sao_Paulo (UTC-3, sem DST).
 // Usado pelos limites diários de ordens e jobs de expiração.
 // ============================================================================

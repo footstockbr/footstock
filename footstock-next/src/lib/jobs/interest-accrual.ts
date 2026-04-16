@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Job: acúmulo de juros diário sobre posições SHORT abertas
+// FootStock — Job: acúmulo de juros diário sobre posições SHORT abertas
 // Executado diariamente às 00:00 BRT pelo scheduler (lib/jobs/scheduler.ts).
 // Rastreabilidade: INT-014 / TASK-4/ST002
 // ============================================================================

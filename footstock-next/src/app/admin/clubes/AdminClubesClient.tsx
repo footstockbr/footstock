@@ -1,7 +1,7 @@
 'use client'
 
 // ============================================================================
-// Foot Stock — AdminClubesClient
+// FootStock — AdminClubesClient
 // Camada interativa da aba Clubes: tabela + modal de edição por ativo.
 //
 // SEGURANÇA: searchText é buscado do backend (SUPER_ADMIN endpoint) APENAS
@@ -31,7 +31,11 @@ interface FullAsset {
   id: string
   ticker: string
   displayName: string
+  realName: string | null
   division: string
+  cluster: string
+  currentSupply: number
+  isActive: boolean
   colorPrimary: string
   colorSecondary: string
   logoUrl: string | null
@@ -39,11 +43,18 @@ interface FullAsset {
   fairValue: number
   financials: Record<string, unknown> | null
   searchText: string
+  coachName: string | null
 }
+
+type ClusterValue = 'A_TOP' | 'A_MID' | 'A_SMALL' | 'B_LIQUID' | 'B_ILLIQ'
 
 interface EditForm {
   name: string
+  realName: string
   division: 'SERIE_A' | 'SERIE_B'
+  cluster: ClusterValue
+  currentSupply: string
+  isActive: boolean
   colorPrimary: string
   colorSecondary: string
   logoUrl: string
@@ -51,6 +62,7 @@ interface EditForm {
   fairValue: string
   ipoPrice: string
   searchText: string
+  coachName: string
 }
 
 const DIVISION_LABELS: Record<string, string> = {
@@ -115,7 +127,11 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
       const fin = full.financials ?? {}
       setEditForm({
         name: full.displayName,
+        realName: full.realName ?? '',
         division: full.division as 'SERIE_A' | 'SERIE_B',
+        cluster: (full.cluster ?? 'A_MID') as ClusterValue,
+        currentSupply: String(full.currentSupply ?? 0),
+        isActive: full.isActive ?? true,
         colorPrimary: full.colorPrimary,
         colorSecondary: full.colorSecondary,
         logoUrl: full.logoUrl ?? '',
@@ -123,6 +139,7 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
         fairValue: String(full.fairValue),
         ipoPrice: String((fin.ipoPrice as number) ?? full.fairValue),
         searchText: full.searchText,
+        coachName: full.coachName ?? '',
       })
     } catch {
       alert('Erro de conexão ao carregar dados do clube')
@@ -148,7 +165,11 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
     try {
       const body: Record<string, unknown> = {
         displayName: editForm.name,
+        realName: editForm.realName.trim() || null,
         division: editForm.division,
+        cluster: editForm.cluster,
+        currentSupply: Number(editForm.currentSupply),
+        isActive: editForm.isActive,
         colorPrimary: editForm.colorPrimary,
         colorSecondary: editForm.colorSecondary,
         logoUrl: editForm.logoUrl || null,
@@ -156,6 +177,7 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
         fairValue: Number(editForm.fairValue),
         ipoPrice: Number(editForm.ipoPrice),
         searchText: editForm.searchText,
+        coachName: editForm.coachName.trim() || null,
       }
 
       const res = await fetch(`/api/v1/admin/assets/${editingTicker}`, {
@@ -333,14 +355,14 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
                   </p>
                 </div>
 
-                {/* Nome fictício */}
+                {/* Nome ficticio */}
                 <div style={formGroupStyle}>
-                  <label style={labelStyle}>Nome do Clube (fictício)</label>
+                  <label style={labelStyle}>Nome do Clube (ficticio)</label>
                   <input
                     style={inputStyle}
                     value={editForm.name}
                     onChange={(e) => set('name', e.target.value)}
-                    placeholder="Nome fictício do clube"
+                    placeholder="Nome ficticio do clube"
                     data-testid="modal-clube-name-input"
                   />
                   {fieldErrors.displayName && (
@@ -350,7 +372,42 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
                   )}
                 </div>
 
-                {/* Divisão */}
+                {/* Nome real */}
+                <div style={formGroupStyle}>
+                  <label style={labelStyle}>
+                    Nome Real do Clube
+                    <span
+                      style={{
+                        marginLeft: '6px',
+                        background: '#F6465D22',
+                        color: '#F6465D',
+                        padding: '1px 5px',
+                        borderRadius: '3px',
+                        fontSize: '9px',
+                        fontWeight: 700,
+                      }}
+                    >
+                      ADMIN ONLY
+                    </span>
+                  </label>
+                  <input
+                    style={inputStyle}
+                    value={editForm.realName}
+                    onChange={(e) => set('realName', e.target.value)}
+                    placeholder="Ex: Flamengo"
+                    data-testid="modal-clube-real-name-input"
+                  />
+                  <p style={{ fontSize: '10px', color: '#555d6c', marginTop: '3px' }}>
+                    Nome real do clube. Nunca exibido ao usuario final.
+                  </p>
+                  {fieldErrors.realName && (
+                    <p style={{ fontSize: '11px', color: '#F6465D', marginTop: '3px' }}>
+                      {fieldErrors.realName[0]}
+                    </p>
+                  )}
+                </div>
+
+                {/* Divisao */}
                 <div style={formGroupStyle}>
                   <label style={labelStyle}>Divisão</label>
                   <select
@@ -359,12 +416,71 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
                     onChange={(e) => set('division', e.target.value as 'SERIE_A' | 'SERIE_B')}
                     data-testid="modal-clube-division-select"
                   >
-                    <option value="SERIE_A">Série A</option>
-                    <option value="SERIE_B">Série B</option>
+                    <option value="SERIE_A">Serie A</option>
+                    <option value="SERIE_B">Serie B</option>
                   </select>
                 </div>
 
-                {/* Total de ações + Valor Justo (IPO price) */}
+                {/* Cluster + Current Supply */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '13px' }}>
+                  <div>
+                    <label style={labelStyle}>Cluster</label>
+                    <select
+                      style={inputStyle}
+                      value={editForm.cluster}
+                      onChange={(e) => set('cluster', e.target.value as ClusterValue)}
+                      data-testid="modal-clube-cluster-select"
+                    >
+                      <option value="A_TOP">A_TOP</option>
+                      <option value="A_MID">A_MID</option>
+                      <option value="A_SMALL">A_SMALL</option>
+                      <option value="B_LIQUID">B_LIQUID</option>
+                      <option value="B_ILLIQ">B_ILLIQ</option>
+                    </select>
+                    {fieldErrors.cluster && (
+                      <p style={{ fontSize: '11px', color: '#F6465D', marginTop: '3px' }}>
+                        {fieldErrors.cluster[0]}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Supply Atual</label>
+                    <input
+                      style={inputStyle}
+                      type="number"
+                      min={0}
+                      value={editForm.currentSupply}
+                      onChange={(e) => set('currentSupply', e.target.value)}
+                      placeholder="Supply atual em circulação"
+                      data-testid="modal-clube-current-supply-input"
+                    />
+                    {fieldErrors.currentSupply && (
+                      <p style={{ fontSize: '11px', color: '#F6465D', marginTop: '3px' }}>
+                        {fieldErrors.currentSupply[0]}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Ativo? (isActive toggle) */}
+                <div style={{ ...formGroupStyle, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <label
+                    style={{ ...labelStyle, marginBottom: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={editForm.isActive}
+                      onChange={(e) => set('isActive', e.target.checked)}
+                      style={{ accentColor: '#F0B90B', width: '16px', height: '16px', cursor: 'pointer' }}
+                      data-testid="modal-clube-is-active-toggle"
+                    />
+                    <span style={{ fontSize: '12px', color: editForm.isActive ? '#2EBD85' : '#F6465D', fontWeight: 600 }}>
+                      {editForm.isActive ? 'Ativo (negociavel)' : 'Inativo (suspenso)'}
+                    </span>
+                  </label>
+                </div>
+
+                {/* Total de acoes + Valor Justo (IPO price) */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '13px' }}>
                   <div>
                     <label style={labelStyle}>Total de Ações</label>
@@ -531,6 +647,41 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
                   {fieldErrors.searchText && (
                     <p style={{ fontSize: '11px', color: '#F6465D', marginTop: '3px' }}>
                       {fieldErrors.searchText[0]}
+                    </p>
+                  )}
+                </div>
+
+                {/* Tecnico — Nome do treinador (matching de noticias) */}
+                <div style={formGroupStyle}>
+                  <label style={labelStyle}>
+                    Técnico
+                    <span
+                      style={{
+                        marginLeft: '6px',
+                        background: 'rgba(240,185,11,.12)',
+                        color: '#F0B90B',
+                        padding: '1px 5px',
+                        borderRadius: '3px',
+                        fontSize: '9px',
+                        fontWeight: 700,
+                      }}
+                    >
+                      MATCHING DE NOTÍCIAS
+                    </span>
+                  </label>
+                  <input
+                    style={inputStyle}
+                    value={editForm.coachName}
+                    onChange={(e) => set('coachName', e.target.value)}
+                    placeholder="Ex: Abel Ferreira"
+                    data-testid="modal-clube-search-tecnico-input"
+                  />
+                  <p style={{ fontSize: '10px', color: '#555d6c', marginTop: '3px' }}>
+                    Nome do técnico atual. Notícias que mencionem este nome serão automaticamente vinculadas a este clube.
+                  </p>
+                  {fieldErrors.coachName && (
+                    <p style={{ fontSize: '11px', color: '#F6465D', marginTop: '3px' }}>
+                      {fieldErrors.coachName[0]}
                     </p>
                   )}
                 </div>

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — PUT  /api/v1/admin/sponsors/[id]  (atualiza patrocinador)
+// FootStock — PUT  /api/v1/admin/sponsors/[id]  (atualiza patrocinador)
 //             DELETE /api/v1/admin/sponsors/[id]  (remove patrocinador)
 // Fonte: module-24/TASK-3/ST002
 // ============================================================================

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — POST /api/v1/admin/news/inject
+// FootStock — POST /api/v1/admin/news/inject
 // Injeção manual de notícias no motor de preços com RBAC (motor:control).
 // Requer: SuperAdmin ou Administrador (não Editor — restringe manipulação de preços).
 // Rastreabilidade: INT-049

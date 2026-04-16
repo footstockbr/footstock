@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — /club/comunicados — Comunicados oficiais do clube
+// FootStock — /club/comunicados — Comunicados oficiais do clube
 // Auth obrigatória CLUB_PARTNER via (portal)/layout.tsx + withClubAuth().
 // Integração com feed de comunicados em fase futura.
 // Rastreabilidade: US-025, US-036, FDD painel-admin §2.12, MILESTONE-9
@@ -11,7 +11,7 @@ import { withClubAuth } from '@/lib/auth/club-auth'
 import { prisma } from '@/lib/prisma'
 
 export const metadata: Metadata = {
-  title: 'Comunicados — Portal do Clube — Foot Stock',
+  title: 'Comunicados — Portal do Clube — FootStock',
 }
 
 export default async function ClubComunicadosPage() {
@@ -118,7 +118,7 @@ export default async function ClubComunicadosPage() {
       <div className="flex items-start gap-2 p-3 rounded-lg bg-[rgba(240,185,11,.06)] border border-[rgba(240,185,11,.12)]">
         <Trophy className="h-4 w-4 text-[#F0B90B] flex-shrink-0 mt-0.5" />
         <p className="text-xs text-[#929AA5]">
-          Comunicados publicados via painel administrativo do Foot Stock.
+          Comunicados publicados via painel administrativo do FootStock.
         </p>
       </div>
     </div>

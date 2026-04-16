@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — POST /api/v1/club/auth/login
+// FootStock — POST /api/v1/club/auth/login
 // Login exclusivo para clubes parceiros (role CLUB_PARTNER).
 // Usa Supabase Auth. Redireciona para /club/login se role incorreto.
 // Rate limiting: 5 tentativas/min por email (TASK-015 sub-item 2).

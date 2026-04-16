@@ -1,6 +1,6 @@
 "use client";
 // ============================================================================
-// Foot Stock — AdminSidebar
+// FootStock — AdminSidebar
 // Sidebar do painel admin com links filtrados por role e navegação mobile por tabs.
 // Rastreabilidade: INT-085, TASK-1/ST004
 // ============================================================================

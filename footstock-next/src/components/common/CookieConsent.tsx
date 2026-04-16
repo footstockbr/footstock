@@ -1,7 +1,7 @@
 'use client'
 
 // ============================================================================
-// Foot Stock — CookieConsent Banner (LGPD)
+// FootStock — CookieConsent Banner (LGPD)
 // Consentimento explicito para analytics antes de inicializar Mixpanel
 // Rastreabilidade: ANALYTICS-SPEC.md EVT-036, T-029, LGPD Art. 8
 // ============================================================================
@@ -75,12 +75,12 @@ export function CookieConsent() {
     >
       <div className="mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-[#848E9C]">
-          Usamos cookies de analytics para melhorar sua experiencia. Seus dados sao pseudonimizados e nunca compartilhamos PII.{' '}
+          Usamos cookies de analytics para melhorar sua experiência. Seus dados são pseudonimizados e nunca compartilhamos PII.{' '}
           <a
             href="/privacidade"
             className="text-[#F0B90B] underline underline-offset-2 hover:text-[#F0B90B]/80"
           >
-            Politica de Privacidade
+            Política de Privacidade
           </a>
         </p>
         <div className="flex shrink-0 gap-2">

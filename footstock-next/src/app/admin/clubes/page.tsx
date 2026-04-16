@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import AdminClubesClient, { type AssetRow } from './AdminClubesClient'
 
 export const metadata: Metadata = {
-  title: 'Clubes — Admin · Foot Stock',
+  title: 'Clubes — Admin · FootStock',
 }
 
 export default async function AdminClubesPage() {

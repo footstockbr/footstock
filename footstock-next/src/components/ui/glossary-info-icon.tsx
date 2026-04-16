@@ -118,14 +118,16 @@ export function GlossaryInfoIcon({
   return (
     <>
       {/* Trigger icon */}
-      <button
-        type="button"
+      <span
+        role="button"
+        tabIndex={0}
         onClick={handleOpen}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpen() } }}
         className={`inline-flex items-center cursor-help text-[#707A8A] hover:text-[#F0B90B] transition-colors ${className}`}
-        aria-label="Ver definicao no glossario"
+        aria-label="Ver definição no glossário"
       >
         <Info style={{ width: size, height: size }} />
-      </button>
+      </span>
 
       {/* Modal overlay */}
       {isOpen && term && (
@@ -133,7 +135,7 @@ export function GlossaryInfoIcon({
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
           role="dialog"
           aria-modal="true"
-          aria-label={`Glossario: ${term.title}`}
+          aria-label={`Glossário: ${term.title}`}
         >
           {/* Backdrop */}
           <div

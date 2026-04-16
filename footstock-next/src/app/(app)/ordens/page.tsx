@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import { OrderHistory } from '@/components/orders/OrderHistory'
 
 export const metadata: Metadata = {
-  title: 'Minhas Ordens | Foot Stock',
-  description: 'Historico de ordens de compra e venda de ativos.',
+  title: 'Minhas Ordens | FootStock',
+  description: 'Histórico de ordens de compra e venda de ativos.',
 }
 
 export default function OrdensPage() {

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/affiliate/me
+// FootStock — GET /api/v1/affiliate/me
 // Métricas do influenciador afiliado: link, conversões, comissões acumuladas.
 // IDOR prevention: userId SEMPRE da sessão, nunca de query param.
 // Rastreabilidade: INT-084, US-036, TASK-3/ST002

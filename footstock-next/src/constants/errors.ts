@@ -1,4 +1,4 @@
-// Foot Stock — Constantes de erro
+// FootStock — Constantes de erro
 // Referência: output/docs/foot-stock/project/ERROR-CATALOG.md
 
 export const ERROR_CODES = {

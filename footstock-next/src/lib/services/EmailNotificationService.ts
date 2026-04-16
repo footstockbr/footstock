@@ -54,7 +54,7 @@ class EmailNotificationService {
       const { Resend } = await import('resend')
       const resend = new Resend(apiKey)
       const result = await resend.emails.send({
-        from: `Foot Stock <${this.getFromAddress()}>`,
+        from: `FootStock <${this.getFromAddress()}>`,
         to: payload.to,
         subject: payload.subject,
         html: payload.html,
@@ -102,13 +102,13 @@ class EmailNotificationService {
         <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;padding:32px 16px">
           <tr>
             <td style="background:#181A20;border-radius:8px;padding:32px;border:1px solid rgba(240,185,11,.15)">
-              <img src="${appUrl}/logo.png" alt="Foot Stock" height="32" style="margin-bottom:24px" />
+              <img src="${appUrl}/logo.png" alt="FootStock" height="32" style="margin-bottom:24px" />
               <h2 style="color:#EAECEF;margin:0 0 16px">${data.title}</h2>
               <p style="color:#929AA5;line-height:1.6;margin:0 0 16px">${data.body}</p>
               ${ctaHtml}
               <p style="color:#707A8A;font-size:12px;margin-top:32px;border-top:1px solid rgba(255,255,255,.1);padding-top:16px">
                 Este email é transacional e não pode ser descadastrado.<br>
-                Foot Stock — ${appUrl}
+                FootStock — ${appUrl}
               </p>
             </td>
           </tr>
@@ -118,18 +118,18 @@ class EmailNotificationService {
     `
 
     const subjects: Partial<Record<NotificationType, string>> = {
-      PAYMENT_CONFIRMED: 'Pagamento confirmado — Foot Stock',
+      PAYMENT_CONFIRMED: 'Pagamento confirmado — FootStock',
       PAYMENT_FAILED: 'Não conseguimos processar seu pagamento',
-      PLAN_CANCEL_ALERT: 'Sua assinatura Foot Stock foi cancelada',
-      ADMIN_BROADCAST: `[Foot Stock] ${data.title}`,
+      PLAN_CANCEL_ALERT: 'Sua assinatura FootStock foi cancelada',
+      ADMIN_BROADCAST: `[FootStock] ${data.title}`,
       CANCELLATION_LOCK_ACTIVE: 'Atenção: Trava de cancelamento ativada',
       CANCELLATION_LOCK_LIQUIDATED: 'Suas posições foram liquidadas automaticamente',
       PASSWORD_RESET: 'Redefinição de senha solicitada',
-      LGPD_EXPORT_READY: 'Seus dados do Foot Stock estão prontos',
-      ACCOUNT_DELETED: 'Sua conta foi excluída — Foot Stock',
+      LGPD_EXPORT_READY: 'Seus dados do FootStock estão prontos',
+      ACCOUNT_DELETED: 'Sua conta foi excluída — FootStock',
       BRUTE_FORCE_BLOCKED: 'Atividade suspeita detectada na sua conta',
       MARGIN_CALL_ALERT: '⚠️ Alerta crítico de margem — Ação necessária',
-      MARGIN_CALL_WARNING: 'Aviso de margem — Foot Stock',
+      MARGIN_CALL_WARNING: 'Aviso de margem — FootStock',
     }
 
     await this.send({

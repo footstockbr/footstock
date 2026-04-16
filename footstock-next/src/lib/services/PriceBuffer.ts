@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — PriceBuffer (T-022)
+// FootStock — PriceBuffer (T-022)
 // Buffer Redis de cotações por ativo, indexado por timestamp.
 // Permite consulta de preço histórico com delay por plano.
 //

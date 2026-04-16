@@ -4,7 +4,7 @@ import { getAuthUser } from "@/lib/auth";
 import { ComunidadeClient } from "./comunidade-client";
 
 export const metadata: Metadata = {
-  title: "Comunidade — Foot Stock",
+  title: "Comunidade — FootStock",
 };
 
 export default async function ComunidadePage() {

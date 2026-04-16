@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/health
+// FootStock — GET /api/health
 // Endpoint de saúde para monitoramento e smoke tests.
 // Não requer autenticação — acessível por load balancers e uptime monitors.
 // ============================================================================

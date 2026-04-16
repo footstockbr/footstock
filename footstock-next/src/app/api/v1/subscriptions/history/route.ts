@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/subscriptions/history
+// FootStock — GET /api/v1/subscriptions/history
 // Histórico de assinaturas e pagamentos do usuário autenticado
 // ============================================================================
 

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — PlanDividendPolicy (T-007)
+// FootStock — PlanDividendPolicy (T-007)
 // Centraliza regras de elegibilidade de dividendo por plano.
 // CRAQUE/LENDA: crédito automático em wallet.
 // JOGADOR: não recebe crédito direto — yield acumula em YieldDifferentialPending.

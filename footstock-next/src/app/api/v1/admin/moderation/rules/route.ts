@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/admin/moderation/rules
+// FootStock — GET /api/v1/admin/moderation/rules
 //              PATCH /api/v1/admin/moderation/rules
 // Leitura e atualização das 5 regras de auto-moderação configuráveis.
 // Persistência: Redis (primário) → DB (backup). Falha silenciosa.

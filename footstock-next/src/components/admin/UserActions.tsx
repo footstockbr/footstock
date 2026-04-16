@@ -2,10 +2,14 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { toast } from 'sonner'
-import { MoreVertical, UserX, UserCheck, RefreshCw, Shield } from 'lucide-react'
+import { MoreVertical, UserX, UserCheck, RefreshCw, Shield, Pencil, CreditCard, DollarSign, Trash2 } from 'lucide-react'
 import { SuspendDialog } from './SuspendDialog'
 import { PromoteDialog } from './PromoteDialog'
 import { ResetBalanceDialog } from './ResetBalanceDialog'
+import { EditNameDialog } from './EditNameDialog'
+import { ChangePlanDialog } from './ChangePlanDialog'
+import { AddBalanceDialog } from './AddBalanceDialog'
+import { DeleteUserDialog } from './DeleteUserDialog'
 import type { AdminUserActionItem } from '@/lib/types/admin'
 
 interface UserActionsProps {
@@ -19,6 +23,10 @@ export function UserActions({ user, currentAdminRole, onActionComplete }: UserAc
   const [showSuspendDialog, setShowSuspendDialog] = useState(false)
   const [showPromoteDialog, setShowPromoteDialog] = useState(false)
   const [showResetDialog, setShowResetDialog] = useState(false)
+  const [showEditNameDialog, setShowEditNameDialog] = useState(false)
+  const [showChangePlanDialog, setShowChangePlanDialog] = useState(false)
+  const [showAddBalanceDialog, setShowAddBalanceDialog] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [loading, setLoading] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -141,6 +149,66 @@ export function UserActions({ user, currentAdminRole, onActionComplete }: UserAc
     }
   }
 
+  async function handleEditName(newName: string) {
+    const res = await fetch(`/api/v1/admin/users/${user.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newName }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => null)
+      toast.error(body?.message ?? `Erro ao editar nome (${res.status})`)
+      return
+    }
+    toast.success(`Nome de ${user.name} alterado para ${newName}.`)
+    setShowEditNameDialog(false)
+    onActionComplete()
+  }
+
+  async function handleChangePlan(newPlan: string) {
+    const res = await fetch(`/api/v1/admin/users/${user.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ planType: newPlan }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => null)
+      toast.error(body?.message ?? `Erro ao trocar plano (${res.status})`)
+      return
+    }
+    toast.success(`Plano de ${user.name} alterado para ${newPlan}.`)
+    setShowChangePlanDialog(false)
+    onActionComplete()
+  }
+
+  async function handleAddBalance(amount: number) {
+    const res = await fetch(`/api/v1/admin/users/${user.id}/add-balance`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => null)
+      toast.error(body?.message ?? `Erro ao inserir saldo (${res.status})`)
+      return
+    }
+    toast.success(`FS$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} adicionado ao saldo de ${user.name}.`)
+    setShowAddBalanceDialog(false)
+    onActionComplete()
+  }
+
+  async function handleDeleteUser() {
+    const res = await fetch(`/api/v1/admin/users/${user.id}`, { method: 'DELETE' })
+    if (!res.ok) {
+      const body = await res.json().catch(() => null)
+      toast.error(body?.message ?? `Erro ao deletar conta (${res.status})`)
+      return
+    }
+    toast.success(`Conta de ${user.name} deletada com sucesso.`)
+    setShowDeleteDialog(false)
+    onActionComplete()
+  }
+
   return (
     <div data-testid="admin-user-actions" className="relative" ref={menuRef}>
       <button
@@ -159,6 +227,39 @@ export function UserActions({ user, currentAdminRole, onActionComplete }: UserAc
           role="menu"
           className="absolute right-0 mt-1 w-52 bg-[#1e1a16] border border-[rgba(240,185,11,.15)] rounded-xl shadow-lg z-20 py-1"
         >
+          {/* Edit name */}
+          <button
+            role="menuitem"
+            data-testid="admin-user-edit-name-button"
+            onClick={() => { setOpen(false); setShowEditNameDialog(true) }}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-[#c5b99a] hover:bg-[rgba(240,185,11,.06)] min-h-[44px]"
+          >
+            <Pencil className="h-4 w-4 text-[#F0B90B]" />
+            Editar nome
+          </button>
+
+          {/* Change plan */}
+          <button
+            role="menuitem"
+            data-testid="admin-user-change-plan-button"
+            onClick={() => { setOpen(false); setShowChangePlanDialog(true) }}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-[#c5b99a] hover:bg-[rgba(240,185,11,.06)] min-h-[44px]"
+          >
+            <CreditCard className="h-4 w-4 text-[#F0B90B]" />
+            Trocar plano
+          </button>
+
+          {/* Add balance */}
+          <button
+            role="menuitem"
+            data-testid="admin-user-add-balance-button"
+            onClick={() => { setOpen(false); setShowAddBalanceDialog(true) }}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-[#2EBD85] hover:bg-[rgba(46,189,133,.06)] min-h-[44px]"
+          >
+            <DollarSign className="h-4 w-4 text-[#2EBD85]" />
+            Inserir saldo
+          </button>
+
           {/* Reset balance */}
           <button
             role="menuitem"
@@ -168,6 +269,9 @@ export function UserActions({ user, currentAdminRole, onActionComplete }: UserAc
             <RefreshCw className="h-4 w-4 text-[#F0B90B]" />
             Resetar saldo
           </button>
+
+          {/* Divider */}
+          <div className="my-1 border-t border-[rgba(240,185,11,.08)]" />
 
           {/* Suspend / Unsuspend */}
           {isSuspended ? (
@@ -206,6 +310,20 @@ export function UserActions({ user, currentAdminRole, onActionComplete }: UserAc
               Alterar role admin
             </button>
           )}
+
+          {/* Divider before delete */}
+          <div className="my-1 border-t border-[rgba(240,185,11,.08)]" />
+
+          {/* Delete user */}
+          <button
+            role="menuitem"
+            data-testid="admin-user-delete-button"
+            onClick={() => { setOpen(false); setShowDeleteDialog(true) }}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-[#F6465D] hover:bg-[rgba(239,68,68,.06)] min-h-[44px]"
+          >
+            <Trash2 className="h-4 w-4" />
+            Deletar conta
+          </button>
         </div>
       )}
 
@@ -240,6 +358,44 @@ export function UserActions({ user, currentAdminRole, onActionComplete }: UserAc
           currentBalance={user.fsBalance ?? 0}
           onConfirm={executeResetBalance}
           onCancel={() => setShowResetDialog(false)}
+        />
+      )}
+
+      {showEditNameDialog && (
+        <EditNameDialog
+          userId={user.id}
+          userName={user.name}
+          onConfirm={handleEditName}
+          onCancel={() => setShowEditNameDialog(false)}
+        />
+      )}
+
+      {showChangePlanDialog && (
+        <ChangePlanDialog
+          userId={user.id}
+          userName={user.name}
+          currentPlan={user.planType}
+          onConfirm={handleChangePlan}
+          onCancel={() => setShowChangePlanDialog(false)}
+        />
+      )}
+
+      {showAddBalanceDialog && (
+        <AddBalanceDialog
+          userId={user.id}
+          userName={user.name}
+          currentBalance={user.fsBalance ?? 0}
+          onConfirm={handleAddBalance}
+          onCancel={() => setShowAddBalanceDialog(false)}
+        />
+      )}
+
+      {showDeleteDialog && (
+        <DeleteUserDialog
+          userId={user.id}
+          userName={user.name}
+          onConfirm={handleDeleteUser}
+          onCancel={() => setShowDeleteDialog(false)}
         />
       )}
     </div>

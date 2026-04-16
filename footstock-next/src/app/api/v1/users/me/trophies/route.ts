@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/users/me/trophies
+// FootStock — GET /api/v1/users/me/trophies
 // Troféus virtuais conquistados pelo usuário em ligas PRO encerradas.
 // Troféus são puramente cosméticos — sem valor monetário.
 // Fonte: T-017

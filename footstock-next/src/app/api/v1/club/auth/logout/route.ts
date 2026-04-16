@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — POST /api/v1/club/auth/logout
+// FootStock — POST /api/v1/club/auth/logout
 // Logout do portal de clubes parceiros. Invalida sessão Supabase.
 // Rastreabilidade: TASK-015 sub-item 2
 // ============================================================================

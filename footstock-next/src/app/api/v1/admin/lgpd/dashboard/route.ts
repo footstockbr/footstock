@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — /api/v1/admin/lgpd/dashboard
+// FootStock — /api/v1/admin/lgpd/dashboard
 // Dados agregados para o DPO Dashboard (LGPD).
 // Protegido por withAdmin('admin:audit').
 // Rastreabilidade: G023

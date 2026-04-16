@@ -22,6 +22,12 @@ const bannerCreateSchema = z.object({
   sponsorId: z.string().cuid('sponsorId inválido').optional().nullable(),
   width:     z.number().int().positive().optional().nullable(),
   height:    z.number().int().positive().optional().nullable(),
+  // Campos de data e imagens responsivas
+  startDate:       z.string().datetime({ offset: true }).optional().nullable(),
+  endDate:         z.string().datetime({ offset: true }).optional().nullable(),
+  imageDesktopUrl:  z.string().url('imageDesktopUrl inválida').optional().nullable(),
+  imageMobileUrl:   z.string().url('imageMobileUrl inválida').optional().nullable(),
+  imageVerticalUrl: z.string().url('imageVerticalUrl inválida').optional().nullable(),
 })
 
 export async function GET(request: NextRequest) {
@@ -120,16 +126,21 @@ export async function POST(request: NextRequest) {
         { status: 422 }
       )
     }
-    const { title, company, position, isActive, color, ctaText, ctaColor, linkUrl, imageUrl, sponsorId, width, height } = parsed.data
+    const { title, company, position, isActive, color, ctaText, ctaColor, linkUrl, imageUrl, sponsorId, width, height, startDate, endDate, imageDesktopUrl, imageMobileUrl, imageVerticalUrl } = parsed.data
 
     const banner = await prisma.sponsorBanner.create({
       data: {
         title, company, position, isActive, color, ctaText, ctaColor,
-        linkUrl:   linkUrl   ?? null,
-        imageUrl:  imageUrl  ?? null,
-        sponsorId: sponsorId ?? null,
-        width:     width     ?? null,
-        height:    height    ?? null,
+        linkUrl:          linkUrl          ?? null,
+        imageUrl:         imageUrl         ?? null,
+        sponsorId:        sponsorId        ?? null,
+        width:            width            ?? null,
+        height:           height           ?? null,
+        startDate:        startDate ? new Date(startDate) : null,
+        endDate:          endDate   ? new Date(endDate)   : null,
+        imageDesktopUrl:  imageDesktopUrl  ?? null,
+        imageMobileUrl:   imageMobileUrl   ?? null,
+        imageVerticalUrl: imageVerticalUrl ?? null,
       },
     })
 

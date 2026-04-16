@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — POST /api/v1/admin/affiliates/:id/pay
+// FootStock — POST /api/v1/admin/affiliates/:id/pay
 // Processar pagamento de comissões pendentes. SUPER_ADMIN only (financial:write).
 // RESOLVED: G002
 // ============================================================================

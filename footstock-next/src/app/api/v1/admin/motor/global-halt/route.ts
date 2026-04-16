@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Admin: Global Halt do Motor de Negociações
+// FootStock — Admin: Global Halt do Motor de Negociações
 // POST   /api/v1/admin/motor/global-halt → pausa motor inteiro
 // DELETE /api/v1/admin/motor/global-halt → retoma motor
 // GET    /api/v1/admin/motor/global-halt → status do halt

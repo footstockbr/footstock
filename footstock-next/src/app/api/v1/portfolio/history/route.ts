@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — GET /api/v1/portfolio/history?period=
+// FootStock — GET /api/v1/portfolio/history?period=
 // Histórico de evolução do patrimônio com dados REAIS + LOCF (module-15 — ST004).
 // Rastreabilidade: INT-024
 // ============================================================================
