@@ -49,10 +49,16 @@ export async function GET(request: NextRequest) {
       console.error('Failed to log data access:', logError)
     }
 
+    // Build adminRole filter: explicit role > hasAdmin (excludes CLUB_PARTNER)
+    const adminRoleFilter = adminRole
+      ? { adminRole: adminRole as string }
+      : hasAdmin === 'true'
+        ? { adminRole: { in: ['SUPER_ADMIN', 'ADMINISTRADOR', 'MONITOR', 'EDITOR', 'MODERADOR'] as string[] } }
+        : {}
+
     const where = {
       ...(planType && { planType }),
-      ...(adminRole && { adminRole }),
-      ...(hasAdmin === 'true' && { adminRole: { in: ['SUPER_ADMIN', 'ADMINISTRADOR', 'MONITOR', 'EDITOR', 'MODERADOR'] } }),
+      ...adminRoleFilter,
       ...(userType && { userType }),
       ...(status === 'suspended' && { suspendedAt: { not: null } }),
       ...(status === 'active' && { suspendedAt: null }),
