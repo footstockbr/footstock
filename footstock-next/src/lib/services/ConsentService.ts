@@ -16,6 +16,7 @@ export type ConsentPurposeKey =
   | 'marketing'
   | 'data_terceiros'
   | 'age_verification'
+  | 'sponsored_leagues'
 
 export interface ConsentSummary {
   purpose: ConsentPurposeKey
@@ -44,6 +45,7 @@ const PURPOSE_MAP: Record<ConsentPurposeKey, ConsentPurpose> = {
   marketing:       ConsentPurpose.MARKETING,
   data_terceiros:  ConsentPurpose.DATA_TERCEIROS,
   age_verification: ConsentPurpose.AGE_VERIFICATION,
+  sponsored_leagues: ConsentPurpose.SPONSORED_LEAGUES,
 }
 
 // Mapeamento inverso enum → string
@@ -53,6 +55,7 @@ const PURPOSE_REVERSE: Record<ConsentPurpose, ConsentPurposeKey> = {
   [ConsentPurpose.MARKETING]:       'marketing',
   [ConsentPurpose.DATA_TERCEIROS]:  'data_terceiros',
   [ConsentPurpose.AGE_VERIFICATION]: 'age_verification',
+  [ConsentPurpose.SPONSORED_LEAGUES]: 'sponsored_leagues',
 }
 
 const NON_REVOCABLE: ConsentPurposeKey[] = ['essential', 'age_verification']

@@ -219,6 +219,7 @@ enum ConsentPurpose {
   MARKETING
   DATA_TERCEIROS
   AGE_VERIFICATION
+  SPONSORED_LEAGUES
 }
 
 enum VerificationMethod {

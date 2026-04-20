@@ -72,7 +72,11 @@ export class OrderService {
 
     // Resolver alias: FLA3 → URU3 (T-031). Normaliza antes de buscar.
     const resolvedTicker = await AliasService.resolve(dto.ticker)
-    if (!resolvedTicker) throw new AppError('ASSET_031', 422, { message: 'Ativo não encontrado.' })
+    // T-02: Diagnosticar tickers não resolvidos
+    if (!resolvedTicker) {
+      console.warn(`[ORDERS] Ticker não resolvido: "${dto.ticker}" para userId ${userId}`)
+      throw new AppError('ASSET_031', 422, { message: 'Ativo não encontrado.' })
+    }
     // Substituir ticker pelo canônico para todo o fluxo downstream
     dto = { ...dto, ticker: resolvedTicker }
 

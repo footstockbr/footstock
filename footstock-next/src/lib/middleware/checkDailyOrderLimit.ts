@@ -8,6 +8,7 @@
 import { NextResponse } from 'next/server'
 import { redisPublisher as redis } from '@/lib/redis'
 import { prisma } from '@/lib/prisma'
+import { atomicIncrWithTtl } from '@/utils/redisRateLimit'
 import type { PlanType } from '@/lib/enums'
 import { DAILY_ORDER_LIMITS_BY_PLAN, ALLOWED_ORDER_TYPES_BY_PLAN } from '@/lib/services/plan-order-limits'
 import { todayInBRT, getBrtDayBounds, nextMidnightBRT, secondsUntilMidnightBRT, formatTimeUntilReset } from '@/utils/timezone'
@@ -71,38 +72,82 @@ export async function checkDailyOrderLimit(
     }
   }
 
-  // Verificar contador
-  const used = await _getDailyCount(userId, now)
-  const remaining = Math.max(0, limit - used)
+  // T-01: Verificar contador usando atomic increment (minimizar race condition)
+  // Padrão: increment primeiro, check depois, refund se necessário
+  const dateStr = todayInBRT(now)
+  const redisKey = `order:daily:${userId}:${dateStr}`
+  const ttl = secondsUntilMidnightBRT(now)
 
-  if (used >= limit) {
-    const timeUntil = formatTimeUntilReset(now)
-    const response = NextResponse.json(
-      {
-        error: {
-          code: 'ORDER_051',
-          message: `Limite diário de ${limit} ordens atingido para o plano ${planType}. Próximo reset em ${timeUntil}.`,
-          limit,
-          used,
-          planType,
-          resetAt,
-          retryAfterSeconds: Math.ceil((nextMidnightBRT(now).getTime() - now.getTime()) / 1000),
+  try {
+    const { count: newCount } = await atomicIncrWithTtl(redisKey, ttl)
+    const used = newCount - 1 // count retorna o valor DEPOIS do INCR
+
+    // Se o incremento nos colocou acima do limite, desfazer e bloquear
+    if (newCount > limit) {
+      await redis.decr(redisKey)
+      const timeUntil = formatTimeUntilReset(now)
+      const response = NextResponse.json(
+        {
+          error: {
+            code: 'ORDER_051',
+            message: `Limite diário de ${limit} ordens atingido para o plano ${planType}. Próximo reset em ${timeUntil}.`,
+            limit,
+            used: limit,
+            planType,
+            resetAt,
+            retryAfterSeconds: Math.ceil((nextMidnightBRT(now).getTime() - now.getTime()) / 1000),
+          },
         },
-      },
-      { status: 403 }
-    )
-    response.headers.set('X-DailyOrder-Limit', String(limit))
-    response.headers.set('X-DailyOrder-Remaining', '0')
-    response.headers.set('X-DailyOrder-Reset', resetAt)
-    return {
-      block: response,
-      info: { limit, used, remaining: 0, resetAt },
+        { status: 403 }
+      )
+      response.headers.set('X-DailyOrder-Limit', String(limit))
+      response.headers.set('X-DailyOrder-Remaining', '0')
+      response.headers.set('X-DailyOrder-Reset', resetAt)
+      return {
+        block: response,
+        info: { limit, used: limit, remaining: 0, resetAt },
+      }
     }
-  }
 
-  return {
-    block: null,
-    info: { limit, used, remaining, resetAt },
+    const remaining = Math.max(0, limit - newCount)
+    return {
+      block: null,
+      info: { limit, used, remaining, resetAt },
+    }
+  } catch {
+    // Fallback para o padrão antigo se Redis falhar
+    const used = await _getDailyCount(userId, now)
+    const remaining = Math.max(0, limit - used)
+
+    if (used >= limit) {
+      const timeUntil = formatTimeUntilReset(now)
+      const response = NextResponse.json(
+        {
+          error: {
+            code: 'ORDER_051',
+            message: `Limite diário de ${limit} ordens atingido para o plano ${planType}. Próximo reset em ${timeUntil}.`,
+            limit,
+            used,
+            planType,
+            resetAt,
+            retryAfterSeconds: Math.ceil((nextMidnightBRT(now).getTime() - now.getTime()) / 1000),
+          },
+        },
+        { status: 403 }
+      )
+      response.headers.set('X-DailyOrder-Limit', String(limit))
+      response.headers.set('X-DailyOrder-Remaining', '0')
+      response.headers.set('X-DailyOrder-Reset', resetAt)
+      return {
+        block: response,
+        info: { limit, used, remaining: 0, resetAt },
+      }
+    }
+
+    return {
+      block: null,
+      info: { limit, used, remaining, resetAt },
+    }
   }
 }
 

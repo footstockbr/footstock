@@ -54,6 +54,23 @@ export async function POST(
         }
       }
 
+      // T-12: Verificar consent LGPD para ligas patrocinadas
+      const consent = await tx.consent.findFirst({
+        where: {
+          userId: auth.user.id,
+          purpose: 'SPONSORED_LEAGUES',
+          granted: true,
+          revokedAt: null,
+        },
+      })
+      if (!consent) {
+        return {
+          error: 'SPONSORED-LGPD-001',
+          message: 'Aceite os termos de privacidade para participar de ligas patrocinadas.',
+          status: 403,
+        }
+      }
+
       // Validar capacidade (dentro da transacao para evitar race condition)
       if (league._count.members >= league.maxParticipants) {
         return { error: 'SPONSORED-004', message: 'Liga cheia. Nao ha mais vagas disponiveis.', status: 422 }

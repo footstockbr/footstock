@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { z } from 'zod'
+import crypto from 'crypto'
 import { withAdmin } from '@/app/api/middleware'
 import { prisma } from '@/lib/prisma'
 import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
@@ -89,9 +90,23 @@ export const POST = withAdmin('financial:write')(async (request: NextRequest) =>
     return NextResponse.json({ success: false, error: { code: 'VAL_001', message: 'Dados inválidos', details: parsed.error.flatten() } }, { status: 422 })
   }
 
-  const user = await prisma.user.findUnique({ where: { email: parsed.data.email.toLowerCase() }, select: { id: true } })
+  let user = await prisma.user.findUnique({ where: { email: parsed.data.email.toLowerCase() }, select: { id: true } })
+
+  // T-14: Auto-link email — criar usuário se não existir
   if (!user) {
-    return NextResponse.json({ success: false, error: { code: 'AUTH_001', message: 'Usuário não encontrado' } }, { status: 404 })
+    const emailLower = parsed.data.email.toLowerCase()
+    // Gerar cpfHash único como placeholder (email + timestamp)
+    const cpfHashPlaceholder = crypto.createHash('sha256').update(`${emailLower}:${Date.now()}`).digest('hex')
+    user = await prisma.user.create({
+      data: {
+        email: emailLower,
+        cpfHash: cpfHashPlaceholder,
+        planType: 'JOGADOR',
+        userType: parsed.data.affiliateType,
+        name: emailLower.split('@')[0]!,
+      },
+      select: { id: true },
+    })
   }
 
   const existing = await prisma.affiliateCode.findFirst({ where: { userId: user.id } })
