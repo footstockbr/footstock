@@ -324,8 +324,6 @@ model Asset {
   colorPrimary   String   @map("color_primary")
   colorSecondary String   @map("color_secondary")
   logoUrl        String?  @map("logo_url")
-  /// Nome do tecnico/treinador atual — usado para matching de noticias (server-side APENAS).
-  coachName      String?  @map("coach_name")
   /// Aliases internos de busca (nomes reais, apelidos, siglas) — uso server-side APENAS.
   /// NUNCA retornar ao cliente. Permite pesquisar "Flamengo" e encontrar URU3.
   searchText     String   @default("") @map("search_text")

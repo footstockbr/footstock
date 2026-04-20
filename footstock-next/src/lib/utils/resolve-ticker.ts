@@ -88,20 +88,15 @@ export async function resolveTickerFromText(text: string): Promise<string | null
   const lower = text.toLowerCase()
 
   // -------------------------------------------------------------------------
-  // Passo 1: Buscar aliases no DB (searchText + coachName de cada ativo ativo)
+  // Passo 1: Buscar aliases no DB (searchText de cada ativo ativo)
   // -------------------------------------------------------------------------
   try {
     const assets = await prisma.asset.findMany({
-      select: { ticker: true, searchText: true, coachName: true },
+      select: { ticker: true, searchText: true },
       where: { isActive: true },
     })
 
     for (const asset of assets) {
-      // Match por coachName (tecnico) — prioridade alta, nome especifico
-      if (asset.coachName) {
-        const coachLower = asset.coachName.trim().toLowerCase()
-        if (coachLower.length > 2 && lower.includes(coachLower)) return asset.ticker
-      }
 
       // Match por searchText aliases
       if (!asset.searchText) continue

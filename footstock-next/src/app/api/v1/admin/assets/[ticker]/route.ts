@@ -50,8 +50,6 @@ const assetUpdateSchema = z.object({
     .optional(),
   // searchText: aliases internos de busca — server-only, NUNCA retornar ao cliente
   searchText: z.string().max(1000).optional(),
-  // coachName: nome do tecnico/treinador — usado para matching de noticias
-  coachName: z.string().max(100).optional().nullable(),
 })
 
 // Helper dev-mode: aceita cookie fs-admin-role quando não há sessão real
@@ -145,8 +143,6 @@ export async function GET(request: NextRequest, { params }: AssetParams) {
       haltReason: asset.haltReason ?? null,
       sentiment: asset.sentiment,
       financials: asset.financials,
-      // coachName: nome do tecnico (SUPER_ADMIN only)
-      coachName: asset.coachName ?? null,
       // searchText: aliases internos (SUPER_ADMIN only — NUNCA expor no endpoint publico)
       searchText: asset.searchText,
       // aliases: mapeamentos de ticker do mundo real para este ticker fictício
@@ -192,7 +188,7 @@ export async function PATCH(request: NextRequest, { params }: AssetParams) {
       )
     }
 
-    const { displayName, realName, division, cluster, currentSupply, isActive, colorPrimary, colorSecondary, logoUrl, totalShares, fairValue, ipoPrice, searchText, coachName } =
+    const { displayName, realName, division, cluster, currentSupply, isActive, colorPrimary, colorSecondary, logoUrl, totalShares, fairValue, ipoPrice, searchText } =
       parsed.data
 
     // Construir updateData apenas com campos fornecidos
@@ -209,7 +205,6 @@ export async function PATCH(request: NextRequest, { params }: AssetParams) {
     if (totalShares !== undefined) updateData.totalShares = BigInt(totalShares)
     if (fairValue !== undefined) updateData.fairValue = fairValue
     if (searchText !== undefined) updateData.searchText = searchText
-    if (coachName !== undefined) updateData.coachName = coachName ?? null
 
     // ipoPrice vive dentro de financials (JSON patch)
     if (ipoPrice !== undefined) {
