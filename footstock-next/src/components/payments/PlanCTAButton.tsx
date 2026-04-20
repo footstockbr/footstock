@@ -26,6 +26,7 @@ interface PlanCTAButtonProps {
 
 export function PlanCTAButton({ planType, label, featureBlocked = 'planos_page', className, ...props }: PlanCTAButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const { track } = useAnalytics()
   const { plan: currentPlan } = usePlanGuard()
 
@@ -35,7 +36,7 @@ export function PlanCTAButton({ planType, label, featureBlocked = 'planos_page',
     const currentTierOrder = TIER_ORDER[currentPlan] ?? -1
     const selectedTierOrder = TIER_ORDER[planType] ?? -1
     if (selectedTierOrder <= currentTierOrder) {
-      alert('Você já possui este plano ou superior.')
+      setError('Você já possui este plano ou superior.')
       return
     }
 
@@ -58,6 +59,11 @@ export function PlanCTAButton({ planType, label, featureBlocked = 'planos_page',
 
   return (
     <>
+      {error && (
+        <div className="mb-2 text-sm text-red-400 bg-red-900/20 p-2 rounded border border-red-700/50">
+          {error}
+        </div>
+      )}
       <Button
         variant="plan"
         size="md"
