@@ -1,0 +1,120 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: tier2-market-sessions.spec.ts >> T-008: Sessoes de Mercado — TIER 2 >> MS-01: GET /api/v1/market/session retorna sessao atual
+- Location: tests/e2e/tier2-market-sessions.spec.ts:17:7
+
+# Error details
+
+```
+Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: true
+Received: undefined
+```
+
+# Test source
+
+```ts
+  1  | /**
+  2  |  * TIER 2 — Sessoes de Mercado (T-008)
+  3  |  * Foot Stock / T-033 Verificacao E2E Completa de Gaps
+  4  |  *
+  5  |  * Cenarios cobertos:
+  6  |  *   MS-01: GET /api/v1/market/session retorna sessao atual
+  7  |  *   MS-02: Sessao contem campo de estado (PRE_ABERTURA/ABERTURA/FECHAMENTO)
+  8  |  *   MS-03: Indicador de sessao visivel no frontend
+  9  |  *   MS-04: Volatilidade de ativo disponivel via API
+  10 |  *   MS-05: Admin pode ver e gerenciar estado da sessao de mercado
+  11 |  */
+  12 | 
+  13 | import { test, expect } from '@playwright/test'
+  14 | import { loginAs, USERS, expectNoServerError } from './setup'
+  15 | 
+  16 | test.describe('T-008: Sessoes de Mercado — TIER 2', () => {
+  17 |   test('MS-01: GET /api/v1/market/session retorna sessao atual', async ({ request }) => {
+  18 |     const res = await request.get('/api/v1/market/session')
+  19 |     expect(res.status()).toBe(200)
+  20 | 
+  21 |     const body = await res.json()
+> 22 |     expect(body.success).toBe(true)
+     |                          ^ Error: expect(received).toBe(expected) // Object.is equality
+  23 |     expect(body.data).toBeDefined()
+  24 | 
+  25 |     // Deve ter um campo de estado de sessao
+  26 |     const session = body.data
+  27 |     expect(session.state ?? session.status ?? session.phase).toBeDefined()
+  28 |   })
+  29 | 
+  30 |   test('MS-02: Sessao contem campos obrigatorios (state, marketOpen)', async ({ request }) => {
+  31 |     const res = await request.get('/api/v1/market/session')
+  32 |     const body = await res.json()
+  33 |     const session = body.data ?? {}
+  34 | 
+  35 |     // Estado da sessao deve ser um dos valores esperados
+  36 |     const validStates = ['PRE_ABERTURA', 'ABERTURA', 'LEILAO', 'FECHAMENTO', 'POS_FECHAMENTO', 'OPEN', 'CLOSED', 'PRE_OPEN']
+  37 |     const state = session.state ?? session.status ?? session.phase
+  38 |     if (state) {
+  39 |       // Deve ser um estado valido ou string nao-vazia
+  40 |       expect(typeof state).toBe('string')
+  41 |       expect(state.length).toBeGreaterThan(0)
+  42 |     }
+  43 |   })
+  44 | 
+  45 |   test('MS-03: Frontend exibe indicador de sessao de mercado', async ({ page }) => {
+  46 |     await loginAs(page, 'craque')
+  47 |     await page.goto('/mercado')
+  48 |     await page.waitForLoadState('networkidle')
+  49 | 
+  50 |     await expectNoServerError(page)
+  51 | 
+  52 |     // Deve haver algum indicador de sessao (pode ser badge, texto, etc)
+  53 |     const sessionIndicator = page.locator('text=/abertura|fechamento|mercado|sess.o/i').first()
+  54 |     const hasIndicator = await sessionIndicator.isVisible({ timeout: 3_000 }).catch(() => false)
+  55 |     // Nao e bloqueador se nao existir ainda — registrar observacao
+  56 |     if (!hasIndicator) {
+  57 |       console.warn('MS-03: Indicador de sessao nao localizado na UI. Verificar implementacao.')
+  58 |     }
+  59 |   })
+  60 | 
+  61 |   test('MS-04: GET /api/v1/market/assets retorna lista de ativos com volatilidade', async ({
+  62 |     request,
+  63 |   }) => {
+  64 |     const res = await request.get('/api/v1/market/assets')
+  65 |     expect([200, 204]).toContain(res.status())
+  66 |     expect(res.status()).not.toBe(500)
+  67 |   })
+  68 | 
+  69 |   test('MS-05: Admin pode ver estado de mercado no dashboard', async ({ page }) => {
+  70 |     await loginAs(page, 'admin')
+  71 |     await page.goto('/admin/mercado')
+  72 |     await page.waitForLoadState('networkidle')
+  73 | 
+  74 |     await expectNoServerError(page)
+  75 | 
+  76 |     // Pagina de mercado admin deve renderizar sem erro
+  77 |     const body = page.locator('body')
+  78 |     await expect(body).not.toBeEmpty()
+  79 |   })
+  80 | 
+  81 |   test('MS-06: Stream SSE /api/v1/market/stream conecta sem erro', async ({ request }) => {
+  82 |     // O endpoint de stream e SSE — verificar que retorna resposta de streaming
+  83 |     const res = await request.get('/api/v1/market/stream', {
+  84 |       timeout: 5_000,
+  85 |     }).catch(() => null)
+  86 | 
+  87 |     if (res) {
+  88 |       // SSE retorna 200 com content-type text/event-stream
+  89 |       const contentType = res.headers()['content-type'] ?? ''
+  90 |       const isSSE = contentType.includes('event-stream') || res.status() === 200
+  91 |       expect(isSSE || [401, 403].includes(res.status())).toBe(true)
+  92 |     }
+  93 |   })
+  94 | })
+  95 | 
+```
