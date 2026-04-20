@@ -77,3 +77,6 @@ tests/load/results/*.html
 
 # Legacy backup (consolidated into footstock-next)
 _*_legacy_backup/
+
+# Pasta de melhorias (ignorada pelo git)
+melhorias/
