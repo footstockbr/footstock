@@ -10,14 +10,14 @@ import { useAllMarketTicks } from "@/hooks/useAllMarketTicks";
 import { useBalance } from "@/hooks/useBalance";
 import { useAnalytics } from "@/hooks/useAnalytics";
 
-type Division = "all" | "SERIE_A" | "SERIE_B";
-type SentimentFilter = "all" | "positive" | "neutral" | "negative";
+type Division = "SERIE_A" | "SERIE_B";
+type SentimentFilter = "positive" | "neutral" | "negative";
 
 export function MarketPageClient() {
   const [baseAssets, setBaseAssets] = useState<AssetData[]>([]);
   const [search, setSearch] = useState("");
-  const [division, setDivision] = useState<Division>("all");
-  const [sentiment, setSentiment] = useState<SentimentFilter>("all");
+  const [divisions, setDivisions] = useState<Set<Division>>(new Set());
+  const [sentiments, setSentiments] = useState<Set<SentimentFilter>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const { track } = useAnalytics();
   const trackedRef = useRef(false);
@@ -93,15 +93,35 @@ export function MarketPageClient() {
     if (trackedRef.current) return;
     trackedRef.current = true;
 
-    const filterApplied = division !== "all" || sentiment !== "all";
-    const filterType = division !== "all" ? "division" : sentiment !== "all" ? "sentiment" : undefined;
+    const filterApplied = divisions.size > 0 || sentiments.size > 0;
+    const filterType = divisions.size > 0 ? "division" : sentiments.size > 0 ? "sentiment" : undefined;
 
     track("market_list_viewed", {
       plan: "JOGADOR" as const, // plano real é resolvido pelo provider via identify
       filter_applied: filterApplied,
       filter_type: filterType,
     });
-  }, [track, division, sentiment]);
+  }, [track, divisions, sentiments]);
+
+  const toggleDivision = (d: Division) => {
+    const newSet = new Set(divisions);
+    if (newSet.has(d)) {
+      newSet.delete(d);
+    } else {
+      newSet.add(d);
+    }
+    setDivisions(newSet);
+  };
+
+  const toggleSentiment = (s: SentimentFilter) => {
+    const newSet = new Set(sentiments);
+    if (newSet.has(s)) {
+      newSet.delete(s);
+    } else {
+      newSet.add(s);
+    }
+    setSentiments(newSet);
+  };
 
   const filtered = useMemo<AssetData[]>(() => {
     return assets.filter((a) => {
@@ -110,22 +130,22 @@ export function MarketPageClient() {
         a.ticker.toLowerCase().includes(search.toLowerCase()) ||
         a.displayName.toLowerCase().includes(search.toLowerCase());
 
-      const matchDivision = division === "all" || a.division === division;
+      const matchDivision = divisions.size === 0 || divisions.has(a.division as Division);
 
       const matchSentiment =
-        sentiment === "all" ||
-        (sentiment === "positive" && a.sentiment === "BULLISH") ||
-        (sentiment === "neutral" && a.sentiment === "NEUTRAL") ||
-        (sentiment === "negative" && a.sentiment === "BEARISH");
+        sentiments.size === 0 ||
+        (sentiments.has("positive") && a.sentiment === "BULLISH") ||
+        (sentiments.has("neutral") && a.sentiment === "NEUTRAL") ||
+        (sentiments.has("negative") && a.sentiment === "BEARISH");
 
       return matchSearch && matchDivision && matchSentiment;
     });
-  }, [assets, search, division, sentiment]);
+  }, [assets, search, divisions, sentiments]);
 
   const clearFilters = () => {
     setSearch("");
-    setDivision("all");
-    setSentiment("all");
+    setDivisions(new Set());
+    setSentiments(new Set());
   };
 
   return (
@@ -182,20 +202,20 @@ export function MarketPageClient() {
         <fieldset className="border-0 p-0 m-0">
           <legend className="sr-only">Filtrar por divisao</legend>
           <div className="flex gap-1.5 flex-wrap">
-            {(["all", "SERIE_A", "SERIE_B"] as const).map((d) => (
+            {(["SERIE_A", "SERIE_B"] as const).map((d) => (
               <button
                 key={d}
-                data-testid={`market-filter-division-${d === "all" ? "all" : d === "SERIE_A" ? "a" : "b"}`}
-                onClick={() => setDivision(d)}
-                aria-pressed={division === d}
+                data-testid={`market-filter-division-${d === "SERIE_A" ? "a" : "b"}`}
+                onClick={() => toggleDivision(d)}
+                aria-pressed={divisions.has(d)}
                 className={cn(
                   "px-3 py-1 rounded-full text-xs font-medium border transition-all",
-                  division === d
+                  divisions.has(d)
                     ? "bg-[rgba(46,189,133,.2)] border-[#2EBD85] text-white"
                     : "bg-transparent border-[rgba(240,185,11,.18)] text-[#929AA5] hover:border-[rgba(240,185,11,.35)]"
                 )}
               >
-                {d === "all" ? "Todos" : d === "SERIE_A" ? "Serie A" : "Serie B"}
+                {d === "SERIE_A" ? "Serie A" : "Serie B"}
               </button>
             ))}
           </div>
@@ -203,15 +223,15 @@ export function MarketPageClient() {
         <fieldset className="border-0 p-0 m-0">
           <legend className="sr-only">Filtrar por sentimento</legend>
           <div className="flex gap-1.5 flex-wrap">
-            {(["all", "positive", "neutral", "negative"] as const).map((s) => (
+            {(["positive", "neutral", "negative"] as const).map((s) => (
               <button
                 key={s}
                 data-testid={`market-filter-sentiment-${s}`}
-                onClick={() => setSentiment(s)}
-                aria-pressed={sentiment === s}
+                onClick={() => toggleSentiment(s)}
+                aria-pressed={sentiments.has(s)}
                 className={cn(
                   "px-3 py-1 rounded-full text-xs font-medium border transition-all",
-                  sentiment === s
+                  sentiments.has(s)
                     ? s === "positive"
                       ? "bg-[rgba(34,197,94,.2)] border-[#2EBD85] text-[#2EBD85]"
                       : s === "negative"
@@ -222,7 +242,7 @@ export function MarketPageClient() {
                     : "bg-transparent border-[rgba(240,185,11,.18)] text-[#929AA5] hover:border-[rgba(240,185,11,.35)]"
                 )}
               >
-                {s === "all" ? "Todos" : s === "positive" ? "Positivo" : s === "neutral" ? "Neutro" : "Negativo"}
+                {s === "positive" ? "Positivo" : s === "neutral" ? "Neutro" : "Negativo"}
               </button>
             ))}
           </div>

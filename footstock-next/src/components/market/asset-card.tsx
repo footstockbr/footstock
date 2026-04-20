@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { WifiOff } from "lucide-react";
+import { WifiOff, Star } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Sparkline } from "@/components/ui/sparkline";
@@ -169,6 +169,14 @@ function AssetCard({ asset, isFavorite }: AssetCardProps) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 mb-0.5">
             <span className="text-sm font-mono font-bold text-[#EAECEF]">{asset.ticker}</span>
+            {isFavorite && (
+              <Star
+                data-testid={`asset-card-favorite-star-${asset.ticker}`}
+                size={16}
+                className="text-[#F0B90B] fill-[#F0B90B]"
+                aria-label="Clube favorito"
+              />
+            )}
             <Badge
               data-testid="asset-card-sentiment"
               variant={SENTIMENT_VARIANTS[asset.sentiment]}

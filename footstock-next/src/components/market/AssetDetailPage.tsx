@@ -348,7 +348,7 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
 
       {/* ShortForm modal (module-14 — Lenda only) */}
       {shortFormOpen && (
-        <Modal isOpen onClose={() => setShortFormOpen(false)}>
+        <Modal isOpen onClose={() => setShortFormOpen(false)} data-testid="short-modal">
           <ShortForm
             ticker={asset.ticker}
             assetName={asset.displayName}

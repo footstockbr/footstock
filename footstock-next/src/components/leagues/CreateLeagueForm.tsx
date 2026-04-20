@@ -80,11 +80,12 @@ function RadioGroup<T extends string>({
                 onChange={() => onChange(opt.value)}
                 className="sr-only"
                 aria-describedby={opt.restricted ? `${id}-${opt.value}-restricted` : undefined}
+                data-testid={opt.value === 'AMIGOS' && opt.restricted ? "league-type-amigos-radio-restricted" : undefined}
               />
               {opt.label}
               {opt.restricted && (
                 <>
-                  <Lock className="h-3 w-3" aria-hidden="true" />
+                  <Lock className="h-3 w-3" data-testid={opt.value === 'AMIGOS' ? "league-amigos-tier-lock-icon" : undefined} aria-hidden="true" />
                   <span id={`${id}-${opt.value}-restricted`} className="sr-only">
                     {opt.restrictedLabel}
                   </span>

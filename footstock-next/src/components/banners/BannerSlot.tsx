@@ -149,7 +149,7 @@ export function BannerSlot({ position, className, variant = 'default' }: Props) 
           src={(desktopImageUrl || imageUrl)!}
           alt={banner.altText ?? banner.title ?? banner.sponsorName ?? 'Banner patrocinado'}
           width={variant === 'sidebar' ? 160 : 800}
-          height={variant === 'sidebar' ? 600 : 100}
+          height={variant === 'sidebar' ? 600 : 60}
           className="w-full object-contain hidden md:block"
           unoptimized
         />

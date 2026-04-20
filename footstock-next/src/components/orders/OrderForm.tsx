@@ -12,6 +12,7 @@ import { LeverageToggle } from '@/components/orders/LeverageToggle'
 import { useMotorStatusContext } from '@/contexts/motor-status-context'
 import { useMarketSession } from '@/hooks/useMarketSession'
 import { useMarketTick } from '@/hooks/useMarketTick'
+import { PriceHistoryChart } from '@/components/orders/PriceHistoryChart'
 import { usePlanGuard, type PlanTier } from '@/hooks/usePlanGuard'
 import { useBalance } from '@/hooks/useBalance'
 import { useAnalytics } from '@/hooks/useAnalytics'
@@ -262,6 +263,14 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
           </span>
         )}
       </div>
+
+      {/* 7-day price history chart — N-04 */}
+      {isBuy && currentPrice > 0 && (
+        <div className="bg-[#1E2329] rounded-lg p-3 border border-[rgba(240,185,11,.1)]">
+          <PriceHistoryChart ticker={ticker} currentPrice={currentPrice} />
+        </div>
+      )}
+
 
       {/* Daily limit counter + saldo atual */}
       <div className="flex items-center justify-between text-xs text-[#707A8A]">

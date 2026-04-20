@@ -13,6 +13,13 @@ import { PixQRModal } from '@/components/payments/PixQRModal'
 import { useAnalytics } from '@/hooks/useAnalytics'
 import { usePlanGuard } from '@/hooks/usePlanGuard'
 
+
+const TIER_ORDER: Record<string, number> = {
+  'JOGADOR': 0,
+  'CRAQUE': 1,
+  'LENDA': 2,
+}
+
 type PlanType = 'CRAQUE' | 'LENDA'
 type Gateway = 'MERCADO_PAGO' | 'PAGSEGURO' | 'PAYPAL' | 'PIX'
 type Period = 'MONTHLY' | 'YEARLY'
@@ -59,6 +66,14 @@ export function CheckoutButton({
   }
 
   async function handleCheckout() {
+    // Validar que é upgrade e não lateral/downgrade (N-05)
+    const currentTierOrder = TIER_ORDER[currentPlan] ?? -1
+    const selectedTierOrder = TIER_ORDER[planType] ?? -1
+    if (selectedTierOrder <= currentTierOrder) {
+      setError('Você já possui este plano ou superior.')
+      return
+    }
+
     // EVT-020: plan_selected — track once per checkout session
     if (!planSelectedTracked.current) {
       track('plan_selected', {

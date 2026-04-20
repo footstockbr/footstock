@@ -13,6 +13,7 @@ interface ModalProps {
   children: React.ReactNode;
   size?: "sm" | "md" | "lg";
   className?: string;
+  "data-testid"?: string;
 }
 
 function Modal({
@@ -23,6 +24,7 @@ function Modal({
   children,
   size = "md",
   className,
+  "data-testid": testId,
 }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -99,6 +101,7 @@ function Modal({
       <div
         ref={dialogRef}
         tabIndex={-1}
+        data-testid={testId}
         className={cn(
           "w-full bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.18)] shadow-lg animate-fade-in focus:outline-none",
           sizeClasses[size],

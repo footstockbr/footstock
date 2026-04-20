@@ -8,6 +8,13 @@ import { usePlanGuard } from '@/hooks/usePlanGuard'
 
 type PlanType = 'CRAQUE' | 'LENDA'
 
+
+const TIER_ORDER: Record<string, number> = {
+  'JOGADOR': 0,
+  'CRAQUE': 1,
+  'LENDA': 2,
+}
+
 interface PlanCTAButtonProps {
   planType: PlanType
   label: string
@@ -24,6 +31,14 @@ export function PlanCTAButton({ planType, label, featureBlocked = 'planos_page',
 
   // EVT-019: plan_upgrade_clicked — when user clicks the upgrade CTA button
   function handleUpgradeClick() {
+    // Validar que é upgrade e não lateral/downgrade (N-05)
+    const currentTierOrder = TIER_ORDER[currentPlan] ?? -1
+    const selectedTierOrder = TIER_ORDER[planType] ?? -1
+    if (selectedTierOrder <= currentTierOrder) {
+      alert('Você já possui este plano ou superior.')
+      return
+    }
+
     track('plan_upgrade_clicked', {
       origin: featureBlocked,
       current_plan: currentPlan,
@@ -88,6 +103,7 @@ export function PlanCTAButton({ planType, label, featureBlocked = 'planos_page',
 
             <button
               type="button"
+              data-testid="plan-checkout-modal-cancel-button"
               onClick={() => setIsOpen(false)}
               style={{
                 marginTop: '12px',

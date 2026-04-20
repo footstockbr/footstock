@@ -73,13 +73,14 @@ export function ShortForm({ ticker, assetName, onSuccess, onClose }: ShortFormPr
   // Guard de plano
   if (!isLenda) {
     return (
-      <div className="p-4 space-y-3 text-center">
+      <div className="p-4 space-y-3 text-center" data-testid="short-form-guard-locked">
         <AlertTriangle className="w-8 h-8 text-[#F0B90B] mx-auto" />
         <p className="text-sm text-[#EAECEF] font-medium">Short Selling requer plano Lenda</p>
         <p className="text-xs text-[#929AA5]">
           Você está no plano <strong>{plan}</strong>. Faça upgrade para acessar short selling com margem, alavancagem e OCO.
         </p>
         <a
+          data-testid="short-form-upgrade-link"
           href="/planos"
           className="inline-flex items-center justify-center w-full h-8 px-3 text-sm font-medium rounded-md bg-[#F0B90B] text-[#0B0E11] hover:bg-[#F0B90B]/90 transition-all"
           onClick={() => {
