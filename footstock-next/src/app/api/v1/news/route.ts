@@ -17,6 +17,8 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl
   const assetId = searchParams.get('assetId')
+  // T-09: suportar filtro por ticker também
+  const ticker = searchParams.get('ticker')
   const impact = searchParams.get('impact')
   const { page, limit, skip } = parsePagination(searchParams, 20)
 
@@ -25,9 +27,19 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    let filterAssetId = assetId
+    // Se ticker foi fornecido, resolver para assetId
+    if (ticker && !assetId) {
+      const asset = await prisma.asset.findUnique({
+        where: { ticker: ticker.toUpperCase() },
+        select: { id: true },
+      })
+      filterAssetId = asset?.id ?? null
+    }
+
     const where = {
       isPublished: true,
-      ...(assetId && { assetIds: { has: assetId } }),
+      ...(filterAssetId && { assetIds: { has: filterAssetId } }),
       ...(impact && { impact: impact as ImpactCategory }),
     }
 

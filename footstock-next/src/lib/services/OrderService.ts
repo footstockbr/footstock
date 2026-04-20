@@ -219,22 +219,33 @@ export class OrderService {
         scheduledAt: null as Date | null,
       }
 
-      const [debitResult, stopLossLeg, takeProfitLeg] = await prisma.$transaction([
-        // Debit atômico: apenas se saldo suficiente
-        prisma.user.updateMany({
-          where: {
-            id: userId,
-            ...(requiredBalance > 0 ? { fsBalance: { gte: requiredBalance } } : {}),
-          },
-          data: requiredBalance > 0 ? { fsBalance: { decrement: requiredBalance } } : {},
-        }),
-        prisma.order.create({
-          data: { ...baseData, price: dto.stopLossPrice! },
-        }),
-        prisma.order.create({
-          data: { ...baseData, price: dto.takeProfitPrice! },
-        }),
-      ])
+      let debitResult, stopLossLeg, takeProfitLeg
+      try {
+        [debitResult, stopLossLeg, takeProfitLeg] = await prisma.$transaction([
+          // Debit atômico: apenas se saldo suficiente
+          prisma.user.updateMany({
+            where: {
+              id: userId,
+              ...(requiredBalance > 0 ? { fsBalance: { gte: requiredBalance } } : {}),
+            },
+            data: requiredBalance > 0 ? { fsBalance: { decrement: requiredBalance } } : {},
+          }),
+          prisma.order.create({
+            data: { ...baseData, price: dto.stopLossPrice! },
+          }),
+          prisma.order.create({
+            data: { ...baseData, price: dto.takeProfitPrice! },
+          }),
+        ], { isolationLevel: 'Serializable' })
+      } catch (err) {
+        // T-03: Tratamento específico de constraint violation (P2002 = unique constraint)
+        if ((err as { code?: string }).code === 'P2002') {
+          throw new AppError('ORDER_057', 409, {
+            message: 'Conflito ao criar ordem. Tente novamente.',
+          })
+        }
+        throw err
+      }
 
       if (requiredBalance > 0 && debitResult.count === 0) {
         throw new AppError('ORDER_002', 402, {
@@ -258,29 +269,40 @@ export class OrderService {
     }
 
     // Ordem simples: debit + create em transação atômica
-    const [debitResult, order] = await prisma.$transaction([
-      prisma.user.updateMany({
-        where: {
-          id: userId,
-          ...(requiredBalance > 0 ? { fsBalance: { gte: requiredBalance } } : {}),
-        },
-        data: requiredBalance > 0 ? { fsBalance: { decrement: requiredBalance } } : {},
-      }),
-      prisma.order.create({
-        data: {
-          userId,
-          assetId: asset.id,
-          type: dto.type as import('@prisma/client').OrderType,
-          side: dto.side as import('@prisma/client').OrderSide,
-          status: 'OPEN' as import('@prisma/client').OrderStatus,
-          quantity: dto.quantity,
-          price: dto.price ?? null,
-          fee: feeAmount,
-          leverageMultiplier,
-          scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : null,
-        },
-      }),
-    ])
+    let debitResult, order
+    try {
+      [debitResult, order] = await prisma.$transaction([
+        prisma.user.updateMany({
+          where: {
+            id: userId,
+            ...(requiredBalance > 0 ? { fsBalance: { gte: requiredBalance } } : {}),
+          },
+          data: requiredBalance > 0 ? { fsBalance: { decrement: requiredBalance } } : {},
+        }),
+        prisma.order.create({
+          data: {
+            userId,
+            assetId: asset.id,
+            type: dto.type as import('@prisma/client').OrderType,
+            side: dto.side as import('@prisma/client').OrderSide,
+            status: 'OPEN' as import('@prisma/client').OrderStatus,
+            quantity: dto.quantity,
+            price: dto.price ?? null,
+            fee: feeAmount,
+            leverageMultiplier,
+            scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : null,
+          },
+        }),
+      ], { isolationLevel: 'Serializable' })
+    } catch (err) {
+      // T-03: Tratamento específico de constraint violation (P2002 = unique constraint)
+      if ((err as { code?: string }).code === 'P2002') {
+        throw new AppError('ORDER_057', 409, {
+          message: 'Conflito ao criar ordem. Tente novamente.',
+        })
+      }
+      throw err
+    }
 
     if (requiredBalance > 0 && debitResult.count === 0) {
       throw new AppError('ORDER_002', 402, {
