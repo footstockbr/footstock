@@ -117,7 +117,8 @@ export function BannerSlot({ position, className, variant = 'default' }: Props) 
 
   const dims = BANNER_DIMENSIONS[position]
   const w = banner.width ?? dims.width
-  const h = banner.height ?? dims.height
+  // Always use canonical height from BANNER_DIMENSIONS, ignore banner.height
+  const h = dims.height
 
   // Pick the right image URL based on variant/viewport
   // For sidebar variant, prefer vertical. Otherwise, use desktop for md+, mobile for sm.
