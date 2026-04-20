@@ -148,7 +148,7 @@ export interface AdminNewsItem {
   source: string
   url: string
   ticker: string
-  sentiment: 'positive' | 'negative' | 'neutral'
+  sentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL'
   category: string
   status: string
   publishedAt: string
@@ -160,7 +160,7 @@ export interface AdminNewsFormItem {
   id: string
   title: string
   ticker: string
-  sentiment: 'positive' | 'negative' | 'neutral'
+  sentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL'
   category: string
 }
 

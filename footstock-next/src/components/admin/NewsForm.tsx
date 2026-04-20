@@ -11,7 +11,7 @@ import { CLUBS } from '@/lib/constants/clubs'
 const newsFormSchema = z.object({
   title: z.string().min(1, 'Título é obrigatório').max(200, 'Máximo 200 caracteres'),
   ticker: z.string().max(10, 'Máximo 10 caracteres').optional().or(z.literal('')),
-  sentiment: z.enum(['positive', 'negative', 'neutral'], {
+  sentiment: z.enum(['BULLISH', 'BEARISH', 'NEUTRAL'], {
     error: () => ({ message: 'Sentimento inválido' }),
   }),
   category: z.string().min(1, 'Categoria é obrigatória'),
@@ -150,9 +150,9 @@ export function NewsForm({ news, onSave, onCancel }: NewsFormProps) {
           aria-describedby={errors.sentiment ? 'sentiment-error' : undefined}
           className={selectClass}
         >
-          <option value="positive">Positivo</option>
-          <option value="negative">Negativo</option>
-          <option value="neutral">Neutro</option>
+          <option value="BULLISH">Positivo (Alta)</option>
+          <option value="BEARISH">Negativo (Queda)</option>
+          <option value="NEUTRAL">Neutro</option>
         </select>
         {errors.sentiment && (
           <span id="sentiment-error" className="mt-1 text-xs text-[#F6465D]" role="alert">

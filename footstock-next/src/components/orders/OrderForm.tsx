@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { AlertCircle, Clock, WalletMinimal } from 'lucide-react'
 import { InfoTip } from '@/components/ui/info-tip'
@@ -51,6 +52,7 @@ interface OrderFormProps {
 }
 
 export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 0, fsBalance: fsBalanceProp }: OrderFormProps) {
+  const queryClient = useQueryClient()
   const { plan, hasAccess } = usePlanGuard()
   const { isOffline } = useMotorStatusContext()
   const { session } = useMarketSession()
@@ -224,6 +226,11 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
       if (remainingHeader !== null && remainingHeader !== 'unlimited') {
         setOrdersRemaining(parseInt(remainingHeader, 10))
       }
+
+      // T-05: invalidar caches relacionados a ordens e portfólio
+      await queryClient.invalidateQueries({ queryKey: ['orders'] })
+      await queryClient.invalidateQueries({ queryKey: ['portfolio'] })
+      await queryClient.invalidateQueries({ queryKey: ['portfolio-history'] })
 
       toast.success(
         side === 'BUY'

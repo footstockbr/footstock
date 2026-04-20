@@ -25,11 +25,11 @@ export default async function NoticiasPage() {
       take: 50,
     }),
     prisma.asset.findMany({
-      select: { id: true, ticker: true },
+      select: { id: true, ticker: true, displayName: true },
     }),
   ]);
 
-  const assetMap = new Map(assets.map((a) => [a.id, a.ticker]));
+  const assetMap = new Map(assets.map((a) => [a.id, { ticker: a.ticker, displayName: a.displayName }]));
 
   return (
     <div data-testid="noticias-page" className="px-4 pt-4">
@@ -47,9 +47,6 @@ export default async function NoticiasPage() {
         <div data-testid="noticias-list" className="flex flex-col gap-3">
           {newsList.map((news) => {
             const sentiment = SENTIMENT_MAP[news.sentiment as Sentiment] ?? SENTIMENT_MAP.NEUTRAL;
-            const tickers = news.assetIds
-              .map((id) => assetMap.get(id))
-              .filter(Boolean);
             const timeAgo = news.publishedAt
               ? formatDistanceToNow(news.publishedAt, { addSuffix: true, locale: ptBR })
               : "";
@@ -61,11 +58,20 @@ export default async function NoticiasPage() {
                 className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.18)] p-4 transition-all hover:border-[rgba(240,185,11,.35)] hover:bg-[rgba(240,185,11,.04)] cursor-pointer"
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2">
-                    {tickers.length > 0 && (
-                      <span className="text-xs font-mono font-bold text-[#F0B90B]">
-                        {tickers.join(", ")}
-                      </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {news.assetIds.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {news.assetIds.map(id => {
+                          const asset = assetMap.get(id);
+                          if (!asset) return null;
+                          return (
+                            <span key={id} className="text-xs font-medium text-[#C0C4CE]">
+                              {asset.displayName}
+                              <span className="text-[#929AA5] ml-1">({asset.ticker})</span>
+                            </span>
+                          );
+                        })}
+                      </div>
                     )}
                     <Badge variant={sentiment.variant} size="xs">
                       {sentiment.label}

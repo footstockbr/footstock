@@ -69,6 +69,9 @@ export function OrderHistory() {
       if (!res.ok) throw new Error('Erro ao carregar ordens')
       return res.json()
     },
+    staleTime: 0,
+    refetchOnMount: 'always',
+    gcTime: 5 * 60 * 1000,
   })
 
   const cancelMutation = useMutation({

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import Link from 'next/link'
 import {
   TrendingUp,
   Clock,
@@ -16,6 +17,8 @@ import { formatFS, formatDateShort } from '@/lib/utils/format'
 import { GlossaryInfoIcon } from '@/components/ui/glossary-info-icon'
 import { DividendTypeLabel } from '@/components/dividends/DividendTypeLabel'
 import type { DividendTypeValue } from '@/components/dividends/DividendTypeLabel'
+import { usePlanGuard } from '@/hooks/usePlanGuard'
+import { Spinner } from '@/components/ui/spinner'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -200,9 +203,31 @@ function DividendRow({ dividend }: { dividend: Dividend }) {
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export function DividendosClient() {
+  const { hasAccess, isLoading: isPlanLoading } = usePlanGuard()
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
   const [page, setPage] = useState(1)
+
+  // T-11: bloquear acesso para plano Jogador
+  if (isPlanLoading) return <Spinner />
+  if (!hasAccess('CRAQUE')) {
+    return (
+      <div data-testid="dividendos-upgrade-gate" className="min-h-screen bg-[#0B0E11] flex items-center justify-center px-4">
+        <div className="max-w-md text-center">
+          <div className="w-16 h-16 rounded-lg bg-[rgba(240,185,11,.15)] flex items-center justify-center mx-auto mb-4">
+            <Lock className="h-8 w-8 text-[#F0B90B]" />
+          </div>
+          <h2 className="text-xl font-semibold text-[#EAECEF] mb-2">Dividendos disponíveis a partir do plano Craque</h2>
+          <p className="text-sm text-[#929AA5] mb-6">Usuários Craque e Lenda recebem dividendos automaticamente no saldo.</p>
+          <Link href="/planos" data-testid="dividendos-upgrade-cta">
+            <Button className="w-full bg-[#F0B90B] hover:bg-[#D4A707] text-[#0c0b09] font-semibold">
+              Ver planos
+            </Button>
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   const buildParams = () => {
     const params = new URLSearchParams({ page: String(page) })

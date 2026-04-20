@@ -45,32 +45,42 @@ export function LeverageToggle({
     }
   }, [isLenda, track, plan])
 
-  // Usuários sem plano Lenda veem o toggle bloqueado com CTA de upgrade
-  if (!isLenda) {
+  // T-16: Usuários sem plano Lenda veem o toggle com overlay semi-transparente
+  const lockedContent = !isLenda
+  if (lockedContent) {
     return (
       <div
-        className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[rgba(240,185,11,.15)] bg-[rgba(240,185,11,.04)] p-3"
+        className="relative rounded-lg border border-[rgba(240,185,11,.18)] bg-[rgba(240,185,11,.04)] p-3"
         data-testid="leverage-toggle-locked"
       >
-        <div className="flex items-center gap-2 min-w-0">
-          <Lock className="h-4 w-4 text-[#F0B90B] flex-shrink-0" aria-hidden="true" />
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-[#EAECEF]">Alavancagem 2x</p>
-            <p className="text-xs text-[#929AA5]">Requer plano Lenda</p>
+        {/* Conteúdo real, semi-transparente */}
+        <div className="opacity-30 pointer-events-none select-none">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-[#F0B90B]" aria-hidden="true" />
+              <div>
+                <p className="text-sm font-medium text-[#EAECEF]">Alavancagem 2x</p>
+                <p className="text-xs text-[#929AA5]">Opera com o dobro do capital disponível</p>
+              </div>
+            </div>
+            <div className="w-11 h-6 rounded-full bg-[#2B3139]" />
           </div>
         </div>
+        {/* Overlay clicável */}
         <Link
           href="/planos"
-          className="shrink-0 rounded-md bg-[#F0B90B] px-3 py-1.5 text-xs font-semibold text-[#0B0E11] transition-colors hover:bg-[#F0B90B]/90 whitespace-nowrap"
+          data-testid="leverage-upgrade-overlay"
           onClick={() => {
-            // EVT-019: plan_upgrade_clicked
             track('plan_upgrade_clicked', {
               origin: 'leverage_2x',
               current_plan: plan as 'JOGADOR' | 'CRAQUE' | 'LENDA',
             })
           }}
+          className="absolute inset-0 flex items-center justify-center gap-2 rounded-lg bg-transparent hover:bg-[rgba(0,0,0,.2)] transition-colors cursor-pointer"
+          aria-label="Fazer upgrade para acessar alavancagem"
         >
-          Fazer upgrade
+          <Lock size={14} className="text-[#F0B90B]" />
+          <span className="text-xs font-medium text-[#F0B90B]">Requer plano Lenda</span>
         </Link>
       </div>
     )

@@ -146,11 +146,28 @@ export class PositionRepository extends BaseRepository<unknown> {
       select: { fsBalance: true },
     })
     const cashBalance = toNumber(user?.fsBalance)
+
+    // T-04: somar valor reservado em ordens OPEN de BUY (já debitado do fsBalance)
+    const openBuyOrders = await prisma.order.findMany({
+      where: {
+        userId,
+        status: 'OPEN',
+        side: 'BUY',
+      },
+      select: { quantity: true, price: true },
+    })
+    const reservedInOpenOrders = openBuyOrders.reduce((acc, order) => {
+      const qty = Number(order.quantity)
+      const price = toNumber(order.price)
+      return acc + (qty * price)
+    }, 0)
+    const displayBalance = cashBalance + reservedInOpenOrders
+
     const positions = await this.findByUserIdInternal(userId)
 
     if (positions.length === 0) {
       return {
-        totalValue: cashBalance,
+        totalValue: displayBalance,
         totalPnL: 0,
         totalPnLPercent: 0,
         pnLToday: 0,
@@ -161,7 +178,7 @@ export class PositionRepository extends BaseRepository<unknown> {
     }
 
     const positionsValue = positions.reduce((acc, p) => acc + p.qty * p.currentPrice, 0)
-    const totalValue = cashBalance + positionsValue
+    const totalValue = displayBalance + positionsValue
     const totalPnL = positions.reduce((acc, p) => acc + p.pnL, 0)
     const totalCost = totalValue - totalPnL
     const totalPnLPercent = totalCost !== 0
