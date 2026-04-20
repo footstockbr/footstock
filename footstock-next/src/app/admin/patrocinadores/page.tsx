@@ -932,7 +932,7 @@ export default function PatrocinadoresPage() {
             {/* Imagens responsivas */}
             <div className="section-divider">Imagens do Banner</div>
             <div className="form-group">
-              <label className="form-label">Desktop (800x100)</label>
+              <label className="form-label">Desktop (480x60)</label>
               <input
                 className="form-input"
                 type="url"
@@ -943,7 +943,7 @@ export default function PatrocinadoresPage() {
               />
             </div>
             <div className="form-group">
-              <label className="form-label">Mobile (400x80)</label>
+              <label className="form-label">Mobile (300x60)</label>
               <input
                 className="form-input"
                 type="url"

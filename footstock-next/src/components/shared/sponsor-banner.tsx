@@ -83,22 +83,22 @@ export function SponsorBanner({ position, className = '' }: Props) {
   }, [position])
 
   // Auto-rotation timer
-  const rotate = useCallback(() => {
-    if (banners.length <= 1) return
-    setFading(true)
-    setTimeout(() => {
-      setActiveIndex((prev) => (prev + 1) % banners.length)
-      setFading(false)
-    }, 300)
-  }, [banners.length])
-
   useEffect(() => {
     if (banners.length <= 1) return
+
+    const rotate = () => {
+      setFading(true)
+      setTimeout(() => {
+        setActiveIndex((prev) => (prev + 1) % banners.length)
+        setFading(false)
+      }, 300)
+    }
+
     timerRef.current = setInterval(rotate, ROTATION_INTERVAL_MS)
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
-  }, [banners.length, rotate])
+  }, [banners.length])
 
   useEffect(() => {
     setActiveIndex(0)
@@ -116,7 +116,8 @@ export function SponsorBanner({ position, className = '' }: Props) {
 
   const dims = BANNER_DIMENSIONS[position]
   const w = banner.width ?? dims.width
-  const h = banner.height ?? dims.height
+  // Always use canonical height from BANNER_DIMENSIONS
+  const h = dims.height
 
   const desktopImg = banner.imageDesktopUrl ?? banner.imageUrl
   const mobileImg = banner.imageMobileUrl ?? banner.imageUrl

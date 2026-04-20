@@ -1,0 +1,117 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: tier2-dividends.spec.ts >> T-007: Dividendos — TIER 2 >> DV-02: GET /api/v1/dividends retorna lista paginada
+- Location: tests/e2e/tier2-dividends.spec.ts:34:7
+
+# Error details
+
+```
+Error: apiRequestContext.post: connect ECONNREFUSED 127.0.0.1:3000
+Call log:
+  - → POST http://localhost:3000/api/v1/auth/login
+    - user-agent: Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.7727.15 Mobile Safari/537.36
+    - accept: */*
+    - accept-encoding: gzip,deflate,br
+    - content-type: application/json
+    - content-length: 61
+
+```
+
+# Test source
+
+```ts
+  1  | /**
+  2  |  * TIER 2 — Dividendos (T-007)
+  3  |  * Foot Stock / T-033 Verificacao E2E Completa de Gaps
+  4  |  *
+  5  |  * Cenarios cobertos:
+  6  |  *   DV-01: Pagina /dividendos carrega com filtros de tipo e status
+  7  |  *   DV-02: GET /api/v1/dividends retorna lista paginada de eventos
+  8  |  *   DV-03: Extrato mostra entrada de dividendo com tipo correto
+  9  |  *   DV-04: Resumo de dividendos exibido no header da pagina
+  10 |  *   DV-05: Filtros de status (pendente/pago/cancelado) funcionam
+  11 |  *   DV-06: Paginacao da lista de dividendos funciona
+  12 |  */
+  13 | 
+  14 | import { test, expect } from '@playwright/test'
+  15 | import { loginAs, USERS, expectNoServerError } from './setup'
+  16 | 
+  17 | test.describe('T-007: Dividendos — TIER 2', () => {
+  18 |   test('DV-01: Pagina /dividendos carrega com estrutura completa', async ({ page }) => {
+  19 |     await loginAs(page, 'craque')
+  20 |     await page.goto('/dividendos')
+  21 |     await page.waitForLoadState('networkidle')
+  22 | 
+  23 |     await expectNoServerError(page)
+  24 | 
+  25 |     // Header da pagina de dividendos
+  26 |     const header = page.locator('[data-testid="dividendos-header"]')
+  27 |     await expect(header).toBeVisible({ timeout: 8_000 })
+  28 | 
+  29 |     // Resumo de dividendos
+  30 |     const summary = page.locator('[data-testid="dividendos-summary"]')
+  31 |     await expect(summary).toBeVisible({ timeout: 5_000 })
+  32 |   })
+  33 | 
+  34 |   test('DV-02: GET /api/v1/dividends retorna lista paginada', async ({ request }) => {
+> 35 |     const loginRes = await request.post('/api/v1/auth/login', {
+     |                                    ^ Error: apiRequestContext.post: connect ECONNREFUSED 127.0.0.1:3000
+  36 |       data: { email: USERS.craque.email, password: USERS.craque.password },
+  37 |     })
+  38 |     expect(loginRes.status()).toBe(200)
+  39 | 
+  40 |     const res = await request.get('/api/v1/dividends?page=1&limit=10', {
+  41 |       headers: { cookie: loginRes.headers()['set-cookie'] ?? '' },
+  42 |     })
+  43 | 
+  44 |     expect([200, 204]).toContain(res.status())
+  45 |     if (res.status() === 200) {
+  46 |       const body = await res.json()
+  47 |       expect(body.success).toBe(true)
+  48 |       expect(body.data).toBeDefined()
+  49 |     }
+  50 |   })
+  51 | 
+  52 |   test('DV-03: Filtros de tipo de dividendo funcionam na UI', async ({ page }) => {
+  53 |     await loginAs(page, 'craque')
+  54 |     await page.goto('/dividendos')
+  55 |     await page.waitForLoadState('networkidle')
+  56 | 
+  57 |     // Filtros de tipo
+  58 |     const typeFilters = page.locator('[data-testid="dividendos-type-filters"]')
+  59 |     if (await typeFilters.isVisible({ timeout: 3_000 }).catch(() => false)) {
+  60 |       await expect(typeFilters).toBeVisible()
+  61 |     }
+  62 | 
+  63 |     // Filtros de status
+  64 |     const statusFilters = page.locator('[data-testid="dividendos-status-filters"]')
+  65 |     if (await statusFilters.isVisible({ timeout: 3_000 }).catch(() => false)) {
+  66 |       await expect(statusFilters).toBeVisible()
+  67 |     }
+  68 |   })
+  69 | 
+  70 |   test('DV-04: Paginacao da lista de dividendos esta presente', async ({ page }) => {
+  71 |     await loginAs(page, 'craque')
+  72 |     await page.goto('/dividendos')
+  73 |     await page.waitForLoadState('networkidle')
+  74 | 
+  75 |     await expectNoServerError(page)
+  76 | 
+  77 |     // Lista de dividendos
+  78 |     const list = page.locator('[data-testid="dividendos-list"]')
+  79 |     await expect(list).toBeVisible({ timeout: 8_000 })
+  80 |   })
+  81 | 
+  82 |   test('DV-05: GET /api/v1/dividends sem auth retorna 401', async ({ request }) => {
+  83 |     const res = await request.get('/api/v1/dividends')
+  84 |     expect(res.status()).toBe(401)
+  85 |   })
+  86 | })
+  87 | 
+```
