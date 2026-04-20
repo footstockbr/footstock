@@ -80,7 +80,7 @@ export function LeverageToggle({
           aria-label="Fazer upgrade para acessar alavancagem"
         >
           <Lock size={14} className="text-[#F0B90B]" />
-          <span className="text-xs font-medium text-[#F0B90B]">Requer plano Lenda</span>
+          <span data-testid="leverage-toggle-lenda-required" className="text-xs font-medium text-[#F0B90B]">Requer plano Lenda</span>
         </Link>
       </div>
     )

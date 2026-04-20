@@ -156,7 +156,7 @@ export function CheckoutButton({
         </Select>
 
         <Button
-          data-testid={`checkout-button-${planType.toLowerCase()}`}
+          data-testid="plan-checkout-modal-checkout-confirm"
           variant="plan"
           size="md"
           fullWidth

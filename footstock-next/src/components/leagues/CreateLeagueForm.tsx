@@ -210,7 +210,7 @@ export function CreateLeagueForm() {
 
       {/* Plan restriction hint for JOGADOR */}
       {plan === 'JOGADOR' && (
-        <p className="text-xs text-gray-500 flex items-center gap-1.5">
+        <p data-testid="league-jogador-restriction-hint" className="text-xs text-gray-500 flex items-center gap-1.5">
           <Lock className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
           Ligas de amigos requerem plano Craque ou superior.
         </p>

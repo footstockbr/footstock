@@ -212,6 +212,7 @@ export function UserActions({ user, currentAdminRole, onActionComplete }: UserAc
   return (
     <div data-testid="admin-user-actions" className="relative" ref={menuRef}>
       <button
+        data-testid="user-actions-menu-trigger"
         onClick={() => setOpen((v) => !v)}
         disabled={loading}
         aria-label={`Ações para ${user.name}`}
@@ -263,6 +264,7 @@ export function UserActions({ user, currentAdminRole, onActionComplete }: UserAc
           {/* Reset balance */}
           <button
             role="menuitem"
+            data-testid="admin-user-reset-balance-button"
             onClick={() => { setOpen(false); setShowResetDialog(true) }}
             className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-[#c5b99a] hover:bg-[rgba(240,185,11,.06)] min-h-[44px]"
           >

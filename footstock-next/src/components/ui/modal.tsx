@@ -122,6 +122,7 @@ function Modal({
               )}
             </div>
             <Button
+              data-testid="modal-close-button"
               variant="ghost"
               size="icon-sm"
               onClick={onClose}
