@@ -9,6 +9,7 @@ import { GlossaryInfoIcon } from '@/components/ui/glossary-info-icon'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { LeverageToggle } from '@/components/orders/LeverageToggle'
+import { OrderConfirmationShortcuts } from '@/components/orders/OrderConfirmationShortcuts'
 import { useMotorStatusContext } from '@/contexts/motor-status-context'
 import { useMarketSession } from '@/hooks/useMarketSession'
 import { useMarketTick } from '@/hooks/useMarketTick'
@@ -539,6 +540,9 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
           {isBuy ? 'Confirmar Compra' : 'Confirmar Venda'}
         </Button>
       </div>
+
+      {/* Item 1/27: Premium features showcase — descoberta de ferramentas avançadas */}
+      <OrderConfirmationShortcuts operationType={side} />
     </form>
   )
 }
