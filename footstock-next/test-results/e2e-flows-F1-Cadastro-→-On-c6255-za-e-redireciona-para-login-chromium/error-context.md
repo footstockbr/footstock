@@ -37,10 +37,11 @@ Received: false
       - generic [ref=e16]:
         - button "Recusar" [ref=e17]
         - button "Aceitar" [ref=e18]
+  - button "Mostrar data-testid overlays" [ref=e19]: "[data-test]"
   - region "Notifications alt+T"
-  - button "Open Next.js Dev Tools" [ref=e24] [cursor=pointer]:
-    - img [ref=e25]
-  - alert [ref=e28]
+  - button "Open Next.js Dev Tools" [ref=e25] [cursor=pointer]:
+    - img [ref=e26]
+  - alert [ref=e29]
 ```
 
 # Test source

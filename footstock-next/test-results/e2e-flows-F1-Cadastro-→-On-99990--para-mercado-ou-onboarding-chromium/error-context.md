@@ -118,11 +118,10 @@ Call log:
       - generic [ref=e82]:
         - button "Recusar" [ref=e83]
         - button "Aceitar" [ref=e84]
-  - button "Mostrar data-testid overlays" [ref=e85]: "[data-test]"
   - region "Notifications alt+T"
-  - button "Open Next.js Dev Tools" [ref=e91] [cursor=pointer]:
-    - img [ref=e92]
-  - alert [ref=e95]
+  - button "Open Next.js Dev Tools" [ref=e90] [cursor=pointer]:
+    - img [ref=e91]
+  - alert [ref=e94]
 ```
 
 # Test source

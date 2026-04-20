@@ -112,8 +112,13 @@ Call log:
   - button "Mostrar data-testid overlays" [ref=e85]: "[data-test]"
   - region "Notifications alt+T"
   - button "Open Next.js Dev Tools" [ref=e91] [cursor=pointer]:
-    - img [ref=e92]
-  - alert [ref=e95]
+    - generic [ref=e94]:
+      - text: Compiling
+      - generic [ref=e95]:
+        - generic [ref=e96]: .
+        - generic [ref=e97]: .
+        - generic [ref=e98]: .
+  - alert [ref=e99]
 ```
 
 # Test source

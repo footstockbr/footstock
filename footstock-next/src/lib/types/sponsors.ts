@@ -15,7 +15,7 @@ export type BannerPosition = (typeof BANNER_POSITIONS)[number]
 
 /** Dimensões canônicas (INTAKE) para cada posição de banner */
 export const BANNER_DIMENSIONS: Record<BannerPosition, { width: number; height: number }> = {
-  home_top: { width: 360, height: 80 },
+  home_top: { width: 360, height: 60 },
   home_mid: { width: 360, height: 60 },
   market_top: { width: 360, height: 60 },
   cart_top: { width: 360, height: 60 },

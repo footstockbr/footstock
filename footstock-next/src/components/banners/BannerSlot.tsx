@@ -138,7 +138,7 @@ export function BannerSlot({ position, className, variant = 'default' }: Props) 
           src={(mobileImageUrl || imageUrl)!}
           alt={banner.altText ?? banner.title ?? banner.sponsorName ?? 'Banner patrocinado'}
           width={variant === 'sidebar' ? 160 : 400}
-          height={variant === 'sidebar' ? 600 : 80}
+          height={variant === 'sidebar' ? 600 : h}
           className="w-full object-contain md:hidden"
           unoptimized
         />
@@ -149,7 +149,7 @@ export function BannerSlot({ position, className, variant = 'default' }: Props) 
           src={(desktopImageUrl || imageUrl)!}
           alt={banner.altText ?? banner.title ?? banner.sponsorName ?? 'Banner patrocinado'}
           width={variant === 'sidebar' ? 160 : 800}
-          height={variant === 'sidebar' ? 600 : 60}
+          height={variant === 'sidebar' ? 600 : h}
           className="w-full object-contain hidden md:block"
           unoptimized
         />

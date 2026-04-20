@@ -12,34 +12,15 @@
 # Error details
 
 ```
-Error: apiRequestContext.post: socket hang up
-Call log:
-  - → POST http://localhost:3000/api/v1/auth/register
-    - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.7727.15 Safari/537.36
-    - accept: */*
-    - accept-encoding: gzip,deflate,br
-    - content-type: application/json
-    - content-length: 252
+Error: expect(received).toBe(expected) // Object.is equality
 
+Expected: 201
+Received: 400
 ```
 
 # Test source
 
 ```ts
-  15  |  *   - Cookie fs_ref deve ser httpOnly=false (lido pelo client no Step1)
-  16  |  *   - Link de compartilhamento deve ser copiavel (clipboard)
-  17  |  *   - Codigo deve ser case-insensitive na URL
-  18  |  *   - Acesso a /api/v1/affiliate/me sem codigo ativo retorna 403
-  19  |  */
-  20  | 
-  21  | import { test, expect } from '@playwright/test'
-  22  | import {
-  23  |   loginAs,
-  24  |   USERS,
-  25  |   uniqueEmail,
-  26  |   VALID_CPF_ADULT,
-  27  |   cleanupTestData,
-  28  |   expectNoServerError,
   29  | } from './setup'
   30  | 
   31  | const VALID_AFFILIATE_CODE = process.env.TEST_AFFILIATE_CODE ?? 'PEDRO100'
@@ -126,8 +107,7 @@ Call log:
   112 |     createdEmails.push(email)
   113 | 
   114 |     // Registrar via API para inspecionar o resultado
-> 115 |     const res = await request.post('/api/v1/auth/register', {
-      |                               ^ Error: apiRequestContext.post: socket hang up
+  115 |     const res = await request.post('/api/v1/auth/register', {
   116 |       data: {
   117 |         name: 'Teste Afiliado',
   118 |         email,
@@ -141,7 +121,8 @@ Call log:
   126 |       },
   127 |     })
   128 | 
-  129 |     expect(res.status()).toBe(201)
+> 129 |     expect(res.status()).toBe(201)
+      |                          ^ Error: expect(received).toBe(expected) // Object.is equality
   130 |     const body = await res.json()
   131 |     expect(body.success).toBe(true)
   132 | 
@@ -228,4 +209,18 @@ Call log:
   213 |     await novoBtn.click()
   214 | 
   215 |     const modal = page.locator('[data-testid="admin-afiliados-novo-modal"]')
+  216 |     await expect(modal).toBeVisible({ timeout: 4_000 })
+  217 | 
+  218 |     // Preencher email
+  219 |     const emailInput = page.locator('[data-testid="admin-afiliados-novo-email-input"]')
+  220 |     await expect(emailInput).toBeVisible()
+  221 |     await emailInput.fill(USERS.craque.email)
+  222 | 
+  223 |     // Preencher comissao
+  224 |     const comissaoInput = page.locator('[data-testid="admin-afiliados-novo-comissao-input"]')
+  225 |     if (await comissaoInput.isVisible()) {
+  226 |       await comissaoInput.fill('100')
+  227 |     }
+  228 | 
+  229 |     // Fechar sem submeter (nao criar dados desnecessarios)
 ```
