@@ -163,18 +163,28 @@ export function ClubSidebar() {
       {/* ── Mobile: header sticky ──────────────────────────────────────────── */}
       <header className="md:hidden sticky top-0 z-40 border-b border-[rgba(240,185,11,.1)] bg-[#0B0E11]/95 backdrop-blur-sm w-full">
         <div className="flex h-14 items-center justify-between px-4">
-          <div className="flex items-center gap-2 min-w-0">
+          <Link
+            href={ROUTES.MERCADO}
+            aria-label="FootStock — A bolsa do futebol"
+            className="flex min-w-0 items-center gap-2"
+          >
             <Image
               src="/logo-foot.png"
-              alt="FootStock"
+              alt=""
+              aria-hidden="true"
               width={20}
               height={20}
-              className="h-5 w-5 object-contain flex-shrink-0"
+              className="h-5 w-5 shrink-0 object-contain"
             />
-            <p className="truncate text-sm font-semibold text-[#EAECEF]">
-              {activeItem?.label ?? "Portal do Clube"}
-            </p>
-          </div>
+            <div className="flex min-w-0 flex-col justify-center leading-none">
+              <span className="truncate text-sm font-bold text-[#F0B90B] tracking-tight">
+                FootStock
+              </span>
+              <span className="mt-0.5 truncate text-[9px] font-medium text-[#F0B90B]/80 tracking-[0.02em]">
+                A bolsa do futebol
+              </span>
+            </div>
+          </Link>
 
           <button
             type="button"

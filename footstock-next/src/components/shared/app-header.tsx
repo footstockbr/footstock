@@ -31,7 +31,12 @@ function AppHeader({ className }: AppHeaderProps) {
       )}
     >
       {/* Logo */}
-      <Link data-testid="header-logo" href={ROUTES.MERCADO} className="flex items-center gap-2 shrink-0">
+      <Link
+        data-testid="header-logo"
+        href={ROUTES.MERCADO}
+        aria-label="FootStock — A bolsa do futebol"
+        className="flex min-w-0 items-center gap-2 md:hidden"
+      >
         {/* @ASSET_PLACEHOLDER
 name: logo-foot
 type: image
@@ -48,14 +53,20 @@ avoid: Texto, complexidade excessiva, gradientes ruidosos
         */}
         <Image
           src="/logo-foot.png"
-          alt="FootStock"
+          alt=""
+          aria-hidden="true"
           width={32}
           height={32}
-          className="w-8 h-8 object-contain"
+          className="w-8 h-8 shrink-0 object-contain"
         />
-        <span className="text-base font-bold text-[#EAECEF] tracking-tight hidden sm:block">
-          FootStock
-        </span>
+        <div className="flex min-w-0 flex-col justify-center leading-none">
+          <span className="truncate text-sm font-bold text-[#F0B90B] tracking-tight">
+            FootStock
+          </span>
+          <span className="mt-0.5 truncate text-[10px] font-medium text-[#F0B90B]/80 tracking-[0.02em]">
+            A bolsa do futebol
+          </span>
+        </div>
       </Link>
 
       {/* Right actions */}

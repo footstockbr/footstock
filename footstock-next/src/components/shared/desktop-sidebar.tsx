@@ -46,16 +46,29 @@ function DesktopSidebar() {
   return (
     <aside data-testid="sidebar" className="hidden md:flex md:w-64 md:flex-col md:flex-shrink-0 md:h-dvh md:sticky md:top-0 md:border-r md:border-[rgba(240,185,11,.1)] md:bg-[#0B0E11]/70">
       <div className="h-14 border-b border-[rgba(240,185,11,.1)] px-4 flex items-center">
-        <Link data-testid="sidebar-logo" href={ROUTES.MERCADO} className="flex items-center gap-2">
+        <Link
+          data-testid="sidebar-logo"
+          href={ROUTES.MERCADO}
+          aria-label="FootStock — A bolsa do futebol"
+          className="flex min-w-0 items-center gap-2"
+        >
           <Image
             src="/logo-foot.png"
-            alt="FootStock"
+            alt=""
+            aria-hidden="true"
             width={24}
             height={24}
-            className="h-6 w-6 object-contain"
+            className="h-6 w-6 shrink-0 object-contain"
             priority
           />
-          <span className="text-sm font-semibold text-[#EAECEF]">FootStock</span>
+          <div className="flex min-w-0 flex-col justify-center leading-none">
+            <span className="truncate text-sm font-bold text-[#F0B90B] tracking-tight">
+              FootStock
+            </span>
+            <span className="mt-0.5 truncate text-[9px] font-medium text-[#F0B90B]/80 tracking-[0.02em]">
+              A bolsa do futebol
+            </span>
+          </div>
         </Link>
       </div>
 
