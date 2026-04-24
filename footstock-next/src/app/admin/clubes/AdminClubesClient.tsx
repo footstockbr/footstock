@@ -8,9 +8,9 @@
 // quando o admin abre o modal de edição — nunca fica no bundle estático.
 // ============================================================================
 
-import { useState, useCallback } from 'react'
-import { Pencil, TrendingUp, TrendingDown, Minus, X, Loader2 } from 'lucide-react'
+import { Loader2, Minus, Pencil, TrendingDown, TrendingUp, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { useCallback, useState } from 'react'
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -270,9 +270,8 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
                   </td>
                   <td className="px-4 py-3 text-right">
                     <span
-                      className={`text-sm font-mono font-medium flex items-center justify-end gap-0.5 ${
-                        neutral ? 'text-[#929AA5]' : positive ? 'text-[#4ade80]' : 'text-[#F6465D]'
-                      }`}
+                      className={`text-sm font-mono font-medium flex items-center justify-end gap-0.5 ${neutral ? 'text-[#929AA5]' : positive ? 'text-[#4ade80]' : 'text-[#F6465D]'
+                        }`}
                     >
                       {neutral ? (
                         <Minus className="h-3 w-3" />
@@ -712,11 +711,11 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
                     style={{ ...inputStyle, minHeight: '64px', resize: 'vertical', fontFamily: 'inherit' }}
                     value={editForm.players}
                     onChange={(e) => set('players', e.target.value)}
-                    placeholder="preencha aqui os principais jogadores separados por vírgula"
+                    placeholder="Preencha aqui os principais jogadores separados por vírgula."
                     data-testid="modal-clube-players-input"
                   />
                   <p style={{ fontSize: '10px', color: '#555d6c', marginTop: '3px' }}>
-                    Segunda camada de matching (peso menor). Usada apenas quando nenhum nome/apelido do clube for encontrado na notícia. Ex: &quot;Piquerez, Dudu, Raphael Veiga&quot;.
+                    Segunda camada de matching (peso menor). Usada apenas quando nenhum nome/apelido do clube for encontrado na notícia. Ex: &quot;Arrascaeta, Yuri Alberto, Flaco López&quot;.
                   </p>
                   {fieldErrors.players && (
                     <p style={{ fontSize: '11px', color: '#F6465D', marginTop: '3px' }}>
