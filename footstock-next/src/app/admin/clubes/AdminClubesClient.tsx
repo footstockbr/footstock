@@ -44,6 +44,7 @@ interface FullAsset {
   financials: Record<string, unknown> | null
   searchText: string
   coachName: string | null
+  players: string
 }
 
 type ClusterValue = 'A_TOP' | 'A_MID' | 'A_SMALL' | 'B_LIQUID' | 'B_ILLIQ'
@@ -63,6 +64,7 @@ interface EditForm {
   ipoPrice: string
   searchText: string
   coachName: string
+  players: string
 }
 
 const DIVISION_LABELS: Record<string, string> = {
@@ -140,6 +142,7 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
         ipoPrice: String((fin.ipoPrice as number) ?? full.fairValue),
         searchText: full.searchText,
         coachName: full.coachName ?? '',
+        players: full.players ?? '',
       })
     } catch {
       alert('Erro de conexão ao carregar dados do clube')
@@ -178,6 +181,7 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
         ipoPrice: Number(editForm.ipoPrice),
         searchText: editForm.searchText,
         coachName: editForm.coachName.trim() || null,
+        players: editForm.players.trim(),
       }
 
       const res = await fetch(`/api/v1/admin/assets/${editingTicker}`, {
@@ -682,6 +686,41 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
                   {fieldErrors.coachName && (
                     <p style={{ fontSize: '11px', color: '#F6465D', marginTop: '3px' }}>
                       {fieldErrors.coachName[0]}
+                    </p>
+                  )}
+                </div>
+
+                {/* Jogadores — fallback de matching de noticias (peso menor) */}
+                <div style={formGroupStyle}>
+                  <label style={labelStyle}>
+                    Jogadores
+                    <span
+                      style={{
+                        marginLeft: '6px',
+                        background: 'rgba(240,185,11,.12)',
+                        color: '#F0B90B',
+                        padding: '1px 5px',
+                        borderRadius: '3px',
+                        fontSize: '9px',
+                        fontWeight: 700,
+                      }}
+                    >
+                      MATCHING DE NOTÍCIAS
+                    </span>
+                  </label>
+                  <textarea
+                    style={{ ...inputStyle, minHeight: '64px', resize: 'vertical', fontFamily: 'inherit' }}
+                    value={editForm.players}
+                    onChange={(e) => set('players', e.target.value)}
+                    placeholder="preencha aqui os principais jogadores separados por vírgula"
+                    data-testid="modal-clube-players-input"
+                  />
+                  <p style={{ fontSize: '10px', color: '#555d6c', marginTop: '3px' }}>
+                    Segunda camada de matching (peso menor). Usada apenas quando nenhum nome/apelido do clube for encontrado na notícia. Ex: &quot;Piquerez, Dudu, Raphael Veiga&quot;.
+                  </p>
+                  {fieldErrors.players && (
+                    <p style={{ fontSize: '11px', color: '#F6465D', marginTop: '3px' }}>
+                      {fieldErrors.players[0]}
                     </p>
                   )}
                 </div>

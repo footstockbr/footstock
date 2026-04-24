@@ -82,6 +82,75 @@ for (const [ticker, aliases] of Object.entries(CANONICAL_TEAM_ALIASES)) {
  *
  * Server-side ONLY. Nunca chamar do lado do cliente.
  */
+// ---------------------------------------------------------------------------
+// Normalizacao de texto: lowercase + strip de acentos (NFD).
+// ---------------------------------------------------------------------------
+function normalize(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
+}
+
+// Stop-tokens comuns que causariam falso-positivo no match por palavra.
+const PLAYER_STOP_TOKENS = new Set([
+  'da', 'do', 'de', 'dos', 'das', 'fc', 'jr', 'jnr', 'sr', 'neto', 'filho',
+])
+
+// Escapa caracteres regex em uma string para usar com \b boundary.
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * Tokeniza lista (jogadores virgula-separada ou nome de tecnico espaco-separado)
+ * em tokens normalizados de >=4 chars, filtrando stop-words, ordenados por
+ * comprimento descendente (match mais especifico primeiro).
+ */
+function buildMatchTokens(raw: string | null | undefined, splitBy: RegExp): string[] {
+  if (!raw) return []
+  const tokens = new Set<string>()
+  for (const piece of raw.split(splitBy)) {
+    const normalized = normalize(piece.trim())
+    if (normalized.length < 4) continue
+    if (PLAYER_STOP_TOKENS.has(normalized)) continue
+    tokens.add(normalized)
+  }
+  return Array.from(tokens).sort((a, b) => b.length - a.length)
+}
+
+/**
+ * Segunda camada (fallback) de matching: resolve o ticker usando Asset.players
+ * (lista virgula-separada) e Asset.coachName. Peso menor que a camada principal
+ * — so deve ser chamada quando resolveTickerFromText nao identifica time pelos
+ * nomes/apelidos do clube. Server-only.
+ */
+export async function resolveByPlayersAndCoach(text: string): Promise<string | null> {
+  if (!text?.trim()) return null
+  const normText = normalize(text)
+
+  try {
+    const assets = await prisma.asset.findMany({
+      select: { ticker: true, players: true, coachName: true },
+      where: { isActive: true },
+    })
+
+    for (const asset of assets) {
+      const playerTokens = buildMatchTokens(asset.players, /[,;|]+/)
+      for (const token of playerTokens) {
+        const re = new RegExp(`\\b${escapeRegex(token)}\\b`)
+        if (re.test(normText)) return asset.ticker
+      }
+      const coachTokens = buildMatchTokens(asset.coachName, /\s+/)
+      for (const token of coachTokens) {
+        const re = new RegExp(`\\b${escapeRegex(token)}\\b`)
+        if (re.test(normText)) return asset.ticker
+      }
+    }
+  } catch {
+    // DB indisponivel: cair no fallback
+  }
+
+  return null
+}
+
 export async function resolveTickerFromText(text: string): Promise<string | null> {
   if (!text?.trim()) return null
 
@@ -126,7 +195,11 @@ export async function resolveTickerFromText(text: string): Promise<string | null
     if (alias.length > 2 && lower.includes(alias)) return ticker
   }
 
-  return null
+  // -------------------------------------------------------------------------
+  // Passo 3: Fallback de segunda camada — jogadores + tecnico.
+  // Peso menor: so roda quando nenhuma das camadas anteriores resolveu.
+  // -------------------------------------------------------------------------
+  return await resolveByPlayersAndCoach(text)
 }
 
 /**
