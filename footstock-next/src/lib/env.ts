@@ -80,13 +80,32 @@ const envSchema = z.object({
 
 const _env = envSchema.safeParse(rawEnv)
 
-if (!_env.success) {
+// Skip strict validation during Next.js build phase (page data collection).
+// Em build phase, Railway/Docker não expoe runtime env vars; validacao real
+// ocorre no boot do server (runtime). Build-time só precisa que tipos resolvam.
+const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build'
+
+if (!_env.success && !isBuildPhase) {
   const missing = _env.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(' | ')
   console.error('[env] Variáveis de ambiente inválidas:', missing)
-  // Em serverless (Vercel), process.exit(1) mata o worker silenciosamente e o Sentry
-  // nunca captura o erro. Lançamos um Error para que a stack trace apareça nos logs
-  // e o handler withAuth retorne 500 com detalhes para diagnóstico.
   throw new Error(`[env] Configuração inválida — variáveis faltando ou inválidas: ${missing}`)
 }
 
-export const env = _env.success ? _env.data : ({} as z.infer<typeof envSchema>)
+// Build-time fallback: durante next build, env vars do Railway nao estao
+// disponiveis (Docker build phase isolada). Fornece dummy values nao-secretos
+// para que page data collection consiga importar modulos que usam env.X
+// (ex: prisma client init em rotas /api/cron/*).
+const buildFallback: z.infer<typeof envSchema> = {
+  DATABASE_URL: 'postgresql://build:build@localhost:5432/build',
+  DIRECT_URL: 'postgresql://build:build@localhost:5432/build',
+  NEXT_PUBLIC_SUPABASE_URL: 'https://build.supabase.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'build-anon-key',
+  SUPABASE_SERVICE_ROLE_KEY: 'build-service-role-key',
+  REDIS_URL: 'redis://localhost:6379',
+  JWT_SECRET: 'build-jwt-secret-32-characters-min-length',
+  MOTOR_SECRET_TOKEN: 'build-motor-token',
+} as z.infer<typeof envSchema>
+
+export const env = _env.success
+  ? _env.data
+  : (isBuildPhase ? buildFallback : ({} as z.infer<typeof envSchema>))
