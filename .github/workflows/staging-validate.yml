@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       staging_url:
-        description: 'URL do preview Vercel'
+        description: 'URL do staging Railway'
         required: true
         type: string
 

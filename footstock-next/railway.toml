@@ -1,0 +1,23 @@
+# ============================================================================
+# Foot Stock — Next.js Frontend Railway Service Config
+#
+# IMPORTANTE: Configure o servico no painel Railway com:
+#   Root Directory = footstock-next/
+#
+# A app Next.js tem package.json e prisma/ proprios em footstock-next/ — usar
+# o subdir como build context evita conflito com o package.json do repo root
+# (que pertence ao monorepo) e mantem `npx prisma generate` apontando para
+# footstock-next/prisma/schema.prisma. Diverge do motor/railway.toml (que usa
+# Root = / porque precisa do prisma compartilhado em /prisma), e intencional.
+# ============================================================================
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "node server.js"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 5

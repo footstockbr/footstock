@@ -263,12 +263,14 @@ describe('AgentOrchestrator — instância', () => {
     expect(() => orch.dispose()).not.toThrow()
   })
 
-  test('tickAsset retorna número dentro do cap', () => {
+  test('tickAsset retorna {impact, syntheticVolume} com impact dentro do cap', () => {
     const orch = new AgentOrchestrator()
     orch.initAsset('asset-1', AssetCluster.A_TOP)
     const ctx = mkCtx()
-    const impact = orch.tickAsset('asset-1', ctx)
-    expect(impact).toBeGreaterThanOrEqual(-MAX_AGGREGATE_IMPACT)
-    expect(impact).toBeLessThanOrEqual(MAX_AGGREGATE_IMPACT)
+    const result = orch.tickAsset('asset-1', ctx)
+    expect(typeof result.impact).toBe('number')
+    expect(result.impact).toBeGreaterThanOrEqual(-MAX_AGGREGATE_IMPACT)
+    expect(result.impact).toBeLessThanOrEqual(MAX_AGGREGATE_IMPACT)
+    expect(typeof result.syntheticVolume).toBe('number')
   })
 })

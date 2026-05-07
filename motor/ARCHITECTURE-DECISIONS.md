@@ -49,6 +49,20 @@ Usar SSE (Server-Sent Events) unidirecional no endpoint `/api/v1/market/stream`.
 - Delay de 1h para plano JOGADOR aplicado no SSE endpoint (não no motor)
 - Redis subscriber criado e fechado por request (sem memory leak)
 
+### Revisão 2 (2026-05-06)
+
+**Mudança:** SSE streaming movido do Vercel (Next.js serverless) para o motor Railway (Node.js standalone).
+
+**Motivo:** Redução de custos — Vercel cobra por tempo de execução de funções serverless; SSE mantém conexões abertas por minutos, gerando custo escalonado. No Railway (container dedicado), o custo é fixo por réplica independente de conexões SSE.
+
+**Detalhes técnicos:**
+- Novos endpoints: `GET /stream/market` e `GET /stream/news` no motor (porta 3001)
+- Headers SSE mantidos: `text/event-stream`, heartbeat 15s, CORS configurado
+- Frontend atualizado para `NEXT_PUBLIC_STREAM_URL=https://stream.footstock.com.br`
+- Endpoints antigos (`/api/v1/market/stream`, `/api/v1/news/stream`) marcados como DEPRECATED (410/301)
+
+**Referência:** `scheduled-updates/footstock-cost/STACK-COST-ANALYSIS.md` §4.2
+
 ---
 
 ## ADR-003: Circuit Breaker 8% com Halt de 5 Minutos

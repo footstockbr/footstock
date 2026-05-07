@@ -24,7 +24,7 @@ export type { SessionType } from './motor.types'
 /**
  * Intervalo do tick do motor em milissegundos.
  * Owner: module-2/TASK-1 — lib/constants/market.ts
- * Valor configurável via env: MOTOR_TICK_INTERVAL_MS (default: 2000ms)
- * No motor: ler de process.env.MOTOR_TICK_INTERVAL_MS ?? 2000
+ * Valor configurável via env: MOTOR_TICK_INTERVAL_MS (default: 10000ms (5x mais econômico vs 2s, decisão 2026-05-06))
+ * No motor: ler de process.env.MOTOR_TICK_INTERVAL_MS ?? 10000
  */
 // MOTOR_TICK_MS não é importada — configurada via variável de ambiente no Railway

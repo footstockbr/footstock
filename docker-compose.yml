@@ -52,17 +52,13 @@ services:
       retries: 3
     restart: unless-stopped
 
-  next:
-    image: node:22-alpine
-    container_name: foot-stock-next
-    working_dir: /app
-    command: npm run dev
+  web:
+    build:
+      context: ./footstock-next
+      dockerfile: Dockerfile
+    container_name: foot-stock-web
     ports:
       - '3000:3000'
-    volumes:
-      - .:/app
-      - /app/node_modules
-      - /app/.next
     depends_on:
       postgres:
         condition: service_healthy
@@ -70,11 +66,12 @@ services:
         condition: service_healthy
     env_file: .env.docker
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/api/health']
       interval: 30s
       timeout: 5s
       start_period: 30s
       retries: 3
+    restart: unless-stopped
 
 volumes:
   postgres_data:

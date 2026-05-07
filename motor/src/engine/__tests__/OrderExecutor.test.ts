@@ -64,6 +64,7 @@ function makePrisma(orders: any[] = [], user: any = makeUser()): any {
     },
     transaction: {
       create: jest.fn().mockResolvedValue({}),
+      findFirst: jest.fn().mockResolvedValue(null),
     },
   }
 

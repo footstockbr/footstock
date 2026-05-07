@@ -7,6 +7,25 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/spec/v2.0.
 
 ---
 
+## [Unreleased] — Railway Consolidation (2026-05-06)
+
+### Changed
+- **Infra:** Migração completa de Vercel + Supabase para Railway (consolidado)
+  - Web (Next.js): deploy via Dockerfile standalone no Railway (`railway up --service web`)
+  - Motor: já no Railway, otimizado (tick 2s → 10s, persistência 8s → 5min)
+  - Banco: PostgreSQL Railway (runbook de cutover em `runbooks/RUNBOOK-016-db-cutover-supabase-to-railway.md`)
+  - Cache: Redis Railway (runbook em `runbooks/RUNBOOK-015-railway-redis-provision.md`)
+  - DNS: Cloudflare → Railway (`stream.footstock.com.br`, `api.footstock.com.br`)
+- **SSE:** Endpoints de streaming movidos do Vercel para o motor (`/stream/market`, `/stream/news`)
+- **Cron jobs:** 19 crons migrados do Vercel para scheduler interno do motor (`node-cron` + leader election)
+- **CI/CD:** GitHub Actions substituíram `vercel deploy` por `railway up`
+
+### Removed
+- `vercel.json` (root e `footstock-next/`)
+- Diretório `.vercel/`
+
+---
+
 ## [1.0.0] - 2026-04-01
 
 ### Milestone 11 — Finalização e Entrega (R$ 663,00)

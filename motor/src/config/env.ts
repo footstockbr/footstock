@@ -23,7 +23,7 @@ function optional(key: string, fallback: string): string {
 export const env = {
   REDIS_URL: required('REDIS_URL'),
   DATABASE_URL: required('DATABASE_URL'),
-  MOTOR_TICK_INTERVAL_MS: parseInt(optional('MOTOR_TICK_INTERVAL_MS', '2000'), 10),
+  MOTOR_TICK_INTERVAL_MS: parseInt(optional('MOTOR_TICK_INTERVAL_MS', '10000'), 10),
   MOTOR_LEADER_TTL_S: parseInt(optional('MOTOR_LEADER_TTL_S', '30'), 10),
   MOTOR_LEADER_HEARTBEAT_S: parseInt(optional('MOTOR_LEADER_HEARTBEAT_S', '10'), 10),
   MOTOR_CIRCUIT_BREAKER_THRESHOLD: parseFloat(

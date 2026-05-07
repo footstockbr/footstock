@@ -25,7 +25,8 @@ import { CLUB_STATE_BY_TICKER } from '../microstructure/clubStates'
 import type { PreviousTickDelta } from '../types/motor.types'
 
 const TICK_INTERVAL_MS = parseInt(process.env.MOTOR_TICK_INTERVAL_MS ?? '2000', 10)
-const PERSIST_HISTORY_EVERY = 4  // Persistir PriceHistory a cada N ticks ≈8s (FDD canônico; A_TOP persiste sempre)
+const PERSIST_HISTORY_EVERY = 30  // Persistir PriceHistory a cada N ticks ≈ 5min com tick=10s (FDD canônico revisado 2026-05; A_TOP persiste sempre — ver item 004)
+const PAUSE_RESUME_MS = 5 * 60 * 1000  // 5 minutos absolutos (independente de TICK_INTERVAL_MS)
 // Heartbeat a cada N ticks (reduz comandos Redis — TTL do MotorHealthService: 60s)
 const HEARTBEAT_EVERY = parseInt(process.env.MOTOR_HEARTBEAT_EVERY ?? '5', 10)
 
@@ -211,7 +212,7 @@ export class MarketEngine {
           const variationPct = state.closePrice > 0
             ? Math.abs((state.currentPrice - state.closePrice) / state.closePrice) * 100
             : 0
-          const resumeAt = Date.now() + 150 * TICK_INTERVAL_MS
+          const resumeAt = Date.now() + PAUSE_RESUME_MS
           state.isPaused = true
           state.haltReason = 'CIRCUIT_BREAKER'
           state.haltResumeAt = resumeAt
@@ -227,7 +228,7 @@ export class MarketEngine {
             const resumeTick = buildHaltTick(state, sessionType, null, null)
             resumeTick.isHalted = false
             this.redis.publish(REDIS_CHANNELS.MARKET_TICK, serializeTick([resumeTick])).catch(console.error)
-          }, 150 * TICK_INTERVAL_MS)
+          }, PAUSE_RESUME_MS)
           continue
         }
 
@@ -265,7 +266,7 @@ export class MarketEngine {
         const tick = buildMotorTick(state, finalPrice, sessionType)
         ticks.push(tick)
 
-        // Persistir PriceHistory (A_TOP: sempre; outros: a cada 5 ticks)
+        /** A_TOP persiste sempre (FDD canônico). Demais tiers persistem a cada PERSIST_HISTORY_EVERY ticks. */
         const shouldPersist =
           state.cluster === 'A_TOP' ||
           this.tickCount % PERSIST_HISTORY_EVERY === 0

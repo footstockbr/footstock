@@ -1,5 +1,9 @@
 # Demo Milestone 7 — Foot Stock
 
+> **Nota infra (2026-05-06):** O sistema foi migrado de Vercel + Supabase para Railway consolidado.
+> Os comandos abaixo continuam válidos; o banco de dados local (Docker) é usado para demo.
+> Para produção, ver runbooks em `runbooks/RUNBOOK-016-db-cutover-supabase-to-railway.md`.
+
 ## Como executar o seed
 
 ```bash

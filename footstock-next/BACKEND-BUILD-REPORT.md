@@ -3,6 +3,7 @@
 Projeto: foot-stock
 Stack: nextjs-api (Next.js 16 + TypeScript + Supabase Auth + Prisma 7 + @prisma/adapter-pg)
 Data: 2026-03-28
+Infra atualizada: 2026-05-06 (Railway consolidation — ver CHANGELOG.md)
 
 ---
 
@@ -19,6 +20,7 @@ Data: 2026-03-28
 - `prisma/schema.prisma` — 20 entidades + 26 enums (completo, alinhado ao LLD)
 - `prisma.config.ts` — datasource config (Prisma 7 breaking change)
 - Prisma client gerado com `npx prisma generate` ✅
+- **Nota pós-migração (2026-05):** DATABASE_URL agora aponta para Railway Postgres (`postgres.railway.internal`). Supabase mantido como legado até cutover completo.
 
 ### Tipos TypeScript
 - `src/types/index.ts` — ApiResponse, ApiListResponse, Pagination, todos os enums, todas as entidades

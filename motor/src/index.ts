@@ -5,6 +5,9 @@
 
 import './config/env'   // fail-fast para variáveis ausentes
 import http from 'http'
+import { handleMarketStream } from './server/routes/marketStream'
+import { handleNewsStream } from './server/routes/newsStream'
+import { registerAllJobs, startScheduler } from './scheduler'
 import { logger } from './utils/logger'
 import { LeaderElection } from './leader/LeaderElection'
 import { MarketEngine } from './engine/MarketEngine'
@@ -58,6 +61,18 @@ const healthServer = http.createServer(async (req, res) => {
     const history = await _engineRef?.getOfiHistory(ticker) ?? []
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ ticker, history }))
+    return
+  }
+
+  // GET /stream/market — SSE streaming de ticks (migrado do Vercel em 2026-05-06)
+  if (url === '/stream/market') {
+    handleMarketStream(req, res)
+    return
+  }
+
+  // GET /stream/news — SSE streaming de notícias (migrado do Vercel em 2026-05-06)
+  if (url === '/stream/news') {
+    handleNewsStream(req, res)
     return
   }
 
@@ -150,6 +165,13 @@ async function main() {
     await onBecameLeader()
   } else {
     startPolling()
+  }
+
+  // Iniciar scheduler se opt-in via env (item 011 + 012)
+  if (process.env.MOTOR_SCHEDULER_ENABLED === 'true') {
+    registerAllJobs()
+    startScheduler(leader)
+    logger.info('[motor] Scheduler iniciado (MOTOR_SCHEDULER_ENABLED=true)')
   }
 
   // Graceful shutdown

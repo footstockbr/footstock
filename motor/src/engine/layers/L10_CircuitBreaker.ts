@@ -21,7 +21,7 @@ import type { AssetState, ClusterParams, LayerResult } from '../../types/motor.t
  *
  * Integração:
  *   variacao >= 8% daily → isHalted=true → halt de 5min → retoma automaticamente.
- *   MarketEngine gerencia o timer de retomada (150 ticks × TICK_INTERVAL_MS).
+ *   MarketEngine gerencia o timer de retomada via PAUSE_RESUME_MS (5min absoluto, independente de TICK_INTERVAL_MS).
  */
 
 const CIRCUIT_BREAKER_THRESHOLD = 0.08   // 8% de variação acumulada no dia

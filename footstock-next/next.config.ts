@@ -30,6 +30,7 @@ const securityHeaders = [
 const allowedOrigins = process.env.ALLOWED_ORIGINS ?? 'https://footstock.com.br'
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   poweredByHeader: false,
 
   async headers() {

@@ -1,38 +1,54 @@
-# docker-compose.dev.yml — Serviços locais para desenvolvimento
-# Uso: docker compose -f docker-compose.dev.yml up -d
+# ============================================================================
+# docker-compose.dev.yml — Override para desenvolvimento local
+# Uso: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+# Paridade com Railway:
+#   - postgres:16-alpine (mesma versão Railway Postgres)
+#   - redis:7-alpine (mesma versão Railway Redis)
+#   - motor: build do Dockerfile raiz (paridade prod)
+#   - web: hot-reload com mount de código (dev-only, não usado em prod)
+#
+# URLs internas (Docker network):
+#   - postgres:5432  → mapeia para postgres.railway.internal em prod
+#   - redis:6379     → mapeia para redis.railway.internal em prod
+#   - motor:3001     → mapeia para motor.up.railway.app em prod
+#   - web:3000       → mapeia para web.up.railway.app em prod
+# ============================================================================
 
 services:
   postgres:
-    image: postgres:16-alpine
-    container_name: foot-stock-postgres-dev
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: foot_stock_dev
     ports:
       - '5433:5432'
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U postgres']
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
 
   redis:
-    image: redis:7-alpine
-    container_name: foot-stock-redis-dev
-    ports:
-      - '6379:6379'
     volumes:
       - redis_dev_data:/data
-    healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    restart: unless-stopped
+
+  motor:
+    volumes:
+      - ./motor/src:/app/src
+      - ./motor/package.json:/app/package.json
+    command: npm run dev
+
+  web:
+    image: node:22-alpine
+    container_name: foot-stock-web-dev
+    working_dir: /app
+    command: npm run dev
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./footstock-next:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: .env.docker
 
 volumes:
   postgres_dev_data:

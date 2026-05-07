@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test'
 const environments = {
   development: 'http://localhost:3000',
   staging: process.env.STAGING_URL || 'https://foot-stock-staging.vercel.app',
-  production: process.env.PROD_URL || 'https://foot-stock.com',
+  production: process.env.PROD_URL || 'https://footstock.com.br',
 } as const
 
 type Env = keyof typeof environments

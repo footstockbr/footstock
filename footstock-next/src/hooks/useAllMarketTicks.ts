@@ -2,8 +2,8 @@
 
 // ============================================================================
 // FootStock — useAllMarketTicks
-// Assina o SSE /api/v1/market/stream e retorna map ticker → preço atualizado.
-// Atualiza automaticamente a cada tick do motor (a cada ~2s).
+// Assina o SSE /stream/market no motor Railway e retorna map ticker → preço atualizado.
+// Atualiza automaticamente a cada tick do motor (a cada ~10s).
 // Substituição do one-time fetch da MarketPageClient para preços em tempo real.
 // ============================================================================
 
@@ -58,7 +58,8 @@ export function useAllMarketTicks(): MarketTickMap {
 
       if (!token || closed) return
 
-      const url = `/api/v1/market/stream?token=${encodeURIComponent(token)}`
+      const baseUrl = process.env.NEXT_PUBLIC_STREAM_URL ?? 'https://stream.footstock.com.br'
+      const url = `${baseUrl}/market?token=${encodeURIComponent(token)}`
       const es = new EventSource(url)
       esRef.current = es
 

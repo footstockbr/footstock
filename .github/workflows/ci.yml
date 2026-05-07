@@ -108,7 +108,7 @@ jobs:
       REDIS_URL: ${{ secrets.REDIS_URL }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
       MOTOR_SECRET_TOKEN: ${{ secrets.MOTOR_SECRET_TOKEN }}
-      NEXT_PUBLIC_APP_URL: 'https://foot-stock.vercel.app'
+      NEXT_PUBLIC_APP_URL: 'https://footstock.com.br'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 

@@ -19,6 +19,21 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.1.0
+        with:
+          node-version: '22'
+
+      - name: Instalar dependências motor
+        working-directory: motor
+        run: npm ci
+
+      - name: Test gate (motor)
+        working-directory: motor
+        run: npm test -- --ci --silent
+        env:
+          NODE_ENV: test
+
       - name: Instalar Railway CLI
         run: npm i -g @railway/cli
 

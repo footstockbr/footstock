@@ -59,7 +59,8 @@ export function useMarketTick(ticker: string): MarketTick | null {
       // Sem token não há como autenticar o SSE
       if (!token || closed) return
 
-      const url = `/api/v1/market/stream?token=${encodeURIComponent(token)}`
+      const baseUrl = process.env.NEXT_PUBLIC_STREAM_URL ?? 'https://stream.footstock.com.br'
+      const url = `${baseUrl}/market?token=${encodeURIComponent(token)}`
       const es = new EventSource(url)
       esRef.current = es
 

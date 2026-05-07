@@ -1,12 +1,18 @@
-name: Deploy Vercel
+name: Deploy Railway Web
 
 on:
   push:
     branches: [main]
+    paths:
+      - 'footstock-next/**'
+      - 'prisma/**'
+      - 'Dockerfile'
+
+  workflow_dispatch:
 
 jobs:
   deploy:
-    name: Deploy para Vercel
+    name: Deploy para Railway (Web)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: production
@@ -27,17 +33,47 @@ jobs:
           key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
           restore-keys: ${{ runner.os }}-npm-
 
-      - name: Instalar Vercel CLI
-        run: npm i -g vercel@latest
+      - name: Instalar dependências
+        run: npm ci
 
-      - name: Pull configurações Vercel
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Gerar Prisma Client
+        run: npx prisma generate
 
-      - name: Build para produção
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Type-check Next.js
+        run: npx tsc --noEmit
 
-      - name: Deploy para produção
-        run: vercel deploy --prebuilt --prod --archive=tgz --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Test gate (footstock-next)
+        working-directory: footstock-next
+        run: npm test -- --ci --silent
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_CI }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL_CI }}
+          REDIS_URL: ${{ secrets.REDIS_URL_CI }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          NODE_ENV: test
+
+      - name: Build Next.js
+        run: npm run build
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_CI }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL_CI }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          MOTOR_SECRET_TOKEN: ${{ secrets.MOTOR_SECRET_TOKEN }}
+          NEXT_PUBLIC_APP_URL: 'https://footstock.com.br'
+
+      - name: Instalar Railway CLI
+        run: npm i -g @railway/cli
+
+      - name: Deploy para Railway
+        run: railway up --service web --environment production --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: 45677912-3487-4978-b20b-fc7cdb8b93cf
 
       - name: Deployment summary
-        run: echo "### Deployed to production :rocket:" >> $GITHUB_STEP_SUMMARY
+        run: echo "### Deployed to Railway production :rocket:" >> $GITHUB_STEP_SUMMARY

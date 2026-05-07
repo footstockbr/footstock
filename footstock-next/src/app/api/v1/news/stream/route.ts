@@ -1,93 +1,51 @@
 // ============================================================================
-// FootStock — SSE Endpoint /api/v1/news/stream (Should)
-// Subscreve o canal Redis news:inject e faz stream para o cliente.
+// FootStock — SSE Endpoint /api/v1/news/stream (DEPRECATED)
+// DEPRECATED 2026-05-06: SSE news streaming migrado para o motor Railway.
+// Este endpoint será removido na sprint seguinte. Use diretamente:
+//   GET {NEXT_PUBLIC_STREAM_URL}/news  (ex: https://stream.footstock.com.br/news)
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createSubscriber } from '@/lib/redis'
-import { withAuth, type AuthContext } from '@/app/api/middleware'
 
 export const maxDuration = 60
 
-const KEEPALIVE_MS = 25_000
-const REDIS_CHANNEL = 'news:inject'
+const DEPRECATED_SINCE = '2026-05-06'
+const NEW_URL = process.env.NEXT_PUBLIC_STREAM_URL
+  ? `${process.env.NEXT_PUBLIC_STREAM_URL}/news`
+  : 'https://stream.footstock.com.br/news'
 
-async function newsStreamHandler(req: NextRequest, _ctx: AuthContext): Promise<NextResponse> {
-  const encoder = new TextEncoder()
+function deprecatedHandler(req: NextRequest): NextResponse {
+  // Preferir 301 redirect para clients compatíveis; fallback JSON para EventSource
+  const accept = req.headers.get('accept') ?? ''
+  const isEventSource = accept.includes('text/event-stream')
 
-  let subscriber: ReturnType<typeof createSubscriber> | null = null
-  let keepalive: ReturnType<typeof setInterval> | null = null
-
-  function cleanup() {
-    if (keepalive) { clearInterval(keepalive); keepalive = null }
-    if (subscriber) {
-      try { subscriber.unsubscribe(REDIS_CHANNEL) } catch { /* ignore */ }
-      try { subscriber.disconnect() } catch { /* ignore */ }
-      subscriber = null
-    }
+  if (isEventSource) {
+    // EventSource não segue redirects automaticamente; retorna JSON com new_url
+    return NextResponse.json(
+      {
+        deprecated: true,
+        since: DEPRECATED_SINCE,
+        new_url: NEW_URL,
+        message: 'Este endpoint foi migrado para o motor Railway. Atualize sua URL de streaming.',
+      },
+      {
+        status: 410,
+        headers: {
+          'Content-Type': 'application/json',
+          'Sunset': DEPRECATED_SINCE,
+        },
+      }
+    )
   }
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      try {
-        subscriber = createSubscriber()
-        if (!subscriber) {
-          controller.close()
-          return
-        }
-
-        subscriber.on('error', (err: Error) => {
-          console.error('[news:stream] Erro Redis:', err)
-          try { controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify({ message: 'Redis connection error' })}\n\n`)) } catch { /* ignore */ }
-          cleanup()
-          try { controller.close() } catch { /* já fechado */ }
-        })
-
-        await subscriber.subscribe(REDIS_CHANNEL)
-
-        subscriber.on('message', (_channel: string, message: string) => {
-          try {
-            controller.enqueue(encoder.encode(`data: ${message}\n\n`))
-          } catch {
-            // Controller fechado
-          }
-        })
-      } catch (err) {
-        console.error('[news:stream] Erro ao conectar Redis:', err)
-        try { controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify({ message: 'Stream unavailable' })}\n\n`)) } catch { /* ignore */ }
-        cleanup()
-        controller.close()
-        return
-      }
-
-      // Heartbeat a cada 25s para manter conexão viva em proxies
-      keepalive = setInterval(() => {
-        try {
-          controller.enqueue(encoder.encode(': heartbeat\n\n'))
-        } catch {
-          cleanup()
-        }
-      }, KEEPALIVE_MS)
-
-      req.signal.addEventListener('abort', () => {
-        cleanup()
-        try { controller.close() } catch { /* já fechado */ }
-      })
-    },
-
-    cancel() {
-      cleanup()
-    },
-  })
-
-  return new NextResponse(stream, {
+  // Clients HTTP comuns: redirect permanente
+  return NextResponse.redirect(NEW_URL, {
+    status: 301,
     headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no',
+      'Sunset': DEPRECATED_SINCE,
+      'Deprecation': 'true',
     },
   })
 }
 
-export const GET = withAuth(newsStreamHandler)
+export const GET = deprecatedHandler

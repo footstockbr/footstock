@@ -6,12 +6,12 @@ O mercado de ações do futebol brasileiro.
 
 - **Frontend:** Next.js 15 (App Router) + TypeScript + Tailwind CSS 4
 - **Backend:** Next.js API Routes + Prisma 6
-- **Database:** PostgreSQL (Supabase)
-- **Cache:** Redis (Railway/Upstash)
+- **Database:** PostgreSQL (Railway Postgres)
+- **Cache:** Redis (Railway Redis)
 - **Motor:** Node.js standalone (Railway)
 - **Auth:** Supabase Auth + WebAuthn
 - **Monitoring:** Sentry
-- **Deploy:** Vercel (web) + Railway (motor)
+- **Deploy:** Railway (web + motor + postgres + redis)
 
 ## Pré-requisitos
 
