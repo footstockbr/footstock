@@ -32,6 +32,7 @@ ENV NODE_ENV=production
 # valores NAO afetam runtime — sao sobrescritos pelas vars do Railway service.
 ENV NEXT_PUBLIC_SUPABASE_URL=https://build-placeholder.supabase.co
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=build-placeholder-anon-key
+ENV SUPABASE_SERVICE_ROLE_KEY=build-placeholder-service-role-key
 ENV NEXT_PUBLIC_APP_URL=https://build.placeholder
 ENV NEXT_PUBLIC_STREAM_URL=https://build.placeholder
 ENV NEXT_PUBLIC_API_URL=https://build.placeholder
@@ -39,9 +40,11 @@ ENV NEXT_PHASE=phase-production-build
 ENV DATABASE_URL=postgresql://build:build@localhost:5432/build
 ENV DIRECT_URL=postgresql://build:build@localhost:5432/build
 ENV REDIS_URL=redis://localhost:6379
+ENV REDIS_DISABLED=true
 ENV JWT_SECRET=build-jwt-secret-placeholder-32-chars-min-len
 ENV NEXTAUTH_SECRET=build-nextauth-secret-placeholder
 ENV MOTOR_SECRET_TOKEN=build-motor-token
+ENV SKIP_ENV_VALIDATION=true
 
 RUN npm run build
 
