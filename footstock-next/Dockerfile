@@ -25,6 +25,24 @@ RUN npx prisma generate
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+
+# Build-time dummies para satisfazer constructors eager de modulos (Supabase
+# client init usa process.env.NEXT_PUBLIC_SUPABASE_URL diretamente, sem passar
+# pelo env.ts). Railway nao expoe env vars durante Docker build phase. Esses
+# valores NAO afetam runtime — sao sobrescritos pelas vars do Railway service.
+ENV NEXT_PUBLIC_SUPABASE_URL=https://build-placeholder.supabase.co
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=build-placeholder-anon-key
+ENV NEXT_PUBLIC_APP_URL=https://build.placeholder
+ENV NEXT_PUBLIC_STREAM_URL=https://build.placeholder
+ENV NEXT_PUBLIC_API_URL=https://build.placeholder
+ENV NEXT_PHASE=phase-production-build
+ENV DATABASE_URL=postgresql://build:build@localhost:5432/build
+ENV DIRECT_URL=postgresql://build:build@localhost:5432/build
+ENV REDIS_URL=redis://localhost:6379
+ENV JWT_SECRET=build-jwt-secret-placeholder-32-chars-min-len
+ENV NEXTAUTH_SECRET=build-nextauth-secret-placeholder
+ENV MOTOR_SECRET_TOKEN=build-motor-token
+
 RUN npm run build
 
 # ─── Stage 3: Runner ───────────────────────────────────────────────────────
