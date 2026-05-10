@@ -34,44 +34,46 @@ function buildProviders(): NextAuthConfig['providers'] {
     )
   }
 
-  providers.push(
-    Credentials({
-      id: 'legacy-supabase',
-      name: 'Email + Password (legacy)',
-      credentials: {
-        email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' },
-      },
-      async authorize(raw) {
-        const email = typeof raw?.email === 'string' ? raw.email.trim().toLowerCase() : ''
-        const password = typeof raw?.password === 'string' ? raw.password : ''
-        if (!email || !password) return null
+  if (env.AUTH_ENABLE_LEGACY_CREDENTIALS === 'true') {
+    providers.push(
+      Credentials({
+        id: 'legacy-supabase',
+        name: 'Email + Password (legacy)',
+        credentials: {
+          email: { label: 'Email', type: 'email' },
+          password: { label: 'Password', type: 'password' },
+        },
+        async authorize(raw) {
+          const email = typeof raw?.email === 'string' ? raw.email.trim().toLowerCase() : ''
+          const password = typeof raw?.password === 'string' ? raw.password : ''
+          if (!email || !password) return null
 
-        const supabase = createClient(
-          env.NEXT_PUBLIC_SUPABASE_URL,
-          env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-          { auth: { autoRefreshToken: false, persistSession: false } },
-        )
+          const supabase = createClient(
+            env.NEXT_PUBLIC_SUPABASE_URL,
+            env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+            { auth: { autoRefreshToken: false, persistSession: false } },
+          )
 
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-        if (error || !data?.user?.email) return null
+          const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+          if (error || !data?.user?.email) return null
 
-        const dbUser = await prisma.user.findUnique({
-          where: { email: data.user.email.toLowerCase() },
-          select: { id: true, email: true, name: true, image: true, emailVerified: true },
-        })
-        if (!dbUser) return null
+          const dbUser = await prisma.user.findUnique({
+            where: { email: data.user.email.toLowerCase() },
+            select: { id: true, email: true, name: true, image: true, emailVerified: true },
+          })
+          if (!dbUser) return null
 
-        return {
-          id: dbUser.id,
-          email: dbUser.email,
-          name: dbUser.name,
-          image: dbUser.image ?? null,
-          emailVerified: dbUser.emailVerified ?? null,
-        }
-      },
-    }),
-  )
+          return {
+            id: dbUser.id,
+            email: dbUser.email,
+            name: dbUser.name,
+            image: dbUser.image ?? null,
+            emailVerified: dbUser.emailVerified ?? null,
+          }
+        },
+      }),
+    )
+  }
 
   if (
     env.AUTH_ENABLE_GOOGLE === 'true' &&
