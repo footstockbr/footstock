@@ -1,6 +1,6 @@
 // ============================================================================
 // Foot Stock Motor — Cron Scheduler (node-cron)
-// 19 jobs migrados do Vercel (item 012).
+// 23 jobs migrados do Vercel (item 012 + item 026 P1-01).
 // Scheduler é OPT-IN via env MOTOR_SCHEDULER_ENABLED.
 // Apenas o leader executa jobs (gating via LeaderElection).
 // ============================================================================
@@ -29,6 +29,10 @@ import { notificationDigestJob } from './jobs/notificationDigest'
 import { notificationQueueJob } from './jobs/notificationQueue'
 import { notificationTtlCleanupJob } from './jobs/notificationTtlCleanup'
 import { ageVerificationRetryJob } from './jobs/ageVerificationRetry'
+import { cancellationExpiryJob } from './jobs/cancellationExpiry'
+import { cardUpdaterJob } from './jobs/cardUpdater'
+import { financialDividendJob } from './jobs/financialDividend'
+import { sessionTransitionJob } from './jobs/sessionTransition'
 
 interface Job {
   name: string
@@ -48,7 +52,7 @@ export function registerJob(
 }
 
 /**
- * Registra os 19 jobs migrados do Vercel.
+ * Registra os 23 jobs migrados do Vercel (19 originais + 4 do item 026 P1-01).
  * Deve ser chamada antes de startScheduler().
  */
 export function registerAllJobs(): void {
@@ -71,6 +75,10 @@ export function registerAllJobs(): void {
   registerJob('notification-queue', '0 10 * * *', notificationQueueJob)
   registerJob('notification-ttl-cleanup', '0 4 * * *', notificationTtlCleanupJob)
   registerJob('age-verification-retry', '0 6 * * *', ageVerificationRetryJob)
+  registerJob('cancellation-expiry', '0 5 * * *', cancellationExpiryJob)
+  registerJob('card-updater', '0 8 * * *', cardUpdaterJob)
+  registerJob('financial-dividend', '0 5 1-7 * *', financialDividendJob)
+  registerJob('session-transition', '* * * * *', sessionTransitionJob)
 }
 
 /**
