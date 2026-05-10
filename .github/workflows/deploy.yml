@@ -40,6 +40,7 @@ jobs:
         run: npx prisma generate
 
       - name: Type-check Next.js
+        working-directory: footstock-next
         run: npx tsc --noEmit
 
       - name: Test gate (footstock-next)
