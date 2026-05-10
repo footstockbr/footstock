@@ -47,10 +47,21 @@ const AUTHJS_COOKIE_PREFIXES = [
 const SUPABASE_COOKIE_PREFIX = 'sb-'
 
 /**
- * Limpa AMBOS cookies (Auth.js + Supabase) na resposta atual. Não chama
- * NextAuth.signOut() para evitar ciclo de import com o root auth.ts; a
- * remoção dos cookies é equivalente para session strategy 'database' —
- * a sessão persistida fica órfã e expira pelo TTL natural do Adapter.
+ * Limpa AMBOS cookies (Auth.js + Supabase) na resposta atual.
+ *
+ * Decisões de design (revisão adversarial item 016):
+ *  - NÃO chamamos NextAuth.signOut() apesar do spec literal mencioná-lo:
+ *    o root `auth.ts` (handler) importa de `@/lib/auth` (este arquivo),
+ *    invocar signOut() daqui criaria import cycle. Para session strategy
+ *    'database', remover o cookie é funcionalmente equivalente —
+ *    a Session row no DB fica órfã e expira via TTL natural do Adapter.
+ *  - Session row órfã no DB será explicitamente revogada em item 018
+ *    (NXAUTH-04 SWITCHOVER) quando `getAuthUser()` Auth.js-first invocar
+ *    este path; lá teremos `userId` em escopo para `prisma.session.deleteMany`.
+ *  - Prefix matching em vez de lista de nomes: tolerante a variações
+ *    `__Secure-` / `__Host-` e `next-auth.` legacy vs `authjs.` v5+.
+ *    Caso NextAuth introduza novo prefix em release futuro, atualizar
+ *    `AUTHJS_COOKIE_PREFIXES` (lint via grep mensal sugerido).
  */
 export async function clearDualCookies(): Promise<void> {
   const cookieStore = await cookies()
