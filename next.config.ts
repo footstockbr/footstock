@@ -85,7 +85,8 @@ export default withSentryConfig(analyzeBundle(nextConfig), {
   silent: true,
   // widenClientFileUpload removido em v10 (comportamento padrão)
   // hideSourceMaps removido em v10 — usar sourcemaps.disable
-  sourcemaps: { disable: true },
+  // sourcemaps habilitados em produção (TASK-P2-05) — requer SENTRY_AUTH_TOKEN no build
+  sourcemaps: { disable: isDev },
   disableLogger: true,
   // Tunelamento para evitar ad-blockers
   tunnelRoute: '/monitoring',
