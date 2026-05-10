@@ -1,9 +1,114 @@
 import 'server-only'
 
 import { cookies } from 'next/headers'
+import * as Sentry from '@sentry/nextjs'
 import { createSupabaseServerClient } from '@/lib/supabase'
+import { env } from '@/lib/env'
 import { prisma } from '@/lib/prisma'
 import type { User, AdminRole } from '@/types'
+
+// ─── NXAUTH-04A — Kill switch + detecção de conflito Auth.js vs Supabase ───────
+//
+// Cenário: usuário pode ter cookie Auth.js + cookie Supabase apontando para
+// users rows DIFERENTES (mudou conta no Supabase via SDK direto, voltou).
+// Silent precedence = wrong identity. Esta camada é precondição de NXAUTH-04
+// (switchover); detectIdentityConflict deve ser chamado pelo getAuthUser()
+// novo a cada request quando AMBOS providers retornam identidade.
+
+export interface IdentityClaim {
+  id: string
+  email: string | null | undefined
+}
+
+/**
+ * Compara identidade Auth.js vs Supabase. Retorna true quando id OU email
+ * normalizado divergem. Inputs nulos NUNCA são conflito (1 só provider ativo).
+ */
+export function detectIdentityConflict(
+  authjsUser: IdentityClaim | null | undefined,
+  supabaseUser: IdentityClaim | null | undefined,
+): boolean {
+  if (!authjsUser || !supabaseUser) return false
+  if (authjsUser.id !== supabaseUser.id) return true
+  const a = (authjsUser.email ?? '').trim().toLowerCase()
+  const s = (supabaseUser.email ?? '').trim().toLowerCase()
+  if (a && s && a !== s) return true
+  return false
+}
+
+const AUTHJS_COOKIE_PREFIXES = [
+  'next-auth.',
+  '__Secure-next-auth.',
+  '__Host-next-auth.',
+  'authjs.',
+  '__Secure-authjs.',
+  '__Host-authjs.',
+]
+const SUPABASE_COOKIE_PREFIX = 'sb-'
+
+/**
+ * Limpa AMBOS cookies (Auth.js + Supabase) na resposta atual. Não chama
+ * NextAuth.signOut() para evitar ciclo de import com o root auth.ts; a
+ * remoção dos cookies é equivalente para session strategy 'database' —
+ * a sessão persistida fica órfã e expira pelo TTL natural do Adapter.
+ */
+export async function clearDualCookies(): Promise<void> {
+  const cookieStore = await cookies()
+  for (const c of cookieStore.getAll()) {
+    const name = c.name
+    if (
+      name.startsWith(SUPABASE_COOKIE_PREFIX) ||
+      AUTHJS_COOKIE_PREFIXES.some((p) => name.startsWith(p))
+    ) {
+      try {
+        cookieStore.delete(name)
+      } catch {
+        // Read-only context (RSC sem mutação) — tolerar; middleware fará a próxima limpeza.
+      }
+    }
+  }
+}
+
+/**
+ * Reage a conflito de identidade. Em modo strict (default produção),
+ * limpa cookies e retorna null forçando re-auth. Em modo non-strict
+ * (debug/recovery), apenas loga e devolve `preferred` para fallback.
+ */
+export async function handleIdentityConflict<T>(
+  preferred: T,
+  authjsUser: IdentityClaim,
+  supabaseUser: IdentityClaim,
+): Promise<T | null> {
+  const meta = {
+    authjs_user_id: authjsUser.id,
+    supabase_user_id: supabaseUser.id,
+    authjs_email_hash: authjsUser.email ? hashTag(authjsUser.email) : null,
+    supabase_email_hash: supabaseUser.email ? hashTag(supabaseUser.email) : null,
+  }
+  console.warn('[auth] dual-cookie identity conflict detected', meta)
+  Sentry.captureMessage('auth.dual_cookie_identity_conflict', {
+    level: 'warning',
+    tags: { source: 'auth', kind: 'dual_cookie_conflict' },
+    extra: meta,
+  })
+
+  if (env.AUTH_DUAL_COOKIE_STRICT === 'false') {
+    return preferred
+  }
+  await clearDualCookies()
+  return null
+}
+
+/** Hash determinístico curto para tag em telemetria sem vazar email PII. */
+function hashTag(value: string): string {
+  let h = 0
+  const v = value.trim().toLowerCase()
+  for (let i = 0; i < v.length; i++) {
+    h = (h << 5) - h + v.charCodeAt(i)
+    h |= 0
+  }
+  return Math.abs(h).toString(16).padStart(8, '0')
+}
 
 // ─── Obter usuário autenticado a partir da sessão Supabase ─────────────────────
 

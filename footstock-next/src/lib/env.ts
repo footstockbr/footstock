@@ -23,6 +23,13 @@ const envSchema = z.object({
   // Auth
   JWT_SECRET: z.string().min(32, 'JWT_SECRET deve ter ao menos 32 caracteres'),
 
+  // Auth.js v5 — NXAUTH-04A kill switch para conflito dual-cookie Auth.js vs Supabase.
+  // 'true' (default): força re-auth quando identities divergem; 'false': loga apenas (modo recovery).
+  AUTH_DUAL_COOKIE_STRICT: z
+    .union([z.literal('true'), z.literal('false')])
+    .optional()
+    .default('true'),
+
   // Motor
   RAILWAY_URL: z.string().url().optional(),
   MOTOR_SECRET_TOKEN: z.string().min(1),
