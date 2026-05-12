@@ -17,6 +17,12 @@ out/
 .env.deploy
 .env.test
 .mcp.json
+# Backups de .env (sufixos .bak, .backup, .old, timestamps)
+.env*.bak*
+.env*.backup*
+.env*.old
+.env.*.bak.*
+*.env.bak
 !.env.example
 !.env.docker.example
 !.env.*.example
@@ -80,3 +86,21 @@ _*_legacy_backup/
 
 # Pasta de melhorias (ignorada pelo git)
 melhorias/
+
+# Backups de banco e exports de dados sensíveis (contêm hashes, PII, auth data)
+backups/
+*.dump
+*.sql.gz
+*.sql.bak
+db-dump-*
+*-dump-*.csv
+*-users-*.csv
+*-auth-users-*.csv
+
+# Secrets / tokens locais
+.npmrc
+secrets/
+*.secret
+*-secrets.json
+*-secrets.yaml
+*-secrets.yml
