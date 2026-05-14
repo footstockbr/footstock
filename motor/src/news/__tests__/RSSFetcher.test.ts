@@ -141,7 +141,7 @@ describe('RSSFetcher', () => {
     const clearIntervalSpy = jest.spyOn(global, 'clearInterval')
 
     fetcher.start()
-    expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 5 * 60 * 1000)
+    expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 10 * 60 * 1000)
 
     fetcher.stop()
     expect(clearIntervalSpy).toHaveBeenCalled()
@@ -170,7 +170,7 @@ describe('RSSFetcher', () => {
     fetcher.start()
 
     // Disparar exatamente um tick do intervalo
-    jest.advanceTimersByTime(5 * 60 * 1000)
+    jest.advanceTimersByTime(10 * 60 * 1000)
 
     // Aguardar microtasks (a Promise rejection precisa ser processada)
     await Promise.resolve()

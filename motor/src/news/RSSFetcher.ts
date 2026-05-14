@@ -28,7 +28,7 @@ const FEEDS_FALLBACK = [
 const NEWS_URLS_KEY = 'news:urls'
 const NEWS_LAST_FETCH_KEY = 'news:last_fetch'
 const URL_TTL_SECONDS = 48 * 60 * 60    // 48 horas
-const FETCH_INTERVAL_MS = 5 * 60 * 1000  // 5 minutos
+const FETCH_INTERVAL_MS = 10 * 60 * 1000  // 10 minutos - FDD canonico
 const NEWS_MAX_AGE_MS = 12 * 60 * 60 * 1000 // 12 horas — INTAKE canônico
 
 // ---------------------------------------------------------------------------
