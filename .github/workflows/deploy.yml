@@ -34,9 +34,11 @@ jobs:
           restore-keys: ${{ runner.os }}-npm-
 
       - name: Instalar dependências
+        working-directory: footstock-next
         run: npm ci
 
       - name: Gerar Prisma Client
+        working-directory: footstock-next
         run: npx prisma generate
 
       - name: Type-check Next.js
@@ -55,6 +57,7 @@ jobs:
           NODE_ENV: test
 
       - name: Build Next.js
+        working-directory: footstock-next
         run: npm run build
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL_CI }}
