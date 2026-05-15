@@ -60,56 +60,28 @@ jobs:
           MOTOR_SECRET_TOKEN: 'test-motor-token-dummy-not-a-real-credential'
           NODE_ENV: test
 
-      - name: DEBUG — Inspect Supabase secrets shape (temporary)
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          MOTOR_SECRET_TOKEN: ${{ secrets.MOTOR_SECRET_TOKEN }}
-        run: |
-          inspect() {
-            local name="$1"; local val="$2"
-            if [ -z "$val" ]; then
-              echo "  $name: EMPTY/UNSET"; return
-            fi
-            local len=${#val}
-            # detect leading/trailing whitespace
-            local trimmed
-            trimmed=$(echo -n "$val" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-            local trim_len=${#trimmed}
-            local has_ws="no"
-            if [ "$len" != "$trim_len" ]; then has_ws="YES(raw_len=$len trim_len=$trim_len)"; fi
-            local starts_https="no"
-            case "$val" in https://*) starts_https="yes";; esac
-            local has_scheme="no"
-            case "$val" in *"://"*) has_scheme="yes";; esac
-            local has_supabase_co="no"
-            case "$val" in *".supabase.co"*) has_supabase_co="yes";; esac
-            local starts_eyj="no"
-            case "$val" in eyJ*) starts_eyj="yes";; esac
-            echo "  $name: len=$len ws=$has_ws starts_https=$starts_https has_scheme=$has_scheme supabase_co=$has_supabase_co jwt_prefix=$starts_eyj"
-          }
-          echo "Supabase / build secrets shape:"
-          inspect "NEXT_PUBLIC_SUPABASE_URL" "$NEXT_PUBLIC_SUPABASE_URL"
-          inspect "NEXT_PUBLIC_SUPABASE_ANON_KEY" "$NEXT_PUBLIC_SUPABASE_ANON_KEY"
-          inspect "SUPABASE_SERVICE_ROLE_KEY" "$SUPABASE_SERVICE_ROLE_KEY"
-          inspect "JWT_SECRET" "$JWT_SECRET"
-          inspect "MOTOR_SECRET_TOKEN" "$MOTOR_SECRET_TOKEN"
-
       - name: Build Next.js
         working-directory: footstock-next
+        # CI Build step is a sanity gate — the deployable artifact is built by
+        # Railway from footstock-next/Dockerfile (see railway.toml). That
+        # Dockerfile uses build-time placeholder values for the same vars
+        # (Supabase client constructors are eager at module load). Railway
+        # overrides at runtime via service env. To keep CI consistent with
+        # what Railway actually does, mirror those placeholders here.
         run: npm run build
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_CI }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL_CI }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          REDIS_URL: ${{ secrets.REDIS_URL }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          MOTOR_SECRET_TOKEN: ${{ secrets.MOTOR_SECRET_TOKEN }}
+          DATABASE_URL: 'postgresql://build:build@localhost:5432/build'
+          DIRECT_URL: 'postgresql://build:build@localhost:5432/build'
+          NEXT_PUBLIC_SUPABASE_URL: 'https://build-placeholder.supabase.co'
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: 'build-placeholder-anon-key'
+          SUPABASE_SERVICE_ROLE_KEY: 'build-placeholder-service-role-key'
+          REDIS_URL: 'redis://localhost:6379'
+          REDIS_DISABLED: 'true'
+          JWT_SECRET: 'build-jwt-secret-placeholder-32-chars-min-len'
+          NEXTAUTH_SECRET: 'build-nextauth-secret-placeholder'
+          MOTOR_SECRET_TOKEN: 'build-motor-token'
           NEXT_PUBLIC_APP_URL: 'https://footstock.com.br'
+          SKIP_ENV_VALIDATION: 'true'
 
       - name: Instalar Railway CLI
         run: npm i -g @railway/cli
