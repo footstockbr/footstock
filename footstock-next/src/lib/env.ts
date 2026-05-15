@@ -23,12 +23,37 @@ const envSchema = z.object({
   // Auth
   JWT_SECRET: z.string().min(32, 'JWT_SECRET deve ter ao menos 32 caracteres'),
 
-  // Auth.js v5 — NXAUTH-04A kill switch para conflito dual-cookie Auth.js vs Supabase.
+  // Auth.js v5 (NextAuth) — NXAUTH-02
+  AUTH_SECRET: z.string().min(32, 'AUTH_SECRET deve ter ao menos 32 caracteres').optional(),
+  AUTH_URL: z.string().url().optional(),
+  AUTH_TRUST_HOST: z
+    .union([z.literal('true'), z.literal('false')])
+    .optional()
+    .default('true'),
+  AUTH_DRIVER: z.enum(['supabase', 'authjs', 'dual']).optional().default('supabase'),
+  AUTH_ENABLE_LEGACY_CREDENTIALS: z
+    .union([z.literal('true'), z.literal('false')])
+    .optional()
+    .default('true'),
+  AUTH_ENABLE_GOOGLE: z
+    .union([z.literal('true'), z.literal('false')])
+    .optional()
+    .default('false'),
+  // NXAUTH-04A — kill switch para conflito dual-cookie Auth.js vs Supabase.
   // 'true' (default): força re-auth quando identities divergem; 'false': loga apenas (modo recovery).
   AUTH_DUAL_COOKIE_STRICT: z
     .union([z.literal('true'), z.literal('false')])
     .optional()
     .default('true'),
+  // NXAUTH-07 — quando 'true' roteia recovery flow para Auth.js Resend magic-link
+  // (passwordless). Default 'false' mantém Supabase resetPasswordForEmail durante
+  // transition. Liga junto com RESEND_API_KEY configurado.
+  AUTH_ENABLE_MAGIC_LINK_RESET: z
+    .union([z.literal('true'), z.literal('false')])
+    .optional()
+    .default('false'),
+  GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+  GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
 
   // Motor
   RAILWAY_URL: z.string().url().optional(),
@@ -39,7 +64,10 @@ const envSchema = z.object({
   SENTRY_DSN: z.string().url().optional(),
 
   // Auth — Registro
-  CPF_HASH_SALT: z.string().min(32, 'CPF_HASH_SALT deve ter ao menos 32 caracteres'),
+  // HMAC_CPF_SECRET é o path canônico (crypto.ts L26). CPF_HASH_SALT é fallback legado
+  // (crypto.ts L32-37 emite warn). crypto.ts valida em runtime — basta um dos dois.
+  CPF_HASH_SALT: z.string().min(32, 'CPF_HASH_SALT deve ter ao menos 32 caracteres').optional(),
+  HMAC_CPF_SECRET: z.string().min(32, 'HMAC_CPF_SECRET deve ter ao menos 32 caracteres').optional(),
 
   // App
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
