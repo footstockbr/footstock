@@ -15,6 +15,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.footstock.mobile",
+      "associatedDomains": [
+        "applinks:footstock.com.br",
+        "applinks:www.footstock.com.br"
+      ],
       "infoPlist": {
         "NSFaceIDUsageDescription": "Use sua biometria para desbloquear o app Foot Stock."
       }
@@ -28,10 +32,23 @@
       "permissions": [
         "USE_BIOMETRIC",
         "USE_FINGERPRINT"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            { "scheme": "https", "host": "footstock.com.br" },
+            { "scheme": "https", "host": "www.footstock.com.br" }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
       ]
     },
     "extra": {
-      "webUrl": "https://footstock.vercel.app",
+      "webUrl": "https://footstock.com.br",
+      "apiUrl": "https://api.footstock.com.br",
+      "streamUrl": "https://stream.footstock.com.br",
       "eas": {
         "projectId": "84d3ed49-7490-4a6a-abca-45613d996503"
       }
