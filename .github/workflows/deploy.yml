@@ -35,7 +35,7 @@ jobs:
 
       - name: Instalar dependências
         working-directory: footstock-next
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       - name: Gerar Prisma Client
         working-directory: footstock-next
