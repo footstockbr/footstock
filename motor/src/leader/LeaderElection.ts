@@ -8,7 +8,7 @@ import type { LeaderState } from '../types/motor.types'
 
 const LEADER_KEY = 'motor:leader'
 const FENCING_KEY = 'motor:fencing-token'
-const LEADER_TTL_MS = 15_000   // 15 segundos — FDD canônico: failover ≤ 20s (TTL 15s + heartbeat 10s)
+const LEADER_TTL_MS = 30_000   // 30 segundos - ADR-001 (failover <= 40s com heartbeat 10s)
 const HEARTBEAT_MS = 10_000    // 10 segundos
 
 export class LeaderElection {
