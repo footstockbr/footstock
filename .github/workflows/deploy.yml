@@ -52,8 +52,12 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL_CI }}
           DIRECT_URL: ${{ secrets.DIRECT_URL_CI }}
           REDIS_URL: ${{ secrets.REDIS_URL_CI }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          NEXT_PUBLIC_SUPABASE_URL: 'https://test.supabase.co'
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test-anon-key-dummy-not-a-real-credential'
+          SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key-dummy-not-real'
+          JWT_SECRET: 'test-jwt-secret-must-be-at-least-32-chars-long'
+          MOTOR_SECRET_TOKEN: 'test-motor-token-dummy-not-a-real-credential'
           NODE_ENV: test
 
       - name: Build Next.js
