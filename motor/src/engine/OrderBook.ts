@@ -4,6 +4,7 @@
 // ============================================================================
 
 import type { OrderBookEntry } from '../types/motor.types'
+import { assertPlanAllowsOrderType } from '../lib/auth'
 
 interface MatchResult {
   filledOrderId: string
@@ -16,6 +17,12 @@ export class OrderBook {
   private sellOrders: Map<string, OrderBookEntry> = new Map()
 
   addOrder(order: OrderBookEntry): void {
+    if (order.planType !== undefined) {
+      assertPlanAllowsOrderType(order.planType, order.type, {
+        isOcoComponent: order.isOcoComponent === true,
+      })
+    }
+
     if (order.side === 'BUY') {
       this.buyOrders.set(order.orderId, order)
     } else {

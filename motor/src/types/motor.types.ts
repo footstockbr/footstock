@@ -113,6 +113,8 @@ export interface OrderBookEntry {
   quantity: number
   price: number
   createdAt: number
+  planType?: 'JOGADOR' | 'CRAQUE' | 'LENDA'
+  isOcoComponent?: boolean
 }
 
 // ─── Leader Election ─────────────────────────────────────────────────────

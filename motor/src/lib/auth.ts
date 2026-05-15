@@ -44,6 +44,41 @@ export function verifyJwt(token: string | null | undefined): JwtPayload {
   return decoded as JwtPayload
 }
 
+export type OrderTypeForPlanGate =
+  | 'MARKET'
+  | 'LIMIT'
+  | 'STOP_LOSS'
+  | 'TAKE_PROFIT'
+  | 'OCO'
+  | 'SCHEDULED'
+
+export class OrderTypeNotAllowedForPlanError extends Error {
+  readonly code = 'ORDER_TYPE_NOT_ALLOWED_FOR_PLAN'
+
+  constructor(
+    readonly orderType: OrderTypeForPlanGate,
+    readonly planType: PlanType,
+    readonly requiredPlan: PlanType = 'LENDA',
+  ) {
+    super(
+      `Order type ${orderType} standalone requires plan ${requiredPlan} (current plan: ${planType}).`,
+    )
+    this.name = 'OrderTypeNotAllowedForPlanError'
+  }
+}
+
+export function assertPlanAllowsOrderType(
+  planType: PlanType,
+  orderType: OrderTypeForPlanGate,
+  context: { isOcoComponent: boolean },
+): void {
+  const requiresLenda = orderType === 'STOP_LOSS' || orderType === 'TAKE_PROFIT'
+  if (!requiresLenda) return
+  if (context.isOcoComponent) return
+  if (planType === 'LENDA') return
+  throw new OrderTypeNotAllowedForPlanError(orderType, planType, 'LENDA')
+}
+
 export function extractTokenFromRequest(req: {
   headers?: Record<string, string | string[] | undefined>
   url?: string
