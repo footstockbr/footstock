@@ -89,6 +89,47 @@ L9_CircuitBreaker verifica se a variação percentual em relação ao `closePric
 
 ---
 
+## ADR-004: Long Leverage 2x para LENDA
+
+**Status:** Accepted (2026-05-14)
+
+**Contexto:**
+O legacy do cliente (4 monolitos JSX em `legacy-old/` e `legacy-new/`) era short-only com margin — não previa operação long alavancada. A produção (Railway) introduziu long leverage 2x como evolução de produto, exclusivo do plano LENDA, e já existem posições abertas em prod consumindo o feature. Reverter o feature inviabilizaria as posições vigentes e quebraria contratos de produto com usuários LENDA.
+
+**Decisão:**
+Manter long leverage 2x apenas para o plano LENDA, com os seguintes parâmetros canônicos:
+
+- **Juros:** 0.3% ao dia, cobrados via `motor/src/scheduler/jobs/leverageInterest.ts` (job registrado em `motor/src/scheduler/index.ts` com schedule `30 7 * * *`, 07:30 UTC diariamente).
+- **Margin call (alerta):** 50% — emite notificação ao holder sem ação automática.
+- **Liquidação:** 20% — fechamento forçado da posição alavancada.
+- **Gating de plano:** verificado em `motor/src/lib/auth.ts` (`PlanType = 'JOGADOR' | 'CRAQUE' | 'LENDA'`); apenas `LENDA` aceita abertura de posição long 2x.
+
+**Implementação:**
+- `motor/src/engine/LeverageInterestRunner.ts` — runner que aplica o débito de juros nas posições long alavancadas LENDA.
+- `motor/src/engine/MarginCallChecker.ts` — checagem dos thresholds 50% (alerta) e 20% (liquidação) em proximidade ao tick.
+- `motor/src/engine/OrderExecutor.ts` — execução de ordens com lógica short pré-existente extendida para long 2x condicional ao plano.
+- `motor/src/scheduler/jobs/leverageInterest.ts` — job camelCase agendado em `motor/src/scheduler/index.ts:66` via `registerJob('leverage-interest', '30 7 * * *', leverageInterestJob)`. Lógica real ainda parcialmente em `footstock-next/src/app/api/cron/leverage-interest/route.ts` (migração para o motor pendente fora desta ADR).
+- `motor/src/lib/auth.ts` — fonte canônica do `PlanType` que gateia o feature.
+
+**Justificativa:**
+- Diferencial competitivo do plano LENDA: long leverage 2x é o principal sell-point do tier premium.
+- Fonte de receita recorrente via juros diários (0.3%/dia compostos), independente de spread de mercado.
+- Posições abertas em produção tornam a reversão tecnicamente custosa (migração de estado) e contratualmente arriscada (expectativa do usuário LENDA).
+- Gating centralizado em `motor/src/lib/auth.ts` mantém a regra de plano em um único ponto canônico.
+
+**Consequências:**
+- (Positivas) Diferencial claro do plano LENDA; receita via juros desacoplada de volume de trading; checagem de plano centralizada em `auth.ts`.
+- (Negativas) Complexidade adicional em `motor/src/engine/OrderExecutor.ts` (caminho long 2x condicional ao plano); risco de cascata de liquidações em alta volatilidade caso o `MarginCallChecker` não rode próximo ao tick; dependência operacional do scheduler `30 7 * * *` (falha no job atrasa cobrança de juros e desalinha P&L do dia).
+
+**Referências:**
+- `forged-goods/research/foot-stock-motor-legacy-vs-deployed.md` — estudo comparativo legacy vs deployed (seção margin/leverage).
+- Apêndice técnico H6/H7 do plano `blacksmith/foot-stock-motor-action-plan.md` (decisão original e thresholds).
+- `motor/src/engine/LeverageInterestRunner.ts`, `motor/src/engine/MarginCallChecker.ts`, `motor/src/engine/OrderExecutor.ts`.
+- `motor/src/scheduler/jobs/leverageInterest.ts`, `motor/src/scheduler/index.ts:66`.
+- `motor/src/lib/auth.ts` (definição de `PlanType`).
+
+---
+
 ## Referências
 
 | Componente | Arquivo | ADR |
@@ -98,3 +139,8 @@ L9_CircuitBreaker verifica se a variação percentual em relação ao `closePric
 | SSE Hook | `hooks/useMarketTick.ts` | ADR-002 |
 | Circuit Breaker | `src/engine/layers/L9_CircuitBreaker.ts` | ADR-003 |
 | Market Engine | `src/engine/MarketEngine.ts` | ADR-001, ADR-003 |
+| Leverage Interest Runner | `src/engine/LeverageInterestRunner.ts` | ADR-004 |
+| Margin Call Checker | `src/engine/MarginCallChecker.ts` | ADR-004 |
+| Order Executor | `src/engine/OrderExecutor.ts` | ADR-004 |
+| Leverage Interest Job | `src/scheduler/jobs/leverageInterest.ts` | ADR-004 |
+| Plan Gating | `src/lib/auth.ts` | ADR-004 |
