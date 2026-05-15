@@ -5,10 +5,12 @@
 // Assina o SSE /stream/market no motor Railway e retorna map ticker → preço atualizado.
 // Atualiza automaticamente a cada tick do motor (a cada ~10s).
 // Substituição do one-time fetch da MarketPageClient para preços em tempo real.
+// NXAUTH-04B: token vem de /api/v1/motor/token (Auth.js → motor JWT bridge).
 // ============================================================================
 
 import { useEffect, useRef, useState } from 'react'
-import { createBrowserClient } from '@supabase/ssr'
+
+import { fetchMotorToken, scheduleMotorTokenRefresh } from '@/lib/motor-token-client'
 
 export interface MarketTickMap {
   [ticker: string]: {
@@ -42,24 +44,29 @@ interface TickPayload {
 export function useAllMarketTicks(): MarketTickMap {
   const [tickMap, setTickMap] = useState<MarketTickMap>({})
   const esRef = useRef<EventSource | null>(null)
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     let closed = false
 
-    async function connect() {
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      )
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      const token = session?.access_token
+    function clearRefreshTimer() {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current)
+        refreshTimerRef.current = null
+      }
+    }
 
-      if (!token || closed) return
+    function closeStream() {
+      esRef.current?.close()
+      esRef.current = null
+    }
+
+    async function connect() {
+      const minted = await fetchMotorToken()
+      if (!minted || closed) return
 
       const baseUrl = process.env.NEXT_PUBLIC_STREAM_URL ?? 'https://stream.footstock.com.br'
-      const url = `${baseUrl}/market?token=${encodeURIComponent(token)}`
+      const url = `${baseUrl}/market?token=${encodeURIComponent(minted.token)}`
       const es = new EventSource(url)
       esRef.current = es
 
@@ -93,14 +100,20 @@ export function useAllMarketTicks(): MarketTickMap {
       es.onerror = () => {
         // EventSource reconecta automaticamente em 3s após erro
       }
+
+      refreshTimerRef.current = scheduleMotorTokenRefresh(minted.expiresAt, () => {
+        if (closed) return
+        closeStream()
+        connect()
+      })
     }
 
     connect()
 
     return () => {
       closed = true
-      esRef.current?.close()
-      esRef.current = null
+      clearRefreshTimer()
+      closeStream()
     }
   }, [])
 

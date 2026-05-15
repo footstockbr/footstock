@@ -2,8 +2,10 @@
 
 // T-022: hook agora expõe isDelayed e delayMinutes do payload SSE.
 // O delay é aplicado server-side — o cliente apenas consome o dado já atrasado.
+// NXAUTH-04B: token vem de /api/v1/motor/token (Auth.js → motor JWT bridge).
 import { useEffect, useRef, useState } from 'react'
-import { createBrowserClient } from '@supabase/ssr'
+
+import { fetchMotorToken, scheduleMotorTokenRefresh } from '@/lib/motor-token-client'
 
 export interface MarketTick {
   ticker: string
@@ -42,25 +44,29 @@ interface TickPayload {
 export function useMarketTick(ticker: string): MarketTick | null {
   const [tick, setTick] = useState<MarketTick | null>(null)
   const esRef = useRef<EventSource | null>(null)
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     let closed = false
 
-    async function connect() {
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      )
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      const token = session?.access_token
+    function clearRefreshTimer() {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current)
+        refreshTimerRef.current = null
+      }
+    }
 
-      // Sem token não há como autenticar o SSE
-      if (!token || closed) return
+    function closeStream() {
+      esRef.current?.close()
+      esRef.current = null
+    }
+
+    async function connect() {
+      const minted = await fetchMotorToken()
+      if (!minted || closed) return
 
       const baseUrl = process.env.NEXT_PUBLIC_STREAM_URL ?? 'https://stream.footstock.com.br'
-      const url = `${baseUrl}/market?token=${encodeURIComponent(token)}`
+      const url = `${baseUrl}/market?token=${encodeURIComponent(minted.token)}`
       const es = new EventSource(url)
       esRef.current = es
 
@@ -96,14 +102,20 @@ export function useMarketTick(ticker: string): MarketTick | null {
       es.onerror = () => {
         // EventSource reconecta automaticamente após erro
       }
+
+      refreshTimerRef.current = scheduleMotorTokenRefresh(minted.expiresAt, () => {
+        if (closed) return
+        closeStream()
+        connect()
+      })
     }
 
     connect()
 
     return () => {
       closed = true
-      esRef.current?.close()
-      esRef.current = null
+      clearRefreshTimer()
+      closeStream()
     }
   }, [ticker])
 

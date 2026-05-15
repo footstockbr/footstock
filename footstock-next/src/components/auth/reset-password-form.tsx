@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { ChevronLeft, AlertTriangle } from "lucide-react";
+import { ChevronLeft, AlertTriangle, MailCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ROUTES } from "@/lib/constants/routes";
@@ -13,6 +13,7 @@ import { resetPasswordSchema, type ResetPasswordFormData as FormData } from "@/l
 
 interface ResetPasswordFormProps {
   token: string | null;
+  magicLinkMode?: boolean;
 }
 
 /**
@@ -20,7 +21,7 @@ interface ResetPasswordFormProps {
  * Recebe o token da URL (passado pela página pai via searchParams).
  * Exibe estado de "link inválido" se token estiver ausente.
  */
-export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
+export function ResetPasswordForm({ token, magicLinkMode = false }: ResetPasswordFormProps) {
   const router = useRouter();
 
   const {
@@ -31,6 +32,26 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
     resolver: zodResolver(resetPasswordSchema),
     mode: "onBlur",
   });
+
+  // NXAUTH-07: modo passwordless — recuperação é por magic-link clicado no email,
+  // não há mais formulário de senha nesta página.
+  if (magicLinkMode) {
+    return (
+      <div className="w-full max-w-sm flex flex-col items-center gap-4 text-center py-8">
+        <MailCheck className="h-12 w-12 text-[#F0B90B]" />
+        <h1 className="text-xl font-bold text-[#EAECEF]">Verifique seu email</h1>
+        <p className="text-sm text-[#929AA5]">
+          Enviamos um link de acesso para o email cadastrado. Basta clicar para entrar — você não precisa mais definir uma nova senha.
+        </p>
+        <Link
+          href={ROUTES.FORGOT_PASSWORD}
+          className="text-sm text-[#F0B90B] hover:text-[#FCD535] transition-colors"
+        >
+          Reenviar link
+        </Link>
+      </div>
+    );
+  }
 
   // Token ausente na URL — estado de link inválido
   if (!token) {

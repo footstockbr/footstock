@@ -1,13 +1,11 @@
 // ============================================================================
-// Foot Stock Motor — Cron Job: order-expiry
-// Migrado de footstock-next/src/app/api/cron/order-expiry/route.ts
+// Foot Stock Motor — Cron Job: order-expiry (Wave 2 / Option C)
+// Proxy HTTP para footstock-next/src/app/api/cron/order-expiry/route.ts.
 // Schedule: 0 6 * * *
 // ============================================================================
 
-import { logger } from '../../utils/logger'
+import { cronProxy } from '../cronProxy'
 
 export async function orderExpiryJob(): Promise<void> {
-  logger.info('[cron/order-expiry] Iniciando job...')
-  // TODO: migrar lógica para motor/src/services/cron/order-expiry.ts
-  logger.info('[cron/order-expiry] Job concluído (stub).')
+  await cronProxy('order-expiry')
 }

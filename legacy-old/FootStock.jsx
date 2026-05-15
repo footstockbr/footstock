@@ -438,7 +438,8 @@ const FUNDAMENTAL_FV = Object.fromEntries(
    3. ORDER FLOW IMBALANCE pressão acumulada compra vs venda
    4. KYLE'S LAMBDA       impacto de preço por ordem do usuário
    5. IMPACT MATRIX       choque fundamental por categoria de notícia
-   6. CIRCUIT BREAKER     trava o ativo se variação ≥ 25%
+   6. CIRCUIT BREAKER     trava o ativo se variação ≥ 8%
+   // 2026-05-14: corrigido typo do header (motor sempre usou 8% em prod, coerente com VELOCITY_CAP 0.025 = 2.5%/tick)
 ═══════════════════════════════════════════════════════════════ */
 
 /* Parâmetros de microestrutura calibrados por ativo */

@@ -4,20 +4,18 @@
 
 | Secret | Plataforma | Periodicidade | Responsável |
 |--------|------------|---------------|-------------|
-| `VERCEL_TOKEN` | GitHub Secrets → Actions | Semestral | DevOps |
-| `VERCEL_ORG_ID` | GitHub Secrets → Actions | Conforme necessário | DevOps |
-| `VERCEL_PROJECT_ID` | GitHub Secrets → Actions | Conforme necessário | DevOps |
 | `RAILWAY_TOKEN` | GitHub Secrets → Actions | Semestral | DevOps |
-| `RAILWAY_REGISTRY_URL` | GitHub Secrets → Actions | Semestral | DevOps |
 | `DATABASE_URL_CI` | GitHub Secrets → Actions | Conforme necessário | DevOps |
-| `JWT_SECRET` | GitHub Secrets + Vercel | Semestral | DevOps |
-| `SUPABASE_SERVICE_ROLE_KEY` | GitHub Secrets + Vercel | Anual ou rotação de projeto | DevOps |
+| `JWT_SECRET` | GitHub Secrets + Railway | Semestral | DevOps |
+| `SUPABASE_SERVICE_ROLE_KEY` | GitHub Secrets + Railway | Anual ou rotação de projeto | DevOps |
+
+> Nota: secrets Vercel legacy (`VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`) e `RAILWAY_REGISTRY_URL` foram removidos do GH em 2026-05-10 (TASK-P1-08, item 033 do loop railway-migration-remediate) — projeto migrado para Railway, registry uso default.
 
 ## Processo de Rotação
 
 1. **Gerar novo token/secret** na plataforma correspondente
 2. **Atualizar em GitHub Settings** → Secrets → Actions
-3. **Atualizar em Vercel Dashboard** (se aplicável) → Project → Environment Variables
+3. **Atualizar em Railway Dashboard** (se aplicável) → Service → Variables
 4. **Deletar o token antigo** na plataforma
 5. **Verificar que o próximo deploy/CI passa** sem erros
 6. **Registrar a rotação** neste documento com a data
@@ -30,7 +28,6 @@
 
 ## Referências
 
-- Vercel Tokens: https://vercel.com/account/tokens
 - Railway Tokens: https://railway.app/account/tokens
 - GitHub Secrets: Settings → Secrets and variables → Actions
 

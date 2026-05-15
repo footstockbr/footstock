@@ -1,8 +1,11 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
+import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabase'
 import { message, errors } from '@/lib/api'
 import { getForgotPasswordRateLimit } from '@/lib/ratelimit'
+import { env } from '@/lib/env'
+import { signIn } from '../../../../../../auth'
 
 const ForgotPasswordSchema = z.object({
   email: z.string().email(),
@@ -10,6 +13,10 @@ const ForgotPasswordSchema = z.object({
 
 // Resposta genérica — nunca revelar se o email está ou não cadastrado (segurança)
 const SAFE_RESPONSE = message('Se este email estiver cadastrado, você receberá as instruções em breve.')
+
+function magicLinkEnabled(): boolean {
+  return env.AUTH_ENABLE_MAGIC_LINK_RESET === 'true' && Boolean(env.RESEND_API_KEY)
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -42,8 +49,31 @@ export async function POST(request: NextRequest) {
       // Rate limiter indisponível — continuar sem bloquear
     }
 
-    // ─── Enviar email de recuperação via Supabase Auth ────────────────────────
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+    const appUrl = env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+
+    if (magicLinkEnabled()) {
+      // ─── Auth.js Resend magic-link (passwordless recovery, NXAUTH-07) ──────
+      try {
+        await signIn('resend', {
+          email,
+          redirect: false,
+          redirectTo: `${appUrl}/`,
+        })
+      } catch (err) {
+        // Falha no Resend não pode revelar status do email — continua silencioso.
+        Sentry.captureException(err, {
+          tags: { route: 'forgot-password', flow: 'authjs-magic-link' },
+        })
+      }
+      return SAFE_RESPONSE
+    }
+
+    // ─── Legacy Supabase reset (transition-safe fallback) ─────────────────────
+    Sentry.addBreadcrumb({
+      category: 'auth.legacy',
+      message: 'auth.legacy.resetPasswordForEmail',
+      level: 'info',
+    })
 
     await supabaseAdmin.auth.resetPasswordForEmail(email, {
       redirectTo: `${appUrl}/redefinir-senha`,

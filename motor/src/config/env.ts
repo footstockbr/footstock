@@ -37,6 +37,10 @@ export const env = {
   LOG_LEVEL: optional('LOG_LEVEL', 'info'),
   MOTOR_ADMIN_SECRET: optional('MOTOR_ADMIN_SECRET', ''),
   REDIS_TLS: optional('REDIS_TLS', 'false') === 'true',
+  // Task 008 (loop 05-14-foot-stock-motor-action-plan): contagens reduzidas ~50%.
+  // Default OFF em prod ate validacao A/B em staging por 48h.
+  // Habilitar em staging: MOTOR_AGENT_COUNTS_V2=true.
+  MOTOR_AGENT_COUNTS_V2: optional('MOTOR_AGENT_COUNTS_V2', 'false') === 'true',
 } as const
 
 // Aviso de segurança: TLS em produção

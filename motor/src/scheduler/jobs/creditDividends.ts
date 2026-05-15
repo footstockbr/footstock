@@ -1,13 +1,11 @@
 // ============================================================================
-// Foot Stock Motor — Cron Job: credit-dividends
-// Migrado de footstock-next/src/app/api/cron/credit-dividends/route.ts
+// Foot Stock Motor — Cron Job: credit-dividends (Wave 1 / Option C)
+// Proxy HTTP para footstock-next/src/app/api/cron/credit-dividends/route.ts.
 // Schedule: 0 9 * * *
 // ============================================================================
 
-import { logger } from '../../utils/logger'
+import { cronProxy } from '../cronProxy'
 
 export async function creditDividendsJob(): Promise<void> {
-  logger.info('[cron/credit-dividends] Iniciando job...')
-  // TODO: migrar lógica para motor/src/services/cron/credit-dividends.ts
-  logger.info('[cron/credit-dividends] Job concluído (stub).')
+  await cronProxy('credit-dividends')
 }
