@@ -261,9 +261,13 @@ model User {
   suspensionReason        String?          @map("suspension_reason") @db.VarChar(500)
   userType                String           @default("NORMAL") @map("user_type")
   version                 Int              @default(0)
+  emailVerified           DateTime?        @map("email_verified")
+  image                   String?
   createdAt               DateTime         @default(now()) @map("created_at")
   updatedAt               DateTime         @updatedAt @map("updated_at")
 
+  accounts                 Account[]
+  sessions                 Session[]
   orders                   Order[]
   positions                Position[]
   transactions             Transaction[]
@@ -296,6 +300,53 @@ model User {
   balanceResetsMade        BalanceResetLog[]          @relation("BalanceResetAdmin")
 
   @@map("users")
+}
+
+// ─── Auth.js v5 (NXAUTH-02) ────────────────────────────────────────
+// Tabelas requeridas pelo @auth/prisma-adapter para account linking,
+// sessions DB e magic-link tokens. Acoplado via wrapper PrismaAdapter
+// (NXAUTH-03A) que previne auto-create de User sem cpfHash.
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refreshToken      String? @map("refresh_token")
+  accessToken       String? @map("access_token")
+  expiresAt         Int?    @map("expires_at")
+  tokenType         String? @map("token_type")
+  scope             String?
+  idToken           String? @map("id_token")
+  sessionState      String? @map("session_state")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
 }
 
 model Asset {
