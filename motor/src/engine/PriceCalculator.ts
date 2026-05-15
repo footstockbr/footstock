@@ -3,7 +3,7 @@
 // Orquestra as 10 camadas quantitativas (L1-L10) + CorrelationLayer.
 //
 // Pipeline canônico (T-009):
-//   [guard isPaused] → L1→L2→L3→L4→L5→L6→L7→L8(cap)→L9(dailyvol)→[Corr]→L10(CB trigger)
+//   [guard isPaused] → L1→L2→L3→L4→L5→L6→L7→[L7.5 Nudge]→L8(cap)→L9(dailyvol)→[Corr]→L10(CB trigger)
 //
 // Mapeamento INTAKE → Camadas:
 //   L1  OrnsteinUhlenbeck  — componente estocástica: σ×√dt×N(0,1)×P
@@ -32,6 +32,7 @@ import { L8_VelocityCap } from './layers/L8_VelocityCap'
 import { L9_DailyVolTarget } from './layers/L9_DailyVolTarget'
 import { L10_CircuitBreaker } from './layers/L10_CircuitBreaker'
 import { correlationLayer } from './CorrelationLayer'
+import { NUDGE_TICKS, NUDGE_DELTA, NUDGE_MIN_PRICE } from './nudge-constants'
 
 export interface PriceCalculationResult {
   newPrice: number
@@ -103,6 +104,20 @@ export class PriceCalculator {
       layerResults.push(result)
     }
 
+    // L7.5: Minimum Activity Nudge — porta do legacy-new/FootStock-new2.jsx (decisao I7).
+    // Posicionado entre L7 e L8: opera no totalDelta acumulado de L1-L7 antes do cap.
+    // Quando o candidato (rounded) iguala o preco atual, incrementa contador de inatividade;
+    // ao atingir NUDGE_TICKS, injeta ±NUDGE_DELTA na direcao de fairValue para destravar UX.
+    const nudgeDelta = this._applyNudge(state, totalDelta)
+    if (nudgeDelta !== 0) {
+      totalDelta += nudgeDelta
+      layerResults.push({
+        layer: 'L7_5_Nudge',
+        deltaPrice: nudgeDelta,
+        metadata: { ticksSinceLastChange: 0, nudgeTicks: NUDGE_TICKS },
+      })
+    }
+
     // L8: velocity cap no delta acumulado (0.35% absoluto por tick)
     const cappedDelta = this.l8.applyCap(totalDelta, state.currentPrice, params.maxTickChange)
     layerResults.push({
@@ -169,6 +184,43 @@ export class PriceCalculator {
   resetDailyVolCap(): void {
     // Nota: o reset real ocorre por ativo via resetDailyVolTarget(state)
     // Este método existe por compatibilidade — MarketEngine itera os estados
+  }
+
+  /**
+   * Minimum Activity Nudge — porta de FootStock-new2.jsx L1158-L1177.
+   *
+   * Mantem contador per-asset `ticksSinceLastChange` no proprio AssetState.
+   * Quando o preco candidato (P + totalDelta) arredondado a 2 decimais
+   * iguala o preco atual, incrementa contador. Ao atingir NUDGE_TICKS,
+   * retorna delta ±NUDGE_DELTA na direcao do fairValue para destravar UX
+   * em ativos de baixa liquidez. Reset do contador a qualquer movimento real.
+   *
+   * Nao opera durante circuit breaker (state.isPaused) — preco intencionalmente
+   * congelado. L8 (cap) e L10 (CB) recebem o nudge aplicado e continuam invioláveis.
+   *
+   * @returns delta adicional a somar em totalDelta (0 quando nao dispara).
+   */
+  private _applyNudge(state: AssetState, totalDelta: number): number {
+    if (state.isPaused) return 0
+
+    const P = state.currentPrice
+    const candidate = +(P + totalDelta).toFixed(2)
+    const moved = candidate !== +P.toFixed(2)
+
+    if (moved) {
+      state.ticksSinceLastChange = 0
+      return 0
+    }
+
+    const ticks = (state.ticksSinceLastChange ?? 0) + 1
+    state.ticksSinceLastChange = ticks
+
+    if (ticks < NUDGE_TICKS) return 0
+
+    const dir = state.fairValue >= P ? 1 : -1
+    const target = Math.max(NUDGE_MIN_PRICE, +(P + dir * NUDGE_DELTA).toFixed(2))
+    state.ticksSinceLastChange = 0
+    return target - P
   }
 
   /**

@@ -84,6 +84,9 @@ export interface AssetState {
   dailySigmaMultiplier: number
   // Multiplicador de volatilidade por sessão (SessionManager): CLOSED=0, PRE_OPENING=0.3, TRADING=1.0, etc.
   volatilityMultiplier: number
+  // Nudge — ticks consecutivos sem variação de preço (reset a cada movimento real).
+  // Quando atinge NUDGE_TICKS, dispara micro-choque ±0.01 na direção do fairValue.
+  ticksSinceLastChange?: number
 }
 
 // ─── Correlação Inter-Ativos ─────────────────────────────────────────────────
