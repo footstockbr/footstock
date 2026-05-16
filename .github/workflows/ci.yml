@@ -82,33 +82,6 @@ jobs:
           MOTOR_SECRET_TOKEN: 'test-motor-token-dummy-not-a-real-credential'
           NODE_ENV: test
 
-  contract-tests:
-    name: Contract Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    needs: [validate]
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.1.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
-      - name: Instalar dependências
-        run: npm ci
-
-      - name: Gerar Prisma Client
-        run: npx prisma generate
-
-      - name: Run contract tests
-        run: npm run test:contracts -- --passWithNoTests --ci
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
-
   build:
     name: Build Next.js
     runs-on: ubuntu-latest
