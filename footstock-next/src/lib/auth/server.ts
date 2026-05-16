@@ -50,6 +50,6 @@ export async function getAuthUser(): Promise<{ user: User } | null> {
   return { user: dbUser as unknown as User }
 }
 
-export function hasPlan(userPlan: PlanType, requiredPlan: PlanType): boolean {
+export function hasPlan(userPlan: PlanType | null | undefined, requiredPlan: PlanType): boolean {
   return hasPlanAccess(userPlan, requiredPlan)
 }

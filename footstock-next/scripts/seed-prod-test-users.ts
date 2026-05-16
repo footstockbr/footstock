@@ -26,6 +26,7 @@ import type { Prisma } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import {
   DEV_TEST_USERS,
+  isStaffDevProfile,
   type DevTestUserProfile,
 } from '../src/lib/constants/dev-test-users.ts'
 
@@ -57,9 +58,12 @@ function cpfHashFor(email: string): string {
   return createHash('sha256').update(seed).digest('hex')
 }
 
-function balanceFor(planType: DevTestUserProfile['planType']): number {
-  if (planType === 'LENDA') return 25000
-  if (planType === 'CRAQUE') return 5000
+function balanceFor(profile: DevTestUserProfile): number {
+  // Staff: saldo fixo operacional (nao trading real).
+  if (isStaffDevProfile(profile)) return 10000
+  // Player: escala por plano.
+  if (profile.planType === 'LENDA') return 25000
+  if (profile.planType === 'CRAQUE') return 5000
   return 2000
 }
 
@@ -79,14 +83,34 @@ function buildCreatePayload(
     passwordHash,
     name: profile.name,
     cpfHash: cpfHashFor(email),
-    planType: profile.planType,
+    // null para staff; PlanType para players.
+    planType: isStaffDevProfile(profile) ? null : (profile.planType ?? 'JOGADOR'),
     adminRole: profile.adminRole ?? null,
     investorProfile: 'INICIANTE',
     favoriteClub: profile.clubId ?? 'FLAM',
     userType: userTypeFor(profile),
-    fsBalance: balanceFor(profile.planType),
+    fsBalance: balanceFor(profile),
     birthDate: new Date('1990-01-01'),
     tourCompleted: true,
+  }
+}
+
+/**
+ * Update payload para upsert idempotente. Alem de passwordHash, agora
+ * tambem reseta planType/userType/fsBalance/adminRole — isso garante que
+ * DBs antigos (com staff seedado como LENDA pre-M055) sao corrigidos
+ * automaticamente na proxima rodada do seed.
+ */
+function buildUpdatePayload(
+  profile: DevTestUserProfile,
+  passwordHash: string,
+): Prisma.UserUpdateInput {
+  return {
+    passwordHash,
+    planType: isStaffDevProfile(profile) ? null : (profile.planType ?? 'JOGADOR'),
+    adminRole: profile.adminRole ?? null,
+    userType: userTypeFor(profile),
+    fsBalance: balanceFor(profile),
   }
 }
 
@@ -119,9 +143,10 @@ async function upsertOne(
 
   const passwordHash = await bcrypt.hash(profile.password, BCRYPT_ROUNDS)
   const createPayload = buildCreatePayload(email, profile, passwordHash)
+  const updatePayload = buildUpdatePayload(profile, passwordHash)
   const r = await prisma.user.upsert({
     where: { email },
-    update: { passwordHash },
+    update: updatePayload,
     create: createPayload,
   })
   const outcome: SeedOutcome = existing ? 'updated' : 'created'

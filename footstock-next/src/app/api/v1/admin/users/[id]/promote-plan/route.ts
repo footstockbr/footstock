@@ -24,7 +24,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const user = await prisma.user.findUnique({ where: { id } })
     if (!user) return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 })
 
-    const currentPlan = user.planType as PlanType
+    // Staff (ADMIN / CLUB_PARTNER) nao possui plano de player — promocao nao se aplica.
+    if (user.userType === 'ADMIN' || user.userType === 'CLUB_PARTNER') {
+      return NextResponse.json(
+        { error: 'CANNOT_PROMOTE_STAFF_PLAN', message: 'Contas administrativas/institucionais nao possuem plano de player.' },
+        { status: 400 },
+      )
+    }
+
+    const currentPlan = user.planType as PlanType | null
     if (PLAN_HIERARCHY[newPlan] <= PLAN_HIERARCHY[currentPlan ?? 'JOGADOR']) {
       return NextResponse.json({ error: 'Downgrade não permitido. Apenas promoção.' }, { status: 400 })
     }

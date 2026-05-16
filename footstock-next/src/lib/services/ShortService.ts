@@ -35,6 +35,13 @@ export class ShortService {
     const user = await prisma.user.findUnique({ where: { id: userId } })
     if (!user) throw new AppError('AUTH_001', 401)
 
+    // Staff (ADMIN / CLUB_PARTNER) não opera ordens — nem short, nem long.
+    if (user.userType === 'ADMIN' || user.userType === 'CLUB_PARTNER' || !user.planType) {
+      throw new AppError('STAFF_CANNOT_TRADE', 403, {
+        message: 'Contas administrativas/institucionais nao podem operar short.',
+      })
+    }
+
     // Guard de plano
     if (user.planType !== PLAN_TYPE.LENDA) {
       throw new AppError('ORDER_051', 403, {

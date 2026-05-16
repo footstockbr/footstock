@@ -32,7 +32,9 @@ export interface User {
   birthDate: string;
   favoriteClub: string | null;
   investorProfile: InvestorProfile;
-  planType: PlanType;
+  userType: string;
+  // null para staff (ADMIN/CLUB_PARTNER); PlanType para players (NORMAL).
+  planType: PlanType | null;
   fsBalance: number;
   marginBlocked: number;
   tourCompleted: boolean;

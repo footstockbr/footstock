@@ -169,7 +169,9 @@ export interface AdminUserItem {
   id: string
   name: string
   email: string
-  planType: string
+  /** null para staff (ADMIN/CLUB_PARTNER); PlanType para players. */
+  planType: string | null
+  userType?: string
   status: string
   adminRole?: string | null
   suspendedAt?: string | null
@@ -183,7 +185,9 @@ export interface AdminUserActionItem {
   name: string
   status: string
   adminRole?: string | null
-  planType?: string
+  /** null para staff. */
+  planType?: string | null
+  userType?: string
   fsBalance?: number
 }
 

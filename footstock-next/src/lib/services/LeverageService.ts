@@ -44,11 +44,20 @@ export class LeverageService {
   async validateLeverage(userId: string, leagueId?: string): Promise<LeverageValidation> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { planType: true },
+      select: { planType: true, userType: true },
     })
 
     if (!user) {
       return { valid: false, errorCode: 'AUTH_001', message: 'Usuário não encontrado.' }
+    }
+
+    // Staff (ADMIN / CLUB_PARTNER): não opera ordens, logo não pode alavancar.
+    if (user.userType === 'ADMIN' || user.userType === 'CLUB_PARTNER' || !user.planType) {
+      return {
+        valid: false,
+        errorCode: 'STAFF_CANNOT_TRADE',
+        message: 'Alavancagem indisponível para contas administrativas/institucionais.',
+      }
     }
 
     // Contexto de liga PRO: alavancagem controlada pelo toggle da liga, não pelo plano

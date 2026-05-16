@@ -17,6 +17,15 @@ export async function POST(
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()
 
+  // Staff (ADMIN / CLUB_PARTNER) nao participa de ligas (orthogonal ao trading).
+  if (auth.user.userType === 'ADMIN' || auth.user.userType === 'CLUB_PARTNER') {
+    return apiError(
+      'STAFF_CANNOT_JOIN_LEAGUE',
+      'Contas administrativas/institucionais nao participam de ligas.',
+      403,
+    )
+  }
+
   // Inscrição em novas ligas bloqueada em CANCELLATION_LOCK
   const lockGuard = await requireActiveSubscription(auth.user.id, 'JOIN_LEAGUE')
   if (lockGuard) return lockGuard

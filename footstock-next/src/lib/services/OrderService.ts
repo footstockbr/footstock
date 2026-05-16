@@ -70,6 +70,17 @@ export class OrderService {
     const user = await prisma.user.findUnique({ where: { id: userId } })
     if (!user) throw new AppError('AUTH_001', 401)
 
+    // Gate staff: ADMIN/CLUB_PARTNER nao tradam (sem planType, sem operacao).
+    if (
+      user.userType === 'ADMIN' ||
+      user.userType === 'CLUB_PARTNER' ||
+      !user.planType
+    ) {
+      throw new AppError('STAFF_CANNOT_TRADE', 403, {
+        message: 'Contas administrativas/institucionais nao podem operar ordens.',
+      })
+    }
+
     // Resolver alias: FLA3 → URU3 (T-031). Normaliza antes de buscar.
     const resolvedTicker = await AliasService.resolve(dto.ticker)
     // T-02: Diagnosticar tickers não resolvidos

@@ -18,9 +18,18 @@ export async function GET(_request: NextRequest) {
 
   const user = await prisma.user.findUnique({
     where: { id: auth.user.id },
-    select: { planType: true },
+    select: { planType: true, userType: true },
   })
   if (!user) return errors.unauthorized()
+
+  // Staff nao tem limite diario (nao tradam) — retornar unlimited.
+  if (!user.planType || user.userType === 'ADMIN' || user.userType === 'CLUB_PARTNER') {
+    const res = ok({ limit: null, used: 0, remaining: null, resetAt: new Date().toISOString() })
+    res.headers.set('X-DailyOrder-Limit', 'unlimited')
+    res.headers.set('X-DailyOrder-Remaining', 'unlimited')
+    res.headers.set('X-DailyOrder-Reset', new Date().toISOString())
+    return res
+  }
 
   // Usar MARKET como tipo de sonda (apenas para leitura do contador — não bloqueia)
   const { info } = await checkDailyOrderLimit(

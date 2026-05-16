@@ -82,7 +82,9 @@ export class PlanService extends BaseService {
       })
     }
 
-    if (user && !canUpgrade(user.planType as PlanType, dto.planType)) {
+    // Player sem planType (estado transitório pos-registro) trata como JOGADOR para canUpgrade.
+    const effectiveCurrentPlan = (user?.planType ?? 'JOGADOR') as PlanType
+    if (user && !canUpgrade(effectiveCurrentPlan, dto.planType)) {
       // Permite downgrade via checkout apenas se assinatura atual está em CANCELLATION_LOCK
       const lockedSub = await prisma.subscription.findFirst({
         where: { userId, status: 'CANCELLATION_LOCK' },

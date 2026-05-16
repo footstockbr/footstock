@@ -13,7 +13,8 @@ declare module "next-auth" {
     user: {
       id: string;
       adminRole: AdminRole | null;
-      planType: PlanType;
+      // planType e null para staff (ADMIN/CLUB_PARTNER) — players sempre tem.
+      planType: PlanType | null;
       userType: string;
       favoriteClub: string | null;
     } & DefaultSession["user"];
@@ -22,7 +23,7 @@ declare module "next-auth" {
   interface User extends DefaultUser {
     id: string;
     adminRole?: AdminRole | null;
-    planType?: PlanType;
+    planType?: PlanType | null;
     userType?: string;
     favoriteClub?: string | null;
   }
@@ -32,7 +33,7 @@ declare module "next-auth/jwt" {
   interface JWT extends DefaultJWT {
     id: string;
     adminRole?: AdminRole | null;
-    planType?: PlanType;
+    planType?: PlanType | null;
     userType?: string;
     favoriteClub?: string | null;
   }

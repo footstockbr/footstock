@@ -1,7 +1,16 @@
+/**
+ * Perfis DEV/teste seedados em dev e prod.
+ *
+ * Regra canonica: planType e conceito de player. Staff (qualquer adminRole
+ * diferente de undefined) NAO recebe planType — fica null no banco e
+ * renderiza StaffBadge na UI.
+ */
 export type DevTestUserProfile = {
   password: string
   name: string
-  planType: 'JOGADOR' | 'CRAQUE' | 'LENDA'
+  // planType: opcional — present apenas para players (NORMAL).
+  // Ausente para staff (ADMIN, CLUB_PARTNER).
+  planType?: 'JOGADOR' | 'CRAQUE' | 'LENDA'
   adminRole?: 'SUPER_ADMIN' | 'ADMINISTRADOR' | 'MONITOR' | 'EDITOR' | 'MODERADOR' | 'CLUB_PARTNER'
   label?: string
   clubId?: string
@@ -11,36 +20,33 @@ export type DevTestUserProfile = {
 const DEV_PASSWORD = process.env.NEXT_PUBLIC_DEV_TEST_PASSWORD ?? 'FootStock@Dev2026!'
 
 export const DEV_TEST_USERS: Record<string, DevTestUserProfile> = {
+  // ─── Staff (sem planType) ─────────────────────────────────────────────────
   'superadmin@foot-stock.test': {
     password: DEV_PASSWORD,
     name: 'Super Admin',
-    planType: 'LENDA',
     adminRole: 'SUPER_ADMIN',
   },
   'admin@foot-stock.test': {
     password: DEV_PASSWORD,
     name: 'Administrador Teste',
-    planType: 'LENDA',
     adminRole: 'ADMINISTRADOR',
   },
   'monitor@foot-stock.test': {
     password: DEV_PASSWORD,
     name: 'Monitor Teste',
-    planType: 'LENDA',
     adminRole: 'MONITOR',
   },
   'editor@foot-stock.test': {
     password: DEV_PASSWORD,
     name: 'Editor Teste',
-    planType: 'LENDA',
     adminRole: 'EDITOR',
   },
   'moderador@foot-stock.test': {
     password: DEV_PASSWORD,
     name: 'Moderador Teste',
-    planType: 'LENDA',
     adminRole: 'MODERADOR',
   },
+  // ─── Players (com planType) ───────────────────────────────────────────────
   'craque@foot-stock.test': {
     password: DEV_PASSWORD,
     name: 'Usuário Craque',
@@ -57,12 +63,17 @@ export const DEV_TEST_USERS: Record<string, DevTestUserProfile> = {
     name: 'Usuário Jogador',
     planType: 'JOGADOR',
   },
+  // ─── Institucional (staff de clube; sem planType) ─────────────────────────
   'clube-parceiro@foot-stock.test': {
     password: DEV_PASSWORD,
     name: 'Clube Parceiro FC',
-    planType: 'JOGADOR',
     adminRole: 'CLUB_PARTNER',
     clubId: 'COL3',
     clubName: 'Colorado do Beira-Rio SC',
   },
+}
+
+/** True se o profile representa staff (sem planType, com adminRole). */
+export function isStaffDevProfile(profile: DevTestUserProfile): boolean {
+  return !!profile.adminRole
 }

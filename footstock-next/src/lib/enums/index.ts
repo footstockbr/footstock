@@ -80,6 +80,30 @@ export const ADMIN_ROLE = {
 } as const;
 export type AdminRole = (typeof ADMIN_ROLE)[keyof typeof ADMIN_ROLE];
 
+/**
+ * Classificação do usuário (User.userType — coluna string no Prisma).
+ * Eixo ortogonal ao plano: STAFF (ADMIN/CLUB_PARTNER) não tem `planType`.
+ */
+export const USER_TYPE = {
+  /** Player (usuário final do app); pode ter planType */
+  NORMAL: 'NORMAL',
+  /** Staff administrativo (painel /admin) — sem planType */
+  ADMIN: 'ADMIN',
+  /** Clube parceiro institucional (rota /club) — sem planType */
+  CLUB_PARTNER: 'CLUB_PARTNER',
+  /** Time parceiro legacy (mantido por compatibilidade com /admin/users) */
+  TIME_PARCEIRO: 'TIME_PARCEIRO',
+  /** Influenciador legacy (mantido por compatibilidade com /admin/users) */
+  INFLUENCIADOR: 'INFLUENCIADOR',
+} as const;
+export type UserType = (typeof USER_TYPE)[keyof typeof USER_TYPE];
+
+/** Tipos considerados staff (sem planType, sem fluxo de assinatura/trading). */
+export const STAFF_USER_TYPES: ReadonlyArray<UserType> = [
+  USER_TYPE.ADMIN,
+  USER_TYPE.CLUB_PARTNER,
+];
+
 /** Sessões do pregão virtual (alinhado com Prisma SessionType) */
 export const SESSION_TYPE = {
   /** Período de pré-abertura (10:45-11:00 BRT, volatilidade 30%) */

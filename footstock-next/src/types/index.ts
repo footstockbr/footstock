@@ -45,7 +45,9 @@ export interface PaginationParams {
 
 // ─── Enums ─────────────────────────────────────────────────────────────────────
 
-export type UserType = 'NORMAL' | 'TIME_PARCEIRO' | 'INFLUENCIADOR'
+// Player types operam o app (NORMAL/TIME_PARCEIRO/INFLUENCIADOR têm planType).
+// Staff types (ADMIN/CLUB_PARTNER) são orthogonais — sem planType, sem trading.
+export type UserType = 'NORMAL' | 'TIME_PARCEIRO' | 'INFLUENCIADOR' | 'ADMIN' | 'CLUB_PARTNER'
 export type InvestorProfile = 'CONSERVADOR' | 'MODERADO' | 'ARROJADO' | 'ESPECULADOR' | 'INICIANTE' | 'INTERMEDIARIO' | 'AVANCADO' | 'FA'
 export type PlanType = 'JOGADOR' | 'CRAQUE' | 'LENDA'
 export type AdminRole = 'SUPER_ADMIN' | 'ADMINISTRADOR' | 'MONITOR' | 'EDITOR' | 'MODERADOR' | 'CLUB_PARTNER'
@@ -136,7 +138,8 @@ export interface User {
   favoriteClubDisplayName?: string | null
   userType: UserType
   investorProfile: InvestorProfile
-  planType: PlanType
+  // null para staff (ADMIN/CLUB_PARTNER); PlanType para players.
+  planType: PlanType | null
   fsBalance: number
   marginBlocked: number
   tourCompleted: boolean
@@ -428,7 +431,7 @@ export interface CreateLeagueInput {
 export interface JWTPayload {
   sub: string
   email: string
-  planType: PlanType
+  planType: PlanType | null
   adminRole?: AdminRole | null
   iat: number
   exp: number

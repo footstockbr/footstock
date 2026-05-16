@@ -173,7 +173,8 @@ export { hasAdminRole } from '@/lib/utils/admin-roles'
 
 const PLAN_LEVELS = { JOGADOR: 1, CRAQUE: 2, LENDA: 3 }
 
-export function hasPlan(userPlan: string, required: 'JOGADOR' | 'CRAQUE' | 'LENDA'): boolean {
+export function hasPlan(userPlan: string | null | undefined, required: 'JOGADOR' | 'CRAQUE' | 'LENDA'): boolean {
+  if (!userPlan) return false
   return (PLAN_LEVELS[userPlan as keyof typeof PLAN_LEVELS] ?? 0) >=
     (PLAN_LEVELS[required] ?? 99)
 }
@@ -190,7 +191,7 @@ export function serializeUser(dbUser: {
   favoriteClubDisplayName?: string | null
   userType: string
   investorProfile: string | null
-  planType: string
+  planType: string | null
   fsBalance: { toNumber(): number }
   marginBlocked: { toNumber(): number }
   tourCompleted: boolean
@@ -210,7 +211,7 @@ export function serializeUser(dbUser: {
     favoriteClubDisplayName: dbUser.favoriteClubDisplayName ?? null,
     userType: dbUser.userType as User['userType'],
     investorProfile: (dbUser.investorProfile ?? 'INICIANTE') as User['investorProfile'],
-    planType: dbUser.planType as User['planType'],
+    planType: (dbUser.planType ?? null) as User['planType'],
     fsBalance: dbUser.fsBalance.toNumber(),
     marginBlocked: dbUser.marginBlocked.toNumber(),
     tourCompleted: dbUser.tourCompleted,

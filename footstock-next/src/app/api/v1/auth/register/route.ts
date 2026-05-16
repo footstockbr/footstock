@@ -187,6 +187,9 @@ export async function POST(req: NextRequest) {
       }
 
       // 6b. Criar User
+      // O register publico so cria players (NORMAL/TIME_PARCEIRO/INFLUENCIADOR — todos
+      // operam como player). Staff (ADMIN/CLUB_PARTNER) so e criado via seed ou /admin/admins.
+      // Logo, todos os usuarios criados aqui recebem planType=JOGADOR.
       const newUser = await tx.user.create({
         data: {
           id: supabaseUserId!,
@@ -198,6 +201,7 @@ export async function POST(req: NextRequest) {
           favoriteClub,
           favoriteClubDisplayName,
           userType: userType ?? 'NORMAL',
+          planType: 'JOGADOR',
           referredByCode: referrerAffiliateCodeId ? referredByCode : null,
           investorProfile: 'INICIANTE',
           ageVerificationPending: isAgePending,

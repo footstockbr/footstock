@@ -5,7 +5,7 @@ import { Button, Modal } from "@/components/ui";
 import { CheckoutButton } from "@/components/payments/CheckoutButton";
 
 interface SubscriptionManageProps {
-  planType?: string;
+  planType?: string | null;
 }
 
 export function SubscriptionManage({ planType }: SubscriptionManageProps) {

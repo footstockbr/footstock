@@ -57,16 +57,30 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Gate staff: ADMIN/CLUB_PARTNER nao tradam (sem planType, sem operacao real).
+  const userClassification = await prisma.user.findUnique({
+    where: { id: auth.user.id },
+    select: { userType: true, planType: true },
+  })
+  if (
+    userClassification?.userType === 'ADMIN' ||
+    userClassification?.userType === 'CLUB_PARTNER'
+  ) {
+    const res = error(
+      'STAFF_CANNOT_TRADE',
+      'Contas administrativas/institucionais nao podem operar ordens.',
+      403,
+    )
+    applyRateLimitHeaders(res, rlInfo)
+    return res
+  }
+
   // Gate de limite diário (verifica plano + tipo + contador Redis)
   let dailyLimitInfo: DailyLimitInfo | null = null
-  const user = await prisma.user.findUnique({
-    where: { id: auth.user.id },
-    select: { planType: true },
-  })
-  if (user) {
+  if (userClassification?.planType) {
     const { block, info } = await checkDailyOrderLimit(
       auth.user.id,
-      user.planType as PlanType,
+      userClassification.planType as PlanType,
       orderType ?? '',
     )
     if (block) {

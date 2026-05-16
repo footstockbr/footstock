@@ -37,7 +37,9 @@ function formatFS(amount: number) {
 }
 
 export function PlanCard({ user }: PlanCardProps) {
-  const isFreePlan = user.planType === "JOGADOR";
+  // Staff (ADMIN/CLUB_PARTNER): planType=null. isFreePlan=true para skip do fetch.
+  const isStaff = !user.planType;
+  const isFreePlan = isStaff || user.planType === "JOGADOR";
   const [sub, setSub] = useState<Subscription | null>(null);
   const { track } = useAnalytics();
 
@@ -55,6 +57,27 @@ export function PlanCard({ user }: PlanCardProps) {
         // Silently fail — show fallback
       });
   }, [isFreePlan]);
+
+  // Staff render: card neutro (sem plano de player, sem assinatura).
+  if (isStaff) {
+    return (
+      <Card data-testid="profile-plan-card">
+        <div className="p-4 flex items-center justify-between">
+          <div>
+            <p className="text-xs text-[#929AA5] mb-1">Tipo de conta</p>
+            <p className="text-sm text-[#EAECEF] font-medium">
+              {user.userType === "CLUB_PARTNER"
+                ? "Clube Parceiro"
+                : "Conta administrativa"}
+            </p>
+            <p className="text-xs text-[#929AA5] mt-1">
+              Sem plano de player. Sem assinatura.
+            </p>
+          </div>
+        </div>
+      </Card>
+    );
+  }
 
   const isCancelled = sub?.status === "CANCELLED";
   const isCancellationLock = sub?.status === "CANCELLATION_LOCK";

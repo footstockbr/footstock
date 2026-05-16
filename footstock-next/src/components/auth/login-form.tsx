@@ -31,7 +31,7 @@ function LoginForm() {
 
   const isDev = process.env.NODE_ENV !== "production";
   const devUsersByRole = Object.entries(DEV_TEST_USERS).map(([email, profile]) => ({
-    role: profile.label ?? profile.adminRole ?? profile.planType,
+    role: profile.label ?? profile.adminRole ?? profile.planType ?? "USUARIO",
     email,
     password: profile.password,
   }));

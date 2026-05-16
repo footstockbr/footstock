@@ -57,7 +57,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.id = user.id as string
         token.adminRole = (user.adminRole ?? null) as AdminRole | null
-        token.planType = user.planType as PlanType | undefined
+        // planType e nullable: staff (ADMIN/CLUB_PARTNER) tem null.
+        token.planType = (user.planType ?? null) as PlanType | null
         token.userType = user.userType
         token.favoriteClub = user.favoriteClub ?? null
       }
@@ -68,7 +69,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (session.user) {
         session.user.id = token.id
         session.user.adminRole = (token.adminRole ?? null) as AdminRole | null
-        session.user.planType = token.planType as PlanType
+        session.user.planType = (token.planType ?? null) as PlanType | null
         session.user.userType = (token.userType ?? '') as string
         session.user.favoriteClub = (token.favoriteClub ?? null) as string | null
       }

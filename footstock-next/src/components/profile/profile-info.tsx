@@ -33,9 +33,15 @@ export function ProfileInfo({ user }: ProfileInfoProps) {
         </div>
       </div>
       <div className="flex flex-wrap gap-2 px-4 pb-4 pt-0 border-t border-[rgba(240,185,11,.1)]">
-        <Badge variant={user.planType.toLowerCase() as "jogador" | "craque" | "lenda"} size="sm">
-          {user.planType}
-        </Badge>
+        {user.planType ? (
+          <Badge variant={user.planType.toLowerCase() as "jogador" | "craque" | "lenda"} size="sm">
+            {user.planType}
+          </Badge>
+        ) : (
+          <Badge variant="default" size="sm">
+            {user.userType === "CLUB_PARTNER" ? "Clube Parceiro" : "Staff"}
+          </Badge>
+        )}
         {user.investorProfile && (
           <Badge variant="default" size="sm">
             {INVESTOR_PROFILE_LABELS[user.investorProfile] ?? user.investorProfile}

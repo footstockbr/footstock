@@ -67,8 +67,10 @@ export function getPlanFeatures(plan: PlanType): PlanFeature[] {
   return PLAN_FEATURES[plan] ?? []
 }
 
-/** Verifica se o plano do usuario atende ao plano minimo requerido */
-export function hasPlanAccess(userPlan: PlanType, requiredPlan: PlanType): boolean {
+/** Verifica se o plano do usuario atende ao plano minimo requerido.
+ * Staff (planType=null) NUNCA tem acesso a features de plano de player. */
+export function hasPlanAccess(userPlan: PlanType | null | undefined, requiredPlan: PlanType): boolean {
+  if (!userPlan) return false
   return PLAN_HIERARCHY[userPlan] >= PLAN_HIERARCHY[requiredPlan]
 }
 

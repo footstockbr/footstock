@@ -44,7 +44,8 @@ export interface AuthorizedUser {
   email: string
   name: string | null
   adminRole: AdminRole | null
-  planType: PlanType
+  // null para staff (ADMIN/CLUB_PARTNER): nao tem plano.
+  planType: PlanType | null
   userType: string
   favoriteClub: string | null
 }
@@ -82,7 +83,7 @@ export async function authorizeCredentials(
     email: user.email,
     name: user.name ?? null,
     adminRole: (user.adminRole as AdminRole | null) ?? null,
-    planType: user.planType as PlanType,
+    planType: (user.planType as PlanType | null) ?? null,
     userType: (user.userType as string | null) ?? '',
     favoriteClub: (user.favoriteClub as string | null) ?? null,
   }

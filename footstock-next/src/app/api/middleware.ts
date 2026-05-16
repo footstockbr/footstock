@@ -82,9 +82,10 @@ export function withAuth(handler: RouteHandler) {
           if (cookieUser) {
             const dbUser = await prisma.user.findUnique({ where: { id: cookieUser.id } })
             if (dbUser) {
+              // Invariante: staff (ADMIN/CLUB_PARTNER) nao possui planType de player.
               const normalizedUser =
-                dbUser.adminRole && dbUser.planType !== 'JOGADOR'
-                  ? await prisma.user.update({ where: { id: dbUser.id }, data: { planType: 'JOGADOR' } })
+                dbUser.adminRole && dbUser.planType !== null
+                  ? await prisma.user.update({ where: { id: dbUser.id }, data: { planType: null } })
                   : dbUser
               const response = await handler(req, { user: normalizedUser as unknown as User })
               // Apply refreshed session cookies to the response so the browser
@@ -128,13 +129,13 @@ export function withAuth(handler: RouteHandler) {
         return errorResponse(ERROR_CODES.AUTH_010, ERROR_MESSAGES['AUTH-010'], 401)
       }
 
-      // Invariante de domínio: contas administrativas são sempre operacionais
-      // e não podem carregar plano pago.
+      // Invariante de domínio: contas administrativas/institucionais (ADMIN/CLUB_PARTNER)
+      // nao possuem plano de player — planType deve ser sempre null.
       const normalizedUser =
-        dbUser.adminRole && dbUser.planType !== 'JOGADOR'
+        dbUser.adminRole && dbUser.planType !== null
           ? await prisma.user.update({
               where: { id: dbUser.id },
-              data: { planType: 'JOGADOR' },
+              data: { planType: null },
             })
           : dbUser
 

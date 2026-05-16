@@ -17,7 +17,8 @@ export interface ForumPostDTO {
   ticker: string | null
   authorId: string
   authorName: string
-  authorPlan: string
+  /** null para staff (ADMIN/CLUB_PARTNER) que excepcionalmente postaram no forum. */
+  authorPlan: string | null
   likesCount: number
   hasUserLiked: boolean
   isFlagged: boolean

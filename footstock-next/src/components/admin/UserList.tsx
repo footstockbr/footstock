@@ -230,9 +230,13 @@ export function UserList({ currentAdminRole }: { currentAdminRole?: string | nul
                       </td>
                       {activeTab === 'usuarios' && (
                         <td className="py-3 px-4">
-                          <Badge variant={PLAN_BADGE_VARIANTS[user.planType]} size="xs">
-                            {PLAN_LABELS[user.planType] ?? user.planType}
-                          </Badge>
+                          {user.planType ? (
+                            <Badge variant={PLAN_BADGE_VARIANTS[user.planType]} size="xs">
+                              {PLAN_LABELS[user.planType] ?? user.planType}
+                            </Badge>
+                          ) : (
+                            <span className="text-[10px] text-[#929AA5]">—</span>
+                          )}
                         </td>
                       )}
                       <td className="py-3 px-4">
@@ -290,9 +294,13 @@ export function UserList({ currentAdminRole }: { currentAdminRole?: string | nul
                     {/* Meta */}
                     <div className="flex flex-col items-end gap-1 flex-shrink-0">
                       {activeTab === 'usuarios' ? (
-                        <Badge variant={PLAN_BADGE_VARIANTS[user.planType]} size="xs">
-                          {PLAN_LABELS[user.planType] ?? user.planType}
-                        </Badge>
+                        user.planType ? (
+                          <Badge variant={PLAN_BADGE_VARIANTS[user.planType]} size="xs">
+                            {PLAN_LABELS[user.planType] ?? user.planType}
+                          </Badge>
+                        ) : (
+                          <span className="text-[10px] text-[#929AA5]">—</span>
+                        )
                       ) : (
                         <span className="text-[10px] text-[#929AA5]">{user.adminRole ?? '—'}</span>
                       )}

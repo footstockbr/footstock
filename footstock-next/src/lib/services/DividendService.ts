@@ -43,7 +43,7 @@ interface PositionForDividend {
   userId: string
   quantity: number
   currentPrice: number
-  planType: string
+  planType: string | null
 }
 
 // ---------------------------------------------------------------------------

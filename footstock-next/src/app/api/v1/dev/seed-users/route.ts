@@ -109,7 +109,7 @@ export async function POST() {
       createdUsers.push(user)
     }
 
-    // Usuários Admin com diferentes roles
+    // Usuários Admin (staff — SEM planType, SEM saldo de player)
     const adminRoles = ['SUPER_ADMIN', 'ADMINISTRADOR', 'MONITOR', 'EDITOR', 'MODERADOR']
     for (let i = 0; i < adminRoles.length; i++) {
       const role = adminRoles[i]
@@ -117,13 +117,15 @@ export async function POST() {
         data: {
           email: `admin-${role.toLowerCase()}-${i}@foot-stock.test`,
           name: `${role} Admin ${i + 1}`,
-          planType: 'LENDA',
+          // Staff nao tem planType (M055).
+          planType: null,
           status: 'ACTIVE',
           adminRole: role as any,
           investorProfile: 'CONSERVADOR',
           birthDate: new Date('1980-03-20'),
           favoriteClub: 'URU3',
-          fsBalance: 500000,
+          // Saldo operacional fixo para staff (nao escala por plano).
+          fsBalance: 10000,
           cpfHash: `cpf-hash-admin-${role}-${i}`,
           userType: 'ADMIN',
         },

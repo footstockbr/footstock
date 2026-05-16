@@ -244,7 +244,7 @@ model User {
   phone                   String?
   cpfHash                 String           @unique @map("cpf_hash")
   birthDate               DateTime?        @map("birth_date") @db.Date
-  planType                PlanType         @default(JOGADOR) @map("plan_type")
+  planType                PlanType?        @map("plan_type")
   status                  UserStatus       @default(ACTIVE)
   adminRole               AdminRole?       @map("admin_role")
   investorProfile         InvestorProfile? @map("investor_profile")
@@ -1412,13 +1412,13 @@ model AgeVerification {
 
 // T-019: Log de reset de saldo pelo admin (auditoria)
 model BalanceResetLog {
-  id              String   @id @default(cuid())
-  userId          String   @map("user_id")
-  adminId         String   @map("admin_id")
-  previousBalance Decimal  @map("previous_balance") @db.Decimal(18, 8)
-  newBalance      Decimal  @map("new_balance") @db.Decimal(18, 8)
-  planType        PlanType @map("plan_type")
-  createdAt       DateTime @default(now()) @map("created_at")
+  id              String    @id @default(cuid())
+  userId          String    @map("user_id")
+  adminId         String    @map("admin_id")
+  previousBalance Decimal   @map("previous_balance") @db.Decimal(18, 8)
+  newBalance      Decimal   @map("new_balance") @db.Decimal(18, 8)
+  planType        PlanType? @map("plan_type")
+  createdAt       DateTime  @default(now()) @map("created_at")
 
   user  User @relation("BalanceResetTarget", fields: [userId], references: [id])
   admin User @relation("BalanceResetAdmin", fields: [adminId], references: [id])

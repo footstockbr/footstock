@@ -11,6 +11,9 @@ const PLAN_DEFAULT_BALANCE: Record<string, number> = {
   LENDA: 25000,
 }
 
+// Saldo operacional fixo para staff (ADMIN / CLUB_PARTNER) — nao escala por plano.
+const STAFF_DEFAULT_BALANCE = 10000
+
 // POST /api/v1/admin/users/:id/reset-balance — ADMIN+
 // Restaura o saldo fictício do usuário ao valor padrão do plano.
 // Cria BalanceResetLog para auditoria e notifica o usuário via Redis (T-019).
@@ -31,7 +34,10 @@ export async function POST(
     const user = await prisma.user.findUnique({ where: { id } })
     if (!user) return errors.notFound('Usuário não encontrado.')
 
-    const defaultBalance = PLAN_DEFAULT_BALANCE[user.planType]
+    const isStaff = user.userType === 'ADMIN' || user.userType === 'CLUB_PARTNER'
+    const defaultBalance = isStaff
+      ? STAFF_DEFAULT_BALANCE
+      : PLAN_DEFAULT_BALANCE[user.planType ?? '']
     if (defaultBalance === undefined) {
       return errors.server('Plano do usuário inválido ou sem saldo padrão definido.')
     }
@@ -50,7 +56,7 @@ export async function POST(
           adminId: auth.user.id,
           previousBalance,
           newBalance: defaultBalance,
-          planType: user.planType as import('@prisma/client').PlanType,
+          planType: (user.planType ?? null) as import('@prisma/client').PlanType | null,
         },
       }),
       prisma.adminMarketAction.create({
