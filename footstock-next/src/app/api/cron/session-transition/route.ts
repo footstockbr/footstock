@@ -7,6 +7,7 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import type { SessionType } from '@prisma/client'
 import { env } from '@/lib/env'
 import { prisma } from '@/lib/prisma'
 import { getCurrentSession } from '@/lib/services/session-manager'
@@ -37,8 +38,8 @@ export async function GET(req: NextRequest) {
       // Registrar transicao no banco (timestamp UTC para auditoria)
       await prisma.marketSessionLog.create({
         data: {
-          fromSession: previousSession as any,
-          toSession: currentSession as any,
+          fromSession: previousSession as SessionType,
+          toSession: currentSession as SessionType,
           transitionAt: now,
         },
       })

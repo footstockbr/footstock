@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
+ 
 // Mock do validators para controlar calcAge
 jest.mock('@/lib/utils/validators', () => ({
   calcAge: jest.fn().mockReturnValue(25), // adulto por padrão

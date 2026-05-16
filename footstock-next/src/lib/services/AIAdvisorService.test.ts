@@ -33,7 +33,7 @@ jest.mock('@/lib/redis', () => ({
   },
 }))
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const { redisPublisher: mockRedis } = require('@/lib/redis')
 
 // ─── Mock: @/lib/prisma ──────────────────────────────────────────────────────
@@ -52,7 +52,7 @@ jest.mock('@/lib/prisma', () => ({
   },
 }))
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const { prisma: mockPrisma } = require('@/lib/prisma')
 
 // ─── Mock: AIResponseParser ──────────────────────────────────────────────────
@@ -63,7 +63,7 @@ jest.mock('@/lib/services/AIResponseParser', () => ({
   },
 }))
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const { aiResponseParser: mockParser } = require('@/lib/services/AIResponseParser')
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────

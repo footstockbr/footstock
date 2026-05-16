@@ -208,6 +208,42 @@ export function DividendosClient() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
   const [page, setPage] = useState(1)
 
+  // Hooks devem ser chamados incondicionalmente (rules-of-hooks). As queries
+  // ficam desativadas via `enabled` enquanto o plano carrega ou o usuario
+  // nao tem acesso — assim nada bate em /api antes da hora.
+  const planAllowed = !isPlanLoading && hasAccess('CRAQUE')
+
+  const buildParams = () => {
+    const params = new URLSearchParams({ page: String(page) })
+    if (typeFilter !== 'ALL') params.set('type', typeFilter)
+    if (statusFilter !== 'ALL') params.set('status', statusFilter)
+    return params
+  }
+
+  const { data, isLoading, error, refetch } = useQuery<DividendResponse>({
+    queryKey: ['dividends', typeFilter, statusFilter, page],
+    queryFn: async () => {
+      const res = await fetch(`/api/v1/dividends?${buildParams()}`)
+      if (!res.ok) throw new Error('Erro ao carregar dividendos')
+      const json = await res.json()
+      return json.data
+    },
+    staleTime: 30_000,
+    enabled: planAllowed,
+  })
+
+  const { data: allData } = useQuery<DividendResponse>({
+    queryKey: ['dividends-summary'],
+    queryFn: async () => {
+      const res = await fetch('/api/v1/dividends?page=1&pageSize=100')
+      if (!res.ok) return { items: [], meta: { page: 1, pageSize: 100, totalItems: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false } }
+      const json = await res.json()
+      return json.data
+    },
+    staleTime: 60_000,
+    enabled: planAllowed,
+  })
+
   // T-11: bloquear acesso para plano Jogador
   if (isPlanLoading) return <Spinner />
   if (!hasAccess('CRAQUE')) {
@@ -228,35 +264,6 @@ export function DividendosClient() {
       </div>
     )
   }
-
-  const buildParams = () => {
-    const params = new URLSearchParams({ page: String(page) })
-    if (typeFilter !== 'ALL') params.set('type', typeFilter)
-    if (statusFilter !== 'ALL') params.set('status', statusFilter)
-    return params
-  }
-
-  const { data, isLoading, error, refetch } = useQuery<DividendResponse>({
-    queryKey: ['dividends', typeFilter, statusFilter, page],
-    queryFn: async () => {
-      const res = await fetch(`/api/v1/dividends?${buildParams()}`)
-      if (!res.ok) throw new Error('Erro ao carregar dividendos')
-      const json = await res.json()
-      return json.data
-    },
-    staleTime: 30_000,
-  })
-
-  const { data: allData } = useQuery<DividendResponse>({
-    queryKey: ['dividends-summary'],
-    queryFn: async () => {
-      const res = await fetch('/api/v1/dividends?page=1&pageSize=100')
-      if (!res.ok) return { items: [], meta: { page: 1, pageSize: 100, totalItems: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false } }
-      const json = await res.json()
-      return json.data
-    },
-    staleTime: 60_000,
-  })
 
   const items = data?.items ?? []
   const meta = data?.meta

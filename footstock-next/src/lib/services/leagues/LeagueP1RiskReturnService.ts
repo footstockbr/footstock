@@ -96,7 +96,7 @@ export class LeagueP1RiskReturnService {
 
     // Constrói série de dias da liga
     const days: string[] = []
-    let cur = new Date(windowStart)
+    const cur = new Date(windowStart)
     while (cur.getTime() <= today.getTime()) {
       days.push(isoDay(cur))
       cur.setUTCDate(cur.getUTCDate() + 1)

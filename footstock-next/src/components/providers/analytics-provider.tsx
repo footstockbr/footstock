@@ -33,6 +33,41 @@ const AnalyticsContext = createContext<AnalyticsContextValue>({
 
 // === Provider ===
 
+async function checkConsentAndInit() {
+  try {
+    const res = await fetch('/api/v1/me', { cache: 'no-store', credentials: 'include' })
+    if (!res.ok) return // Usuario nao logado — nao inicializa
+
+    const json = await res.json()
+    const user = json.data ?? json
+
+    // Verificar se usuario concedeu consentimento analytics
+    const consents: Array<{ purpose: string; granted: boolean }> = user.consents ?? []
+    const hasAnalyticsConsent = consents.some(
+      (c) => c.purpose === 'analytics' && c.granted
+    )
+
+    if (!hasAnalyticsConsent) return // Sem consentimento — nao rastrear
+
+    // Inicializar Mixpanel
+    analytics.init()
+
+    // Identificar usuario com propriedades nao-PII
+    if (user.id) {
+      analytics.identify(user.id, {
+        plan: user.plan ?? 'JOGADOR',
+        investorProfile: user.investorProfile ?? 'INICIANTE',
+        userType: user.userType ?? 'NORMAL',
+        affiliateCode: user.affiliateCode ?? null,
+        referredByCode: user.referredByCode ?? null,
+        createdAt: user.createdAt ?? new Date().toISOString(),
+      })
+    }
+  } catch {
+    // Falha silenciosa — analytics nunca deve quebrar o app
+  }
+}
+
 export function AnalyticsProvider({ children }: { children: ReactNode }) {
   const initialized = useRef(false)
 
@@ -43,41 +78,6 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
     // Verificar consentimento analytics antes de inicializar
     checkConsentAndInit()
   }, [])
-
-  async function checkConsentAndInit() {
-    try {
-      const res = await fetch('/api/v1/me', { cache: 'no-store', credentials: 'include' })
-      if (!res.ok) return // Usuario nao logado — nao inicializa
-
-      const json = await res.json()
-      const user = json.data ?? json
-
-      // Verificar se usuario concedeu consentimento analytics
-      const consents: Array<{ purpose: string; granted: boolean }> = user.consents ?? []
-      const hasAnalyticsConsent = consents.some(
-        (c) => c.purpose === 'analytics' && c.granted
-      )
-
-      if (!hasAnalyticsConsent) return // Sem consentimento — nao rastrear
-
-      // Inicializar Mixpanel
-      analytics.init()
-
-      // Identificar usuario com propriedades nao-PII
-      if (user.id) {
-        analytics.identify(user.id, {
-          plan: user.plan ?? 'JOGADOR',
-          investorProfile: user.investorProfile ?? 'INICIANTE',
-          userType: user.userType ?? 'NORMAL',
-          affiliateCode: user.affiliateCode ?? null,
-          referredByCode: user.referredByCode ?? null,
-          createdAt: user.createdAt ?? new Date().toISOString(),
-        })
-      }
-    } catch {
-      // Falha silenciosa — analytics nunca deve quebrar o app
-    }
-  }
 
   const track = useCallback(<E extends keyof AnalyticsEvents>(
     event: E,

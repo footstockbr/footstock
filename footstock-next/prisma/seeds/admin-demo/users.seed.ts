@@ -6,7 +6,7 @@
  * Invariante: saldos por plano — Jogador FS$2.000, Craque FS$5.000, Lenda FS$25.000
  */
 
-import type { PrismaClient } from '@prisma/client'
+import type { Prisma, PrismaClient } from '@prisma/client'
 
 const DEMO_USERS = [
   {
@@ -122,20 +122,20 @@ export async function seedAdminDemoUsers(prisma: PrismaClient): Promise<void> {
 
   for (const user of DEMO_USERS) {
     try {
-      const createData: any = {
+      const createData: Prisma.UserCreateInput = {
         email: user.email,
         name: user.name,
         cpfHash: user.cpfHash,
         birthDate: user.birthDate,
         favoriteClub: user.favoriteClub,
-        investorProfile: user.investorProfile as any,
-        planType: user.planType as any,
+        investorProfile: user.investorProfile,
+        planType: user.planType,
         fsBalance: user.fsBalance,
         userType: 'NORMAL',
       }
 
       if (user.adminRole) {
-        createData.adminRole = user.adminRole as any
+        createData.adminRole = user.adminRole
       }
 
       await prisma.user.create({

@@ -53,9 +53,9 @@ function hexToLab(hex: string): { L: number; a: number; b: number } {
   const lg = srgbToLinear(g)
   const lb = srgbToLinear(b)
   // linear RGB -> XYZ (D65)
-  let x = (0.4124564 * lr + 0.3575761 * lg + 0.1804375 * lb) / 0.95047
-  let y = (0.2126729 * lr + 0.7151522 * lg + 0.0721750 * lb) / 1.0
-  let z = (0.0193339 * lr + 0.1191920 * lg + 0.9503041 * lb) / 1.08883
+  const x = (0.4124564 * lr + 0.3575761 * lg + 0.1804375 * lb) / 0.95047
+  const y = (0.2126729 * lr + 0.7151522 * lg + 0.0721750 * lb) / 1.0
+  const z = (0.0193339 * lr + 0.1191920 * lg + 0.9503041 * lb) / 1.08883
   // XYZ -> Lab
   const f = (t: number) => (t > 0.008856 ? t ** (1 / 3) : 7.787 * t + 16 / 116)
   const fx = f(x)
