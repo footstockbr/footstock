@@ -23,12 +23,14 @@ import { createHash, createHmac } from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import { PrismaClient } from '@prisma/client'
 import type { Prisma } from '@prisma/client'
+import { PrismaPg } from '@prisma/adapter-pg'
 import {
   DEV_TEST_USERS,
   type DevTestUserProfile,
 } from '../src/lib/constants/dev-test-users.ts'
 
-const prisma = new PrismaClient()
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! })
+const prisma = new PrismaClient({ adapter })
 
 const BCRYPT_ROUNDS = 12
 
