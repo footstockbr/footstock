@@ -26,6 +26,38 @@ ALTER TABLE "users"
   ALTER COLUMN "plan_type" DROP NOT NULL,
   ALTER COLUMN "plan_type" DROP DEFAULT;
 
+-- balance_reset_logs pode faltar em ambientes bootstrapped antes do init
+-- atual (drift schema vs migration history). Criar idempotentemente.
+CREATE TABLE IF NOT EXISTS "balance_reset_logs" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "admin_id" TEXT NOT NULL,
+    "previous_balance" DECIMAL(18,8) NOT NULL,
+    "new_balance" DECIMAL(18,8) NOT NULL,
+    "plan_type" "PlanType",
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "balance_reset_logs_pkey" PRIMARY KEY ("id")
+);
+
+CREATE INDEX IF NOT EXISTS "balance_reset_logs_user_id_idx" ON "balance_reset_logs"("user_id");
+CREATE INDEX IF NOT EXISTS "balance_reset_logs_admin_id_idx" ON "balance_reset_logs"("admin_id");
+CREATE INDEX IF NOT EXISTS "balance_reset_logs_created_at_idx" ON "balance_reset_logs"("created_at");
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'balance_reset_logs_user_id_fkey') THEN
+    ALTER TABLE "balance_reset_logs"
+      ADD CONSTRAINT "balance_reset_logs_user_id_fkey"
+      FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'balance_reset_logs_admin_id_fkey') THEN
+    ALTER TABLE "balance_reset_logs"
+      ADD CONSTRAINT "balance_reset_logs_admin_id_fkey"
+      FOREIGN KEY ("admin_id") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+  END IF;
+END $$;
+
 ALTER TABLE "balance_reset_logs"
   ALTER COLUMN "plan_type" DROP NOT NULL;
 
