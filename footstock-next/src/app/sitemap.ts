@@ -1,8 +1,17 @@
 import type { MetadataRoute } from 'next'
-import { env } from '@/lib/env'
+
+const PRODUCTION_URL = 'https://www.footstock.com.br'
+
+function resolveBaseUrl(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_APP_URL?.trim()
+  if (fromEnv && !fromEnv.includes('build.placeholder')) {
+    return fromEnv.replace(/\/$/, '')
+  }
+  return PRODUCTION_URL
+}
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')
+  const baseUrl = resolveBaseUrl()
   const now = new Date()
 
   const publicRoutes: Array<{
