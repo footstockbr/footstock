@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import * as Sentry from '@sentry/nextjs'
+import { encode } from '@auth/core/jwt'
 import { supabaseAdmin } from '@/lib/supabase'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
 import { serializeUser } from '@/lib/auth'
+import {
+  authorizeCredentials,
+  backfillPasswordHash,
+} from '@/lib/auth-credentials'
 import { getLoginIpRateLimit } from '@/lib/ratelimit'
 import { emailNotificationService } from '@/lib/services/EmailNotificationService'
 import { getRedisClient } from '@/lib/redis'
@@ -20,6 +26,11 @@ const LoginSchema = z.object({
 
 const LOGIN_FAIL_LIMIT = 5
 const LOGIN_WINDOW_SECONDS = 900 // 15 minutos
+
+// JWT Auth.js — alinhar com cookie name de auth.config para derivar access_token
+const AUTHJS_SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
+const AUTHJS_SALT_PROD = '__Secure-authjs.session-token'
+const AUTHJS_SALT_DEV = 'authjs.session-token'
 
 /** Chave do contador de falhas por email */
 function failKey(email: string): string {
@@ -42,6 +53,18 @@ function buildRlInfo(failCount: number, failTtlSeconds: number): RateLimitInfo {
   }
 }
 
+type LoginPath = 'authjs' | 'supabase_fallback' | 'fail'
+
+function emitLoginBreadcrumb(path: LoginPath, backfillApplied: boolean): void {
+  // Sem PII — apenas o caminho de autenticacao e se houve backfill assincrono.
+  Sentry.addBreadcrumb({
+    category: 'auth',
+    message: 'login_path',
+    level: 'info',
+    data: { path, backfill_applied: backfillApplied },
+  })
+}
+
 export async function POST(request: NextRequest) {
   try {
     // ─── 1. Parse e validação do body ─────────────────────────────────────────
@@ -54,8 +77,6 @@ export async function POST(request: NextRequest) {
     const { email, password } = parsed.data
 
     // ─── 2. Pre-check por IP (proteção anti-lockout por terceiros) ────────────
-    // Limita IPs que disparam muitas tentativas antes de verificar o email específico.
-    // Sem isso, um atacante poderia bloquear contas alheias enviando 5 falhas/email.
     const rawIp = request.headers.get('x-forwarded-for') ?? '127.0.0.1'
     const ip = normalizeIp(rawIp)
 
@@ -118,70 +139,154 @@ export async function POST(request: NextRequest) {
     // Headers base para respostas não bloqueadas
     let rlInfo = buildRlInfo(currentFailCount, failTtl)
 
-    // ─── 5. Tentativa de autenticação via Supabase Auth ───────────────────────
-    const { data: authData, error: authError } = await supabaseAdmin.auth.signInWithPassword({
-      email,
-      password,
-    })
+    // ─── 5. Auth.js path PRIMEIRO (TASK-3 dual-stack) ─────────────────────────
+    // authorizeCredentials roda Zod + bcrypt.compare contra Prisma.passwordHash
+    // com timing defense. Retorno nullable: null = falha Auth.js (sem hash OR
+    // hash invalido OR user nao existe). Caller decide se cabe Supabase fallback.
+    const authjsUser = await authorizeCredentials({ email, password })
 
-    // ─── 6. Autenticação falhou: incrementar contador de falhas ───────────────
-    if (authError || !authData.session || !authData.user) {
-      if (r) {
-        try {
-          const { count, ttl } = await atomicIncrWithTtl(fk, LOGIN_WINDOW_SECONDS)
-          currentFailCount = count
-          failTtl = ttl > 0 ? ttl : LOGIN_WINDOW_SECONDS
-          rlInfo = buildRlInfo(currentFailCount, failTtl)
+    let path: LoginPath = 'fail'
+    let backfillApplied = false
 
-          // Threshold atingido: bloquear e notificar
-          if (count >= LOGIN_FAIL_LIMIT) {
-            await r.set(bk, '1', 'EX', LOGIN_WINDOW_SECONDS)
+    if (authjsUser) {
+      // ─── 5a. Auth.js path bem-sucedido ──────────────────────────────────────
+      path = 'authjs'
 
-            emailNotificationService.sendForType('BRUTE_FORCE_BLOCKED', email, {
-              title: 'Acesso temporariamente bloqueado',
-              body: `Detectamos ${LOGIN_FAIL_LIMIT} tentativas de login falhadas na sua conta. Por segurança, o acesso foi bloqueado por 15 minutos.`,
-              ctaLabel: 'Redefinir senha',
-              ctaUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://footstock.app'}/esqueci-senha`,
-            }).catch((err: unknown) => console.error('[login] Erro ao enviar BRUTE_FORCE_BLOCKED:', err))
+      const dbUser = await prisma.user.findUnique({ where: { id: authjsUser.id } })
+      if (!dbUser) {
+        // Defesa: deletou entre authorize e findUnique. Trata como auth fail.
+        path = 'fail'
+      } else {
+        const salt = process.env.NODE_ENV === 'production' ? AUTHJS_SALT_PROD : AUTHJS_SALT_DEV
+        const secret = process.env.AUTH_SECRET
+        if (!secret) {
+          emitLoginBreadcrumb('fail', false)
+          return errors.server()
+        }
+
+        const access_token = await encode({
+          token: {
+            id: authjsUser.id,
+            sub: authjsUser.id,
+            email: authjsUser.email,
+            adminRole: authjsUser.adminRole,
+            planType: authjsUser.planType,
+            userType: authjsUser.userType,
+            favoriteClub: authjsUser.favoriteClub,
+          },
+          secret,
+          salt,
+          maxAge: AUTHJS_SESSION_MAX_AGE_SECONDS,
+        })
+
+        emitLoginBreadcrumb('authjs', false)
+
+        const res = ok({
+          user: serializeUser(dbUser),
+          session: {
+            access_token,
+            refresh_token: null,
+            expires_at: Math.floor(Date.now() / 1000) + AUTHJS_SESSION_MAX_AGE_SECONDS,
+          },
+          requiresOnboarding: !dbUser.tourCompleted,
+        })
+        // Tambem seteia o cookie Auth.js para que requests subsequentes
+        // funcionem via middleware (mesmo contrato que signIn faria).
+        res.cookies.set({
+          name: salt,
+          value: access_token,
+          httpOnly: true,
+          sameSite: 'lax',
+          path: '/',
+          secure: process.env.NODE_ENV === 'production',
+          maxAge: AUTHJS_SESSION_MAX_AGE_SECONDS,
+        })
+        applyRateLimitHeaders(res, rlInfo)
+        return res
+      }
+    }
+
+    // ─── 5b. Supabase fallback (gated por FEATURE_AUTH_SUPABASE_FALLBACK) ─────
+    const fallbackEnabled = process.env.FEATURE_AUTH_SUPABASE_FALLBACK === 'true'
+    let backfillUser: { id: string } | null = null
+
+    if (fallbackEnabled) {
+      const candidate = await prisma.user.findUnique({
+        where: { email },
+        select: { id: true, passwordHash: true },
+      })
+      // Apenas elegivel quando user existe E ainda nao tem passwordHash.
+      // Quando o user JA tem passwordHash, a falha em authorizeCredentials
+      // significa senha errada — NUNCA cair em Supabase nesse caso.
+      if (candidate && candidate.passwordHash == null) {
+        const { data: authData, error: authError } = await supabaseAdmin.auth.signInWithPassword({
+          email,
+          password,
+        })
+
+        if (!authError && authData.session && authData.user) {
+          path = 'supabase_fallback'
+          backfillUser = { id: candidate.id }
+
+          // fire-and-forget: nao bloqueia o response. Erro/sucesso e silencioso,
+          // visivel apenas em Sentry via breadcrumb sincrono (data.backfill_applied
+          // reflete intencao; o ack real fica no proximo login do mesmo user).
+          backfillApplied = true
+          void backfillPasswordHash(candidate.id, password)
+
+          const dbUser = await prisma.user.findUnique({ where: { id: authData.user.id } })
+          if (dbUser) {
+            emitLoginBreadcrumb('supabase_fallback', backfillApplied)
+            const res = ok({
+              user: serializeUser(dbUser),
+              session: {
+                access_token: authData.session.access_token,
+                refresh_token: authData.session.refresh_token,
+                expires_at: authData.session.expires_at,
+              },
+              requiresOnboarding: !dbUser.tourCompleted,
+            })
+            applyRateLimitHeaders(res, rlInfo)
+            return res
           }
-        } catch {
-          // Redis offline — não incrementar (fail-open)
+          // dbUser ausente: cai para fail abaixo
+          path = 'fail'
+          backfillApplied = false
         }
       }
-
-      // Mensagem genérica — não revelar se é email ou senha incorreto (SEC)
-      const res = NextResponse.json(
-        { error: { code: 'AUTH_001', message: 'Credenciais inválidas.' } },
-        { status: 401 }
-      )
-      applyRateLimitHeaders(res, rlInfo)
-      return res
     }
 
-    // ─── 7. Autenticação bem-sucedida ─────────────────────────────────────────
-    // NAO reseta o contador de falhas — janela expira naturalmente (spec §2)
-    const dbUser = await prisma.user.findUnique({
-      where: { id: authData.user.id },
-    })
+    // ─── 6. Autenticação falhou: incrementar contador de falhas ───────────────
+    if (r) {
+      try {
+        const { count, ttl } = await atomicIncrWithTtl(fk, LOGIN_WINDOW_SECONDS)
+        currentFailCount = count
+        failTtl = ttl > 0 ? ttl : LOGIN_WINDOW_SECONDS
+        rlInfo = buildRlInfo(currentFailCount, failTtl)
 
-    if (!dbUser) {
-      const res = NextResponse.json(
-        { error: { code: 'AUTH_001', message: 'Credenciais inválidas.' } },
-        { status: 401 }
-      )
-      applyRateLimitHeaders(res, rlInfo)
-      return res
+        // Threshold atingido: bloquear e notificar
+        if (count >= LOGIN_FAIL_LIMIT) {
+          await r.set(bk, '1', 'EX', LOGIN_WINDOW_SECONDS)
+
+          emailNotificationService.sendForType('BRUTE_FORCE_BLOCKED', email, {
+            title: 'Acesso temporariamente bloqueado',
+            body: `Detectamos ${LOGIN_FAIL_LIMIT} tentativas de login falhadas na sua conta. Por segurança, o acesso foi bloqueado por 15 minutos.`,
+            ctaLabel: 'Redefinir senha',
+            ctaUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://footstock.app'}/esqueci-senha`,
+          }).catch((err: unknown) => console.error('[login] Erro ao enviar BRUTE_FORCE_BLOCKED:', err))
+        }
+      } catch {
+        // Redis offline — não incrementar (fail-open)
+      }
     }
 
-    const res = ok({
-      user: serializeUser(dbUser),
-      session: {
-        access_token: authData.session.access_token,
-        refresh_token: authData.session.refresh_token,
-        expires_at: authData.session.expires_at,
-      },
-      requiresOnboarding: !dbUser.tourCompleted,
-    })
+    emitLoginBreadcrumb('fail', false)
+
+    // Mensagem genérica — não revelar se é email ou senha incorreto (SEC)
+    const res = NextResponse.json(
+      { error: { code: 'AUTH_001', message: 'Credenciais inválidas.' } },
+      { status: 401 }
+    )
     applyRateLimitHeaders(res, rlInfo)
     return res
   } catch {
