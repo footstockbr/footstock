@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import * as Sentry from '@sentry/nextjs'
+import bcrypt from 'bcryptjs'
+
 import { withAuth, type AuthContext } from '@/app/api/middleware'
 import { changePasswordSchema } from '@/lib/schemas/auth.schema'
 import { ERROR_CODES, ERROR_MESSAGES } from '@/lib/constants/errors'
 import { MESSAGES } from '@/lib/constants/messages'
 import { env } from '@/lib/env'
+import { prisma } from '@/lib/prisma'
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -60,44 +63,110 @@ async function handler(req: NextRequest, { user }: AuthContext) {
     }
 
     const { currentPassword, newPassword } = parsed.data
-    const supabaseAdmin = getSupabaseAdmin()
 
     const isDevCookieSession =
       process.env.NODE_ENV !== 'production' && req.cookies.get('fs_dev_auth')?.value === user.email
 
-    if (!supabaseAdmin) {
-      if (process.env.NODE_ENV !== 'production' || isDevCookieSession) {
-        return NextResponse.json({
-          success: true,
-          data: { message: MESSAGES.PROFILE.PASSWORD_CHANGED },
-        })
-      }
+    const fallbackEnabled = process.env.FEATURE_AUTH_SUPABASE_FALLBACK === 'true'
 
+    // ─── 1. Buscar user no Prisma (fonte da verdade pos-M054) ─────────────────
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { id: true, email: true, passwordHash: true },
+    })
+
+    if (!dbUser) {
       return NextResponse.json(
         {
           success: false,
           error: {
-            code: ERROR_CODES.SYS_002,
-            message: ERROR_MESSAGES[ERROR_CODES.SYS_002],
+            code: ERROR_CODES.AUTH_001,
+            message: MESSAGES.PROFILE.PASSWORD_MISMATCH,
           },
         },
-        { status: 503 }
+        { status: 401 }
       )
     }
 
-    Sentry.addBreadcrumb({
-      category: 'auth.legacy',
-      message: 'auth.legacy.signInWithPassword',
-      level: 'info',
-    })
+    // ─── 2. Verify-old: bcrypt quando temos hash, Supabase fallback caso flag ─
+    let verifiedViaSupabaseFallback = false
+    let needsBackfill = false
 
     if (!isDevCookieSession) {
-      const { error: verifyError } = await supabaseAdmin.auth.signInWithPassword({
-        email: user.email,
-        password: currentPassword,
-      })
+      if (dbUser.passwordHash != null) {
+        Sentry.addBreadcrumb({
+          category: 'auth.changepw',
+          message: 'auth.changepw.verify.bcrypt',
+          level: 'info',
+          data: { path: 'authjs' },
+        })
 
-      if (verifyError) {
+        const ok = await bcrypt.compare(currentPassword, dbUser.passwordHash)
+        if (!ok) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: {
+                code: ERROR_CODES.AUTH_001,
+                message: MESSAGES.PROFILE.PASSWORD_MISMATCH,
+              },
+            },
+            { status: 401 }
+          )
+        }
+      } else if (fallbackEnabled) {
+        const supabaseAdmin = getSupabaseAdmin()
+
+        if (!supabaseAdmin) {
+          // Sem hash + sem Supabase + fallback ligado = nao da pra verificar.
+          // Em dev sem supabase ainda permitimos pseudo-success (legado).
+          if (process.env.NODE_ENV !== 'production') {
+            return NextResponse.json({
+              success: true,
+              data: { message: MESSAGES.PROFILE.PASSWORD_CHANGED },
+            })
+          }
+          return NextResponse.json(
+            {
+              success: false,
+              error: {
+                code: ERROR_CODES.SYS_002,
+                message: ERROR_MESSAGES[ERROR_CODES.SYS_002],
+              },
+            },
+            { status: 503 }
+          )
+        }
+
+        Sentry.addBreadcrumb({
+          category: 'auth.changepw',
+          message: 'auth.changepw.verify.supabase_fallback',
+          level: 'info',
+          data: { path: 'supabase_fallback' },
+        })
+
+        const { error: verifyError } = await supabaseAdmin.auth.signInWithPassword({
+          email: dbUser.email,
+          password: currentPassword,
+        })
+
+        if (verifyError) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: {
+                code: ERROR_CODES.AUTH_001,
+                message: MESSAGES.PROFILE.PASSWORD_MISMATCH,
+              },
+            },
+            { status: 401 }
+          )
+        }
+
+        verifiedViaSupabaseFallback = true
+        needsBackfill = true
+      } else {
+        // Sem hash + flag OFF = nao ha como verificar. Tratar como mismatch.
         return NextResponse.json(
           {
             success: false,
@@ -111,17 +180,15 @@ async function handler(req: NextRequest, { user }: AuthContext) {
       }
     }
 
-    Sentry.addBreadcrumb({
-      category: 'auth.legacy',
-      message: 'auth.legacy.admin.updateUserById',
-      level: 'info',
-    })
+    // ─── 3. Update via Prisma (hash bcrypt 12 rounds) ─────────────────────────
+    const newHash = await bcrypt.hash(newPassword, 12)
 
-    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
-      password: newPassword,
-    })
-
-    if (updateError) {
+    try {
+      await prisma.user.update({
+        where: { id: dbUser.id },
+        data: { passwordHash: newHash, updatedAt: new Date() },
+      })
+    } catch {
       return NextResponse.json(
         {
           success: false,
@@ -132,6 +199,37 @@ async function handler(req: NextRequest, { user }: AuthContext) {
         },
         { status: 400 }
       )
+    }
+
+    Sentry.addBreadcrumb({
+      category: 'auth.changepw',
+      message: 'auth.changepw.update.prisma',
+      level: 'info',
+      data: { backfill_applied: needsBackfill, via: verifiedViaSupabaseFallback ? 'supabase_fallback' : 'authjs' },
+    })
+
+    // ─── 4. Atualizacao paralela no Supabase (gated por flag) ────────────────
+    // Preserva login para sessoes Supabase ainda ativas em outros devices ate o
+    // cookie expirar. Fire-and-forget: erros sao apenas logados em Sentry.
+    if (fallbackEnabled) {
+      const supabaseAdmin = getSupabaseAdmin()
+      if (supabaseAdmin) {
+        supabaseAdmin.auth.admin
+          .updateUserById(user.id, { password: newPassword })
+          .then(({ error }) => {
+            if (error) {
+              Sentry.captureMessage('auth.changepw.supabase_update_failed', {
+                level: 'warning',
+                extra: { user_id: user.id, supabase_error: error.message },
+              })
+            }
+          })
+          .catch((err: unknown) => {
+            Sentry.captureException(err, {
+              tags: { feature: 'auth.changepw', op: 'supabase_admin_update' },
+            })
+          })
+      }
     }
 
     return NextResponse.json({
