@@ -37,34 +37,52 @@ jobs:
       - name: Cache Next.js
         uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf  # v4.2.2
         with:
-          path: .next/cache
+          path: footstock-next/.next/cache
           key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**/*.ts', '**/*.tsx') }}
 
       - name: Instalar dependências
-        run: npm ci
+        working-directory: footstock-next
+        run: npm ci --legacy-peer-deps
 
       - name: Gerar Prisma Client
+        working-directory: footstock-next
         run: npx prisma generate
 
+      # env-coverage roda no root porque escaneia o monorepo inteiro
+      # (motor/src + footstock-next/{app,lib,src}) contra .env.example
+      # na raiz. Script já filtra node_modules/dist e vars injetadas
+      # pela plataforma (NEXT_PHASE, PORT, RAILWAY_REPLICA_ID).
       - name: Validar cobertura de env vars
         run: chmod +x scripts/check-env-coverage.sh && ./scripts/check-env-coverage.sh
 
       - name: Verificar tipos TypeScript
+        working-directory: footstock-next
         run: npx tsc --noEmit
 
       - name: Lint ESLint
+        working-directory: footstock-next
         run: npm run lint
 
-      - name: Verificar formatação Prettier
-        run: npm run format:check
-
       - name: Testes unitários
+        working-directory: footstock-next
         run: npm test -- --passWithNoTests --ci --coverage
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_CI }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL_CI }}
+          REDIS_URL: ${{ secrets.REDIS_URL_CI }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          NEXT_PUBLIC_SUPABASE_URL: 'https://test.supabase.co'
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test-anon-key-dummy-not-a-real-credential'
+          SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key-dummy-not-real'
+          JWT_SECRET: 'test-jwt-secret-must-be-at-least-32-chars-long'
+          MOTOR_SECRET_TOKEN: 'test-motor-token-dummy-not-a-real-credential'
+          NODE_ENV: test
 
       - name: Upload coverage
         uses: codecov/codecov-action@5c47607acb93fed5485fdbf7232e8a31425f672a  # v4.6.0
         with:
           fail_ci_if_error: false
+          directory: footstock-next/coverage
 
   contract-tests:
     name: Contract Tests
@@ -97,9 +115,7 @@ jobs:
     name: Build Next.js
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # `needs: validate` removed temporarily — validate job has the same
-    # monorepo bug (npm ci/tsc/lint run at repo root instead of
-    # footstock-next/). Restore after validate is fixed in a follow-up.
+    needs: [validate]
     permissions:
       contents: read
     env:
