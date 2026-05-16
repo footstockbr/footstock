@@ -83,6 +83,22 @@ jobs:
           NEXT_PUBLIC_APP_URL: 'https://footstock.com.br'
           SKIP_ENV_VALIDATION: 'true'
 
+      # Aplica migrations Prisma em produção ANTES de subir o código novo,
+      # para garantir que o schema do banco está alinhado com o build que
+      # será deployed. Roda em ambos os dirs (root prisma/ = lineage motor,
+      # footstock-next/prisma/ = lineage Next.js). Idempotente: pula
+      # migrations já registradas em _prisma_migrations.
+      - name: Aplicar Prisma migrations (produção)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL_PROD }}
+        run: |
+          set -e
+          echo "==> migrate deploy (root prisma/ — motor lineage)"
+          npx prisma migrate deploy --schema prisma/schema.prisma
+          echo "==> migrate deploy (footstock-next/prisma/ — Next.js lineage)"
+          npx prisma migrate deploy --schema footstock-next/prisma/schema.prisma
+
       - name: Instalar Railway CLI
         run: npm i -g @railway/cli
 
