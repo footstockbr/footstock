@@ -29,6 +29,7 @@ function LoginForm() {
     resolver: zodResolver(loginSchema),
   });
 
+  const isDev = process.env.NODE_ENV !== "production";
   const devUsersByRole = Object.entries(DEV_TEST_USERS).map(([email, profile]) => ({
     role: profile.label ?? profile.adminRole ?? profile.planType,
     email,
@@ -196,6 +197,7 @@ avoid: Texto no logo
         </Link>
       </p>
 
+      {isDev && (
       <footer className="pt-3 mt-4 border-t border-[#2B3139]/60">
         <div className="mb-2">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-[#707A8A]">
@@ -227,6 +229,7 @@ avoid: Texto no logo
           ))}
         </div>
       </footer>
+      )}
     </div>
   );
 }
