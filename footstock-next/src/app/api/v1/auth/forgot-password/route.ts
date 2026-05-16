@@ -5,7 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { message, errors } from '@/lib/api'
 import { getForgotPasswordRateLimit } from '@/lib/ratelimit'
 import { env } from '@/lib/env'
-import { signIn } from '../../../../../../auth'
+import { signIn } from '@/auth'
 
 const ForgotPasswordSchema = z.object({
   email: z.string().email(),

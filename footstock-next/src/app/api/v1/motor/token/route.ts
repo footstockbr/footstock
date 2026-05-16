@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { auth } from '../../../../../../auth'
+import { auth } from '@/auth'
 import { mintMotorToken, MOTOR_TOKEN_TTL_SECONDS } from '@/lib/auth/motor-token'
 import { prisma } from '@/lib/prisma'
 import type { PlanType } from '@/types'
