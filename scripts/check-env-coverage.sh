@@ -10,13 +10,35 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
-# Extrair variáveis referenciadas no código (app/, lib/, src/, motor/)
+# Diretórios reais com código de aplicação (monorepo: motor + footstock-next).
+# Exclui node_modules, dist, .next, build, coverage para não pegar lixo de
+# tooling (Babel, Browserslist, Chokidar) compilado em dependências.
+SCAN_DIRS=()
+for d in motor/src footstock-next/app footstock-next/lib footstock-next/src; do
+  [ -d "$d" ] && SCAN_DIRS+=("$d")
+done
+
+if [ ${#SCAN_DIRS[@]} -eq 0 ]; then
+  echo "ERRO: nenhum diretório de código encontrado para escanear"
+  exit 1
+fi
+
+# Variáveis injetadas pela plataforma/runtime — não precisam estar em .env.example
+# (NEXT_PHASE é setado pelo Next.js durante build/dev; PORT e RAILWAY_REPLICA_ID
+# são injetados pelo Railway no container em runtime).
+IGNORED_VARS=" NEXT_PHASE PORT RAILWAY_REPLICA_ID "
+
 CODE_VARS=$(grep -roh \
   "process\.env\.\([A-Z_0-9]\+\)\|NEXT_PUBLIC_[A-Z_0-9]\+" \
-  app/ lib/ src/ motor/ --include="*.ts" --include="*.tsx" --include="*.js" 2>/dev/null \
+  "${SCAN_DIRS[@]}" \
+  --include="*.ts" --include="*.tsx" --include="*.js" \
+  --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.next \
+  --exclude-dir=build --exclude-dir=coverage \
+  2>/dev/null \
   | sed 's/process\.env\.//' | sort -u || true)
 
 for var in $CODE_VARS; do
+  case "$IGNORED_VARS" in *" $var "*) continue ;; esac
   if ! grep -q "^${var}=" "$ENV_FILE" 2>/dev/null; then
     echo "MISSING: $var não está em $ENV_FILE"
     MISSING=$((MISSING + 1))
