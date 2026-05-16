@@ -92,11 +92,16 @@ jobs:
       # via prisma migrate resolve); migrations novas para o motor
       # precisam ser portadas para footstock-next/prisma/ até que os
       # dois schemas sejam unificados. Idempotente.
+      # footstock-next/prisma/schema.prisma declara só `provider` no
+      # bloco datasource (sem `url` nem `directUrl`), então o Prisma
+      # usa DATABASE_URL para tudo, inclusive migrate. DATABASE_URL_PROD
+      # aponta para pgbouncer porta 6543 (transaction mode), que trava
+      # em advisory locks de migrations. Aqui sobrescrevemos com o
+      # DIRECT_URL (session pooler porta 5432) só para o migrate.
       - name: Aplicar Prisma migrations (produção)
         working-directory: footstock-next
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL_PROD }}
+          DATABASE_URL: ${{ secrets.DIRECT_URL_PROD }}
         run: npx prisma migrate deploy
 
       - name: Instalar Railway CLI
