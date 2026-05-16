@@ -63,9 +63,13 @@ jobs:
         working-directory: footstock-next
         run: npm run lint
 
+      # Roda apenas suite unitária (sem --coverage). O threshold global de 70%
+      # do jest.config.ts assume execução completa unit + contract + integration
+      # — coverage real só faz sentido em rollup dedicado (ainda não wired).
+      # Mesma assinatura do "Test gate" do deploy.yml para coerência cross-workflow.
       - name: Testes unitários
         working-directory: footstock-next
-        run: npm test -- --passWithNoTests --ci --coverage
+        run: npm test -- --ci --silent
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL_CI }}
           DIRECT_URL: ${{ secrets.DIRECT_URL_CI }}
@@ -77,12 +81,6 @@ jobs:
           JWT_SECRET: 'test-jwt-secret-must-be-at-least-32-chars-long'
           MOTOR_SECRET_TOKEN: 'test-motor-token-dummy-not-a-real-credential'
           NODE_ENV: test
-
-      - name: Upload coverage
-        uses: codecov/codecov-action@5c47607acb93fed5485fdbf7232e8a31425f672a  # v4.6.0
-        with:
-          fail_ci_if_error: false
-          directory: footstock-next/coverage
 
   contract-tests:
     name: Contract Tests
