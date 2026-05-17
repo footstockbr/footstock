@@ -5,6 +5,7 @@ import * as Sentry from '@sentry/nextjs'
 import { createSupabaseServerClient } from '@/lib/supabase'
 import { env } from '@/lib/env'
 import { prisma } from '@/lib/prisma'
+import { readAuthjsSession } from '@/lib/auth/authjs-session'
 import type { User, AdminRole } from '@/types'
 
 // ─── NXAUTH-04A — Kill switch + detecção de conflito Auth.js vs Supabase ───────
@@ -135,6 +136,18 @@ export async function getAuthUser(): Promise<{ user: User; supabaseId: string } 
         if (devUser) {
           return { supabaseId: devUser.id, user: serializeUser(devUser) }
         }
+      }
+    }
+
+    // Dual-stack PREFERRED: Auth.js v5 cookie `(__Secure-)authjs.session-token`.
+    // /api/v1/auth/login default em prod escreve esse cookie; sem este branch
+    // server components (admin/layout.tsx) e route handlers que usam getAuthUser
+    // retornariam null e mandariam redirect(/login), criando o bounce reportado.
+    const authjs = await readAuthjsSession()
+    if (authjs?.id) {
+      const dbUser = await prisma.user.findUnique({ where: { id: authjs.id } })
+      if (dbUser) {
+        return { supabaseId: dbUser.id, user: serializeUser(dbUser) }
       }
     }
 

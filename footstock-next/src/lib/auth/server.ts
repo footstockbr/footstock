@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { env } from '@/lib/env'
 import { prisma } from '@/lib/prisma'
 import { hasPlanAccess } from '@/lib/auth/planAccess'
+import { readAuthjsSession } from '@/lib/auth/authjs-session'
 import type { PlanType } from '@/lib/enums'
 import type { User } from '@/types/models'
 
@@ -13,6 +14,17 @@ export async function getAuthUser(): Promise<{ user: User } | null> {
   const authHeader =
     headerStore.get('authorization') ?? headerStore.get('Authorization')
   const bearer = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+
+  // Dual-stack PREFERRED: Auth.js v5 cookie. /api/v1/auth/login default em prod
+  // escreve `__Secure-authjs.session-token`; route handlers e server components
+  // que dependem deste helper retornariam null sem este branch.
+  if (!bearer) {
+    const authjs = await readAuthjsSession()
+    if (authjs?.id) {
+      const dbUser = await prisma.user.findUnique({ where: { id: authjs.id } })
+      if (dbUser) return { user: dbUser as unknown as User }
+    }
+  }
 
   const supabase = createServerClient(
     env.NEXT_PUBLIC_SUPABASE_URL,
