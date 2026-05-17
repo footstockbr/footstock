@@ -25,7 +25,12 @@ export class MarketMakerAgent extends BaseAgent {
     const side = this.lastSide === 'BUY' ? 'SELL' : 'BUY'
     this.lastSide = side
 
-    const quantity = Math.max(1, Math.floor(ctx.volume24h * 0.001))
+    // CAP em MAX_MM_QUANTITY: mesma justificativa do PanicSellerAgent —
+    // syntheticVolume retorna para state.volume e vira ctx.volume24h no proximo
+    // tick. Sem cap, criar um feedback loop linear (vol cresce ~0.1% por tick
+    // enquanto o spread permanecer > TARGET_SPREAD).
+    const MAX_MM_QUANTITY = 5_000
+    const quantity = Math.min(MAX_MM_QUANTITY, Math.max(1, Math.floor(ctx.volume24h * 0.001)))
     const priceModifier = side === 'BUY' ? -0.001 : 0.001
 
     return { side, quantity, priceModifier, reason: 'compress_spread' }

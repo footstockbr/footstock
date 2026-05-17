@@ -29,6 +29,11 @@ const PERSIST_HISTORY_EVERY = 30  // Persistir PriceHistory a cada N ticks ≈ 5
 const PAUSE_RESUME_MS = 5 * 60 * 1000  // 5 minutos absolutos (independente de TICK_INTERVAL_MS)
 // Heartbeat a cada N ticks (reduz comandos Redis — TTL do MotorHealthService: 60s)
 const HEARTBEAT_EVERY = parseInt(process.env.MOTOR_HEARTBEAT_EVERY ?? '5', 10)
+// Sanity cap em state.volume — defesa em profundidade contra feedback loop dos
+// agents que escalam quantity por volume24h (PanicSeller, MarketMaker).
+// MAX_INT64 e ~9.2e18; usar 1e15 (1 quatrilhao) deixa folga absurda para
+// volume legitimo e ainda detecta loop bem antes de overflow.
+const MAX_DAILY_VOLUME = 1_000_000_000_000_000  // 1e15
 
 export class MarketEngine {
   private redis: Redis
@@ -248,8 +253,10 @@ export class MarketEngine {
         const { impact: agentImpact, syntheticVolume } = agentOrchestrator.tickAsset(assetId, agentCtx)
         const finalPrice = newPrice * (1 + agentImpact)
 
-        // Acumular volume sintético dos agentes (sem isso, volume 24h fica zero)
-        state.volume += syntheticVolume
+        // Acumular volume sintético dos agentes (sem isso, volume 24h fica zero).
+        // Clamp em MAX_DAILY_VOLUME garante que mesmo se um agente novo escapar
+        // do cap interno, nao ha overflow do BigInt persistido em assets.volume.
+        state.volume = Math.min(state.volume + syntheticVolume, MAX_DAILY_VOLUME)
 
         // Match de ordens pendentes
         const fills = orderBook.matchOrders(finalPrice)
@@ -261,7 +268,10 @@ export class MarketEngine {
         state.currentPrice = finalPrice
         state.highPrice = Math.max(state.highPrice, finalPrice)
         state.lowPrice = Math.min(state.lowPrice, finalPrice)
-        state.volume += state.pendingBuyVolume + state.pendingSellVolume
+        state.volume = Math.min(
+          state.volume + state.pendingBuyVolume + state.pendingSellVolume,
+          MAX_DAILY_VOLUME,
+        )
 
         const tick = buildMotorTick(state, finalPrice, sessionType)
         ticks.push(tick)
@@ -373,11 +383,19 @@ export class MarketEngine {
       // Atualizar closePrice junto com currentPrice — o CB deve detectar
       // movimentos bruscos (>8% em 20s), não drift gradual acumulado desde o startup.
       state.closePrice = state.currentPrice
+      // Last-line guard: garante que o BigInt persistido nunca extrapole
+      // MAX_DAILY_VOLUME (1e15), mesmo se state.volume estiver corrompido por
+      // estado em memoria antigo nao migrado.
+      const safeVolume = Math.max(0, Math.min(state.volume, MAX_DAILY_VOLUME))
+      if (!Number.isFinite(state.volume) || state.volume > MAX_DAILY_VOLUME) {
+        logger.warn(`[engine] volume out-of-range ticker=${state.ticker} raw=${state.volume} clamped=${safeVolume}`)
+        state.volume = safeVolume
+      }
       return this.prisma.asset.update({
         where: { id: state.id },
         data: {
           currentPrice: state.currentPrice,
-          volume: BigInt(state.volume),
+          volume: BigInt(safeVolume),
         },
       })
     })
