@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { auth } from '@/auth'
 import { env } from '@/lib/env'
 import { prisma } from '@/lib/prisma'
 import { canAccess, type AdminResource } from '@/lib/auth/canAccess'
@@ -61,6 +62,25 @@ export function withAuth(handler: RouteHandler) {
       const token = authHeader?.replace('Bearer ', '') ?? queryToken ?? undefined
 
       if (!token) {
+        // Dual-stack read: prefer cookie Auth.js v5 (`__Secure-authjs.session-token`).
+        // /api/v1/auth/login define esse cookie no Auth.js path (default em prod),
+        // entao todo request subsequente do browser carrega APENAS esse cookie
+        // (sem nenhum cookie Supabase `sb-*`). Sem este branch, /api/v1/me e demais
+        // rotas legacy retornariam 401 e o frontend bounce de volta pro /login.
+        try {
+          const session = await auth()
+          if (session?.user?.id) {
+            const dbUser = await prisma.user.findUnique({ where: { id: session.user.id } })
+            if (dbUser) {
+              const normalizedUser =
+                dbUser.adminRole && dbUser.planType !== null
+                  ? await prisma.user.update({ where: { id: dbUser.id }, data: { planType: null } })
+                  : dbUser
+              return handler(req, { user: normalizedUser as unknown as User })
+            }
+          }
+        } catch { /* Auth.js indisponivel — segue para Supabase cookie */ }
+
         // Fallback: cookie de sessão Supabase (browser fetch sem Bearer header)
         try {
           const cookieStore = await cookies()
