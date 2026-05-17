@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { createBrowserClient } from "@supabase/ssr";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ROUTES } from "@/lib/constants/routes";
@@ -51,17 +50,11 @@ function LoginForm() {
       throw new Error(json.error.message || "Email ou senha incorretos");
     }
 
-    // Em produção, setar sessão Supabase nos cookies do browser
-    if (!isDev) {
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      );
-      await supabase.auth.setSession({
-        access_token: json.data.session.access_token,
-        refresh_token: json.data.session.refresh_token,
-      });
-    }
+    // Em prod a sessao ja vem como cookie httpOnly `__Secure-authjs.session-token`
+    // setado pelo Set-Cookie da resposta de /api/v1/auth/login (Auth.js v5 path).
+    // Nao chamamos supabase.auth.setSession porque o access_token e JWE Auth.js
+    // (nao JWT Supabase) e refresh_token = null — setSession lancaria e abortaria
+    // o redirect, mantendo o usuario travado no /login.
 
     // EVT-005: Login Concluido
     const userData = json.data.user;
