@@ -146,7 +146,7 @@ export class PriceCalculator {
     }
 
     // Preço candidato final (antes do CB trigger)
-    const candidatePrice = Math.max(5.0, state.currentPrice + cappedDelta + correlationDelta)
+    const candidatePrice = Math.max(NUDGE_MIN_PRICE, state.currentPrice + cappedDelta + correlationDelta)
 
     // L10: Circuit Breaker trigger — verifica candidatePrice vs closePrice
     const cbResult = this.l10.checkTrigger(candidatePrice, state)
