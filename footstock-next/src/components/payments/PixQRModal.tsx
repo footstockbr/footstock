@@ -27,8 +27,8 @@ const PLAN_LABELS: Record<PlanType, string> = {
 }
 
 const PLAN_PRICES: Record<PlanType, Record<Period, string>> = {
-  CRAQUE: { monthly: 'R$ 2,00', yearly: 'R$ 18,00' },
-  LENDA:  { monthly: 'R$ 3,00', yearly: 'R$ 27,00' },
+  CRAQUE: { monthly: 'R$ 19,90', yearly: 'R$ 179,04' },
+  LENDA:  { monthly: 'R$ 39,90', yearly: 'R$ 359,04' },
 }
 
 const EXPIRY_SECONDS = 30 * 60 // 30 minutes

@@ -73,7 +73,7 @@ export default async function ContaPage() {
         <div data-testid="conta-upgrade-cta" className="bg-[rgba(240,185,11,.08)] rounded-lg border border-[rgba(240,185,11,.25)] p-4 mb-4">
           <p className="text-sm font-semibold text-[#F0B90B] mb-1">⭐ Faça upgrade para Craque</p>
           <p className="text-xs text-[#929AA5] mb-3">
-            Dados em tempo real, assessor IA e muito mais por apenas R$ 2,00/mês
+            Dados em tempo real, assessor IA e muito mais por apenas R$ 19,90/mês
           </p>
           <Link href={ROUTES.PLANOS}>
             <Button data-testid="conta-upgrade-button" variant="plan" size="md" fullWidth>Ver planos</Button>
