@@ -236,7 +236,7 @@ export class TransactionService {
       redis.get('market:session').catch(() => null),
     ]).then(([user, sessionStr]) => {
       const plan = (user?.planType ?? 'JOGADOR') as 'JOGADOR' | 'CRAQUE' | 'LENDA'
-      const marketSession = (sessionStr ?? 'TRADING') as 'PRE_MARKET' | 'TRADING' | 'CALL' | 'AFTER' | 'CLOSED'
+      const marketSession = (sessionStr ?? 'TRADING') as 'PRE_OPENING' | 'TRADING' | 'CLOSING_CALL' | 'AFTER_MARKET' | 'CLOSED'
       mixpanelServer.trackOrderExecuted(order.userId, {
         asset_ticker: order.asset.ticker,
         order_type: order.type as 'MARKET' | 'LIMIT' | 'SCHEDULED' | 'OCO' | 'SHORT',

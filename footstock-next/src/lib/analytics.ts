@@ -12,7 +12,7 @@ import mixpanel from 'mixpanel-browser'
 export type UserPlan = 'JOGADOR' | 'CRAQUE' | 'LENDA'
 export type InvestorProfile = 'INICIANTE' | 'INTERMEDIARIO' | 'AVANCADO' | 'FA_FUTEBOL'
 export type OrderType = 'MARKET' | 'LIMIT' | 'SCHEDULED' | 'OCO' | 'SHORT'
-export type MarketSession = 'PRE_MARKET' | 'TRADING' | 'CALL' | 'AFTER' | 'CLOSED'
+export type MarketSession = 'PRE_OPENING' | 'TRADING' | 'CLOSING_CALL' | 'AFTER_MARKET' | 'CLOSED'
 export type NotificationType =
   | 'ORDER_EXECUTED' | 'ORDER_CANCELLED' | 'MARGIN_CALL_ALERT' | 'CIRCUIT_BREAKER'
   | 'NEWS_FAVORITE_CLUB' | 'PAYMENT_CONFIRMED' | 'PAYMENT_FAILED' | 'PLAN_CANCEL_ALERT'
