@@ -14,7 +14,6 @@
 import 'server-only'
 
 import { cookies } from 'next/headers'
-import { decode } from '@auth/core/jwt'
 
 const AUTHJS_COOKIE_PROD = '__Secure-authjs.session-token'
 const AUTHJS_COOKIE_DEV = 'authjs.session-token'
@@ -39,10 +38,18 @@ export async function readAuthjsSession(): Promise<AuthjsSessionPayload | null> 
   // exatamente com o cookie presente (ex: preview deploys, teste com curl).
   const cookieNames = [AUTHJS_COOKIE_PROD, AUTHJS_COOKIE_DEV]
 
-  for (const name of cookieNames) {
-    const value = cookieStore.get(name)?.value
-    if (!value) continue
+  const presentCookies = cookieNames
+    .map((name) => ({ name, value: cookieStore.get(name)?.value }))
+    .filter((c): c is { name: string; value: string } => Boolean(c.value))
 
+  if (presentCookies.length === 0) return null
+
+  // Dynamic import: @auth/core/jwt e ESM-only e quebra parse do Jest no
+  // import top-level. Lazy load mantem testes que nao tocam o cookie verdes
+  // sem precisar customizar transformIgnorePatterns.
+  const { decode } = await import('@auth/core/jwt')
+
+  for (const { name, value } of presentCookies) {
     try {
       const decoded = await decode({ token: value, secret, salt: name })
       if (decoded?.id) {
