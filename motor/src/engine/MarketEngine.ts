@@ -5,6 +5,7 @@
 
 import type Redis from 'ioredis'
 import { PrismaClient } from '@prisma/client'
+import { PrismaPg } from '@prisma/adapter-pg'
 import { PriceCalculator } from './PriceCalculator'
 import { OrderBook } from './OrderBook'
 import { sessionManager } from './SessionManager'
@@ -23,6 +24,7 @@ import { MarginCallChecker } from './MarginCallChecker'
 import { LeverageInterestRunner } from './LeverageInterestRunner'
 import { CLUB_STATE_BY_TICKER } from '../microstructure/clubStates'
 import type { PreviousTickDelta } from '../types/motor.types'
+import { NUDGE_MIN_PRICE } from './nudge-constants'
 
 const TICK_INTERVAL_MS = parseInt(process.env.MOTOR_TICK_INTERVAL_MS ?? '2000', 10)
 const PERSIST_HISTORY_EVERY = 30  // Persistir PriceHistory a cada N ticks ≈ 5min com tick=10s (FDD canônico revisado 2026-05; A_TOP persiste sempre — ver item 004)
@@ -58,7 +60,8 @@ export class MarketEngine {
 
   constructor(redis: Redis) {
     this.redis = redis
-    this.prisma = new PrismaClient()
+    const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! })
+    this.prisma = new PrismaClient({ adapter })
     this.calculator = new PriceCalculator(redis)  // Passa Redis para persistência dos estados de camada
     this.healthService = MotorHealthService.getInstance(redis)
     this.orderExecutor = new OrderExecutor(this.prisma, redis)
@@ -226,8 +229,16 @@ export class MarketEngine {
             state.isPaused = false
             state.haltReason = null
             state.haltResumeAt = null
-            state.closePrice = state.currentPrice  // Reset âncora: evita re-trigger imediato do CB
-            logger.info(`[engine] ${state.ticker} retomado após circuit breaker (closePrice reset para ${state.currentPrice.toFixed(4)})`)
+            // Fix C: NÃO rebaixar a âncora ao retomar. Antes, closePrice virava o
+            // preço deprimido pós-halt, permitindo nova queda de 8% imediatamente
+            // (ratchet de quedas sucessivas). A âncora canônica é o close do dia
+            // anterior (resetada apenas em PRE_OPENING). Para evitar re-trigger
+            // imediato do CB enquanto o ativo se recupera, usamos openPrice do dia
+            // como âncora (em vez de currentPrice deprimido).
+            if (state.openPrice > 0) {
+              state.closePrice = state.openPrice
+            }
+            logger.info(`[engine] ${state.ticker} retomado após circuit breaker (closePrice mantido em ${state.closePrice.toFixed(4)}, currentPrice=${state.currentPrice.toFixed(4)})`)
             this.persistHaltState(assetId, false, null).catch(console.error)
             // Publica tick de retomada para o frontend atualizar em tempo real
             const resumeTick = buildHaltTick(state, sessionType, null, null)
@@ -251,7 +262,9 @@ export class MarketEngine {
           volatilityMultiplier,
         }
         const { impact: agentImpact, syntheticVolume } = agentOrchestrator.tickAsset(assetId, agentCtx)
-        const finalPrice = newPrice * (1 + agentImpact)
+        // Fix A: re-aplicar floor depois do impacto dos agentes — sem isso,
+        // o agente puxa o preço abaixo de NUDGE_MIN_PRICE e equilibra em ~0.98.
+        const finalPrice = Math.max(NUDGE_MIN_PRICE, newPrice * (1 + agentImpact))
 
         // Acumular volume sintético dos agentes (sem isso, volume 24h fica zero).
         // Clamp em MAX_DAILY_VOLUME garante que mesmo se um agente novo escapar
@@ -380,9 +393,11 @@ export class MarketEngine {
 
   private async updateAssetPrices(): Promise<void> {
     const updates = [...this.assetStates.values()].map(state => {
-      // Atualizar closePrice junto com currentPrice — o CB deve detectar
-      // movimentos bruscos (>8% em 20s), não drift gradual acumulado desde o startup.
-      state.closePrice = state.currentPrice
+      // Fix B: NÃO ressincronizar closePrice com currentPrice a cada 10 ticks.
+      // Esse rolling-anchor neutralizava o CB: a janela de detecção virava 20s
+      // (~3.5% máximo de drift por janela) enquanto a deriva acumulada (que é o
+      // que importa) ficava invisível. Agora closePrice é a âncora diária —
+      // resetada apenas no PRE_OPENING (linha ~170).
       // Last-line guard: garante que o BigInt persistido nunca extrapole
       // MAX_DAILY_VOLUME (1e15), mesmo se state.volume estiver corrompido por
       // estado em memoria antigo nao migrado.

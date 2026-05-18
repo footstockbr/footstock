@@ -50,7 +50,7 @@ export const CLUSTER_PARAMS: Record<AssetCluster, ClusterParams> = {
   B_LIQUID: {
     cluster: 'B_LIQUID',
     baseVolume: 3_000,
-    drift: -0.0002,           // leve pressão vendedora
+    drift: 0,                 // Fix D: drift estrutural removido — pressão vendedora permanente causava sangria contínua
     theta: 0.23,              // INTAKE canônico: 0.23
     sigma: 0.0035,
     garchAlpha: 0.12,
@@ -64,7 +64,7 @@ export const CLUSTER_PARAMS: Record<AssetCluster, ClusterParams> = {
   B_ILLIQ: {
     cluster: 'B_ILLIQ',
     baseVolume: 500,
-    drift: -0.0005,           // pressão vendedora mais forte
+    drift: 0,                 // Fix D: drift estrutural removido — pressão vendedora permanente causava sangria contínua
     theta: 0.25,              // INTAKE canônico: 0.25
     sigma: 0.0040,            // INTAKE canônico: 0.0040
     garchAlpha: 0.12,

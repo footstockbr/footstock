@@ -18,6 +18,7 @@ import { RSSFetcher } from './news/RSSFetcher'
 import { NewsClassifier } from './news/NewsClassifier'
 import { NewsPublisher } from './news/NewsPublisher'
 import { PrismaClient } from '@prisma/client'
+import { PrismaPg } from '@prisma/adapter-pg'
 
 const MOTOR_ID = `motor-${process.env.RAILWAY_REPLICA_ID ?? 'local'}-${Date.now()}`
 
@@ -123,7 +124,8 @@ async function main() {
 
     // Pipeline RSS — inicia junto com o engine
     if (!rssFetcher) {
-      newsPrisma = new PrismaClient()
+      const newsAdapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! })
+      newsPrisma = new PrismaClient({ adapter: newsAdapter })
       const publisher = new NewsPublisher(newsPrisma, redis)
       newsClassifier = new NewsClassifier(redis, newsPrisma)
       rssFetcher = new RSSFetcher(redis, newsPrisma)
