@@ -1,6 +1,8 @@
 -- ============================================================
 -- RESET: Preços e contadores dos 40 ativos para valores de IPO
--- Foot Stock — Colar no Supabase SQL Editor
+-- Foot Stock — Rodar no Railway Postgres
+--   Opção A (CLI):  railway run psql $DATABASE_URL -f prisma/M_RESET_assets_initial_prices.sql
+--   Opção B (SSH):  railway connect postgres  →  \i prisma/M_RESET_assets_initial_prices.sql
 -- Gerado em: 2026-05-16
 -- ============================================================
 -- O que faz:
