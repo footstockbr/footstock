@@ -60,11 +60,12 @@ describe('news-inject-contract', () => {
     expect(validateNewsInjectPayload({})).toBe(false)
   })
 
-  test('[INFRA] sentimentToDurationTicks dentro de [1, 10]', () => {
+  test('[INFRA] sentimentToDurationTicks retorna NEWS_IMPACT_DURATION_TICKS independente do sentiment', () => {
+    // Sentiment não é mais driver da duração — a curva de L7 exige o total fixo
+    // (PRESSURE_SPREAD_TICKS + ABSORPTION_TICKS). Ver news-inject-contract.ts.
     const ticks = [0, 0.5, 1, -1, 0.2].map(sentimentToDurationTicks)
     ticks.forEach(t => {
-      expect(t).toBeGreaterThanOrEqual(1)
-      expect(t).toBeLessThanOrEqual(10)
+      expect(t).toBe(50)
     })
   })
 })

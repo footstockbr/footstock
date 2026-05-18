@@ -8,6 +8,7 @@ import type Redis from 'ioredis'
 import type { MarketEngine } from '../engine/MarketEngine'
 import { REDIS_CHANNELS } from '../types/events.types'
 import type { MotorControlEvent, NewsInjectEvent } from '../types/events.types'
+import { NEWS_IMPACT_DURATION_TICKS } from '../contracts/news-inject-contract'
 import { logger } from '../utils/logger'
 
 export class AdminChannel {
@@ -58,7 +59,7 @@ export class AdminChannel {
         const rawMagnitude = (payload.magnitude as number) ?? 0
         const impact = (payload.impact as string) ?? 'NEUTRAL'
         const magnitude = impact === 'NEGATIVE' ? -rawMagnitude : rawMagnitude
-        const durationTicks = (payload.durationTicks as number) ?? 10
+        const durationTicks = (payload.durationTicks as number) ?? NEWS_IMPACT_DURATION_TICKS
         if (event.assetId) {
           this.engine.injectNewsImpact(event.assetId, magnitude, durationTicks)
         }

@@ -27,7 +27,7 @@ import type { PreviousTickDelta } from '../types/motor.types'
 import { NUDGE_MIN_PRICE } from './nudge-constants'
 
 const TICK_INTERVAL_MS = parseInt(process.env.MOTOR_TICK_INTERVAL_MS ?? '2000', 10)
-const PERSIST_HISTORY_EVERY = 30  // Persistir PriceHistory a cada N ticks ≈ 5min com tick=10s (FDD canônico revisado 2026-05; A_TOP persiste sempre — ver item 004)
+const PERSIST_HISTORY_EVERY = 6  // Persistir PriceHistory a cada N ticks ≈ 1min com tick=10s (reduzido de 30 para evitar gráficos degrau-degrau em B_LIQUID/B_ILLIQ; A_TOP persiste sempre — ver item 004)
 const PAUSE_RESUME_MS = 5 * 60 * 1000  // 5 minutos absolutos (independente de TICK_INTERVAL_MS)
 // Heartbeat a cada N ticks (reduz comandos Redis — TTL do MotorHealthService: 60s)
 const HEARTBEAT_EVERY = parseInt(process.env.MOTOR_HEARTBEAT_EVERY ?? '5', 10)

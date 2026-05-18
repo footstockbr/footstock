@@ -53,7 +53,19 @@ export function validateNewsInjectPayload(payload: unknown): payload is NewsInje
 // Evento Redis formatado para module-14 (NewsInjectEvent)
 // ---------------------------------------------------------------------------
 
-/** Duração padrão do impacto em ticks (sentiment * 5, mínimo 1, máximo 10) */
-export function sentimentToDurationTicks(sentiment: number): number {
-  return Math.max(1, Math.min(10, Math.round(Math.abs(sentiment) * 5)))
+/**
+ * Duração canônica do impacto em ticks (PRESSURE_SPREAD_TICKS + ABSORPTION_TICKS).
+ * L7_PressureQueue computa `ticksElapsed = TOTAL - newsImpactTicks` para
+ * progredir na curva de decaimento. Se `newsImpactTicks` começar abaixo do total,
+ * a notícia entra direto na cauda da absorção e some sem efeito perceptível.
+ */
+export const NEWS_IMPACT_DURATION_TICKS = 50
+
+/**
+ * @deprecated `sentiment` não controla a duração — a curva de L7 exige o total fixo.
+ * Mantido por compat de assinatura; retorna sempre `NEWS_IMPACT_DURATION_TICKS`.
+ * Use a constante diretamente em novo código.
+ */
+export function sentimentToDurationTicks(_sentiment: number): number {
+  return NEWS_IMPACT_DURATION_TICKS
 }
