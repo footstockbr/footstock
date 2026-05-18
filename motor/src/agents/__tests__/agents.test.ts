@@ -153,21 +153,22 @@ describe('ValueInvestorAgent', () => {
 describe('PanicSellerAgent', () => {
   const agent = new PanicSellerAgent()
 
-  test('queda 7% → SELL com panic_cascade', () => {
-    const d = agent.decide(mkCtx({ priceChange24h: -0.07, volume24h: 10_000 }))
+  // Thresholds suavizados para demo: SELL > 10%, quantity × 2 em > 15%.
+  test('queda 12% → SELL com panic_cascade', () => {
+    const d = agent.decide(mkCtx({ priceChange24h: -0.12, volume24h: 10_000 }))
     expect(d.side).toBe('SELL')
     expect(d.reason).toBe('panic_cascade')
     expect(d.quantity).toBeGreaterThan(0)
   })
 
-  test('queda 10% → quantity × 2', () => {
-    const d1 = agent.decide(mkCtx({ priceChange24h: -0.06, volume24h: 10_000 }))
-    const d2 = agent.decide(mkCtx({ priceChange24h: -0.10, volume24h: 10_000 }))
+  test('queda 15% → quantity × 2', () => {
+    const d1 = agent.decide(mkCtx({ priceChange24h: -0.12, volume24h: 10_000 }))
+    const d2 = agent.decide(mkCtx({ priceChange24h: -0.16, volume24h: 10_000 }))
     expect(d2.quantity).toBe(d1.quantity * 2)
   })
 
-  test('queda 3% (< 5%) → HOLD', () => {
-    expect(agent.decide(mkCtx({ priceChange24h: -0.03 })).side).toBe('HOLD')
+  test('queda 7% (< 10%) → HOLD', () => {
+    expect(agent.decide(mkCtx({ priceChange24h: -0.07 })).side).toBe('HOLD')
   })
 })
 
