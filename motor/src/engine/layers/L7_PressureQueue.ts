@@ -29,6 +29,10 @@ export class L7_PressureQueue implements QuantLayer {
 
   applyLayer(state: AssetState, _params: ClusterParams, _noise: number): LayerResult {
     if (state.newsImpact === 0 || state.newsImpactTicks <= 0) {
+      // Sane-default: se ticks expiraram, zera magnitude também — garante que o
+      // flag "notícia ativa" (consumido por L10) não fique preso caso a magnitude
+      // tenha sido sanitizada externamente.
+      if (state.newsImpactTicks <= 0 && state.newsImpact !== 0) state.newsImpact = 0
       return { layer: this.name, deltaPrice: 0 }
     }
 
@@ -55,6 +59,7 @@ export class L7_PressureQueue implements QuantLayer {
 
     // Decrementar ticks restantes
     state.newsImpactTicks -= 1
+    if (state.newsImpactTicks === 0) state.newsImpact = 0
 
     return {
       layer: this.name,

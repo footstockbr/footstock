@@ -74,7 +74,9 @@ export class L10_CircuitBreaker implements QuantLayer {
       (candidatePrice - state.closePrice) / state.closePrice
     )
 
-    const newsActive = state.newsImpactTicks > 0
+    // newsActive exige newsImpact !== 0 também: protege contra ticks "fantasma"
+    // (newsImpact=0 sem decrement em L7 manteria o flag preso eternamente).
+    const newsActive = state.newsImpact !== 0 && state.newsImpactTicks > 0
     const threshold = newsActive ? NEWS_CB_THRESHOLD : CIRCUIT_BREAKER_THRESHOLD
 
     if (changePercent >= threshold) {

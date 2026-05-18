@@ -553,8 +553,16 @@ export class MarketEngine {
   injectNewsImpact(assetId: string, magnitude: number, durationTicks: number): void {
     const state = this.assetStates.get(assetId)
     if (!state) return
-    state.newsImpact = magnitude
-    state.newsImpactTicks = durationTicks
+
+    // Sanitização defensiva: clampa magnitude em [-1, 1] e rejeita NaN/Infinity.
+    // L10 usa `newsImpact !== 0 && newsImpactTicks > 0` como flag de "notícia ativa"
+    // para relaxar o circuit breaker — valores absurdos não podem entrar.
+    if (!Number.isFinite(magnitude) || !Number.isFinite(durationTicks)) return
+    const clampedMagnitude = Math.max(-1, Math.min(1, magnitude))
+    const clampedTicks = Math.max(0, Math.min(200, Math.floor(durationTicks)))
+
+    state.newsImpact = clampedMagnitude
+    state.newsImpactTicks = clampedTicks
   }
 
   /** Resolve ticker (ex: 'FOG3') para o assetId (UUID) interno do engine. */

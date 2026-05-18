@@ -9,6 +9,7 @@ import { L5_KyleLambda } from '../L5_KyleLambda'
 import { L6_SupplyScaling } from '../L6_SupplyScaling'
 import { L7_PressureQueue } from '../L7_PressureQueue'
 import { L9_CircuitBreaker } from '../L9_CircuitBreaker'
+import { L10_CircuitBreaker } from '../L10_CircuitBreaker'
 import type { AssetState, ClusterParams } from '../../../types/motor.types'
 
 const mockState = (overrides: Partial<AssetState> = {}): AssetState => ({
@@ -208,5 +209,34 @@ describe('L9_CircuitBreaker', () => {
     const result = l9.applyLayer(state, mockParams(), 0) as any
     expect(result.triggered).toBe(true)
     expect(state.isPaused).toBe(true)
+  })
+})
+
+describe('L10_CircuitBreaker — guard duplo de notícia ativa', () => {
+  const l10 = new L10_CircuitBreaker()
+
+  test('newsImpact=0 e ticks>0 NÃO relaxa threshold (fica 8%)', () => {
+    // Cenário "ticks fantasma": magnitude zerada externamente mas contador preso.
+    // Não pode liberar 20% — protege contra abuso e bugs de sincronia.
+    const state = mockState({ closePrice: 28.00, newsImpact: 0, newsImpactTicks: 50 })
+    const result = l10.checkTrigger(30.80, state) as any  // 10% acima
+    expect(result.triggered).toBe(true)
+    expect(result.metadata.threshold).toBe(0.08)
+    expect(result.metadata.newsActive).toBe(0)
+  })
+
+  test('newsImpact!=0 e ticks>0 RELAXA threshold para 20%', () => {
+    const state = mockState({ closePrice: 28.00, newsImpact: 0.8, newsImpactTicks: 30 })
+    const result = l10.checkTrigger(30.80, state) as any  // 10% — abaixo de 20%
+    expect(result.triggered).toBe(false)
+    expect(result.metadata.threshold).toBe(0.20)
+    expect(result.metadata.newsActive).toBe(1)
+  })
+
+  test('notícia >= 20% ainda dispara CB mesmo com news active', () => {
+    const state = mockState({ closePrice: 28.00, newsImpact: 0.9, newsImpactTicks: 5 })
+    const result = l10.checkTrigger(35.00, state) as any  // 25% — acima do news threshold
+    expect(result.triggered).toBe(true)
+    expect(result.metadata.threshold).toBe(0.20)
   })
 })
