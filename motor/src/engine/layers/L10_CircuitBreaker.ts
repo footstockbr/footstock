@@ -27,6 +27,20 @@ import type { AssetState, ClusterParams, LayerResult } from '../../types/motor.t
 const CIRCUIT_BREAKER_THRESHOLD = 0.08   // 8% de variação acumulada no dia
 const HALT_DURATION_TICKS       = 150    // ~5 minutos (150 ticks × 2s)
 
+/**
+ * Threshold elevado enquanto há notícia ativa (state.newsImpactTicks > 0).
+ *
+ * Motivação: com magnitude típica das notícias × SPOT_CAP=2.5%/tick de L7, o
+ * preço cruza o threshold canônico de 8% em ~10 ticks (fim da fase spread),
+ * disparando CB exatamente enquanto a notícia ainda deveria estar absorvendo.
+ * O halt de 5min interrompe a curva de 50 ticks, e nem o front-end nem o usuário
+ * veem a absorção. Durante notícia ativa toleramos até NEWS_CB_THRESHOLD; o CB
+ * canônico volta no tick em que `newsImpactTicks === 0`.
+ *
+ * Ver L7_PressureQueue para a curva e news-inject-contract.ts para a duração.
+ */
+const NEWS_CB_THRESHOLD = 0.20            // 20% durante notícia (em vez de 8%)
+
 export interface CircuitBreakerResult extends LayerResult {
   triggered: boolean
   haltTicks?: number
@@ -60,7 +74,10 @@ export class L10_CircuitBreaker implements QuantLayer {
       (candidatePrice - state.closePrice) / state.closePrice
     )
 
-    if (changePercent >= CIRCUIT_BREAKER_THRESHOLD) {
+    const newsActive = state.newsImpactTicks > 0
+    const threshold = newsActive ? NEWS_CB_THRESHOLD : CIRCUIT_BREAKER_THRESHOLD
+
+    if (changePercent >= threshold) {
       // Halt: MarketEngine trata o estado isPaused e o timer de retomada
       state.isPaused = true
 
@@ -71,7 +88,8 @@ export class L10_CircuitBreaker implements QuantLayer {
         haltTicks: HALT_DURATION_TICKS,
         metadata: {
           changePercent,
-          threshold: CIRCUIT_BREAKER_THRESHOLD,
+          threshold,
+          newsActive: newsActive ? 1 : 0,
           haltDurationTicks: HALT_DURATION_TICKS,
         },
       }
@@ -81,7 +99,7 @@ export class L10_CircuitBreaker implements QuantLayer {
       layer: this.name,
       deltaPrice: 0,
       triggered: false,
-      metadata: { changePercent, threshold: CIRCUIT_BREAKER_THRESHOLD },
+      metadata: { changePercent, threshold, newsActive: newsActive ? 1 : 0 },
     }
   }
 }
