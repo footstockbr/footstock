@@ -15,7 +15,15 @@ const registerBase = z.object({
     .min(11, 'CPF inválido')
     .max(14)
     .refine((v) => validateCPF(v), 'CPF inválido'),
-  email: z.string().email('Informe um email válido').max(255),
+  // ID-NEW-005 (Codex round 3): canonicalizar email antes da validacao para
+  // que User@x.com e user@x.com nao virem dois registros distintos sob unique
+  // index case-sensitive do Postgres. transform roda apos .email() — mantido
+  // .trim() para acidentes de paste com espacos.
+  email: z
+    .string()
+    .max(255)
+    .email('Informe um email válido')
+    .transform((v) => v.trim().toLowerCase()),
   password: z.string().min(8, 'Senha deve ter no mínimo 8 caracteres').max(128),
   confirmPassword: z.string(),
   favoriteClub: z.string().min(1, 'Selecione seu clube do coração'),
@@ -25,7 +33,10 @@ const registerBase = z.object({
     analytics: z.boolean().optional().default(false),
     thirdParty: z.boolean().optional().default(false),
   }),
-  userType: z.enum(['NORMAL', 'TIME_PARCEIRO', 'INFLUENCIADOR']).optional().default('NORMAL'),
+  // ID-NEW-002 (Codex round 2): userType NAO e aceito do cliente. Public
+  // registration sempre cria userType=NORMAL. Promocao para TIME_PARCEIRO /
+  // INFLUENCIADOR e fluxo admin-side, fora deste schema. Manter campo aqui
+  // apenas significa privilege escalation via payload.
   referredByCode: z.string().max(20).optional(),
 })
 
@@ -60,7 +71,12 @@ export type Step2Data = z.infer<typeof step2Schema>
 // ─── Login ────────────────────────────────────────────────────────────────────
 
 export const loginSchema = z.object({
-  email: z.string().email('Informe um email válido'),
+  // ID-NEW-005: canonicalizar email simetricamente ao registerSchema para que
+  // login funcione mesmo se o usuario digitar com case diferente do cadastro.
+  email: z
+    .string()
+    .email('Informe um email válido')
+    .transform((v) => v.trim().toLowerCase()),
   password: z.string().min(8, 'Senha deve ter no mínimo 8 caracteres'),
 })
 export type LoginFormData = z.infer<typeof loginSchema>

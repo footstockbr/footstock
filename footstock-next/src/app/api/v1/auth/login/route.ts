@@ -18,7 +18,13 @@ import { applyRateLimitHeaders, normalizeIp, retryAfterFromReset } from '@/middl
 import type { RateLimitInfo } from '@/middleware/rateLimit'
 
 const LoginSchema = z.object({
-  email: z.string().email(),
+  // ID-NEW-005 (Codex round 3): canonicalizar email para casar com o que o
+  // register persiste (trim + lowercase). Sem isso, login com `USER@x.com`
+  // falha quando o DB armazenou `user@x.com`.
+  email: z
+    .string()
+    .email()
+    .transform((v) => v.trim().toLowerCase()),
   password: z.string().min(1),
 })
 
@@ -213,12 +219,18 @@ export async function POST(request: NextRequest) {
     if (fallbackEnabled) {
       const candidate = await prisma.user.findUnique({
         where: { email },
-        select: { id: true, passwordHash: true },
+        select: { id: true, passwordHash: true, status: true },
       })
-      // Apenas elegivel quando user existe E ainda nao tem passwordHash.
-      // Quando o user JA tem passwordHash, a falha em authorizeCredentials
-      // significa senha errada — NUNCA cair em Supabase nesse caso.
-      if (candidate && candidate.passwordHash == null) {
+      // Elegivel apenas quando user existe E ainda nao tem passwordHash E
+      // status=ACTIVE. ID-NEW-004 (Codex round 3): sem o check de status,
+      // user SUSPENDED/BANNED com hash null + senha Supabase valida ainda
+      // conseguiria sessao via fallback. Espelha o gate de authorizeCredentials
+      // (src/lib/auth-credentials.ts) que ja bloqueia non-ACTIVE no path direto.
+      if (
+        candidate &&
+        candidate.passwordHash == null &&
+        (candidate.status as string | null) === 'ACTIVE'
+      ) {
         const { data: authData, error: authError } = await supabaseAdmin.auth.signInWithPassword({
           email,
           password,

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import { ConsentPurpose } from '@prisma/client'
+import { randomUUID } from 'node:crypto'
+import bcrypt from 'bcryptjs'
+import { ConsentPurpose, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { getRedisClient } from '@/lib/redis'
 import { registerSchema } from '@/lib/schemas/auth.schema'
 import { hashCPF } from '@/lib/utils/crypto'
 import { verifyAge, verifyAgeWithFlagCheck } from '@/lib/services/age-verification'
@@ -18,16 +20,87 @@ import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
 // FS$ concedidos ao referrer a cada cadastro com código válido
 const REFERRAL_SIGNUP_REWARD = 100
 
-export async function POST(req: NextRequest) {
-  let supabaseUserId: string | null = null
-  let prismaCommitted = false // flag: não compensar Supabase se DB já commitou
+// bcrypt cost factor — alinhado com authorizeCredentials (src/lib/auth-credentials.ts).
+// Trocar aqui exige bump coordenado para preservar timing defense.
+const BCRYPT_ROUNDS = 12
 
+// 60-char dummy bcrypt-shaped string. Espelha DUMMY_HASH de
+// src/lib/auth-credentials.ts: mesmo shape e cost factor para que o
+// bcrypt.compare execute o mesmo trabalho dos paths "novo usuario", fechando
+// timing leak entre "email/cpf existe" e "novo cadastro" (ID-001 do Codex).
+const DUMMY_HASH = '$2a$12$' + '.'.repeat(53)
+
+// Quantas vezes regerar o codigo de afiliado antes de desistir. Cobre o
+// caso raro de colisao com afiliados ja existentes (ID-006 do Codex).
+const AFFILIATE_CODE_RETRY = 5
+
+// TTL do reservation lock (ID-005 do Codex). Suficiente para FlagCheck
+// (~3s tipico, ate 10s no timeout) + bcrypt(12) + transaction. Apos isso o
+// lock expira automaticamente mesmo em crash. Acquire via SET NX EX.
+const REGISTRATION_LOCK_TTL_SECONDS = 60
+
+// CAS release (ID-NEW-006 Codex round 3): so deleta a chave SE o valor bater
+// com o token desta requisicao. Sem isso, request A apos TTL overrun roda
+// `del()` na lock que ja pertence a request B, abrindo janela para C entrar
+// e pagar FlagCheck de novo. Token aleatorio via randomUUID() + KEYS[1]/ARGV[1].
+const LOCK_RELEASE_LUA = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("DEL", KEYS[1])
+else
+  return 0
+end
+`
+
+async function acquireRegistrationLock(key: string): Promise<{ acquired: boolean; release: () => Promise<void> }> {
+  const r = getRedisClient()
+  if (!r) {
+    // Pre-gate Redis acima ja deveria ter retornado 503. Best-effort no-op
+    // mantido apenas para defesa em profundidade — nao deve ser hit em prod.
+    return { acquired: true, release: async () => {} }
+  }
+  const lockKey = `reg:lock:${key}`
+  const token = randomUUID()
+  // 'NX' + 'EX' = SET if Not eXists with EXpiry. ioredis assinatura:
+  //   set(key, value, expiryMode, time, setMode)
+  const result = await r.set(lockKey, token, 'EX', REGISTRATION_LOCK_TTL_SECONDS, 'NX')
+  if (result !== 'OK') return { acquired: false, release: async () => {} }
+  return {
+    acquired: true,
+    release: async () => {
+      try {
+        await r.eval(LOCK_RELEASE_LUA, 1, lockKey, token)
+      } catch {
+        /* expira sozinho via TTL */
+      }
+    },
+  }
+}
+
+export async function POST(req: NextRequest) {
   // ── Rate limiting (TASK-026 — 3 req / 1 hora por IP) ─────────────────────────
   const rawIp = req.headers.get('x-forwarded-for') ?? '127.0.0.1'
   const ip = normalizeIp(rawIp)
 
   // Captura info de rl para headers em TODAS as respostas (não apenas 429)
   let rlInfo: RateLimitInfo = { limit: 3, remaining: 3, resetTimestampSeconds: 0 }
+
+  // ID-003 v3 (Codex round 3): PING real, nao apenas presence-check. O
+  // getRedisClient() pode retornar um objeto cliente cujo Redis subjacente
+  // esta offline; nesse caso SlidingWindowRateLimiter.limit() pegaria o erro
+  // de comando no try/catch interno e retornaria success:true (fail-open).
+  // PING explicito quebra esse caminho: se o servidor nao responde, 503.
+  try {
+    const r = getRedisClient()
+    if (!r) throw new Error('redis client null')
+    const pong = await r.ping()
+    if (pong !== 'PONG') throw new Error(`unexpected ping reply: ${pong}`)
+  } catch (pingErr) {
+    console.error('[register] Redis ping falhou (rate-limiter fail-closed):', (pingErr as Error).message)
+    return NextResponse.json(
+      { success: false, error: { code: ERROR_CODES.SYS_001, message: 'Servico de cadastro temporariamente indisponivel. Tente novamente em instantes.' } },
+      { status: 503 },
+    )
+  }
 
   try {
     const rlResult = await getRegisterRateLimit().limit(ip)
@@ -46,8 +119,16 @@ export async function POST(req: NextRequest) {
       applyRateLimitHeaders(res, rlInfo, retryAfter)
       return res
     }
-  } catch {
-    // Rate limiter indisponível (Redis offline) — fail-open
+  } catch (rlErr) {
+    // Rate limiter indisponivel (Redis offline) — fail-CLOSED em cadastro.
+    // Sem o limiter, atacante pode driblar 3/hr e consumir FlagCheck/bcrypt.
+    // ID-003 do Codex review. Login mantem fail-open porque ja tem outras
+    // defesas (counters por email); register nao tem fallback equivalente.
+    console.error('[register] rate limiter indisponivel (fail-closed):', (rlErr as Error).message)
+    return NextResponse.json(
+      { success: false, error: { code: ERROR_CODES.SYS_001, message: 'Servico de cadastro temporariamente indisponivel. Tente novamente em instantes.' } },
+      { status: 503 },
+    )
   }
 
   try {
@@ -80,13 +161,16 @@ export async function POST(req: NextRequest) {
       cpf,
       favoriteClub,
       consents,
-      userType,
       referredByCode,
     } = parsed.data
 
     // ── 1. Verificar unicidade de email (AUTH-004) ────────────────────────────
     const emailExists = await prisma.user.findUnique({ where: { email } })
     if (emailExists) {
+      // Timing defense (ID-001): equaliza com o path de sucesso, que faz
+      // bcrypt.hash(password, 12). Sem este compare o atacante mede a
+      // latencia para enumerar emails cadastrados.
+      await bcrypt.compare(password, DUMMY_HASH).catch(() => false)
       const res = NextResponse.json(
         { success: false, error: { code: ERROR_CODES.AUTH_004, message: ERROR_MESSAGES['AUTH-004'] } },
         { status: 409 }
@@ -99,6 +183,8 @@ export async function POST(req: NextRequest) {
     const cpfHash = hashCPF(cpf)
     const cpfExists = await prisma.user.findFirst({ where: { cpfHash } })
     if (cpfExists) {
+      // Timing defense (ID-001): mesmo motivo do bloco AUTH-004 acima.
+      await bcrypt.compare(password, DUMMY_HASH).catch(() => false)
       const res = NextResponse.json(
         { success: false, error: { code: ERROR_CODES.AUTH_003, message: ERROR_MESSAGES['AUTH-003'] } },
         { status: 409 }
@@ -118,42 +204,55 @@ export async function POST(req: NextRequest) {
       return res
     }
 
-    // ── 3c. Resolver favoriteClubDisplayName via constante local ─────────────
-    const favoriteClubDisplayName = CLUB_DISPLAY_NAMES[favoriteClub] ?? null
-
-    // ── 4. Criar usuário no Supabase Auth ─────────────────────────────────────
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
-
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-    })
-
-    if (authError || !authData.user) {
-      console.error('[register] Supabase Auth error:', authError?.message)
+    // ── 3a-lock. Reservation locks (ID-005 + ID-NEW-003) ─────────────────────
+    // Antes de gastar FlagCheck (call externa potencialmente paga) + bcrypt(12),
+    // adquire DOIS locks Redis: um em email (normalizado) e outro em cpfHash.
+    // Fecha tres janelas de race:
+    //  (a) mesmo CPF + emails diferentes (so 1 vence email-uniq, mas todos
+    //      pagavam FlagCheck antes do lock CPF + email);
+    //  (b) mesmo email + CPFs diferentes (mesma logica simetrica);
+    //  (c) duplo paid-call ao FlagCheck para o mesmo CPF concorrente.
+    // Ordem fixa email -> cpf evita deadlock entre pares (A,B) e (B,A).
+    const emailKey = email.trim().toLowerCase()
+    const lockEmail = await acquireRegistrationLock(`email:${emailKey}`)
+    if (!lockEmail.acquired) {
+      await bcrypt.compare(password, DUMMY_HASH).catch(() => false)
       const res = NextResponse.json(
-        { success: false, error: { code: ERROR_CODES.SYS_001, message: ERROR_MESSAGES['SYS-001'] } },
-        { status: 500 }
+        { success: false, error: { code: ERROR_CODES.AUTH_004, message: ERROR_MESSAGES['AUTH-004'] } },
+        { status: 409 },
+      )
+      applyRateLimitHeaders(res, rlInfo)
+      return res
+    }
+    const lockCpf = await acquireRegistrationLock(`cpf:${cpfHash}`)
+    if (!lockCpf.acquired) {
+      // Solta o lock de email ja adquirido antes de retornar (ID-005 self-heal
+      // via TTL cobre, mas explicit release evita stale window de 60s).
+      await lockEmail.release()
+      await bcrypt.compare(password, DUMMY_HASH).catch(() => false)
+      const res = NextResponse.json(
+        { success: false, error: { code: ERROR_CODES.AUTH_003, message: ERROR_MESSAGES['AUTH-003'] } },
+        { status: 409 },
       )
       applyRateLimitHeaders(res, rlInfo)
       return res
     }
 
-    supabaseUserId = authData.user.id
+    try {
 
-    // ── 4b. FlagCheck — verificação de maioridade via CPF (T-023) ─────────────
+    // ── 3b. FlagCheck — verificação de maioridade via CPF (T-023) ─────────────
+    // Roda ANTES da criação do usuário: sem Supabase, não há compensação possível,
+    // então abortamos antes de qualquer escrita no Prisma se o FlagCheck bloquear.
     const flagCheckResult = await verifyAgeWithFlagCheck(cpf, birthDate)
 
     if (!flagCheckResult.isAdult) {
-      // EVT-004: Verificacao de Idade Bloqueada
-      mixpanelServer.track(supabaseUserId, 'age_verification_blocked', {
+      // EVT-004: Verificacao de Idade Bloqueada — usa UUID aleatorio (sem
+      // derivacao de CPF). ID-007 do Codex: cpfHash slice e privacy-sensitive
+      // e correlacionavel via offline guessing se CPF_HASH_SALT vazar.
+      mixpanelServer.track(`anon-${randomUUID()}`, 'age_verification_blocked', {
         verification_method: flagCheckResult.method === 'flagcheck' ? 'flagcheck' : 'dob_calculation',
         step: 1,
       })
-      await supabase.auth.admin.deleteUser(supabaseUserId)
       const res = NextResponse.json(
         { success: false, error: { code: ERROR_CODES.AUTH_011, message: ERROR_MESSAGES['AUTH-011'] } },
         { status: 403 }
@@ -164,14 +263,28 @@ export async function POST(req: NextRequest) {
 
     const isAgePending = flagCheckResult.pending
 
+    // ── 3c. Resolver favoriteClubDisplayName via constante local ─────────────
+    const favoriteClubDisplayName = CLUB_DISPLAY_NAMES[favoriteClub] ?? null
+
+    // ── 4. Hash da senha (bcrypt) ─────────────────────────────────────────────
+    // Auth.js v5 Credentials provider compara via bcrypt em src/lib/auth-credentials.ts.
+    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS)
+
     // ── 5. Pré-gerar código de afiliado para o novo usuário ───────────────────
-    const newAffiliateCode = await generateUniqueAffiliateCode(name, async (code) => {
+    // ID-006: generate-then-create e TOCTOU. Tratamos colisao via retry com
+    // reseed (ate AFFILIATE_CODE_RETRY tentativas). A unicidade DEFINITIVA
+    // continua sendo a constraint do banco (P2002 capturado abaixo).
+    let newAffiliateCode = await generateUniqueAffiliateCode(name, async (code) => {
       const existing = await prisma.affiliateCode.findUnique({ where: { code } })
       return !!existing
     })
 
-    // ── 6. Saga Prisma: tudo numa única transaction ───────────────────────────
-    const user = await prisma.$transaction(async (tx) => {
+    // ── 6. Saga Prisma: tudo numa única transaction com retry de colisao ──────
+    // ID-009 (Codex): isolation level Serializable fecha a janela onde dois
+    // requests concorrentes com mesmo `referredByCode` leem `active: true` e
+    // ambos creditam SIGNUP. Combinado com a uniqueness implicita (P2002 em
+    // email/cpf) + retry-loop externo, garante creditacao exatamente-uma-vez.
+    const runRegistrationTx = async () => prisma.$transaction(async (tx) => {
       // 6a. Validar referral DENTRO da transaction (evita race condition T7)
       let referrerAffiliateCodeId: string | null = null
       let referrerUserId: string | null = null
@@ -186,13 +299,9 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // 6b. Criar User
-      // O register publico so cria players (NORMAL/TIME_PARCEIRO/INFLUENCIADOR — todos
-      // operam como player). Staff (ADMIN/CLUB_PARTNER) so e criado via seed ou /admin/admins.
-      // Logo, todos os usuarios criados aqui recebem planType=JOGADOR.
+      // 6b. Criar User — ID gerado por Prisma cuid (default no schema).
       const newUser = await tx.user.create({
         data: {
-          id: supabaseUserId!,
           email,
           cpfHash,
           name,
@@ -200,8 +309,11 @@ export async function POST(req: NextRequest) {
           birthDate: new Date(birthDate),
           favoriteClub,
           favoriteClubDisplayName,
-          userType: userType ?? 'NORMAL',
+          // ID-NEW-002: userType e SEMPRE NORMAL no fluxo publico. Promocao
+          // para TIME_PARCEIRO/INFLUENCIADOR e admin-side (rota separada).
+          userType: 'NORMAL',
           planType: 'JOGADOR',
+          passwordHash,
           referredByCode: referrerAffiliateCodeId ? referredByCode : null,
           investorProfile: 'INICIANTE',
           ageVerificationPending: isAgePending,
@@ -266,9 +378,69 @@ export async function POST(req: NextRequest) {
       }
 
       return newUser
-    })
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
 
-    prismaCommitted = true
+    let user: Awaited<ReturnType<typeof runRegistrationTx>>
+    let attempt = 0
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      attempt++
+      try {
+        user = await runRegistrationTx()
+        break
+      } catch (txErr) {
+        // ID-009 (Codex): Serializable pode levantar 40001 (Postgres
+        // serialization_failure). Prisma surface-a como P2034 ou
+        // PrismaClientUnknownRequestError. Retry ate AFFILIATE_CODE_RETRY
+        // (mesmo cap usado para colisao de codigo) — eventos raros, sem
+        // backoff (transaction inteira ja pagou bcrypt(12) so 1x).
+        if (
+          txErr instanceof Prisma.PrismaClientKnownRequestError &&
+          (txErr.code === 'P2034' || (txErr.meta?.code === '40001'))
+        ) {
+          if (attempt < AFFILIATE_CODE_RETRY) continue
+          throw txErr
+        }
+        if (
+          txErr instanceof Prisma.PrismaClientKnownRequestError &&
+          txErr.code === 'P2002'
+        ) {
+          const target = (txErr.meta?.target as string[] | string | undefined) ?? ''
+          const targetStr = Array.isArray(target) ? target.join(',') : target
+
+          // Colisao no codigo de afiliado: regera e retenta (ID-006).
+          if (targetStr.includes('code') && attempt < AFFILIATE_CODE_RETRY) {
+            newAffiliateCode = await generateUniqueAffiliateCode(name, async (code) => {
+              const existing = await prisma.affiliateCode.findUnique({ where: { code } })
+              return !!existing
+            })
+            continue
+          }
+
+          // Colisao em email/cpfHash: outro request venceu a race (ID-002).
+          // Retorna 409 controlado em vez de 500. Pre-checks ja deram dummy
+          // bcrypt, mas em race o path agora gastou bcrypt.hash real;
+          // aceitavel pois e evento raro (apenas concorrencia).
+          if (targetStr.includes('email')) {
+            const res = NextResponse.json(
+              { success: false, error: { code: ERROR_CODES.AUTH_004, message: ERROR_MESSAGES['AUTH-004'] } },
+              { status: 409 },
+            )
+            applyRateLimitHeaders(res, rlInfo)
+            return res
+          }
+          if (targetStr.includes('cpf')) {
+            const res = NextResponse.json(
+              { success: false, error: { code: ERROR_CODES.AUTH_003, message: ERROR_MESSAGES['AUTH-003'] } },
+              { status: 409 },
+            )
+            applyRateLimitHeaders(res, rlInfo)
+            return res
+          }
+        }
+        throw txErr
+      }
+    }
 
     // EVT-003: Cadastro Concluido (server-side)
     const hasAnalyticsConsent = consents.analytics === true
@@ -344,9 +516,14 @@ export async function POST(req: NextRequest) {
       ).catch((notifErr: unknown) => console.error('[register] Falha ao notificar AGE_VERIFICATION_PENDING:', notifErr))
     }
 
-    // ── 7. Sessão inicial ─────────────────────────────────────────────────────
-    const { data: sessionData } = await supabase.auth.signInWithPassword({ email, password })
-
+    // ── 7. Resposta (sem sessao) ──────────────────────────────────────────────
+    // Frontend faz signIn via /api/v1/auth/login (mesmo path do login-form), que
+    // chama authorizeCredentials -> bcrypt.compare -> setCookie Auth.js v5.
+    // ID-004 (Codex): nao expor `method` (flagcheck|self_declaration) nem
+    // `verified` no payload publico — leak de cobertura do provider FlagCheck
+    // (atacante aprende se CPF esta na base do provedor). Frontend so precisa
+    // saber se ha pendencia para mostrar banner; detalhe vem por endpoint
+    // autenticado posterior.
     const res = NextResponse.json(
       {
         success: true,
@@ -358,39 +535,24 @@ export async function POST(req: NextRequest) {
             planType: user.planType,
             affiliateCode: newAffiliateCode,
           },
-          session: sessionData.session
-            ? {
-                access_token: sessionData.session.access_token,
-                refresh_token: sessionData.session.refresh_token,
-              }
-            : null,
           requiresOnboarding: true,
-          ageVerification: {
-            method: flagCheckResult.method,
-            verified: flagCheckResult.verified,
-            pending: isAgePending,
-          },
+          ageVerificationPending: isAgePending,
         },
       },
       { status: 201 }
     )
     applyRateLimitHeaders(res, rlInfo)
     return res
+
+    } finally {
+      // ID-005 / ID-NEW-003: libera ambos os locks (email + cpf) independe de
+      // sucesso/erro. Em crash, TTL Redis garante self-heal. Ordem reversa
+      // da aquisicao para simetria (cpf -> email).
+      await lockCpf.release()
+      await lockEmail.release()
+    }
   } catch (err) {
     console.error('[register] Erro interno:', (err as Error).message)
-
-    if (supabaseUserId && !prismaCommitted) {
-      try {
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-        const supabase = createClient(supabaseUrl, supabaseServiceKey)
-        await supabase.auth.admin.deleteUser(supabaseUserId)
-        console.info('[register] Compensação: usuário Supabase removido após falha Prisma', supabaseUserId)
-      } catch (compensationErr) {
-        console.error('[register] CRÍTICO: falha na compensação Supabase:', (compensationErr as Error).message)
-      }
-    }
-
     const res = NextResponse.json(
       { success: false, error: { code: ERROR_CODES.SYS_001, message: ERROR_MESSAGES['SYS-001'] } },
       { status: 500 }

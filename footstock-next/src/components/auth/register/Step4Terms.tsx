@@ -4,7 +4,6 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { createBrowserClient } from '@supabase/ssr'
 import { Button } from '@/components/ui/button'
 import { ROUTES } from '@/lib/constants/routes'
 import type { WizardData } from '../register-wizard'
@@ -103,18 +102,29 @@ export function Step4Terms({ data, onComplete }: Step4Props) {
         return
       }
 
-      // Persistir sessão Supabase nos cookies do browser (espelha padrão do login-form)
-      if (json.data.session) {
-        const supabase = createBrowserClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        )
-        await supabase.auth.setSession({
-          access_token: json.data.session.access_token,
-          refresh_token: json.data.session.refresh_token,
-        })
+      // Auth.js v5 — abrir sessao via /api/v1/auth/login (mesmo path do login-form).
+      // Em dev usa /api/v1/auth/dev-login (espelha LoginForm.performLogin).
+      const isDev = process.env.NODE_ENV !== 'production'
+      const loginEndpoint = isDev ? '/api/v1/auth/dev-login' : '/api/v1/auth/login'
+      const loginRes = await fetch(loginEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: data.email, password: data.password }),
+      })
+      const loginJson = await loginRes.json()
+      if (!loginRes.ok || loginJson.error) {
+        // Conta criada mas signIn falhou — usuario consegue fazer login manualmente.
+        toast.error('Conta criada, mas houve um problema ao iniciar a sessão. Por favor, faça login.')
+        setTimeout(() => router.replace(ROUTES.LOGIN), 1500)
+        return
       }
 
+      // ID-008 (Codex): cookie fs-admin-role NAO e setado aqui porque novos
+      // usuarios sempre saem do register com planType=JOGADOR e adminRole=null
+      // (vide src/app/api/v1/auth/register/route.ts §6b). O middleware lera
+      // ausencia do cookie como "user comum" — comportamento correto. Login
+      // posterior (rota /api/v1/auth/login) e o ponto canonico para setar o
+      // cookie quando aplicavel.
       const finalData = { ...data, consents }
       onComplete(finalData)
       toast.success('Conta criada com sucesso! Bem-vindo ao FootStock.')

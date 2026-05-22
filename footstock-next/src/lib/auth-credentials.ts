@@ -78,6 +78,13 @@ export async function authorizeCredentials(
   const ok = await bcrypt.compare(password, user.passwordHash)
   if (!ok) return null
 
+  // ID-NEW-001 (Codex round 2): negar autenticacao para usuarios nao-ACTIVE.
+  // Estado canonico em prisma.user.status (UserStatus: ACTIVE | SUSPENDED |
+  // BANNED). Banido/suspenso com senha correta NAO deve obter cookie de sessao.
+  // O timing ja esta equalizado (bcrypt.compare ocorreu acima); negar aqui nao
+  // expoe diferencial sobre o caminho de senha errada.
+  if ((user.status as string | null) !== 'ACTIVE') return null
+
   return {
     id: user.id,
     email: user.email,
