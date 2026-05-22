@@ -6,7 +6,7 @@
  * SLO: p95 < 500ms, p99 < 1000ms
  *
  * Criticidade: Média-Alta — Tab 4 do app; resposta cacheada no Redis (TTL 5min)
- * Gargalo potencial: cache miss força query no banco + classificação Haiku
+ * Gargalo potencial: cache miss força query no banco + classificação Sonnet
  * Nota: agregação RSS ocorre a cada 5 minutos no footstock-news-server (serviço separado)
  *
  * Uso:

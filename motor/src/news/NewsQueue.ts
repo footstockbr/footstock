@@ -4,7 +4,7 @@
 // Rastreabilidade: INT-046
 // ============================================================================
 
-/** Item bruto de notícia antes da classificação Haiku */
+/** Item bruto de notícia antes da classificação Sonnet */
 export interface RawNewsItem {
   url: string
   title: string

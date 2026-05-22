@@ -34,7 +34,7 @@ const makeRawItem = (): RawNewsItem => ({
   publishedAt: new Date().toISOString(),
 })
 
-const haikusResponse = (json: object) => ({
+const sonnetsResponse = (json: object) => ({
   content: [{ type: 'text', text: JSON.stringify(json) }],
 })
 
@@ -45,14 +45,14 @@ describe('NewsClassifier', () => {
   beforeEach(async () => {
     redis = new RedisMock() as unknown as Redis
     // Inicializar token bucket
-    await (redis as any).set('news:haiku:tokens', 60, 'EX', 60)
+    await (redis as any).set('news:sonnet:tokens', 60, 'EX', 60)
     classifier = new NewsClassifier(redis)
     mockCreate.mockReset()
     jest.clearAllMocks()
   })
 
   test('[SUCCESS] classificação normal retorna dados corretos', async () => {
-    mockCreate.mockResolvedValue(haikusResponse({
+    mockCreate.mockResolvedValue(sonnetsResponse({
       ticker: 'FLM', sentiment: 0.8, impactCategory: 'RESULTADO_ESPORTIVO', relevance: 0.9,
     }))
 
@@ -75,8 +75,8 @@ describe('NewsClassifier', () => {
     expect(mockCreate).toHaveBeenCalledTimes(1) // sem retry
   })
 
-  test('[ERROR — Rate limit RATE_001] lança RateLimitError sem chamar Haiku', async () => {
-    await (redis as any).set('news:haiku:tokens', 0)
+  test('[ERROR — Rate limit RATE_001] lança RateLimitError sem chamar Sonnet', async () => {
+    await (redis as any).set('news:sonnet:tokens', 0)
 
     await expect(classifier.classify(makeRawItem())).rejects.toThrow(RateLimitError)
     expect(mockCreate).not.toHaveBeenCalled()
@@ -97,7 +97,7 @@ describe('NewsClassifier', () => {
     mockCreate
       .mockRejectedValueOnce(new Error('Network error'))
       .mockRejectedValueOnce(new Error('Network error'))
-      .mockResolvedValue(haikusResponse({ ticker: 'PLM', sentiment: 0.5, impactCategory: 'CONTRATACAO', relevance: 0.7 }))
+      .mockResolvedValue(sonnetsResponse({ ticker: 'PLM', sentiment: 0.5, impactCategory: 'CONTRATACAO', relevance: 0.7 }))
 
     const result = await classifier.classify(makeRawItem())
     expect(result.ticker).toBe('PLM')
@@ -105,7 +105,7 @@ describe('NewsClassifier', () => {
   }, 10_000)
 
   test('[SUCCESS] sentiment clampado para [-1, 1]', async () => {
-    mockCreate.mockResolvedValue(haikusResponse({
+    mockCreate.mockResolvedValue(sonnetsResponse({
       ticker: 'GRM', sentiment: 1.5, impactCategory: 'RESULTADO_ESPORTIVO', relevance: 0.5,
     }))
 
@@ -115,7 +115,7 @@ describe('NewsClassifier', () => {
   })
 
   test('[SUCCESS] relevance clampada para [0, 1]', async () => {
-    mockCreate.mockResolvedValue(haikusResponse({
+    mockCreate.mockResolvedValue(sonnetsResponse({
       ticker: 'INT', sentiment: 0.3, impactCategory: 'CONTRATACAO', relevance: 2.0,
     }))
 
@@ -125,7 +125,7 @@ describe('NewsClassifier', () => {
   })
 
   test('[EDGE — content type !== text] ternário retorna string vazia → fallback', async () => {
-    // Haiku retorna bloco do tipo 'tool_use' em vez de 'text'
+    // Sonnet retorna bloco do tipo 'tool_use' em vez de 'text'
     mockCreate.mockResolvedValue({
       content: [{ type: 'tool_use', input: {} }],
     })
@@ -138,7 +138,7 @@ describe('NewsClassifier', () => {
 
   test('[EDGE — campos JSON com tipos incorretos] usa valores padrão', async () => {
     // Todos os campos com tipos errados — cobre os branches false dos typeof
-    mockCreate.mockResolvedValue(haikusResponse({
+    mockCreate.mockResolvedValue(sonnetsResponse({
       ticker: 42,       // not string
       sentiment: 'alto', // not number
       impactCategory: 'RESULTADO_ESPORTIVO', // valid string
@@ -153,16 +153,16 @@ describe('NewsClassifier', () => {
 
   test('[INFRA — bucket inexistente] checkRateLimit cria chave automaticamente', async () => {
     // Remover a chave criada no beforeEach
-    await (redis as any).del('news:haiku:tokens')
+    await (redis as any).del('news:sonnet:tokens')
 
-    mockCreate.mockResolvedValue(haikusResponse({
+    mockCreate.mockResolvedValue(sonnetsResponse({
       ticker: 'FLM', sentiment: 0.5, impactCategory: 'RESULTADO_ESPORTIVO', relevance: 0.8,
     }))
 
     const result = await classifier.classify(makeRawItem())
     expect(result.ticker).toBe('FLM')
     // Chave criada com 60 e depois decrementada em 1 = 59
-    const tokens = await (redis as any).get('news:haiku:tokens')
+    const tokens = await (redis as any).get('news:sonnet:tokens')
     expect(parseInt(tokens)).toBe(59)
   })
 
@@ -170,7 +170,7 @@ describe('NewsClassifier', () => {
     const mockPublisher = { publish: jest.fn().mockResolvedValue(undefined) }
     const item = makeRawItem()
 
-    mockCreate.mockResolvedValue(haikusResponse({
+    mockCreate.mockResolvedValue(sonnetsResponse({
       ticker: 'CRC', sentiment: 0.6, impactCategory: 'RESULTADO_ESPORTIVO', relevance: 0.7,
     }))
 
@@ -193,7 +193,7 @@ describe('NewsClassifier', () => {
     const item = makeRawItem()
 
     // Zerar tokens para forçar RateLimitError
-    await (redis as any).set('news:haiku:tokens', 0)
+    await (redis as any).set('news:sonnet:tokens', 0)
 
     while (!newsQueue.isEmpty()) newsQueue.dequeue()
     newsQueue.enqueue(item)
@@ -213,7 +213,7 @@ describe('NewsClassifier', () => {
     }
     const item = makeRawItem()
 
-    mockCreate.mockResolvedValue(haikusResponse({
+    mockCreate.mockResolvedValue(sonnetsResponse({
       ticker: 'FLU', sentiment: -0.3, impactCategory: 'LESAO', relevance: 0.5,
     }))
 

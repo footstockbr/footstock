@@ -1,6 +1,6 @@
 // ============================================================================
 // Foot Stock Motor — NewsClassifier
-// Classifica notícias via Claude Haiku: ticker, impactCategory, sentiment, relevance.
+// Classifica notícias via Claude Sonnet: ticker, impactCategory, sentiment, relevance.
 // Rate limiting por token bucket Redis (60 req/min).
 // Rastreabilidade: INT-047, INT-128
 // ============================================================================
@@ -35,7 +35,7 @@ const CLASSIFICATION_FALLBACK: ClassifiedNews = {
 // Rate limit config
 // ---------------------------------------------------------------------------
 
-const RATE_LIMIT_KEY = 'news:haiku:tokens'
+const RATE_LIMIT_KEY = 'news:sonnet:tokens'
 const RATE_LIMIT_MAX = 60
 const RATE_LIMIT_TTL = 60 // segundos
 
@@ -121,7 +121,7 @@ export class NewsClassifier {
     const tokens = await this.redis.decr(RATE_LIMIT_KEY)
     if (tokens < 0) {
       await this.redis.incr(RATE_LIMIT_KEY) // reverter decrement
-      throw new RateLimitError('RATE_001', 'Rate limit Haiku excedido (60 req/min)')
+      throw new RateLimitError('RATE_001', 'Rate limit Sonnet excedido (60 req/min)')
     }
   }
 
@@ -168,7 +168,7 @@ Responda SOMENTE com JSON no formato:
     try {
       const response = await this.anthropic.messages.create(
         {
-          model: 'claude-haiku-4-5',
+          model: 'claude-sonnet-4-5',
           max_tokens: 150,
           messages: [{ role: 'user', content: this.buildPrompt(item) }],
         },
@@ -193,7 +193,7 @@ Responda SOMENTE com JSON no formato:
         }
       } catch {
         // JSON mal-formado — fallback imediato (sem retry)
-        logger.warn(`[NewsClassifier] Resposta Haiku não é JSON válido — aplicando fallback`)
+        logger.warn(`[NewsClassifier] Resposta Sonnet não é JSON válido — aplicando fallback`)
         return { ...CLASSIFICATION_FALLBACK }
       }
     } catch (err) {
@@ -205,7 +205,7 @@ Responda SOMENTE com JSON no formato:
         return this.classify(item, attempt + 1)
       }
 
-      logger.error(`[SYS_002] Haiku API indisponível após 3 tentativas: ${(err as Error).message}`)
+      logger.error(`[SYS_002] Sonnet API indisponível após 3 tentativas: ${(err as Error).message}`)
       return { ...CLASSIFICATION_FALLBACK }
     }
   }

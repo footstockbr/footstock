@@ -3945,7 +3945,7 @@ function MainApp({onExit,user,initialBalance=2000,onUpgrade,planDueDate=null}){
 
   /* ══════════════════════════════════════════════════
      BUSCA DE NOTÍCIAS EM SEGUNDO PLANO
-     Consome o backend FootStock News API (RSS + Claude Haiku)
+     Consome o backend FootStock News API (RSS + Claude Sonnet)
      em vez de chamar a API Anthropic diretamente do frontend.
      Intervalo: 10 minutos (alinhado com o polling do backend).
      Primeira busca: 3s após mount.
