@@ -29,6 +29,18 @@ function errorResponse(code: string, message: string, status: number) {
   return NextResponse.json({ success: false, error: { code, message } }, { status })
 }
 
+// E2E-2026-05-22: descobri via E2E que GET /api/v1/me ecoava `user` inteiro,
+// incluindo passwordHash (bcrypt) e cpfHash. Causa raiz: middleware carrega
+// prisma.user.findUnique() sem select, e cada handler tinha que se lembrar
+// de stripar. Defesa em profundidade: stripar AQUI antes de entregar ao
+// handler. Qualquer rota nova que ecoe `user` ja sai limpa.
+function sanitizeUser<T extends Record<string, unknown>>(user: T): Omit<T, 'passwordHash' | 'cpfHash'> {
+  /* eslint-disable @typescript-eslint/no-unused-vars */
+  const { passwordHash: _p, cpfHash: _c, ...safe } = user
+  /* eslint-enable @typescript-eslint/no-unused-vars */
+  return safe as Omit<T, 'passwordHash' | 'cpfHash'>
+}
+
 // ---------------------------------------------------------------------------
 // withAuth — valida sessao Supabase e carrega usuario do BANCO
 // ---------------------------------------------------------------------------
@@ -76,7 +88,7 @@ export function withAuth(handler: RouteHandler) {
                 dbUser.adminRole && dbUser.planType !== null
                   ? await prisma.user.update({ where: { id: dbUser.id }, data: { planType: null } })
                   : dbUser
-              return handler(req, { user: normalizedUser as unknown as User })
+              return handler(req, { user: sanitizeUser(normalizedUser) as unknown as User })
             }
           }
         } catch { /* Auth.js indisponivel — segue para Supabase cookie */ }
@@ -107,7 +119,7 @@ export function withAuth(handler: RouteHandler) {
                 dbUser.adminRole && dbUser.planType !== null
                   ? await prisma.user.update({ where: { id: dbUser.id }, data: { planType: null } })
                   : dbUser
-              const response = await handler(req, { user: normalizedUser as unknown as User })
+              const response = await handler(req, { user: sanitizeUser(normalizedUser) as unknown as User })
               // Apply refreshed session cookies to the response so the browser
               // receives updated tokens (prevents stale token → 401 loop).
               for (const { name, value, options } of pendingCookies) {
@@ -125,7 +137,7 @@ export function withAuth(handler: RouteHandler) {
           if (devAuthEmail) {
             const devUser = await prisma.user.findUnique({ where: { email: devAuthEmail } })
             if (devUser) {
-              return handler(req, { user: devUser as unknown as User })
+              return handler(req, { user: sanitizeUser(devUser) as unknown as User })
             }
           }
         }
@@ -159,7 +171,7 @@ export function withAuth(handler: RouteHandler) {
             })
           : dbUser
 
-      return handler(req, { user: normalizedUser as unknown as User })
+      return handler(req, { user: sanitizeUser(normalizedUser) as unknown as User })
     } catch {
       return errorResponse(ERROR_CODES.SYS_001, ERROR_MESSAGES['SYS-001'], 500)
     }

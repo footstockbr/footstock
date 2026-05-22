@@ -13,8 +13,16 @@ import { updateProfileSchema } from '@/lib/schemas/user.schema'
 import type { UserPublic } from '@/types/models'
 
 async function getHandler(_req: NextRequest, { user }: AuthContext) {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { cpfHash: _cpfHash, ...safeUser } = user as UserPublic & { cpfHash: string }
+  // E2E-2026-05-22: middleware carrega prisma.user.findUnique() sem select,
+  // entao todas as colunas escapam — inclui passwordHash (bcrypt) e cpfHash.
+  // Strip explicito por nome aqui ate o middleware adotar select allowlist.
+  /* eslint-disable @typescript-eslint/no-unused-vars */
+  const {
+    cpfHash: _cpfHash,
+    passwordHash: _passwordHash,
+    ...safeUser
+  } = user as UserPublic & { cpfHash: string; passwordHash?: string }
+  /* eslint-enable @typescript-eslint/no-unused-vars */
   return NextResponse.json({ success: true, data: safeUser as UserPublic })
 }
 
