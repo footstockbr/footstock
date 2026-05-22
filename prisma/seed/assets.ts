@@ -86,11 +86,11 @@ function toSerieBSeed(index: number, ticker: string, displayName: string, realNa
 
 const SERIE_A_CLUBS: ClubSeedData[] = CLUBS
   .filter((club) => club.division === 'SERIE_A')
-  .map((club, index) => toSerieASeed(index, club.ticker, club.name, club.realName))
+  .map((club, index) => toSerieASeed(index, club.ticker, club.displayName, club.realName))
 
 const SERIE_B_CLUBS: ClubSeedData[] = CLUBS
   .filter((club) => club.division === 'SERIE_B')
-  .map((club, index) => toSerieBSeed(index, club.ticker, club.name, club.realName))
+  .map((club, index) => toSerieBSeed(index, club.ticker, club.displayName, club.realName))
 
 export async function seedAssets() {
   if (process.env.NODE_ENV === 'production') {

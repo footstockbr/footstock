@@ -68,7 +68,15 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
 # Copia Prisma engine necessário para runtime
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma/client ./node_modules/@prisma/client
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+
+# Copia Prisma CLI + schema + migrations para permitir `prisma migrate deploy`
+# em pre-deploy (Railway: railway.toml -> [deploy].preDeployCommand).
+# Sem isso, a coluna `players` (M053) e o backfill de `real_name` (M056) nao
+# sao aplicados em producao, e a tela de selecao de clube no cadastro fica com
+# fallback `realName ?? displayName` exibindo nome ficticio.
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 
 USER nextjs
 
