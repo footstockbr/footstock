@@ -1,5 +1,5 @@
 import { Avatar, Badge, Card } from "@/components/ui";
-import { CLUBS } from "@/lib/constants/clubs";
+import { CLUBS_PUBLIC as CLUBS } from "@/lib/constants/clubs-public";
 import type { User } from "@/types";
 
 const INVESTOR_PROFILE_LABELS: Record<string, string> = {

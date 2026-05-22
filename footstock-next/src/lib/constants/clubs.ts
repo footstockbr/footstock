@@ -1,60 +1,87 @@
-export interface ClubOption {
-  ticker: string
-  /** Nome fictício exibido na plataforma após cadastro */
-  displayName: string
-  /** Nome real do clube — exibido APENAS no step 3 de cadastro para ajudar identificação */
-  realName: string
-  division: 'SERIE_A' | 'SERIE_B'
+// ============================================================================
+// CLUBS — Lista completa dos 40 clubes COM realName (server-only).
+//
+// IMPORTANTE: este modulo e server-only via `import 'server-only'`. Importar
+// daqui em qualquer Client Component fara o build do Next.js falhar — exato
+// comportamento desejado para evitar vazar a associacao ticker<->clube real
+// no bundle JS publico.
+//
+// Para uso em Client Components, importar de './clubs-public' (sem realName).
+//
+// Em runtime, a fonte da verdade do realName e o banco (tabela `assets`,
+// coluna `real_name`, populada via migration M056). Esta constante existe
+// como bootstrap/seed snapshot e fallback de derivacao no register API.
+// ============================================================================
+
+// Guardrail server-only manual. Equivalente a `import 'server-only'` mas
+// compativel com Node puro (Prisma seed via tsx) onde o pacote `server-only`
+// lança incondicionalmente sem o resolver custom do Next.js.
+if (typeof window !== 'undefined') {
+  throw new Error(
+    "[clubs.ts] modulo server-only — importe de '@/lib/constants/clubs-public' em Client Components."
+  )
 }
 
-/** 40 clubes do futebol brasileiro (Série A + B) */
-export const CLUBS: ClubOption[] = [
-  // Série A (20 clubes)
-  { ticker: 'URU3', displayName: 'Urubu da Gavea FC',               realName: 'Flamengo',        division: 'SERIE_A' },
-  { ticker: 'POR4', displayName: 'Porco do Parque FC',              realName: 'Palmeiras',       division: 'SERIE_A' },
-  { ticker: 'TIM3', displayName: 'Timão do São Jorge FC',           realName: 'Corinthians',     division: 'SERIE_A' },
-  { ticker: 'TRI4', displayName: 'Tricolor do Morumbi AC',          realName: 'São Paulo',       division: 'SERIE_A' },
-  { ticker: 'GAL3', displayName: 'Galo da Lagoinha FC',             realName: 'Atlético-MG',     division: 'SERIE_A' },
-  { ticker: 'IMO3', displayName: 'Imortal da Arena FC',             realName: 'Grêmio',          division: 'SERIE_A' },
-  { ticker: 'COL3', displayName: 'Colorado do Beira-Rio SC',        realName: 'Internacional',   division: 'SERIE_A' },
-  { ticker: 'GUE4', displayName: 'Guerreiro das Laranjeiras AC',    realName: 'Fluminense',      division: 'SERIE_A' },
-  { ticker: 'BAL4', displayName: 'Baleia da Vila Belmiro SC',       realName: 'Santos',          division: 'SERIE_A' },
-  { ticker: 'MAL4', displayName: 'Cruz de Malta de São Januário SC',realName: 'Vasco da Gama',   division: 'SERIE_A' },
-  { ticker: 'FOG3', displayName: 'Estrela do General Severiano RC', realName: 'Botafogo',        division: 'SERIE_A' },
-  { ticker: 'FUR3', displayName: 'Furacão do Capão da Imbuia FC',   realName: 'Athletico-PR',    division: 'SERIE_A' },
-  { ticker: 'FOR3', displayName: 'Leão do Pici FC',                 realName: 'Fortaleza',       division: 'SERIE_A' },
-  { ticker: 'TRI3', displayName: 'Tricolor da Fonte Nova FC',       realName: 'Bahia',           division: 'SERIE_A' },
-  { ticker: 'RAP3', displayName: 'Raposa do Mineirão FC',           realName: 'Cruzeiro',        division: 'SERIE_A' },
-  { ticker: 'RBB3', displayName: 'Touro do Nabi FC',                realName: 'RB Bragantino',   division: 'SERIE_A' },
-  { ticker: 'CUI3', displayName: 'Dourado do Pantanal FC',          realName: 'Cuiabá',          division: 'SERIE_A' },
-  { ticker: 'VIT3', displayName: 'Leão da Barra FC',                realName: 'Vitória',         division: 'SERIE_A' },
-  { ticker: 'JUV3', displayName: 'Índio da Serra Gaúcha FC',        realName: 'Juventude',       division: 'SERIE_A' },
-  { ticker: 'MIR3', displayName: 'Leãozinho do Maiô FC',            realName: 'Mirassol',        division: 'SERIE_A' },
-  // Série B (20 clubes)
-  { ticker: 'LEI3', displayName: 'Leão da Ilha do Retiro FC',       realName: 'Sport Recife',    division: 'SERIE_B' },
-  { ticker: 'NTL3', displayName: 'Tigre do Vale do Peixe FC',       realName: 'Novorizontino',   division: 'SERIE_B' },
-  { ticker: 'AVA3', displayName: 'Leão da Ilha SC',                 realName: 'Avaí',            division: 'SERIE_B' },
-  { ticker: 'GOI3', displayName: 'Periquito da Serrinha FC',        realName: 'Goiás',           division: 'SERIE_B' },
-  { ticker: 'CHA3', displayName: 'Condá da Arena Verde FC',         realName: 'Chapecoense',     division: 'SERIE_B' },
-  { ticker: 'PON3', displayName: 'Macaca do Majestoso FC',          realName: 'Ponte Preta',     division: 'SERIE_B' },
-  { ticker: 'GUA3', displayName: 'Bugre do Brinco de Ouro FC',      realName: 'Guarani',         division: 'SERIE_B' },
-  { ticker: 'OPE3', displayName: 'Fantasma dos Campos Gerais FC',   realName: 'Operário-PR',     division: 'SERIE_B' },
-  { ticker: 'SAM3', displayName: 'Labirinto da Ilha do Amor FC',    realName: 'Sampaio Corrêa',  division: 'SERIE_B' },
-  { ticker: 'TIS3', displayName: 'Tigre da Serra Dourada FC',       realName: 'Vila Nova',       division: 'SERIE_B' },
-  { ticker: 'LON3', displayName: 'Tubarão do Café FC',              realName: 'Londrina',        division: 'SERIE_B' },
-  { ticker: 'FIG3', displayName: 'Alvinegro da Ressacada FC',       realName: 'Figueirense',     division: 'SERIE_B' },
-  { ticker: 'PAY3', displayName: 'Papão da Curuzu FC',              realName: 'Paysandu',        division: 'SERIE_B' },
-  { ticker: 'CFC3', displayName: 'Vovó Alemão do Couto FC',         realName: 'Coritiba',        division: 'SERIE_B' },
-  { ticker: 'AME3', displayName: 'Coelho do Calafate FC',           realName: 'América-MG',      division: 'SERIE_B' },
-  { ticker: 'BSA3', displayName: 'Pantera da Mogiana FC',           realName: 'Botafogo-SP',     division: 'SERIE_B' },
-  { ticker: 'CRB3', displayName: 'Galo da Pajuçara RC',             realName: 'CRB',             division: 'SERIE_B' },
-  { ticker: 'CSA3', displayName: 'Jacaré do Mutange FC',            realName: 'CSA',             division: 'SERIE_B' },
-  { ticker: 'ITA3', displayName: 'Galo de Itu FC',                  realName: 'Ituano',          division: 'SERIE_B' },
-  { ticker: 'TON3', displayName: 'Gavião do Tombos FC',             realName: 'Tombense',        division: 'SERIE_B' },
-]
+import { CLUBS_PUBLIC, type PublicClub } from './clubs-public'
+
+export interface ClubOption extends PublicClub {
+  /** Nome real do clube — server-only. NUNCA expor em endpoints publicos exceto /clubs-for-selection. */
+  realName: string
+}
+
+const REAL_NAMES: Record<string, string> = {
+  // Serie A
+  URU3: 'Flamengo',
+  POR4: 'Palmeiras',
+  TIM3: 'Corinthians',
+  TRI4: 'São Paulo',
+  GAL3: 'Atlético-MG',
+  IMO3: 'Grêmio',
+  COL3: 'Internacional',
+  GUE4: 'Fluminense',
+  BAL4: 'Santos',
+  MAL4: 'Vasco da Gama',
+  FOG3: 'Botafogo',
+  FUR3: 'Athletico-PR',
+  FOR3: 'Fortaleza',
+  TRI3: 'Bahia',
+  RAP3: 'Cruzeiro',
+  RBB3: 'RB Bragantino',
+  CUI3: 'Cuiabá',
+  VIT3: 'Vitória',
+  JUV3: 'Juventude',
+  MIR3: 'Mirassol',
+  // Serie B
+  LEI3: 'Sport Recife',
+  NTL3: 'Novorizontino',
+  AVA3: 'Avaí',
+  GOI3: 'Goiás',
+  CHA3: 'Chapecoense',
+  PON3: 'Ponte Preta',
+  GUA3: 'Guarani',
+  OPE3: 'Operário-PR',
+  SAM3: 'Sampaio Corrêa',
+  TIS3: 'Vila Nova',
+  LON3: 'Londrina',
+  FIG3: 'Figueirense',
+  PAY3: 'Paysandu',
+  CFC3: 'Coritiba',
+  AME3: 'América-MG',
+  BSA3: 'Botafogo-SP',
+  CRB3: 'CRB',
+  CSA3: 'CSA',
+  ITA3: 'Ituano',
+  TON3: 'Tombense',
+}
+
+/** 40 clubes do futebol brasileiro (Série A + B), com realName server-only. */
+export const CLUBS: ClubOption[] = CLUBS_PUBLIC.map((c) => ({
+  ...c,
+  realName: REAL_NAMES[c.ticker] ?? c.displayName,
+}))
 
 /**
- * Mapeamento ticker → cores primaria/secundaria para uso no seed e UI.
+ * Mapeamento ticker -> cores primaria/secundaria para uso no seed e UI.
  * Cores escolhidas com base na identidade visual aproximada dos clubes reais.
  */
 export const CLUB_COLORS: Record<string, { primary: string; secondary: string }> = {
@@ -103,8 +130,8 @@ export const CLUB_COLORS: Record<string, { primary: string; secondary: string }>
 }
 
 /**
- * Mapeamento ticker → displayName (nome fictício usado na plataforma após cadastro).
- * O nome real do clube é exibido APENAS na tela de seleção do cadastro.
+ * Mapeamento ticker -> displayName (nome ficticio usado na plataforma após cadastro).
+ * O nome real do clube e exibido APENAS na tela de seleção do cadastro.
  */
 export const CLUB_DISPLAY_NAMES: Record<string, string> = {
   URU3: 'Urubu da Gavea FC',

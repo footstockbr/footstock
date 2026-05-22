@@ -8,7 +8,7 @@ import { Newspaper } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { CLUBS } from '@/lib/constants/clubs'
+import { CLUBS_PUBLIC as CLUBS } from '@/lib/constants/clubs-public'
 
 const CATEGORIES = [
   { value: 'ESPORTIVA_MAJORITARIA', label: 'Esportiva Majoritária (+/-3%)' },

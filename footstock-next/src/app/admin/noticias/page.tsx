@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Lock } from 'lucide-react'
 import { IMPACT_CATEGORY_LABELS, IMPACT_CATEGORY_OPTIONS, SENTIMENT_HEX_COLORS, SENTIMENT_LABELS, SENTIMENT_OPTIONS } from '@/lib/constants/admin-ui'
-import { CLUBS } from '@/lib/constants/clubs'
+import { CLUBS_PUBLIC as CLUBS } from '@/lib/constants/clubs-public'
 
 interface NewsItem {
   id: string

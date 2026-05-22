@@ -4,8 +4,8 @@
 // Fonte: module-18/TASK-7/ST005
 // ============================================================================
 
-import { CLUBS } from '@/lib/constants/clubs'
+import { CLUBS_PUBLIC } from '@/lib/constants/clubs-public'
 
-export const TICKERS_40 = CLUBS.map((club) => club.ticker) as readonly string[]
+export const TICKERS_40 = CLUBS_PUBLIC.map((club) => club.ticker) as readonly string[]
 
 export type Ticker = (typeof TICKERS_40)[number]

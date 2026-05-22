@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Loader2 } from 'lucide-react'
 import type { AdminNewsFormItem } from '@/lib/types/admin'
-import { CLUBS } from '@/lib/constants/clubs'
+import { CLUBS_PUBLIC as CLUBS } from '@/lib/constants/clubs-public'
 
 const newsFormSchema = z.object({
   title: z.string().min(1, 'Título é obrigatório').max(200, 'Máximo 200 caracteres'),
