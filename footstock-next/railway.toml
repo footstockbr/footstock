@@ -23,7 +23,11 @@ dockerfilePath = "Dockerfile"
 # `prisma migrate deploy` e idempotente: aplica apenas migrations pendentes em
 # /prisma/migrations/ (timestamped folders). M056 (backfill real_name) e M053
 # (coach_name + players) sao as duas pendentes em prod desde 2026-05-22.
-preDeployCommand = "node ./node_modules/prisma/build/index.js migrate deploy"
+# GUARDRAIL primeiro deploy: `id &&` registra usuario efetivo no log Railway
+# para confirmar que o container roda como `nextjs` (uid 1001) e tem acesso a
+# /migrations. Apos o primeiro deploy bem-sucedido, remover o `id && ` (a doc
+# Railway nao garante explicitamente que pre-deploy respeite USER do Dockerfile).
+preDeployCommand = "id && cd /migrations && node ./node_modules/prisma/build/index.js migrate deploy"
 startCommand = "node server.js"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 30

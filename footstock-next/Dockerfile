@@ -66,17 +66,26 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
-# Copia Prisma engine necessário para runtime
+# Prisma runtime para o server.js (cliente gerado + bin).
+# Identico ao Dockerfile original que ja funcionava em prod.
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma/client ./node_modules/@prisma/client
 
-# Copia Prisma CLI + schema + migrations para permitir `prisma migrate deploy`
-# em pre-deploy (Railway: railway.toml -> [deploy].preDeployCommand).
-# Sem isso, a coluna `players` (M053) e o backfill de `real_name` (M056) nao
-# sao aplicados em producao, e a tela de selecao de clube no cadastro fica com
-# fallback `realName ?? displayName` exibindo nome ficticio.
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+# Migration toolkit ISOLADO em /migrations — evita conflito com o subset de
+# node_modules que o Next.js standalone empacota em ./node_modules/. Prisma CLI
+# tem deps fora do escopo @prisma/ (c12, deepmerge-ts, effect, empathic, jiti,
+# etc) que precisam estar disponiveis quando preDeployCommand rodar.
+#
+# preDeployCommand no Railway (railway.toml) precisa de `cd /migrations` antes
+# de chamar o binario. Layout:
+#   /migrations/
+#     ├── prisma/           (schema + migrations/)
+#     ├── prisma.config.js
+#     └── node_modules/     (prod-only, full tree)
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules /migrations/node_modules
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma /migrations/node_modules/.prisma
+COPY --from=builder --chown=nextjs:nodejs /app/prisma /migrations/prisma
+COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.js /migrations/prisma.config.js
 
 USER nextjs
 
