@@ -2,14 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import * as Sentry from '@sentry/nextjs'
 import { encode } from '@auth/core/jwt'
-import { supabaseAdmin } from '@/lib/supabase'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
 import { serializeUser } from '@/lib/auth'
-import {
-  authorizeCredentials,
-  backfillPasswordHash,
-} from '@/lib/auth-credentials'
+import { authorizeCredentials } from '@/lib/auth-credentials'
 import { getLoginIpRateLimit } from '@/lib/ratelimit'
 import { emailNotificationService } from '@/lib/services/EmailNotificationService'
 import { getRedisClient } from '@/lib/redis'
@@ -59,7 +55,7 @@ function buildRlInfo(failCount: number, failTtlSeconds: number): RateLimitInfo {
   }
 }
 
-type LoginPath = 'authjs' | 'supabase_fallback' | 'fail'
+type LoginPath = 'authjs' | 'fail'
 
 /**
  * Codex P1#3 (2026-05-23): browsers nao precisam do access_token no JSON —
@@ -245,63 +241,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ─── 5b. Supabase fallback (gated por FEATURE_AUTH_SUPABASE_FALLBACK) ─────
-    const fallbackEnabled = process.env.FEATURE_AUTH_SUPABASE_FALLBACK === 'true'
-    let backfillUser: { id: string } | null = null
-
-    if (fallbackEnabled) {
-      const candidate = await prisma.user.findUnique({
-        where: { email },
-        select: { id: true, passwordHash: true, status: true },
-      })
-      // Elegivel apenas quando user existe E ainda nao tem passwordHash E
-      // status=ACTIVE. ID-NEW-004 (Codex round 3): sem o check de status,
-      // user SUSPENDED/BANNED com hash null + senha Supabase valida ainda
-      // conseguiria sessao via fallback. Espelha o gate de authorizeCredentials
-      // (src/lib/auth-credentials.ts) que ja bloqueia non-ACTIVE no path direto.
-      if (
-        candidate &&
-        candidate.passwordHash == null &&
-        (candidate.status as string | null) === 'ACTIVE'
-      ) {
-        const { data: authData, error: authError } = await supabaseAdmin.auth.signInWithPassword({
-          email,
-          password,
-        })
-
-        if (!authError && authData.session && authData.user) {
-          path = 'supabase_fallback'
-          backfillUser = { id: candidate.id }
-
-          // fire-and-forget: nao bloqueia o response. Erro/sucesso e silencioso,
-          // visivel apenas em Sentry via breadcrumb sincrono (data.backfill_applied
-          // reflete intencao; o ack real fica no proximo login do mesmo user).
-          backfillApplied = true
-          void backfillPasswordHash(candidate.id, password)
-
-          const dbUser = await prisma.user.findUnique({ where: { id: authData.user.id } })
-          if (dbUser) {
-            emitLoginBreadcrumb('supabase_fallback', backfillApplied)
-            const echoToken = wantsTokenInBody(request)
-            const res = ok({
-              user: serializeUser(dbUser),
-              session: {
-                access_token: echoToken ? authData.session.access_token : null,
-                refresh_token: echoToken ? authData.session.refresh_token : null,
-                expires_at: authData.session.expires_at,
-                access_token_in_body: echoToken,
-              },
-              requiresOnboarding: !dbUser.tourCompleted,
-            })
-            applyRateLimitHeaders(res, rlInfo)
-            return res
-          }
-          // dbUser ausente: cai para fail abaixo
-          path = 'fail'
-          backfillApplied = false
-        }
-      }
-    }
+    // Tech debt #33 (2026-05-23): Supabase fallback removido. Apenas Auth.js.
+    // Users sem passwordHash devem usar /esqueci-senha (magic link reset).
 
     // ─── 6. Autenticação falhou: incrementar contador de falhas ───────────────
     if (r) {
