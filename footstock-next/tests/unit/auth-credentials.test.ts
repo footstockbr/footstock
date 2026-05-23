@@ -85,7 +85,7 @@ describe('authorizeCredentials', () => {
     mockFindUnique.mockResolvedValueOnce({
       id: 'u3', email: 'a@b.com', passwordHash: hash,
       name: 'A', adminRole: 'SUPERADMIN', planType: 'LENDA',
-      userType: 'ADMIN', favoriteClub: 'FLAM',
+      userType: 'ADMIN', favoriteClub: 'FLAM', status: 'ACTIVE',
     })
     const out = await authorizeCredentials({ email: 'a@b.com', password: 'correct-horse' })
     expect(out).toEqual({

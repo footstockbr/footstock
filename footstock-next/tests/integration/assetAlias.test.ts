@@ -271,11 +271,12 @@ describe('T-024 — CLUBS constant', () => {
   })
 
   it('CLUBS array popula realName para todos os clubes', () => {
+    // Pos-refactor: CLUBS deriva realName do mapa REAL_NAMES (Record<ticker, name>).
+    // Contar entradas do mapa em vez de literais `realName:` no arquivo.
     const content = fs.readFileSync(path.join(WORKSPACE, FILE), 'utf-8')
-    // Contar entradas com realName
-    const realNameMatches = content.match(/realName:/g)
-    expect(realNameMatches).not.toBeNull()
-    expect(realNameMatches!.length).toBeGreaterThanOrEqual(40)
+    const realNameEntries = content.match(/^\s+[A-Z]{3}[34]:\s+'/gm)
+    expect(realNameEntries).not.toBeNull()
+    expect(realNameEntries!.length).toBeGreaterThanOrEqual(40)
   })
 })
 

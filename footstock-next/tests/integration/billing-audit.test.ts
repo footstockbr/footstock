@@ -140,7 +140,7 @@ describe('ST001: Checkout — Upgrade de Plano', () => {
     const body = await res.json()
 
     expect(res.status).toBe(422)
-    expect(body.error.code).toBe('VAL_001')
+    expect(body.error.code).toBe('VAL-001')
   })
 
   test('POST /api/v1/payments/checkout para plano já ativo retorna 409 (PAYMENT_002)', async () => {
@@ -462,8 +462,9 @@ describe('ST006: Restrições de Features — Códigos corretos por feature (US-
 
     expect(res.status).toBe(403)
     expect(body.error).toBeDefined()
-    // O código pode ser AUTH_003 ou AI_050 dependendo da implementação
-    expect(['AUTH_003', 'AI_050']).toContain(body.error.code)
+    // Wire format hifen pos tech debt #29 (2026-05-23): AUTH-002 (forbidden generico)
+    // ou AI_050 (codigo de feature gating). Aceita ambos por compat com tests legados.
+    expect(['AUTH-002', 'AUTH_003', 'AI_050']).toContain(body.error.code)
   })
 
   test('Alinhamento de códigos: ORDER_051 para ordens, LEAGUE_050 para ligas, AI_050 para IA', () => {
