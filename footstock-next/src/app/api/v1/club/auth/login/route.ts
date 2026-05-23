@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
 
   if (authError || !authData.user) {
     return NextResponse.json(
-      { error: { code: 'AUTH_001', message: 'Email ou senha incorretos.' } },
+      { error: { code: 'AUTH-001', message: 'Email ou senha incorretos.' } },
       { status: 401 }
     )
   }

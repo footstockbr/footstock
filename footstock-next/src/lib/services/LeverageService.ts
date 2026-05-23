@@ -48,7 +48,7 @@ export class LeverageService {
     })
 
     if (!user) {
-      return { valid: false, errorCode: 'AUTH_001', message: 'Usuário não encontrado.' }
+      return { valid: false, errorCode: 'AUTH-001', message: 'Usuário não encontrado.' }
     }
 
     // Staff (ADMIN / CLUB_PARTNER): não opera ordens, logo não pode alavancar.

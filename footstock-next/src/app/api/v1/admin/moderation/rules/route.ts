@@ -21,7 +21,7 @@ const PatchSchema = z.object({
 export async function GET() {
   const auth = await getAuthUser()
   if (!auth) {
-    return NextResponse.json({ error: { code: 'AUTH_010', message: 'Não autorizado.' } }, { status: 401 })
+    return NextResponse.json({ error: { code: 'AUTH-010', message: 'Não autorizado.' } }, { status: 401 })
   }
   if (!hasAdminRole(auth.user.adminRole, 'MODERADOR')) {
     return NextResponse.json({ error: { code: 'ADMIN_050', message: 'Permissão insuficiente.' } }, { status: 403 })
@@ -39,7 +39,7 @@ export async function GET() {
 export async function PATCH(req: NextRequest) {
   const auth = await getAuthUser()
   if (!auth) {
-    return NextResponse.json({ error: { code: 'AUTH_010', message: 'Não autorizado.' } }, { status: 401 })
+    return NextResponse.json({ error: { code: 'AUTH-010', message: 'Não autorizado.' } }, { status: 401 })
   }
   if (!hasAdminRole(auth.user.adminRole, 'SUPER_ADMIN')) {
     return NextResponse.json(

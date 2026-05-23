@@ -46,7 +46,7 @@ async function banHandler(req: NextRequest, { user }: AuthContext): Promise<Next
 
   if (targetId === user.id) {
     return NextResponse.json(
-      { success: false, error: { code: 'AUTH_003', message: 'Não é possível banir a própria conta' } },
+      { success: false, error: { code: 'ADMIN-053', message: 'Não é possível banir a própria conta' } },
       { status: 403 },
     )
   }
@@ -65,7 +65,7 @@ async function banHandler(req: NextRequest, { user }: AuthContext): Promise<Next
 
   if (target.adminRole) {
     return NextResponse.json(
-      { success: false, error: { code: 'AUTH_004', message: 'Não é possível banir contas administrativas' } },
+      { success: false, error: { code: 'ADMIN-054', message: 'Não é possível banir contas administrativas' } },
       { status: 403 },
     )
   }

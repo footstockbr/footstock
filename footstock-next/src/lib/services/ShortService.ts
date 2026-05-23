@@ -33,7 +33,7 @@ export class ShortService {
     currentPrice: number,
   ): Promise<Position> {
     const user = await prisma.user.findUnique({ where: { id: userId } })
-    if (!user) throw new AppError('AUTH_001', 401)
+    if (!user) throw new AppError('AUTH-001', 401)
 
     // Staff (ADMIN / CLUB_PARTNER) não opera ordens — nem short, nem long.
     if (user.userType === 'ADMIN' || user.userType === 'CLUB_PARTNER' || !user.planType) {

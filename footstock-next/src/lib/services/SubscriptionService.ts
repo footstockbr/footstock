@@ -143,7 +143,7 @@ export class SubscriptionService extends BaseService {
 
     if (user?.adminRole) {
       throw Object.assign(new Error('Contas administrativas não podem criar assinatura.'), {
-        code: 'AUTH_009',
+        code: 'AUTH-009',
         statusCode: 403,
       })
     }

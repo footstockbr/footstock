@@ -20,7 +20,7 @@ export const POST = withAuth(async (req: NextRequest, { user }: AuthContext) => 
   if (user.adminRole) {
     return NextResponse.json(
       {
-        error: 'AUTH_009',
+        error: 'AUTH-009',
         message: 'Contas administrativas não podem contratar assinatura.',
       },
       { status: 403 }

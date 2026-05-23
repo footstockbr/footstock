@@ -64,14 +64,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   if (!auth) {
     return NextResponse.json(
-      { success: false, error: { code: 'AUTH_010', message: 'Sessão inválida' } },
+      { success: false, error: { code: 'AUTH-010', message: 'Sessão inválida' } },
       { status: 401 }
     )
   }
 
   if (!hasAdminRole(auth.user.adminRole, 'ADMINISTRADOR')) {
     return NextResponse.json(
-      { success: false, error: { code: 'AUTH_009', message: 'Acesso negado' } },
+      { success: false, error: { code: 'AUTH-009', message: 'Acesso negado' } },
       { status: 403 }
     )
   }

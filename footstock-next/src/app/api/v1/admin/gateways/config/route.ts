@@ -154,14 +154,14 @@ async function getHandler(req: NextRequest) {
 
   if (!auth) {
     return NextResponse.json(
-      { success: false, error: { code: 'AUTH_010', message: 'Sessão inválida' } },
+      { success: false, error: { code: 'AUTH-010', message: 'Sessão inválida' } },
       { status: 401 }
     )
   }
 
   if (!hasAdminRole(auth.user.adminRole, 'ADMINISTRADOR')) {
     return NextResponse.json(
-      { success: false, error: { code: 'AUTH_009', message: 'Acesso negado' } },
+      { success: false, error: { code: 'AUTH-009', message: 'Acesso negado' } },
       { status: 403 }
     )
   }
@@ -214,7 +214,7 @@ async function patchHandler(req: NextRequest) {
 
   if (!auth) {
     return NextResponse.json(
-      { success: false, error: { code: 'AUTH_010', message: 'Sessão inválida' } },
+      { success: false, error: { code: 'AUTH-010', message: 'Sessão inválida' } },
       { status: 401 }
     )
   }
@@ -222,7 +222,7 @@ async function patchHandler(req: NextRequest) {
   // PATCH de configuração de gateway é exclusivo SUPER_ADMIN (re-auth feita no frontend)
   if (auth.user.adminRole !== 'SUPER_ADMIN') {
     return NextResponse.json(
-      { success: false, error: { code: 'AUTH_009', message: 'Apenas SUPER_ADMIN pode alterar configuração de gateways' } },
+      { success: false, error: { code: 'AUTH-009', message: 'Apenas SUPER_ADMIN pode alterar configuração de gateways' } },
       { status: 403 }
     )
   }

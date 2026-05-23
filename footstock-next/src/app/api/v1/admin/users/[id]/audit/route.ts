@@ -43,7 +43,7 @@ async function getHandler(
 
     if (!user) {
       return NextResponse.json(
-        { success: false, error: { code: 'AUTH_001', message: 'Usuário não encontrado' } },
+        { success: false, error: { code: 'AUTH-001', message: 'Usuário não encontrado' } },
         { status: 404 }
       )
     }

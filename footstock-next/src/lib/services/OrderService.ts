@@ -68,7 +68,7 @@ export class OrderService {
   async createOrder(userId: string, dto: CreateOrderDTO): Promise<Order> {
     // Buscar usuário
     const user = await prisma.user.findUnique({ where: { id: userId } })
-    if (!user) throw new AppError('AUTH_001', 401)
+    if (!user) throw new AppError('AUTH-001', 401)
 
     // Gate staff: ADMIN/CLUB_PARTNER nao tradam (sem planType, sem operacao).
     if (

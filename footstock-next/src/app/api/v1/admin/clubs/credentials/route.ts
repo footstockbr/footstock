@@ -22,12 +22,12 @@ const CreateClubUserSchema = z.object({
 export async function POST(request: NextRequest) {
   const auth = await getAuthUser()
   if (!auth) {
-    return NextResponse.json({ error: { code: 'AUTH_001', message: 'Não autorizado' } }, { status: 401 })
+    return NextResponse.json({ error: { code: 'AUTH-001', message: 'Não autorizado' } }, { status: 401 })
   }
 
   if (auth.user.adminRole !== 'SUPER_ADMIN') {
     return NextResponse.json(
-      { error: { code: 'AUTH_002', message: 'Apenas SUPER_ADMIN pode gerenciar representantes de clubes.' } },
+      { error: { code: 'AUTH-002', message: 'Apenas SUPER_ADMIN pode gerenciar representantes de clubes.' } },
       { status: 403 }
     )
   }
@@ -106,12 +106,12 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const auth = await getAuthUser()
   if (!auth) {
-    return NextResponse.json({ error: { code: 'AUTH_001', message: 'Não autorizado' } }, { status: 401 })
+    return NextResponse.json({ error: { code: 'AUTH-001', message: 'Não autorizado' } }, { status: 401 })
   }
 
   if (auth.user.adminRole !== 'SUPER_ADMIN') {
     return NextResponse.json(
-      { error: { code: 'AUTH_002', message: 'Acesso negado' } },
+      { error: { code: 'AUTH-002', message: 'Acesso negado' } },
       { status: 403 }
     )
   }

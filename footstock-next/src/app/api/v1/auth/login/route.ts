@@ -61,6 +61,25 @@ function buildRlInfo(failCount: number, failTtlSeconds: number): RateLimitInfo {
 
 type LoginPath = 'authjs' | 'supabase_fallback' | 'fail'
 
+/**
+ * Codex P1#3 (2026-05-23): browsers nao precisam do access_token no JSON —
+ * o cookie HttpOnly+Secure ja autentica requests subsequentes. Eco-lo no
+ * payload abre XSS exfiltration path (atacante com qualquer XSS le o JSON
+ * antes do redirect e exfiltra o JWE).
+ *
+ * Native clients (Expo/iOS/Android) NAO sao browsers — nao podem ler cookies
+ * httpOnly e dependem do token no JSON para anexar Authorization: Bearer.
+ * Gate via header explicito X-Client: native.
+ */
+function wantsTokenInBody(request: NextRequest): boolean {
+  const xclient = request.headers.get('x-client')?.toLowerCase().trim()
+  return xclient === 'native' || xclient === 'mobile' || xclient === 'expo'
+}
+
+function maskedToken(jwt: string): string {
+  return `${jwt.slice(0, 10)}***${jwt.slice(-4)}`
+}
+
 function emitLoginBreadcrumb(path: LoginPath, backfillApplied: boolean): void {
   // Sem PII — apenas o caminho de autenticacao e se houve backfill assincrono.
   Sentry.addBreadcrumb({
@@ -187,15 +206,29 @@ export async function POST(request: NextRequest) {
 
         emitLoginBreadcrumb('authjs', false)
 
+        const expiresAt = Math.floor(Date.now() / 1000) + AUTHJS_SESSION_MAX_AGE_SECONDS
+        const echoToken = wantsTokenInBody(request)
         const res = ok({
           user: serializeUser(dbUser),
           session: {
-            access_token,
+            // Web (default): omite access_token do JSON — cookie HttpOnly basta.
+            // Native (X-Client: native): inclui access_token para Bearer auth.
+            access_token: echoToken ? access_token : null,
             refresh_token: null,
-            expires_at: Math.floor(Date.now() / 1000) + AUTHJS_SESSION_MAX_AGE_SECONDS,
+            expires_at: expiresAt,
+            access_token_in_body: echoToken,
           },
           requiresOnboarding: !dbUser.tourCompleted,
         })
+        if (!echoToken) {
+          // Audit: marca JWE com prefixo+sufixo para correlacionar com logs sem expor o token.
+          Sentry.addBreadcrumb({
+            category: 'auth',
+            message: 'access_token_omitted_from_body',
+            level: 'info',
+            data: { jwt_fingerprint: maskedToken(access_token) },
+          })
+        }
         // Tambem seteia o cookie Auth.js para que requests subsequentes
         // funcionem via middleware (mesmo contrato que signIn faria).
         res.cookies.set({
@@ -249,12 +282,14 @@ export async function POST(request: NextRequest) {
           const dbUser = await prisma.user.findUnique({ where: { id: authData.user.id } })
           if (dbUser) {
             emitLoginBreadcrumb('supabase_fallback', backfillApplied)
+            const echoToken = wantsTokenInBody(request)
             const res = ok({
               user: serializeUser(dbUser),
               session: {
-                access_token: authData.session.access_token,
-                refresh_token: authData.session.refresh_token,
+                access_token: echoToken ? authData.session.access_token : null,
+                refresh_token: echoToken ? authData.session.refresh_token : null,
                 expires_at: authData.session.expires_at,
+                access_token_in_body: echoToken,
               },
               requiresOnboarding: !dbUser.tourCompleted,
             })
@@ -296,7 +331,7 @@ export async function POST(request: NextRequest) {
 
     // Mensagem genérica — não revelar se é email ou senha incorreto (SEC)
     const res = NextResponse.json(
-      { error: { code: 'AUTH_001', message: 'Credenciais inválidas.' } },
+      { error: { code: 'AUTH-001', message: 'Credenciais inválidas.' } },
       { status: 401 }
     )
     applyRateLimitHeaders(res, rlInfo)

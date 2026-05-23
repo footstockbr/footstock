@@ -33,7 +33,7 @@ async function requireSuperAdmin() {
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   const auth = await requireSuperAdmin()
   if (!auth) {
-    return NextResponse.json({ error: { code: 'AUTH_002', message: 'Acesso negado' } }, { status: 403 })
+    return NextResponse.json({ error: { code: 'AUTH-002', message: 'Acesso negado' } }, { status: 403 })
   }
 
   const { id } = await params
@@ -78,7 +78,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const auth = await requireSuperAdmin()
   if (!auth) {
-    return NextResponse.json({ error: { code: 'AUTH_002', message: 'Acesso negado' } }, { status: 403 })
+    return NextResponse.json({ error: { code: 'AUTH-002', message: 'Acesso negado' } }, { status: 403 })
   }
 
   const { id } = await params
@@ -112,7 +112,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   const auth = await requireSuperAdmin()
   if (!auth) {
-    return NextResponse.json({ error: { code: 'AUTH_002', message: 'Acesso negado' } }, { status: 403 })
+    return NextResponse.json({ error: { code: 'AUTH-002', message: 'Acesso negado' } }, { status: 403 })
   }
 
   const { id } = await params

@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   const auth = await getAuthUser()
   if (!auth) {
     return NextResponse.json(
-      { success: false, error: { code: 'AUTH_010', message: 'Sessão expirada.' } },
+      { success: false, error: { code: 'AUTH-010', message: 'Sessão expirada.' } },
       { status: 401 }
     )
   }

@@ -20,7 +20,7 @@ export async function GET() {
   const auth = await getAuthUser()
   if (!auth) {
     return NextResponse.json(
-      { error: { code: 'AUTH_010', message: 'Não autorizado.' } },
+      { error: { code: 'AUTH-010', message: 'Não autorizado.' } },
       { status: 401 }
     )
   }
@@ -56,7 +56,7 @@ export async function PATCH(req: NextRequest) {
   const auth = await getAuthUser()
   if (!auth) {
     return NextResponse.json(
-      { error: { code: 'AUTH_010', message: 'Não autorizado.' } },
+      { error: { code: 'AUTH-010', message: 'Não autorizado.' } },
       { status: 401 }
     )
   }

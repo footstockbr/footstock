@@ -77,7 +77,7 @@ export class PlanService extends BaseService {
     // Contas administrativas são operacionais e não entram em fluxo de assinatura/billing.
     if (user?.adminRole) {
       throw Object.assign(new Error('Contas administrativas não podem contratar assinatura.'), {
-        code: 'AUTH_009',
+        code: 'AUTH-009',
         statusCode: 403,
       })
     }
@@ -183,7 +183,7 @@ export class PlanService extends BaseService {
 
     if (user?.adminRole) {
       throw Object.assign(new Error('Contas administrativas não podem ter assinatura ativa.'), {
-        code: 'AUTH_009',
+        code: 'AUTH-009',
         statusCode: 403,
       })
     }

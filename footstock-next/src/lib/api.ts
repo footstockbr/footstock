@@ -45,30 +45,33 @@ export function error(
   )
 }
 
+// Wire-format canonico: hifen (AUTH-001) alinhado com ERROR_CODES/ERROR_MESSAGES.
+// Tech debt #29 (2026-05-23): consolidou wire underscore (AUTH_001) -> hifen.
+// Demais codigos (ADMIN-*, ASSET-*, RATE-*, VAL-*, SYS-*, ORD-*) ja eram hifen.
 export const errors = {
   unauthorized: (msg = 'Sessão expirada. Faça login novamente.') =>
-    error('AUTH_001', msg, 401),
+    error('AUTH-001', msg, 401),
 
   forbidden: (msg = 'Acesso negado.', requiredPlan?: string) =>
-    error('AUTH_003', msg, 403, requiredPlan ? { requiredPlan } : undefined),
+    error('AUTH-002', msg, 403, requiredPlan ? { requiredPlan } : undefined),
 
   notFound: (msg = 'Recurso não encontrado.') =>
-    error('NOT_FOUND_001', msg, 404),
+    error('NOT-FOUND-001', msg, 404),
 
   conflict: (code: string, msg: string) =>
     error(code, msg, 409),
 
   validation: (msg = 'Dados inválidos. Verifique os campos e tente novamente.', details?: string) =>
-    error('VAL_001', msg, 422, details ? { details } : undefined),
+    error('VAL-001', msg, 422, details ? { details } : undefined),
 
   rateLimit: (msg = 'Limite de requisições atingido. Tente novamente em instantes.', resetAt?: string) =>
-    error('RATE_001', msg, 429, resetAt ? { resetAt } : undefined),
+    error('RATE-001', msg, 429, resetAt ? { resetAt } : undefined),
 
   server: (msg = 'Erro interno. Nossa equipe foi notificada.') =>
-    error('SYS_001', msg, 500),
+    error('SYS-001', msg, 500),
 
   notImplemented: () =>
-    error('SYS_002', 'Funcionalidade em desenvolvimento.', 501),
+    error('SYS-002', 'Funcionalidade em desenvolvimento.', 501),
 }
 
 // ─── Paginação ─────────────────────────────────────────────────────────────────

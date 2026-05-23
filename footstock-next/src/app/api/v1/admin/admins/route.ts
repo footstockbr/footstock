@@ -58,14 +58,14 @@ async function postHandler(req: NextRequest, ctx: AuthContext): Promise<NextResp
 
   if (!target) {
     return NextResponse.json(
-      { success: false, error: { code: 'AUTH_001', message: 'Usuario nao encontrado' } },
+      { success: false, error: { code: 'AUTH-001', message: 'Usuario nao encontrado' } },
       { status: 404 }
     )
   }
 
   if (target.adminRole === parsed.data.role) {
     return NextResponse.json(
-      { success: false, error: { code: 'AUTH_006', message: 'Usuario ja possui esta role admin' } },
+      { success: false, error: { code: 'AUTH-006', message: 'Usuario ja possui esta role admin' } },
       { status: 409 }
     )
   }
@@ -73,7 +73,7 @@ async function postHandler(req: NextRequest, ctx: AuthContext): Promise<NextResp
   // Guard anti-self-promotion: SUPER_ADMIN não pode promover a si mesmo
   if (ctx.user.id === target.id && parsed.data.role === ADMIN_ROLE.SUPER_ADMIN) {
     return NextResponse.json(
-      { success: false, error: { code: 'AUTH_007', message: 'Nao e permitido auto-promover para SUPER_ADMIN' } },
+      { success: false, error: { code: 'ADMIN-058', message: 'Não é permitido auto-promover para SUPER_ADMIN' } },
       { status: 403 }
     )
   }

@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
       )
 
       if (!verification.verified) {
-        return apiError('AUTH_008', 'Autenticação biométrica falhou. Tente novamente.', 401)
+        return apiError('AUTH-008', 'Autenticação biométrica falhou. Tente novamente.', 401)
       }
 
       challengeStore.delete(`auth:${email}`)

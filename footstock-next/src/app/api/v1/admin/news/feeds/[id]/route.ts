@@ -14,7 +14,7 @@ const updateSchema = z.object({
 async function requireFeedAccess(id: string) {
   const auth = await getAuthUser()
   if (!auth) {
-    return { error: NextResponse.json({ success: false, error: { code: 'AUTH_001', message: 'Não autorizado.' } }, { status: 401 }) }
+    return { error: NextResponse.json({ success: false, error: { code: 'AUTH-001', message: 'Não autorizado.' } }, { status: 401 }) }
   }
   if (!auth.user.adminRole || !canAccess(auth.user.adminRole as AdminRole, 'news:sources')) {
     return { error: NextResponse.json({ success: false, error: { code: 'ADMIN_050', message: 'Acesso negado.' } }, { status: 403 }) }

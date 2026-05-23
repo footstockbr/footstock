@@ -10,7 +10,7 @@ export async function DELETE(
 ) {
   const auth = await getAuthUser()
   if (!auth) {
-    return NextResponse.json({ success: false, error: { code: 'AUTH_001', message: 'Não autorizado.' } }, { status: 401 })
+    return NextResponse.json({ success: false, error: { code: 'AUTH-001', message: 'Não autorizado.' } }, { status: 401 })
   }
 
   if (!auth.user.adminRole || !canAccess(auth.user.adminRole as AdminRole, 'news:sources')) {

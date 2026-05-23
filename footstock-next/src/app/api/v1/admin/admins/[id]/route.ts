@@ -48,14 +48,14 @@ async function patchHandler(req: NextRequest, { user }: AuthContext): Promise<Ne
 
   if (!target || !target.adminRole) {
     return NextResponse.json(
-      { success: false, error: { code: 'AUTH_001', message: 'Administrador nao encontrado' } },
+      { success: false, error: { code: 'AUTH-001', message: 'Administrador nao encontrado' } },
       { status: 404 }
     )
   }
 
   if (target.id === user.id && parsed.data.role !== 'SUPER_ADMIN') {
     return NextResponse.json(
-      { success: false, error: { code: 'AUTH_009', message: 'Nao e permitido rebaixar o proprio acesso' } },
+      { success: false, error: { code: 'ADMIN-056', message: 'Não é permitido rebaixar o próprio acesso' } },
       { status: 403 }
     )
   }
@@ -64,7 +64,7 @@ async function patchHandler(req: NextRequest, { user }: AuthContext): Promise<Ne
     const totalSuperAdmins = await prisma.user.count({ where: { adminRole: 'SUPER_ADMIN' } })
     if (totalSuperAdmins <= 1) {
       return NextResponse.json(
-        { success: false, error: { code: 'AUTH_009', message: 'Nao e permitido remover o ultimo SUPER_ADMIN' } },
+        { success: false, error: { code: 'ADMIN-057', message: 'Não é permitido remover o último SUPER_ADMIN' } },
         { status: 403 }
       )
     }
@@ -117,14 +117,14 @@ async function deleteHandler(req: NextRequest, { user }: AuthContext): Promise<N
 
   if (!target || !target.adminRole) {
     return NextResponse.json(
-      { success: false, error: { code: 'AUTH_001', message: 'Administrador nao encontrado' } },
+      { success: false, error: { code: 'AUTH-001', message: 'Administrador nao encontrado' } },
       { status: 404 }
     )
   }
 
   if (target.id === user.id) {
     return NextResponse.json(
-      { success: false, error: { code: 'AUTH_009', message: 'Nao e permitido remover o proprio acesso admin' } },
+      { success: false, error: { code: 'ADMIN-056', message: 'Não é permitido remover o próprio acesso admin' } },
       { status: 403 }
     )
   }
@@ -133,7 +133,7 @@ async function deleteHandler(req: NextRequest, { user }: AuthContext): Promise<N
     const totalSuperAdmins = await prisma.user.count({ where: { adminRole: 'SUPER_ADMIN' } })
     if (totalSuperAdmins <= 1) {
       return NextResponse.json(
-        { success: false, error: { code: 'AUTH_009', message: 'Nao e permitido remover o ultimo SUPER_ADMIN' } },
+        { success: false, error: { code: 'ADMIN-057', message: 'Não é permitido remover o último SUPER_ADMIN' } },
         { status: 403 }
       )
     }
