@@ -1,6 +1,20 @@
 import { z } from 'zod'
 import { validateCPF, calcAge } from '@/lib/utils/validators'
 
+// bcrypt (e bcryptjs) trunca silenciosamente em 72 bytes UTF-8 — sufixos sao
+// ignorados sem aviso. Sem este guard, "senha-de-80-bytes-cujo-prefixo-bate"
+// e "senha-de-80-bytes-cujo-prefixo-bateXYZ" virariam o mesmo hash; usuario
+// acharia que tem uma senha longa enquanto na pratica usa so os primeiros 72.
+// Aplicado em fluxos de DEFINICAO/TROCA de senha (register/reset/change).
+// NAO aplicado no login: rejeitar la quebraria contas existentes que ja
+// foram cadastradas sob max(128) anterior.
+const BCRYPT_MAX_BYTES = 72
+const bcryptByteLimit = (label = 'Senha') => (v: string) => {
+  const bytes = new TextEncoder().encode(v).length
+  return bytes <= BCRYPT_MAX_BYTES
+}
+const bcryptByteLimitMsg = `Senha excede 72 bytes (UTF-8). Caracteres especiais ocupam mais espaco — encurte ou use ASCII.`
+
 // ─── Schema base do objeto (sem .refine) — necessário para derivar step schemas ─
 
 const registerBase = z.object({
@@ -24,7 +38,11 @@ const registerBase = z.object({
     .max(255)
     .email('Informe um email válido')
     .transform((v) => v.trim().toLowerCase()),
-  password: z.string().min(8, 'Senha deve ter no mínimo 8 caracteres').max(128),
+  password: z
+    .string()
+    .min(8, 'Senha deve ter no mínimo 8 caracteres')
+    .max(128)
+    .refine(bcryptByteLimit(), bcryptByteLimitMsg),
   confirmPassword: z.string(),
   favoriteClub: z.string().min(1, 'Selecione seu clube do coração'),
   consents: z.object({
@@ -85,7 +103,11 @@ export type LoginFormData = z.infer<typeof loginSchema>
 
 export const resetPasswordSchema = z
   .object({
-    newPassword: z.string().min(8, 'A senha deve ter pelo menos 8 caracteres'),
+    newPassword: z
+      .string()
+      .min(8, 'A senha deve ter pelo menos 8 caracteres')
+      .max(128)
+      .refine(bcryptByteLimit(), bcryptByteLimitMsg),
     confirmPassword: z.string().min(1, 'Confirme a senha'),
   })
   .refine((data) => data.newPassword === data.confirmPassword, {
@@ -104,7 +126,8 @@ export const changePasswordSchema = z
     newPassword: z
       .string({ message: 'Nova senha é obrigatória.' })
       .min(8, 'Senha deve ter no mínimo 8 caracteres.')
-      .max(128, 'Senha deve ter no máximo 128 caracteres.'),
+      .max(128, 'Senha deve ter no máximo 128 caracteres.')
+      .refine(bcryptByteLimit(), bcryptByteLimitMsg),
     confirmPassword: z.string({
       message: 'Confirmação de senha é obrigatória.',
     }),
