@@ -28,10 +28,15 @@ dockerfilePath = "Dockerfile"
 # Railway sem stack trace. Migrations M056 + M053-new NAO foram aplicadas, bug
 # de nome ficticio persistiu em prod. Fix manual via tramway proxy (RUNBOOK-016).
 #
-# HARDENING: pre-deploy agora usa `set -ex` (cada linha ecoada) + checks
-# explicitos com exit codes distintos (10..14) para que falha silenciosa
-# nao reapareca. Cada exit code mapeia uma causa raiz auditavel nos logs.
-preDeployCommand = "set -ex; id; test -d /migrations || exit 10; test -f /migrations/prisma.config.js || exit 11; test -d /migrations/prisma/migrations || exit 12; test -f /migrations/node_modules/prisma/build/index.js || exit 13; test -n \"${DATABASE_URL:-}\" || exit 14; cd /migrations && node ./node_modules/prisma/build/index.js migrate deploy"
+# HARDENING DESCARTADO em 2026-05-23: a versao com `set -ex` + 5 guards (exit
+# 10..14) foi commitada em 96ec375 esperando que o stderr aparecesse nos logs
+# do Railway. NAO aparece — preDeployCommand roda em instancia one-shot cujo
+# stdout/stderr NAO e capturado por deploymentLogs/environmentLogs (GraphQL).
+# 3 deploys consecutivos (a1da77b4, 2229719c, d15040a9) falharam silenciosamente
+# bloqueando o fix bcrypt-72-bytes (commit ad66600). Sem observabilidade, o
+# hardening so causou regressao. Voltando ao comando simples que funcionou em
+# 0999491 (deploy 17f95f52, SUCCESS em 2026-05-22 23:22 UTC).
+preDeployCommand = "id && cd /migrations && node ./node_modules/prisma/build/index.js migrate deploy"
 startCommand = "node server.js"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 30
