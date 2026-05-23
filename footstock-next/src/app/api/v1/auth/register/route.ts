@@ -164,29 +164,33 @@ export async function POST(req: NextRequest) {
       referredByCode,
     } = parsed.data
 
-    // ── 1. Verificar unicidade de email (AUTH-004) ────────────────────────────
+    // ── 1. Verificar unicidade de email ───────────────────────────────────────
+    // P1-Codex#1: emails-existem e CPFs-existem retornam AUTH-013 generico
+    // (mesmo codigo + mesma mensagem) para nao enumerar usuarios cadastrados.
+    // O tipo real do conflito (email|cpf) vai apenas no log ops, nunca no wire.
     const emailExists = await prisma.user.findUnique({ where: { email } })
     if (emailExists) {
       // Timing defense (ID-001): equaliza com o path de sucesso, que faz
       // bcrypt.hash(password, 12). Sem este compare o atacante mede a
       // latencia para enumerar emails cadastrados.
       await bcrypt.compare(password, DUMMY_HASH).catch(() => false)
+      console.info('[register] conflict pre_check', { reason: 'email_exists', ip })
       const res = NextResponse.json(
-        { success: false, error: { code: ERROR_CODES.AUTH_004, message: ERROR_MESSAGES['AUTH-004'] } },
+        { success: false, error: { code: ERROR_CODES.AUTH_013, message: ERROR_MESSAGES['AUTH-013'] } },
         { status: 409 }
       )
       applyRateLimitHeaders(res, rlInfo)
       return res
     }
 
-    // ── 2. Hash do CPF e verificar unicidade (AUTH-003) ───────────────────────
+    // ── 2. Hash do CPF e verificar unicidade ──────────────────────────────────
     const cpfHash = hashCPF(cpf)
     const cpfExists = await prisma.user.findFirst({ where: { cpfHash } })
     if (cpfExists) {
-      // Timing defense (ID-001): mesmo motivo do bloco AUTH-004 acima.
       await bcrypt.compare(password, DUMMY_HASH).catch(() => false)
+      console.info('[register] conflict pre_check', { reason: 'cpf_exists', ip })
       const res = NextResponse.json(
-        { success: false, error: { code: ERROR_CODES.AUTH_003, message: ERROR_MESSAGES['AUTH-003'] } },
+        { success: false, error: { code: ERROR_CODES.AUTH_013, message: ERROR_MESSAGES['AUTH-013'] } },
         { status: 409 }
       )
       applyRateLimitHeaders(res, rlInfo)
@@ -217,8 +221,9 @@ export async function POST(req: NextRequest) {
     const lockEmail = await acquireRegistrationLock(`email:${emailKey}`)
     if (!lockEmail.acquired) {
       await bcrypt.compare(password, DUMMY_HASH).catch(() => false)
+      console.info('[register] conflict lock', { reason: 'email_lock_held', ip })
       const res = NextResponse.json(
-        { success: false, error: { code: ERROR_CODES.AUTH_004, message: ERROR_MESSAGES['AUTH-004'] } },
+        { success: false, error: { code: ERROR_CODES.AUTH_013, message: ERROR_MESSAGES['AUTH-013'] } },
         { status: 409 },
       )
       applyRateLimitHeaders(res, rlInfo)
@@ -230,8 +235,9 @@ export async function POST(req: NextRequest) {
       // via TTL cobre, mas explicit release evita stale window de 60s).
       await lockEmail.release()
       await bcrypt.compare(password, DUMMY_HASH).catch(() => false)
+      console.info('[register] conflict lock', { reason: 'cpf_lock_held', ip })
       const res = NextResponse.json(
-        { success: false, error: { code: ERROR_CODES.AUTH_003, message: ERROR_MESSAGES['AUTH-003'] } },
+        { success: false, error: { code: ERROR_CODES.AUTH_013, message: ERROR_MESSAGES['AUTH-013'] } },
         { status: 409 },
       )
       applyRateLimitHeaders(res, rlInfo)
@@ -420,18 +426,21 @@ export async function POST(req: NextRequest) {
           // Colisao em email/cpfHash: outro request venceu a race (ID-002).
           // Retorna 409 controlado em vez de 500. Pre-checks ja deram dummy
           // bcrypt, mas em race o path agora gastou bcrypt.hash real;
-          // aceitavel pois e evento raro (apenas concorrencia).
+          // aceitavel pois e evento raro (apenas concorrencia). Codigo unificado
+          // AUTH-013 para nao re-introduzir o enum (P1-Codex#1).
           if (targetStr.includes('email')) {
+            console.info('[register] conflict race', { reason: 'email_race_loss', ip })
             const res = NextResponse.json(
-              { success: false, error: { code: ERROR_CODES.AUTH_004, message: ERROR_MESSAGES['AUTH-004'] } },
+              { success: false, error: { code: ERROR_CODES.AUTH_013, message: ERROR_MESSAGES['AUTH-013'] } },
               { status: 409 },
             )
             applyRateLimitHeaders(res, rlInfo)
             return res
           }
           if (targetStr.includes('cpf')) {
+            console.info('[register] conflict race', { reason: 'cpf_race_loss', ip })
             const res = NextResponse.json(
-              { success: false, error: { code: ERROR_CODES.AUTH_003, message: ERROR_MESSAGES['AUTH-003'] } },
+              { success: false, error: { code: ERROR_CODES.AUTH_013, message: ERROR_MESSAGES['AUTH-013'] } },
               { status: 409 },
             )
             applyRateLimitHeaders(res, rlInfo)

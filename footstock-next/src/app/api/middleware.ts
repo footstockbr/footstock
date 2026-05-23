@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { Prisma } from '@prisma/client'
 import { auth } from '@/auth'
 import { env } from '@/lib/env'
 import { prisma } from '@/lib/prisma'
@@ -13,6 +14,41 @@ import { hasPlanAccess } from '@/lib/auth/planAccess'
 import { ERROR_CODES, ERROR_MESSAGES } from '@/lib/constants/errors'
 import type { AdminRole, PlanType } from '@/lib/enums'
 import type { User } from '@/types/models'
+
+// Allowlist canonica de campos do User entregues ao handler. Substitui o
+// denylist antigo (sanitizeUser strip de passwordHash/cpfHash) por defesa
+// no nivel do query: campos sensiveis NUNCA saem do banco para handlers.
+// Adicionar nova coluna sensivel em schema.prisma exige decisao explicita
+// de incluir aqui — failure-mode passa de "lembrar de stripar" para
+// "lembrar de incluir", que e o lado seguro.
+const SAFE_USER_SELECT = {
+  id: true,
+  email: true,
+  name: true,
+  phone: true,
+  birthDate: true,
+  planType: true,
+  status: true,
+  adminRole: true,
+  investorProfile: true,
+  tourCompleted: true,
+  tourSkippedAt: true,
+  favoriteClub: true,
+  fsBalance: true,
+  marginBlocked: true,
+  ageVerificationPending: true,
+  referredByCode: true,
+  favoriteClubDisplayName: true,
+  bio: true,
+  suspendedAt: true,
+  suspensionReason: true,
+  userType: true,
+  version: true,
+  emailVerified: true,
+  image: true,
+  createdAt: true,
+  updatedAt: true,
+} as const satisfies Prisma.UserSelect
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -30,16 +66,10 @@ function errorResponse(code: string, message: string, status: number) {
 }
 
 // E2E-2026-05-22: descobri via E2E que GET /api/v1/me ecoava `user` inteiro,
-// incluindo passwordHash (bcrypt) e cpfHash. Causa raiz: middleware carrega
-// prisma.user.findUnique() sem select, e cada handler tinha que se lembrar
-// de stripar. Defesa em profundidade: stripar AQUI antes de entregar ao
-// handler. Qualquer rota nova que ecoe `user` ja sai limpa.
-function sanitizeUser<T extends Record<string, unknown>>(user: T): Omit<T, 'passwordHash' | 'cpfHash'> {
-  /* eslint-disable @typescript-eslint/no-unused-vars */
-  const { passwordHash: _p, cpfHash: _c, ...safe } = user
-  /* eslint-enable @typescript-eslint/no-unused-vars */
-  return safe as Omit<T, 'passwordHash' | 'cpfHash'>
-}
+// incluindo passwordHash (bcrypt) e cpfHash. Original fix: denylist via
+// sanitizeUser. Codex P2#5 (2026-05-23): convertido para allowlist via
+// SAFE_USER_SELECT — campos sensiveis NUNCA saem do banco, eliminando
+// a janela onde codigo handler novo poderia esquecer de stripar.
 
 // ---------------------------------------------------------------------------
 // withAuth — valida sessao Supabase e carrega usuario do BANCO
@@ -82,13 +112,20 @@ export function withAuth(handler: RouteHandler) {
         try {
           const session = await auth()
           if (session?.user?.id) {
-            const dbUser = await prisma.user.findUnique({ where: { id: session.user.id } })
+            const dbUser = await prisma.user.findUnique({
+              where: { id: session.user.id },
+              select: SAFE_USER_SELECT,
+            })
             if (dbUser) {
               const normalizedUser =
                 dbUser.adminRole && dbUser.planType !== null
-                  ? await prisma.user.update({ where: { id: dbUser.id }, data: { planType: null } })
+                  ? await prisma.user.update({
+                      where: { id: dbUser.id },
+                      data: { planType: null },
+                      select: SAFE_USER_SELECT,
+                    })
                   : dbUser
-              return handler(req, { user: sanitizeUser(normalizedUser) as unknown as User })
+              return handler(req, { user: normalizedUser as unknown as User })
             }
           }
         } catch { /* Auth.js indisponivel — segue para Supabase cookie */ }
@@ -112,14 +149,21 @@ export function withAuth(handler: RouteHandler) {
           )
           const { data: { user: cookieUser } } = await supabaseCookie.auth.getUser()
           if (cookieUser) {
-            const dbUser = await prisma.user.findUnique({ where: { id: cookieUser.id } })
+            const dbUser = await prisma.user.findUnique({
+              where: { id: cookieUser.id },
+              select: SAFE_USER_SELECT,
+            })
             if (dbUser) {
               // Invariante: staff (ADMIN/CLUB_PARTNER) nao possui planType de player.
               const normalizedUser =
                 dbUser.adminRole && dbUser.planType !== null
-                  ? await prisma.user.update({ where: { id: dbUser.id }, data: { planType: null } })
+                  ? await prisma.user.update({
+                      where: { id: dbUser.id },
+                      data: { planType: null },
+                      select: SAFE_USER_SELECT,
+                    })
                   : dbUser
-              const response = await handler(req, { user: sanitizeUser(normalizedUser) as unknown as User })
+              const response = await handler(req, { user: normalizedUser as unknown as User })
               // Apply refreshed session cookies to the response so the browser
               // receives updated tokens (prevents stale token → 401 loop).
               for (const { name, value, options } of pendingCookies) {
@@ -135,9 +179,12 @@ export function withAuth(handler: RouteHandler) {
           const devAuthRaw = req.cookies.get('fs_dev_auth')?.value
           const devAuthEmail = devAuthRaw ? decodeURIComponent(devAuthRaw) : null
           if (devAuthEmail) {
-            const devUser = await prisma.user.findUnique({ where: { email: devAuthEmail } })
+            const devUser = await prisma.user.findUnique({
+              where: { email: devAuthEmail },
+              select: SAFE_USER_SELECT,
+            })
             if (devUser) {
-              return handler(req, { user: sanitizeUser(devUser) as unknown as User })
+              return handler(req, { user: devUser as unknown as User })
             }
           }
         }
@@ -155,7 +202,10 @@ export function withAuth(handler: RouteHandler) {
 
       // SEGURANCA: adminRole e planType SEMPRE lidos do banco.
       // Claims JWT sao nao-confiaveis para autorizacao (podem ser forjados).
-      const dbUser = await prisma.user.findUnique({ where: { id: supabaseUser.id } })
+      const dbUser = await prisma.user.findUnique({
+        where: { id: supabaseUser.id },
+        select: SAFE_USER_SELECT,
+      })
 
       if (!dbUser) {
         return errorResponse(ERROR_CODES.AUTH_010, ERROR_MESSAGES['AUTH-010'], 401)
@@ -168,10 +218,11 @@ export function withAuth(handler: RouteHandler) {
           ? await prisma.user.update({
               where: { id: dbUser.id },
               data: { planType: null },
+              select: SAFE_USER_SELECT,
             })
           : dbUser
 
-      return handler(req, { user: sanitizeUser(normalizedUser) as unknown as User })
+      return handler(req, { user: normalizedUser as unknown as User })
     } catch {
       return errorResponse(ERROR_CODES.SYS_001, ERROR_MESSAGES['SYS-001'], 500)
     }
