@@ -94,7 +94,7 @@ export default function GlossarioPage() {
   }, [query]);
 
   return (
-    <div data-testid="page-glossario" className="px-4 pt-4">
+    <div data-testid="page-glossario" className="px-4 pt-4 max-w-5xl mx-auto">
       <h1 className="text-lg font-bold text-[#EAECEF] mb-1 flex items-center gap-2">
         <BookOpen className="h-5 w-5 text-[#F0B90B]" />
         Glossário
@@ -120,7 +120,7 @@ export default function GlossarioPage() {
           <p className="text-xs text-[#707A8A] mb-3">
             {filteredTerms.length} resultado{filteredTerms.length !== 1 ? "s" : ""}
           </p>
-          <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-1 lg:grid-cols-2 items-start gap-2">
             {filteredTerms.map((item) => (
               <TermCard
                 key={item.slug}
@@ -148,7 +148,7 @@ export default function GlossarioPage() {
                 {CATEGORY_LABELS[category] ?? category}
                 <span className="text-xs text-[#707A8A] font-normal ml-2">({terms.length})</span>
               </h2>
-              <div className="flex flex-col gap-2">
+              <div className="grid grid-cols-1 lg:grid-cols-2 items-start gap-2">
                 {terms.map((item) => (
                   <TermCard
                     key={item.slug}
@@ -183,7 +183,7 @@ function TermCard({
   return (
     <div
       id={`term-${term.slug}`}
-      className={`bg-[#1E2329] rounded-lg border p-4 transition-colors ${
+      className={`min-w-0 bg-[#1E2329] rounded-lg border p-4 transition-colors ${
         isExpanded ? "border-[rgba(240,185,11,.3)]" : "border-[rgba(240,185,11,.1)]"
       }`}
     >

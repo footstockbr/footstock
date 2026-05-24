@@ -78,7 +78,7 @@ export function NoticiasContent() {
   }, [selectedTicker]);
 
   return (
-    <div data-testid="noticias-page" className="px-4 pt-4">
+    <div data-testid="noticias-page" className="px-4 pt-4 max-w-5xl mx-auto">
       <h1 className="text-lg font-bold text-[#EAECEF] mb-4 flex items-center gap-2">
         <Newspaper className="h-5 w-5 text-[#F0B90B]" />
         Feed de Noticias
@@ -127,7 +127,7 @@ export function NoticiasContent() {
           </p>
         </div>
       ) : (
-        <div data-testid="noticias-list" className="flex flex-col gap-3">
+        <div data-testid="noticias-list" className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 items-start gap-3">
           {newsList.map((news) => {
             const sentiment = SENTIMENT_MAP[news.sentiment] ?? SENTIMENT_MAP.NEUTRAL;
             const timeAgo = news.publishedAt
@@ -138,10 +138,10 @@ export function NoticiasContent() {
               <div
                 key={news.id}
                 data-testid={`noticias-item-${news.id}`}
-                className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.18)] p-4 transition-all hover:border-[rgba(240,185,11,.35)] hover:bg-[rgba(240,185,11,.04)] cursor-pointer"
+                className="min-w-0 bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.18)] p-4 transition-all hover:border-[rgba(240,185,11,.35)] hover:bg-[rgba(240,185,11,.04)] cursor-pointer"
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
                     {news.assetIds.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
                         {news.assetIds.map((id) => {
@@ -162,8 +162,8 @@ export function NoticiasContent() {
                   </div>
                   {timeAgo && <span className="text-[10px] text-[#707A8A] shrink-0">{timeAgo}</span>}
                 </div>
-                <p className="text-sm font-medium text-[#EAECEF] leading-snug">{news.title}</p>
-                {news.source && <p className="text-xs text-[#929AA5] mt-1">Fonte: {news.source}</p>}
+                <p className="text-sm font-medium text-[#EAECEF] leading-snug break-words">{news.title}</p>
+                {news.source && <p className="text-xs text-[#929AA5] mt-1 break-words">Fonte: {news.source}</p>}
               </div>
             );
           })}

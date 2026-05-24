@@ -48,7 +48,7 @@ export default async function AssessorPage() {
   }
 
   return (
-    <div data-testid="page-assessor" className="flex flex-col min-h-[calc(100dvh-56px-56px)]">
+    <div data-testid="page-assessor" className="flex flex-col min-h-[calc(100dvh-56px-56px)] md:min-h-[calc(100dvh-56px)] max-w-3xl mx-auto w-full">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 pt-4 pb-3 border-b border-[rgba(240,185,11,.1)]">
         <Bot className="h-5 w-5 text-[#F0B90B]" />

@@ -86,27 +86,27 @@ function SummaryCards({ items }: { items: Dividend[] }) {
   const expiredCount = items.filter(d => d.status === 'EXPIRADO').length
 
   return (
-    <div className="grid grid-cols-3 gap-3 mb-5" data-testid="dividendos-summary">
-      <div className="bg-[#1E2329] rounded-xl p-4 border border-[rgba(46,189,133,.12)]">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5" data-testid="dividendos-summary">
+      <div className="bg-[#1E2329] rounded-xl p-4 border border-[rgba(46,189,133,.12)] min-w-0">
         <div className="flex items-center gap-2 mb-1">
-          <TrendingUp className="h-4 w-4 text-[#2EBD85]" />
-          <span className="text-xs text-[#929AA5]">Total Creditado</span>
+          <TrendingUp className="h-4 w-4 text-[#2EBD85] shrink-0" />
+          <span className="text-xs text-[#929AA5] truncate">Total Creditado</span>
         </div>
-        <p className="text-lg font-semibold text-[#2EBD85]">{formatFS(credited)}</p>
+        <p className="text-lg font-semibold text-[#2EBD85] truncate">{formatFS(credited)}</p>
       </div>
 
-      <div className="bg-[#1E2329] rounded-xl p-4 border border-[rgba(102,126,234,.12)]">
+      <div className="bg-[#1E2329] rounded-xl p-4 border border-[rgba(102,126,234,.12)] min-w-0">
         <div className="flex items-center gap-2 mb-1">
-          <Clock className="h-4 w-4" style={{ color: '#667EEA' }} />
-          <span className="text-xs text-[#929AA5]">Pend. venda ({pendingCount})</span>
+          <Clock className="h-4 w-4 shrink-0" style={{ color: '#667EEA' }} />
+          <span className="text-xs text-[#929AA5] truncate">Pend. venda ({pendingCount})</span>
         </div>
-        <p className="text-lg font-semibold" style={{ color: '#667EEA' }}>{formatFS(pendingRealization)}</p>
+        <p className="text-lg font-semibold truncate" style={{ color: '#667EEA' }}>{formatFS(pendingRealization)}</p>
       </div>
 
-      <div className="bg-[#1E2329] rounded-xl p-4 border border-[rgba(146,154,165,.12)]">
+      <div className="bg-[#1E2329] rounded-xl p-4 border border-[rgba(146,154,165,.12)] min-w-0">
         <div className="flex items-center gap-2 mb-1">
-          <XCircle className="h-4 w-4 text-[#929AA5]" />
-          <span className="text-xs text-[#929AA5]">Expirados</span>
+          <XCircle className="h-4 w-4 text-[#929AA5] shrink-0" />
+          <span className="text-xs text-[#929AA5] truncate">Expirados</span>
         </div>
         <p className="text-lg font-semibold text-[#929AA5]">{expiredCount}</p>
       </div>

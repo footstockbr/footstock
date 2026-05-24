@@ -86,7 +86,7 @@ export default function ConsentimentosPage() {
   }, []);
 
   return (
-    <div data-testid="consentimentos-page" className="px-4 py-4 pb-24">
+    <div data-testid="consentimentos-page" className="px-4 py-4 pb-24 max-w-3xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <Link

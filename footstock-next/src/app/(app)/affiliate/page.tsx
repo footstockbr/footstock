@@ -19,7 +19,7 @@ export default async function AffiliatePage() {
   const ctx = await withAffiliateAuth()
 
   return (
-    <div data-testid="affiliate-page" className="px-4 py-4 flex flex-col gap-4">
+    <div data-testid="affiliate-page" className="px-4 py-4 flex flex-col gap-4 max-w-5xl mx-auto">
       <h1 className="text-lg font-bold text-[#EAECEF]">Portal do Afiliado</h1>
       <AffiliatePortalClient
         affiliateCode={ctx.code}

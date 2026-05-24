@@ -23,7 +23,7 @@ export default async function AssinaturaPage() {
 
   if (!subscription) {
     return (
-      <div data-testid="assinatura-page" className="px-4 pt-4 pb-8">
+      <div data-testid="assinatura-page" className="px-4 pt-4 pb-8 max-w-3xl mx-auto">
         <h1 className="text-xl font-bold text-[#EAECEF] mb-1">Minha Assinatura</h1>
         <p className="text-sm text-[#929AA5] mb-6">Você está no plano gratuito.</p>
 
@@ -56,7 +56,7 @@ export default async function AssinaturaPage() {
   const inCancellationLock = subscription.status === 'CANCELLATION_LOCK'
 
   return (
-    <div data-testid="assinatura-page" className="px-4 pt-4 pb-8 flex flex-col gap-4">
+    <div data-testid="assinatura-page" className="px-4 pt-4 pb-8 flex flex-col gap-4 max-w-3xl mx-auto">
       <div>
         <h1 className="text-xl font-bold text-[#EAECEF] mb-1">Minha Assinatura</h1>
         <p className="text-sm text-[#929AA5]">Gerencie seu plano e pagamentos.</p>

@@ -39,7 +39,7 @@ export default async function ContaPage() {
   const showUpgradeCta = user.planType === "JOGADOR";
 
   return (
-    <div data-testid="conta-page" className="px-4 pt-4 pb-6">
+    <div data-testid="conta-page" className="px-4 pt-4 pb-6 max-w-3xl mx-auto">
       {/* Profile header */}
       <div data-testid="conta-profile-header" className="flex items-center gap-4 bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.18)] p-4 mb-4">
         <Avatar name={user.name} size="lg" />
@@ -54,17 +54,17 @@ export default async function ContaPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-2 mb-4">
-        <div className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.1)] p-3 text-center">
-          <p className="text-lg font-bold font-mono text-[#EAECEF]">{ordersCount}</p>
-          <p className="text-[10px] text-[#929AA5] uppercase tracking-wide">Ordens</p>
+        <div className="min-w-0 bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.1)] p-2 sm:p-3 text-center">
+          <p className="text-base sm:text-lg font-bold font-mono text-[#EAECEF] truncate">{ordersCount}</p>
+          <p className="text-[10px] text-[#929AA5] uppercase tracking-wide truncate">Ordens</p>
         </div>
-        <div className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.1)] p-3 text-center">
-          <p className="text-lg font-bold font-mono text-[#EAECEF]">{leaguesCount}</p>
-          <p className="text-[10px] text-[#929AA5] uppercase tracking-wide">Ligas</p>
+        <div className="min-w-0 bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.1)] p-2 sm:p-3 text-center">
+          <p className="text-base sm:text-lg font-bold font-mono text-[#EAECEF] truncate">{leaguesCount}</p>
+          <p className="text-[10px] text-[#929AA5] uppercase tracking-wide truncate">Ligas</p>
         </div>
-        <div className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.1)] p-3 text-center">
-          <p className="text-lg font-bold font-mono text-[#EAECEF]">{rankDisplay}</p>
-          <p className="text-[10px] text-[#929AA5] uppercase tracking-wide">Ranking</p>
+        <div className="min-w-0 bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.1)] p-2 sm:p-3 text-center">
+          <p className="text-base sm:text-lg font-bold font-mono text-[#EAECEF] truncate">{rankDisplay}</p>
+          <p className="text-[10px] text-[#929AA5] uppercase tracking-wide truncate">Ranking</p>
         </div>
       </div>
 

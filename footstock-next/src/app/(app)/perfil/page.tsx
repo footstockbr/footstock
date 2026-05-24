@@ -26,7 +26,7 @@ export default async function PerfilPage() {
   const { user } = auth;
 
   return (
-    <div data-testid="perfil-page" className="px-4 py-4 flex flex-col gap-4">
+    <div data-testid="perfil-page" className="px-4 py-4 flex flex-col gap-4 max-w-2xl mx-auto">
       <h1 className="text-lg font-bold text-[#EAECEF]">Meu Perfil</h1>
 
       <ProfileInfo user={user} />
