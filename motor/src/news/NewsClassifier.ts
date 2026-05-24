@@ -99,7 +99,9 @@ export class NewsClassifier {
       `
       // Formato compacto para o prompt: "URU3=flamengo,fla,mengao,urubu | POR4=palmeiras,porco,verdao"
       this.tickerMapLine = rows
-        .map((r: { ticker: string; search_text: string }) => `${r.ticker}=${r.search_text.replace(/\s+/g, ',').split(',').slice(0, 6).join(',')}`)
+        .map((r: { ticker: string; search_text: string }) =>
+          `${r.ticker}=${r.search_text.split(/[,;|]+/).map((s: string) => s.trim()).filter(Boolean).slice(0, 6).join(',')}`
+        )
         .join(' | ')
       logger.info(`[NewsClassifier] Mapeamento real→ticker: ${rows.length} ativos carregados`)
     } catch (err) {
@@ -163,43 +165,50 @@ Responda SOMENTE com JSON no formato:
     await this.checkRateLimit()
 
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 5000)
+    const timeout = setTimeout(() => {
+      controller.abort()
+      logger.warn(`[NewsClassifier] Timeout após 5s — abortando chamada Sonnet (tentativa ${attempt})`)
+    }, 5000)
 
     try {
       const response = await this.anthropic.messages.create(
         {
-          model: 'claude-sonnet-4-5',
+          model: 'claude-sonnet-4-6',
           max_tokens: 150,
           messages: [{ role: 'user', content: this.buildPrompt(item) }],
         },
         { signal: controller.signal as AbortSignal }
       )
 
-      clearTimeout(timeout)
-
       const text = response.content[0].type === 'text' ? response.content[0].text : ''
 
       try {
         const parsed = JSON.parse(text) as Partial<ClassifiedNews>
+
+        const rawTicker = typeof parsed.ticker === 'string' ? parsed.ticker.toUpperCase().slice(0, 4) : ''
+        const ticker = TICKERS_40.includes(rawTicker) ? rawTicker : ''
+        if (rawTicker && !ticker) {
+          logger.warn(`[NewsClassifier] Ticker inválido retornado pelo LLM: "${rawTicker}" — ignorado`)
+        }
+
+        const sentiment = typeof parsed.sentiment === 'number' && isFinite(parsed.sentiment)
+          ? Math.max(-1, Math.min(1, parsed.sentiment))
+          : 0
+        const relevance = typeof parsed.relevance === 'number' && isFinite(parsed.relevance)
+          ? Math.max(0, Math.min(1, parsed.relevance))
+          : 0
+
         return {
-          ticker: (typeof parsed.ticker === 'string' ? parsed.ticker : '').toUpperCase().slice(0, 4),
-          sentiment: typeof parsed.sentiment === 'number'
-            ? Math.max(-1, Math.min(1, parsed.sentiment))
-            : 0,
+          ticker,
+          sentiment,
           impactCategory: typeof parsed.impactCategory === 'string' ? parsed.impactCategory : 'INSTITUCIONAL',
-          relevance: typeof parsed.relevance === 'number'
-            ? Math.max(0, Math.min(1, parsed.relevance))
-            : 0,
+          relevance,
         }
       } catch {
-        // JSON mal-formado — fallback imediato (sem retry)
         logger.warn(`[NewsClassifier] Resposta Sonnet não é JSON válido — aplicando fallback`)
         return { ...CLASSIFICATION_FALLBACK }
       }
     } catch (err) {
-      clearTimeout(timeout)
-
-      // JSON mal-formado já tratado acima. Aqui: erros de rede/abort
       if (attempt < 3) {
         await sleep(1000)
         return this.classify(item, attempt + 1)
@@ -207,6 +216,8 @@ Responda SOMENTE com JSON no formato:
 
       logger.error(`[SYS_002] Sonnet API indisponível após 3 tentativas: ${(err as Error).message}`)
       return { ...CLASSIFICATION_FALLBACK }
+    } finally {
+      clearTimeout(timeout)
     }
   }
 
