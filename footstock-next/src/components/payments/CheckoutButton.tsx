@@ -2,13 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { NativeSelect } from '@/components/ui/select'
 import { PixQRModal } from '@/components/payments/PixQRModal'
 import { useAnalytics } from '@/hooks/useAnalytics'
 import { usePlanGuard } from '@/hooks/usePlanGuard'
@@ -131,29 +125,18 @@ export function CheckoutButton({
       )}
 
       <div className="flex flex-col gap-2">
-        <Select
+        <NativeSelect
           value={gateway}
           onValueChange={handleGatewayChange}
           disabled={loading}
-        >
-          <SelectTrigger
-            className="bg-[#1E2329] border-[rgba(240,185,11,.2)] text-[#EAECEF] text-sm h-9"
-            data-testid="checkout-gateway-select"
-          >
-            <SelectValue placeholder="Forma de pagamento" />
-          </SelectTrigger>
-          <SelectContent className="bg-[#1E2329] border-[rgba(240,185,11,.2)]">
-            {(Object.keys(GATEWAY_LABELS) as Gateway[]).map((g) => (
-              <SelectItem
-                key={g}
-                value={g}
-                className="text-[#EAECEF] focus:bg-[rgba(240,185,11,.1)]"
-              >
-                {GATEWAY_LABELS[g]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          placeholder="Forma de pagamento"
+          options={(Object.keys(GATEWAY_LABELS) as Gateway[]).map((g) => ({
+            value: g,
+            label: GATEWAY_LABELS[g],
+          }))}
+          triggerClassName="bg-[#1E2329] border-[rgba(240,185,11,.2)] text-[#EAECEF] text-sm h-9"
+          data-testid="checkout-gateway-select"
+        />
 
         <Button
           data-testid="plan-checkout-modal-checkout-confirm"
