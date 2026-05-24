@@ -57,6 +57,8 @@ export class MarketEngine {
   private previousTickDeltas = new Map<string, PreviousTickDelta>()
   /** Sessão do tick anterior — detecta transições para resetar âncora do CB. */
   private previousSessionType: SessionType | null = null
+  /** Timers de retomada do circuit breaker por assetId — cancelados no stop(). */
+  private circuitBreakerTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
   constructor(redis: Redis) {
     this.redis = redis
@@ -103,6 +105,10 @@ export class MarketEngine {
       clearInterval(this.tickTimer)
       this.tickTimer = null
     }
+    for (const timer of this.circuitBreakerTimers.values()) {
+      clearTimeout(timer)
+    }
+    this.circuitBreakerTimers.clear()
     agentOrchestrator.dispose()
     if (disconnectPrisma) {
       await this.prisma.$disconnect()
@@ -237,26 +243,32 @@ export class MarketEngine {
           state.haltReason = 'CIRCUIT_BREAKER'
           state.haltResumeAt = resumeAt
           this.notifyCircuitBreaker(assetId, state.ticker, variationPct, resumeAt, sessionType).catch(console.error)
-          setTimeout(() => {
-            state.isPaused = false
-            state.haltReason = null
-            state.haltResumeAt = null
-            // Fix C: NÃO rebaixar a âncora ao retomar. Antes, closePrice virava o
-            // preço deprimido pós-halt, permitindo nova queda de 8% imediatamente
-            // (ratchet de quedas sucessivas). A âncora canônica é o close do dia
-            // anterior (resetada apenas em PRE_OPENING). Para evitar re-trigger
-            // imediato do CB enquanto o ativo se recupera, usamos openPrice do dia
-            // como âncora (em vez de currentPrice deprimido).
-            if (state.openPrice > 0) {
-              state.closePrice = state.openPrice
-            }
-            logger.info(`[engine] ${state.ticker} retomado após circuit breaker (closePrice mantido em ${state.closePrice.toFixed(4)}, currentPrice=${state.currentPrice.toFixed(4)})`)
-            this.persistHaltState(assetId, false, null).catch(console.error)
-            // Publica tick de retomada para o frontend atualizar em tempo real
-            const resumeTick = buildHaltTick(state, sessionType, null, null)
-            resumeTick.isHalted = false
-            this.redis.publish(REDIS_CHANNELS.MARKET_TICK, serializeTick([resumeTick])).catch(console.error)
-          }, PAUSE_RESUME_MS)
+          {
+            const existingTimer = this.circuitBreakerTimers.get(assetId)
+            if (existingTimer) clearTimeout(existingTimer)
+            const cbTimer = setTimeout(() => {
+              this.circuitBreakerTimers.delete(assetId)
+              state.isPaused = false
+              state.haltReason = null
+              state.haltResumeAt = null
+              // Fix C: NÃO rebaixar a âncora ao retomar. Antes, closePrice virava o
+              // preço deprimido pós-halt, permitindo nova queda de 8% imediatamente
+              // (ratchet de quedas sucessivas). A âncora canônica é o close do dia
+              // anterior (resetada apenas em PRE_OPENING). Para evitar re-trigger
+              // imediato do CB enquanto o ativo se recupera, usamos openPrice do dia
+              // como âncora (em vez de currentPrice deprimido).
+              if (state.openPrice > 0) {
+                state.closePrice = state.openPrice
+              }
+              logger.info(`[engine] ${state.ticker} retomado após circuit breaker (closePrice mantido em ${state.closePrice.toFixed(4)}, currentPrice=${state.currentPrice.toFixed(4)})`)
+              this.persistHaltState(assetId, false, null).catch(console.error)
+              // Publica tick de retomada para o frontend atualizar em tempo real
+              const resumeTick = buildHaltTick(state, sessionType, null, null)
+              resumeTick.isHalted = false
+              this.redis.publish(REDIS_CHANNELS.MARKET_TICK, serializeTick([resumeTick])).catch(console.error)
+            }, PAUSE_RESUME_MS)
+            this.circuitBreakerTimers.set(assetId, cbTimer)
+          }
           continue
         }
 
