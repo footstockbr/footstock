@@ -72,6 +72,16 @@ export class MarketEngine {
   }
 
   async start(): Promise<void> {
+    // Limpa halts stale do DB antes de carregar ativos — evita que circuit breakers
+    // de sessões anteriores (motor parado durante o halt) fiquem visíveis para sempre.
+    const cleared = await this.prisma.asset.updateMany({
+      where: { isHalted: true },
+      data: { isHalted: false, haltReason: null },
+    })
+    if (cleared.count > 0) {
+      logger.warn(`[engine] Startup: ${cleared.count} halts stale limpos do DB`)
+    }
+
     await this.loadAssets()
     logger.info(`[engine] ${this.assetStates.size} ativos carregados. Iniciando ticks...`)
 

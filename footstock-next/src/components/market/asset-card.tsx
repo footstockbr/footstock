@@ -79,19 +79,19 @@ function AssetCard({ asset, isFavorite }: AssetCardProps) {
       <Link
         href={ROUTES.MERCADO_DETALHE(asset.ticker)}
         data-testid="asset-card"
-        className="relative block bg-[#1E2329] rounded-lg border border-red-900/50 p-3 opacity-75 hover:opacity-85 transition-opacity"
+        className="relative block bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.2)] p-3 opacity-80 hover:opacity-95 transition-opacity"
       >
         <div className="absolute top-2 right-2 flex flex-col items-end gap-0.5">
           <span
             data-testid="asset-card-halted-badge"
-            className="text-[10px] font-bold bg-red-900/80 text-red-300 px-1.5 py-0.5 rounded"
+            className="text-[9px] font-semibold tracking-widest uppercase bg-[rgba(240,185,11,.12)] text-[#F0B90B] border border-[rgba(240,185,11,.3)] px-1.5 py-0.5 rounded-sm"
           >
-            SUSPENSO
+            Pausado
           </span>
           {countdown && (
             <span
               data-testid="asset-card-halt-countdown"
-              className="text-[9px] font-mono text-red-400/80"
+              className="text-[9px] font-mono text-[#929AA5]"
             >
               {countdown}
             </span>

@@ -50,17 +50,17 @@ export function HaltedBadge({ haltedUntil, haltReason: _haltReason, size = 'sm',
       <span
         data-testid="halted-badge"
         className={cn(
-          'font-bold bg-red-900/80 text-red-300 rounded animate-pulse',
-          size === 'sm' ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-1'
+          'font-semibold tracking-widest uppercase bg-[rgba(240,185,11,.12)] text-[#F0B90B] border border-[rgba(240,185,11,.3)] rounded-sm',
+          size === 'sm' ? 'text-[9px] px-1.5 py-0.5' : 'text-[11px] px-2 py-1'
         )}
       >
-        SUSPENSO
+        Pausado
       </span>
       {countdown && (
         <span
           data-testid="halted-badge-countdown"
           className={cn(
-            'font-mono text-red-400/80',
+            'font-mono text-[#929AA5]',
             size === 'sm' ? 'text-[9px]' : 'text-[11px]'
           )}
         >
