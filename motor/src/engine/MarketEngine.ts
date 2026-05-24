@@ -74,16 +74,24 @@ export class MarketEngine {
   }
 
   async start(): Promise<void> {
-    // Limpa halts stale do DB antes de carregar ativos.
-    // Ao adquirir liderança, garantimos single-leader: não existe outra instância ativa.
-    // Todos os isHalted=true no DB são stale de um motor anterior que morreu antes de
-    // auto-resumir via setTimeout. Limpar incondicionalmente.
+    // Limpa apenas halts de CB expirados (ou sem haltedUntil = dados legados).
+    // Halts administrativos (FORCE_CIRCUIT_BREAKER, etc.) são preservados: o operador
+    // os criou explicitamente e a intenção é que sobrevivam ao restart.
+    // loadAssets() reconcilia o estado em memória a partir do DB.
+    const now = new Date()
     const cleared = await this.prisma.asset.updateMany({
-      where: { isHalted: true },
-      data: { isHalted: false, haltReason: null },
+      where: {
+        isHalted: true,
+        haltReason: 'CIRCUIT_BREAKER',
+        OR: [
+          { haltedUntil: null },          // legado: CB sem timestamp de expiração
+          { haltedUntil: { lte: now } },  // CB expirado
+        ],
+      },
+      data: { isHalted: false, haltReason: null, haltedUntil: null },
     })
     if (cleared.count > 0) {
-      logger.warn(`[engine] Startup: ${cleared.count} halts stale limpos do DB`)
+      logger.warn(`[engine] Startup: ${cleared.count} halts de CB expirados/legados limpos do DB`)
     }
 
     await this.loadAssets()
@@ -116,7 +124,38 @@ export class MarketEngine {
     logger.info('[engine] Engine encerrado.')
   }
 
+  /**
+   * Agenda a retomada de um halt de circuit breaker.
+   * Cancela timer anterior do mesmo ativo (idempotente) e registra o novo no Map.
+   * Usa sessionManager.getCurrentSession() no momento do disparo — mais correto
+   * do que capturar a sessão em runTick() (pode ter mudado após 300s).
+   */
+  private scheduleCircuitBreakerResume(assetId: string, state: AssetState, delayMs: number): void {
+    const existingTimer = this.circuitBreakerTimers.get(assetId)
+    if (existingTimer) clearTimeout(existingTimer)
+
+    const cbTimer = setTimeout(() => {
+      this.circuitBreakerTimers.delete(assetId)
+      state.isPaused = false
+      state.haltReason = null
+      state.haltResumeAt = null
+      // Fix C: âncora permanece no openPrice do dia para evitar re-trigger imediato do CB.
+      if (state.openPrice > 0) {
+        state.closePrice = state.openPrice
+      }
+      const sessionType = sessionManager.getCurrentSession()
+      logger.info(`[engine] ${state.ticker} retomado após circuit breaker (closePrice=${state.closePrice.toFixed(4)}, currentPrice=${state.currentPrice.toFixed(4)})`)
+      this.persistHaltState(assetId, false, null, null).catch(console.error)
+      const resumeTick = buildHaltTick(state, sessionType, null, null)
+      resumeTick.isHalted = false
+      this.redis.publish(REDIS_CHANNELS.MARKET_TICK, serializeTick([resumeTick])).catch(console.error)
+    }, delayMs)
+
+    this.circuitBreakerTimers.set(assetId, cbTimer)
+  }
+
   private async loadAssets(): Promise<void> {
+    const loadTime = Date.now()
     const assets = await this.prisma.asset.findMany({ where: { isActive: true } })
 
     for (const asset of assets) {
@@ -127,6 +166,18 @@ export class MarketEngine {
       // âncora inicial é o comportamento correto — CB só dispara para movimentos
       // bruscos a partir do momento de (re)inicialização.
       const currentPriceNum = Number(asset.currentPrice)
+
+      // Reconciliar halt: CB com haltedUntil futuro reatualiza memória e agenda timer;
+      // halt admin (sem haltedUntil) persiste como isPaused=true sem retomada automática.
+      const haltedUntilMs = asset.haltedUntil?.getTime() ?? null
+      const isCbHaltActive =
+        asset.isHalted &&
+        asset.haltReason === 'CIRCUIT_BREAKER' &&
+        haltedUntilMs !== null &&
+        haltedUntilMs > loadTime
+      const isAdminHalt = asset.isHalted && asset.haltReason !== 'CIRCUIT_BREAKER'
+      const isPaused = isCbHaltActive || isAdminHalt
+
       const state: AssetState = {
         id: asset.id,
         ticker: asset.ticker,
@@ -142,9 +193,9 @@ export class MarketEngine {
         variance: 0.00001,  // Variância GARCH inicial (reduzida 10x: evita ruído GARCH soterrar L2_Anchor)
         pendingBuyVolume: 0,
         pendingSellVolume: 0,
-        isPaused: false,
-        haltReason: null,
-        haltResumeAt: null,
+        isPaused,
+        haltReason: isPaused ? (asset.haltReason ?? null) : null,
+        haltResumeAt: isCbHaltActive ? haltedUntilMs : null,
         newsImpact: 0,
         newsImpactTicks: 0,
         ofiState: 0,               // L4_OFI: OFI_t inicial (sem acumulação)
@@ -155,6 +206,13 @@ export class MarketEngine {
 
       this.assetStates.set(asset.id, state)
       this.orderBooks.set(asset.id, new OrderBook())
+
+      // CB ainda ativo: reagendar retomada pelo tempo restante
+      if (isCbHaltActive && haltedUntilMs) {
+        const remainingMs = Math.max(0, haltedUntilMs - Date.now())
+        this.scheduleCircuitBreakerResume(asset.id, state, remainingMs)
+        logger.warn(`[engine] ${asset.ticker} halt CB ativo — retomada reagendada em ${Math.ceil(remainingMs / 1000)}s`)
+      }
 
       // Inicializar agentes para este ativo conforme seu cluster real
       const clusterMap: Record<string, AssetCluster> = {
@@ -243,32 +301,7 @@ export class MarketEngine {
           state.haltReason = 'CIRCUIT_BREAKER'
           state.haltResumeAt = resumeAt
           this.notifyCircuitBreaker(assetId, state.ticker, variationPct, resumeAt, sessionType).catch(console.error)
-          {
-            const existingTimer = this.circuitBreakerTimers.get(assetId)
-            if (existingTimer) clearTimeout(existingTimer)
-            const cbTimer = setTimeout(() => {
-              this.circuitBreakerTimers.delete(assetId)
-              state.isPaused = false
-              state.haltReason = null
-              state.haltResumeAt = null
-              // Fix C: NÃO rebaixar a âncora ao retomar. Antes, closePrice virava o
-              // preço deprimido pós-halt, permitindo nova queda de 8% imediatamente
-              // (ratchet de quedas sucessivas). A âncora canônica é o close do dia
-              // anterior (resetada apenas em PRE_OPENING). Para evitar re-trigger
-              // imediato do CB enquanto o ativo se recupera, usamos openPrice do dia
-              // como âncora (em vez de currentPrice deprimido).
-              if (state.openPrice > 0) {
-                state.closePrice = state.openPrice
-              }
-              logger.info(`[engine] ${state.ticker} retomado após circuit breaker (closePrice mantido em ${state.closePrice.toFixed(4)}, currentPrice=${state.currentPrice.toFixed(4)})`)
-              this.persistHaltState(assetId, false, null).catch(console.error)
-              // Publica tick de retomada para o frontend atualizar em tempo real
-              const resumeTick = buildHaltTick(state, sessionType, null, null)
-              resumeTick.isHalted = false
-              this.redis.publish(REDIS_CHANNELS.MARKET_TICK, serializeTick([resumeTick])).catch(console.error)
-            }, PAUSE_RESUME_MS)
-            this.circuitBreakerTimers.set(assetId, cbTimer)
-          }
+          this.scheduleCircuitBreakerResume(assetId, state, PAUSE_RESUME_MS)
           continue
         }
 
@@ -473,8 +506,9 @@ export class MarketEngine {
   ): Promise<void> {
     const haltReason = 'CIRCUIT_BREAKER'
 
-    // 1. Persistir halt no banco (isHalted=true) — sincroniza OrderService que lê do DB
-    await this.persistHaltState(assetId, true, haltReason)
+    // 1. Persistir halt no banco com timestamp de expiração — sincroniza OrderService e
+    //    permite startup cleanup baseado em expiração (sem depender de processo vivo).
+    await this.persistHaltState(assetId, true, haltReason, new Date(resumeAt))
 
     // 2. Publicar evento circuit-breaker no Redis (consumido por outros serviços)
     const notification = {
@@ -503,16 +537,17 @@ export class MarketEngine {
     }
   }
 
-  /** Persiste isHalted e haltReason no banco de dados. */
+  /** Persiste isHalted, haltReason e haltedUntil no banco de dados. */
   private async persistHaltState(
     assetId: string,
     isHalted: boolean,
-    haltReason: string | null
+    haltReason: string | null,
+    haltedUntil: Date | null = null
   ): Promise<void> {
     try {
       await this.prisma.asset.update({
         where: { id: assetId },
-        data: { isHalted, haltReason },
+        data: { isHalted, haltReason, haltedUntil },
       })
     } catch (err) {
       logger.error(`[engine] Falha ao persistir halt state para ${assetId}:`, err)

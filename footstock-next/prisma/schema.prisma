@@ -369,9 +369,10 @@ model Asset {
   currentSupply  BigInt   @default(1000000) @map("current_supply")
   totalShares    BigInt   @default(1000000) @map("total_shares")
   isActive       Boolean  @default(true) @map("is_active")
-  isHalted       Boolean  @default(false) @map("is_halted")
-  haltReason     String?  @map("halt_reason")
-  sentiment      String   @default("NEUTRAL") // BULLISH | BEARISH | NEUTRAL
+  isHalted       Boolean   @default(false) @map("is_halted")
+  haltReason     String?   @map("halt_reason")
+  haltedUntil    DateTime? @map("halted_until")
+  sentiment      String    @default("NEUTRAL") // BULLISH | BEARISH | NEUTRAL
   financials     Json?    @db.JsonB
   colorPrimary   String   @map("color_primary")
   colorSecondary String   @map("color_secondary")
