@@ -79,37 +79,35 @@ function AssetCard({ asset, isFavorite }: AssetCardProps) {
       <Link
         href={ROUTES.MERCADO_DETALHE(asset.ticker)}
         data-testid="asset-card"
-        className="relative block bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.2)] p-3 hover:border-[rgba(240,185,11,.35)] transition-colors"
+        className="block bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.2)] p-3 hover:border-[rgba(240,185,11,.35)] transition-colors"
       >
-        <div className="absolute top-2 right-2 flex flex-col items-end gap-0.5">
-          <span
-            data-testid="asset-card-halted-badge"
-            aria-label="Negociação pausada temporariamente por circuit breaker"
-            title="Negociação pausada temporariamente por circuit breaker"
-            className="text-[9px] font-semibold tracking-widest uppercase bg-[rgba(240,185,11,.12)] text-[#F0B90B] border border-[rgba(240,185,11,.3)] px-1.5 py-0.5 rounded-sm"
-          >
-            Pausado
-          </span>
-          {countdown && (
-            <span
-              data-testid="asset-card-halt-countdown"
-              className="text-[9px] font-mono text-[#929AA5]"
-            >
-              {countdown}
-            </span>
-          )}
-        </div>
         <div className="flex items-center gap-2.5">
           <div className="w-10 h-10 rounded-full bg-[#2B3139] flex items-center justify-center text-xs font-black text-[#F0B90B] shrink-0">
             {asset.ticker.slice(0, 3)}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-sm font-mono font-bold text-[#EAECEF]">{asset.ticker}</span>
+              <span
+                data-testid="asset-card-halted-badge"
+                aria-label="Negociação pausada temporariamente por circuit breaker"
+                title="Negociação pausada temporariamente por circuit breaker"
+                className="text-[9px] font-semibold tracking-widest uppercase bg-[rgba(240,185,11,.12)] text-[#F0B90B] border border-[rgba(240,185,11,.3)] px-1.5 py-0.5 rounded-sm"
+              >
+                Pausado
+              </span>
+              {countdown && (
+                <span
+                  data-testid="asset-card-halt-countdown"
+                  className="text-[9px] font-mono text-[#929AA5]"
+                >
+                  {countdown}
+                </span>
+              )}
             </div>
             <p className="text-xs text-[#929AA5] truncate">{asset.displayName}</p>
           </div>
-          <div className="text-right">
+          <div className="text-right shrink-0">
             <p
               data-testid="asset-card-price"
               className="text-sm font-mono font-bold text-[#EAECEF]"
