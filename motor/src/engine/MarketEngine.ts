@@ -72,14 +72,21 @@ export class MarketEngine {
   }
 
   async start(): Promise<void> {
-    // Limpa halts stale do DB antes de carregar ativos — evita que circuit breakers
-    // de sessões anteriores (motor parado durante o halt) fiquem visíveis para sempre.
+    // Limpa halts stale do DB antes de carregar ativos.
+    // Usa updatedAt como guard temporal: apenas halts mais antigos que o período máximo
+    // de auto-resume (300s CB + 30s grace = 330s) são considerados stale de sessões
+    // anteriores. Halts recentes (< 330s) podem ter sido criados por outra instância
+    // durante failover e não devem ser apagados.
+    const STALE_HALT_GRACE_MS = 330_000
     const cleared = await this.prisma.asset.updateMany({
-      where: { isHalted: true },
+      where: {
+        isHalted: true,
+        updatedAt: { lt: new Date(Date.now() - STALE_HALT_GRACE_MS) },
+      },
       data: { isHalted: false, haltReason: null },
     })
     if (cleared.count > 0) {
-      logger.warn(`[engine] Startup: ${cleared.count} halts stale limpos do DB`)
+      logger.warn(`[engine] Startup: ${cleared.count} halts stale limpos do DB (updatedAt > 330s atrás)`)
     }
 
     await this.loadAssets()

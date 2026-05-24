@@ -79,11 +79,13 @@ function AssetCard({ asset, isFavorite }: AssetCardProps) {
       <Link
         href={ROUTES.MERCADO_DETALHE(asset.ticker)}
         data-testid="asset-card"
-        className="relative block bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.2)] p-3 opacity-80 hover:opacity-95 transition-opacity"
+        className="relative block bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.2)] p-3 hover:border-[rgba(240,185,11,.35)] transition-colors"
       >
         <div className="absolute top-2 right-2 flex flex-col items-end gap-0.5">
           <span
             data-testid="asset-card-halted-badge"
+            aria-label="Negociação pausada temporariamente por circuit breaker"
+            title="Negociação pausada temporariamente por circuit breaker"
             className="text-[9px] font-semibold tracking-widest uppercase bg-[rgba(240,185,11,.12)] text-[#F0B90B] border border-[rgba(240,185,11,.3)] px-1.5 py-0.5 rounded-sm"
           >
             Pausado

@@ -49,6 +49,8 @@ export function HaltedBadge({ haltedUntil, haltReason: _haltReason, size = 'sm',
     <div className={cn('inline-flex flex-col items-center gap-0.5', className)}>
       <span
         data-testid="halted-badge"
+        aria-label="Negociação pausada temporariamente por circuit breaker"
+        title="Negociação pausada temporariamente por circuit breaker"
         className={cn(
           'font-semibold tracking-widest uppercase bg-[rgba(240,185,11,.12)] text-[#F0B90B] border border-[rgba(240,185,11,.3)] rounded-sm',
           size === 'sm' ? 'text-[9px] px-1.5 py-0.5' : 'text-[11px] px-2 py-1'
