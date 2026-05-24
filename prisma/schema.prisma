@@ -503,16 +503,22 @@ model News {
   content     String         @db.Text
   impact      ImpactCategory
   sentiment   Sentiment
+  ticker      String? // ticker do ativo vinculado (ex: "URU3") — ADR adr-news-ticker-assetids-sync (Opcao A)
   // Array de IDs de ativos relacionados (suporte nativo PostgreSQL)
   assetIds    String[]       @map("asset_ids")
   source      String?
   isPublished Boolean        @default(false) @map("is_published")
   publishedAt DateTime?      @map("published_at")
+  isArchived  Boolean        @default(false) @map("is_archived")
+  archivedAt  DateTime?      @map("archived_at")
+  clicks      Int            @default(0)
+  author      String         @default("admin")
   createdAt   DateTime       @default(now()) @map("created_at")
   updatedAt   DateTime       @updatedAt @map("updated_at")
 
   @@index([publishedAt])
   @@index([isPublished])
+  @@index([isArchived])
   @@map("news")
 }
 
