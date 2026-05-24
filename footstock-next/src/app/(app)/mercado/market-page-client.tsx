@@ -19,6 +19,7 @@ export function MarketPageClient() {
   const [divisions, setDivisions] = useState<Set<Division>>(new Set());
   const [sentiments, setSentiments] = useState<Set<SentimentFilter>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
+  const [favoriteClubTicker, setFavoriteClubTicker] = useState<string | null>(null);
   const { track } = useAnalytics();
   const trackedRef = useRef(false);
 
@@ -45,14 +46,23 @@ export function MarketPageClient() {
   }, [baseAssets, tickMap]);
 
   useEffect(() => {
-    async function fetchAssets() {
+    async function fetchData() {
       try {
-        const res = await fetch("/api/v1/assets", { credentials: "include" });
-        if (!res.ok) {
+        const [assetsRes, meRes] = await Promise.all([
+          fetch("/api/v1/assets", { credentials: "include" }),
+          fetch("/api/v1/me", { credentials: "include" }),
+        ]);
+
+        if (meRes.ok) {
+          const meJson = await meRes.json();
+          setFavoriteClubTicker(meJson.data?.favoriteClub ?? null);
+        }
+
+        if (!assetsRes.ok) {
           setIsLoading(false);
           return;
         }
-        const json = await res.json();
+        const json = await assetsRes.json();
         const mapped: AssetData[] = (json.data ?? []).map((a: {
           ticker: string;
           displayName: string;
@@ -85,7 +95,7 @@ export function MarketPageClient() {
         setIsLoading(false);
       }
     }
-    fetchAssets();
+    fetchData();
   }, []);
 
   // EVT-016: market_list_viewed — rastreia quando a página do mercado é visualizada
@@ -124,7 +134,7 @@ export function MarketPageClient() {
   };
 
   const filtered = useMemo<AssetData[]>(() => {
-    return assets.filter((a) => {
+    const list = assets.filter((a) => {
       const matchSearch =
         !search ||
         a.ticker.toLowerCase().includes(search.toLowerCase()) ||
@@ -140,7 +150,17 @@ export function MarketPageClient() {
 
       return matchSearch && matchDivision && matchSentiment;
     });
-  }, [assets, search, divisions, sentiments]);
+
+    if (favoriteClubTicker) {
+      const favIdx = list.findIndex((a) => a.ticker === favoriteClubTicker);
+      if (favIdx > 0) {
+        const [fav] = list.splice(favIdx, 1);
+        list.unshift(fav);
+      }
+    }
+
+    return list;
+  }, [assets, search, divisions, sentiments, favoriteClubTicker]);
 
   const clearFilters = () => {
     setSearch("");
@@ -272,7 +292,11 @@ export function MarketPageClient() {
           className="flex flex-col gap-2 p-4 md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
         >
           {filtered.map((asset) => (
-            <AssetCard key={asset.ticker} asset={asset} />
+            <AssetCard
+              key={asset.ticker}
+              asset={asset}
+              isFavorite={!!favoriteClubTicker && asset.ticker === favoriteClubTicker}
+            />
           ))}
         </div>
       )}

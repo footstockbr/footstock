@@ -5,51 +5,15 @@
 // ============================================================================
 
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { createServerClient } from '@supabase/ssr'
-import { prisma } from '@/lib/prisma'
 import { adminSessionService } from '@/lib/admin/AdminSessionService'
+import { getAuthUser } from '@/lib/auth'
 
 export async function GET() {
   try {
-    const cookieStore = await cookies()
+    const auth = await getAuthUser()
 
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() { return cookieStore.getAll() },
-          setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch { /* Server Component */ }
-          },
-        },
-      }
-    )
-
-    const { data: { user } } = await supabase.auth.getUser()
-    const devAuthEmail =
-      process.env.NODE_ENV !== 'production' ? cookieStore.get('fs_dev_auth')?.value : null
-
-    // adminRole sempre do banco — JWT não confiável para autorização
-    const dbUser = user
-      ? await prisma.user.findUnique({
-          where: { id: user.id },
-          select: { id: true, adminRole: true },
-        })
-      : devAuthEmail
-      ? await prisma.user.findUnique({
-          where: { email: devAuthEmail },
-          select: { id: true, adminRole: true },
-        })
-      : null
-
-    if (!dbUser?.adminRole) {
-      const hasAuthenticatedIdentity = Boolean(user || devAuthEmail)
+    if (!auth?.user.adminRole) {
+      const hasAuthenticatedIdentity = Boolean(auth)
       return NextResponse.json(
         { error: hasAuthenticatedIdentity ? 'AUTH-005' : 'AUTH-001' },
         { status: hasAuthenticatedIdentity ? 403 : 401 }
@@ -57,9 +21,9 @@ export async function GET() {
     }
 
     // Inicializa TTL de atividade Redis para a sessão admin
-    await adminSessionService.storeActivityTimestamp(dbUser.id)
+    await adminSessionService.storeActivityTimestamp(auth.user.id)
 
-    return NextResponse.json({ ok: true, adminRole: dbUser.adminRole })
+    return NextResponse.json({ ok: true, adminRole: auth.user.adminRole })
   } catch {
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }

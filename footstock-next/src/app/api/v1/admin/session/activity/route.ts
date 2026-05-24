@@ -5,65 +5,29 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { createServerClient } from '@supabase/ssr'
-import { prisma } from '@/lib/prisma'
 import { adminSessionService } from '@/lib/admin/AdminSessionService'
-import type { AdminRole } from '@/lib/enums'
+import { getAuthUser } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = await cookies()
+    const auth = await getAuthUser()
 
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() { return cookieStore.getAll() },
-          setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch { /* Server Component */ }
-          },
-        },
-      }
-    )
-
-    const { data: { user } } = await supabase.auth.getUser()
-    const devAuthEmail =
-      process.env.NODE_ENV !== 'production' ? request.cookies.get('fs_dev_auth')?.value : null
-    const devAdminRole =
-      process.env.NODE_ENV !== 'production' ? request.cookies.get('fs-admin-role')?.value : null
-
-    let dbUser = user
-      ? await prisma.user.findUnique({
-          where: { id: user.id },
-          select: { id: true, adminRole: true },
-        })
-      : devAuthEmail
-      ? await prisma.user.findUnique({
-          where: { email: devAuthEmail },
-          select: { id: true, adminRole: true },
-        })
-      : null
-
-    // Dev mode: fallback to fs-admin-role cookie if no Supabase user
-    if (!dbUser && devAdminRole) {
-      dbUser = { id: 'dev-user', adminRole: devAdminRole as AdminRole | null }
-    }
-
-    if (!dbUser) {
+    if (!auth) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (!dbUser.adminRole) {
+    if (!auth.user.adminRole) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    await adminSessionService.storeActivityTimestamp(dbUser.id)
+    const body = await request.json().catch(() => ({}))
+    const requestedUserId = typeof body?.userId === 'string' ? body.userId : null
+
+    if (requestedUserId && requestedUserId !== auth.user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    await adminSessionService.storeActivityTimestamp(auth.user.id)
 
     return NextResponse.json({ ok: true })
   } catch {
