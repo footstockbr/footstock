@@ -4,10 +4,12 @@
 // FootStock — useMotorStatus
 // Polling do endpoint /api/v1/health/motor a cada 10s.
 // Frequência alinhada ao intervalo de publicação do heartbeat do motor.
-// Fail-safe: assume offline quando fetch falha.
+// Grace period: banner só aparece após 3 polls consecutivos offline (≈30s),
+// evitando falso positivo durante restart do motor.
 // ============================================================================
 
 import { useQuery } from '@tanstack/react-query'
+import { useRef, useState, useEffect } from 'react'
 
 export interface MotorStatus {
   status: 'online' | 'offline'
@@ -33,6 +35,8 @@ export interface UseMotorStatusReturn {
   isLoading: boolean
 }
 
+const OFFLINE_GRACE_POLLS = 3  // mostra banner após 3 polls consecutivos offline (≈30s)
+
 export function useMotorStatus(): UseMotorStatusReturn {
   const { data, isLoading, isError } = useQuery<MotorStatus, Error>({
     queryKey: ['motor-status'],
@@ -42,12 +46,27 @@ export function useMotorStatus(): UseMotorStatusReturn {
     retry: 1,
   })
 
-  // Fail-safe: se erro de fetch ou status offline → isOnline=false
-  const isOnline = !isError && data?.status === 'online'
+  const consecutiveOffline = useRef(0)
+  const [confirmedOffline, setConfirmedOffline] = useState(false)
+
+  const pollIsOnline = !isError && data?.status === 'online'
+
+  useEffect(() => {
+    if (isLoading) return
+    if (pollIsOnline) {
+      consecutiveOffline.current = 0
+      setConfirmedOffline(false)
+    } else {
+      consecutiveOffline.current += 1
+      if (consecutiveOffline.current >= OFFLINE_GRACE_POLLS) {
+        setConfirmedOffline(true)
+      }
+    }
+  }, [pollIsOnline, isLoading])
 
   return {
-    isOnline,
-    isOffline: !isLoading && !isOnline,
+    isOnline: pollIsOnline,
+    isOffline: confirmedOffline,
     lastTick: data?.lastTick ?? null,
     isLoading,
   }
