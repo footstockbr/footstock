@@ -109,15 +109,15 @@ export default async function PlanosPage() {
   const userPlanLevel = PLAN_ORDER[userPlan] ?? 1;
 
   return (
-    <div data-testid="planos-page" className="px-4 pt-4 pb-8">
-      <div className="text-center mb-6">
+    <div data-testid="planos-page" className="px-4 md:px-8 pt-4 pb-8 max-w-5xl mx-auto">
+      <div className="text-center mb-8">
         <h1 className="text-xl font-bold text-[#EAECEF] mb-1">Escolha seu plano</h1>
         <p className="text-sm text-[#929AA5]">
           Invista em dados melhores. Cancele quando quiser.
         </p>
       </div>
 
-      <div data-testid="planos-list" className="flex flex-col gap-4">
+      <div data-testid="planos-list" className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 items-start">
         {PLANS.map((plan) => {
           const Icon = plan.icon;
           const isCraque = plan.type === PlanType.CRAQUE;
@@ -150,7 +150,7 @@ export default async function PlanosPage() {
             <div
               key={plan.type}
               data-testid={`plano-card-${plan.type.toLowerCase()}`}
-              className={`rounded-xl border p-5 relative ${
+              className={`rounded-xl border p-5 relative flex flex-col ${
                 isCraque
                   ? "bg-[rgba(240,185,11,.06)] border-[rgba(240,185,11,.4)] shadow-[0_0_24px_rgba(240,185,11,.12)]"
                   : "bg-[#1E2329] border-[rgba(240,185,11,.12)]"
@@ -190,7 +190,7 @@ export default async function PlanosPage() {
                 </div>
               </div>
 
-              <ul className="space-y-2 mb-4">
+              <ul className="space-y-2 mb-4 flex-1">
                 {plan.features.map((feature) => (
                   <li key={feature} className="flex items-center gap-2">
                     <Check className="h-3.5 w-3.5 text-[#4ade80] flex-shrink-0" />
