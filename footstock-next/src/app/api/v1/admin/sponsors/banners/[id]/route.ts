@@ -61,7 +61,7 @@ export async function PATCH(request: NextRequest, { params }: BannerParams) {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
-      auth = { user: dummyUser, supabaseId: 'dev-user' }
+      auth = { user: dummyUser, userId: 'dev-user' }
     }
   }
 
@@ -147,7 +147,7 @@ export async function DELETE(request: NextRequest, { params }: BannerParams) {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
-      auth = { user: dummyUser, supabaseId: 'dev-user' }
+      auth = { user: dummyUser, userId: 'dev-user' }
     }
   }
 

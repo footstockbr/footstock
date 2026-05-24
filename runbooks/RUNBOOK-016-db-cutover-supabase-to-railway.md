@@ -1,5 +1,9 @@
 # Runbook 016 — DB Cutover: Supabase → Railway Postgres ⚠️ CRÍTICO
 
+> **STATUS: CONCLUÍDO (2026-05).** O cutover foi executado; o banco de produção
+> é Railway-internal Postgres. Registro histórico do procedimento — não há mais
+> Supabase para migrar.
+
 > **Tipo:** RUNBOOK — REQUER JANELA DE MANUTENÇÃO  
 > **Criticidade:** ALTA  
 > **Criado:** 2026-05-06  

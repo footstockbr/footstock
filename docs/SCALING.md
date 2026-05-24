@@ -4,6 +4,11 @@
 **Data:** 2026-03-31
 **Versão:** v1.0
 
+> NOTA (2026-05): A stack de produção é Railway (web + motor + Postgres + Redis).
+> As tabelas de custo abaixo, que listam Vercel e Supabase, são projeções
+> históricas anteriores ao cutover e NÃO refletem a infraestrutura atual.
+> Tratar como referência histórica, não como guia de provisionamento.
+
 ---
 
 ## Visão Geral

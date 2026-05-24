@@ -1,18 +1,13 @@
 // ============================================================================
-// Auth.js v5 - Credentials authorize + Supabase->Prisma backfill (TASK-3/Item 3)
+// Auth.js v5 - Credentials authorize (TASK-3/Item 3)
 // ----------------------------------------------------------------------------
-// Pure functions used by the Credentials provider em `src/auth.ts` e pelo
-// route handler `src/app/api/v1/auth/login/route.ts` (dual-stack fallback).
+// Pure function used by the Credentials provider em `src/auth.ts` e pelo
+// route handler `src/app/api/v1/auth/login/route.ts`.
 //
 //  - `authorizeCredentials(credentials)`: Zod parse + bcrypt.compare contra
 //    `user.passwordHash` do Prisma. Aplica timing defense via dummy bcrypt
 //    quando o user nao existe ou ainda nao tem hash. Retorna nullable; o
-//    caller (Auth.js OU /api/v1/auth/login) decide o que fazer com null.
-//
-//  - `backfillPasswordHash(userId, plaintext)`: hash bcrypt(12) +
-//    `prisma.user.updateMany({ where: { id, passwordHash: null }, ... })`.
-//    Race-safe por construcao: segundo concorrente vira no-op porque o
-//    WHERE deixa de bater apos o primeiro UPDATE commitar.
+//    caller decide o que fazer com null (falha de autenticacao).
 // ============================================================================
 
 import bcrypt from 'bcryptjs'
@@ -69,9 +64,8 @@ export async function authorizeCredentials(
   // existe user ou nao existe hash. O resultado e descartado.
   if (!user || !user.passwordHash) {
     await bcrypt.compare(password, DUMMY_HASH).catch(() => false)
-    if (!user) return null
-    // user existe mas sem passwordHash: o caller (login/route.ts) podera
-    // tentar o fallback Supabase + backfill se a flag estiver ligada.
+    // user existe mas sem passwordHash: deve recuperar acesso via magic-link
+    // (/esqueci-senha). Sem hash nao ha autenticacao por credenciais.
     return null
   }
 
@@ -93,30 +87,5 @@ export async function authorizeCredentials(
     planType: (user.planType as PlanType | null) ?? null,
     userType: (user.userType as string | null) ?? '',
     favoriteClub: (user.favoriteClub as string | null) ?? null,
-  }
-}
-
-/**
- * Backfill silencioso do `passwordHash` para users que ainda autenticam via
- * Supabase. Race-safe: `updateMany` filtra por `passwordHash: null`, entao
- * o segundo login concorrente do mesmo user vira no-op (count=0).
- *
- * Nunca lanca: a logica chamadora (rota /login) usa fire-and-forget
- * (`void backfillPasswordHash(...)`) e o sucesso/falha so afeta o proximo
- * login - nao o atual.
- */
-export async function backfillPasswordHash(
-  userId: string,
-  plaintext: string,
-): Promise<{ applied: boolean }> {
-  try {
-    const hash = await bcrypt.hash(plaintext, 12)
-    const result = await prisma.user.updateMany({
-      where: { id: userId, passwordHash: null },
-      data: { passwordHash: hash, updatedAt: new Date() },
-    })
-    return { applied: result.count > 0 }
-  } catch {
-    return { applied: false }
   }
 }

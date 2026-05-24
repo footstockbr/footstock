@@ -10,9 +10,8 @@ import { env } from '@/lib/env'
 import { prisma } from '@/lib/prisma'
 
 function passwordEndpointDisabled(): boolean {
-  // NXAUTH-07: quando o flow passwordless via Auth.js está ativo, change-password
-  // (que ainda escreve em Supabase Auth) deixa de ter sentido — bloquear até
-  // sunset definitivo em NXAUTH-09.
+  // NXAUTH-07: quando o flow passwordless via Auth.js está ativo, alteração de
+  // senha por credenciais deixa de fazer sentido — bloquear o endpoint.
   return env.AUTH_ENABLE_MAGIC_LINK_RESET === 'true'
 }
 

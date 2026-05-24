@@ -1,16 +1,12 @@
 /**
- * Unit tests para `authorizeCredentials` + `backfillPasswordHash`
- * (src/lib/auth-credentials.ts).
+ * Unit tests para `authorizeCredentials` (src/lib/auth-credentials.ts).
  *
  * Cobertura:
  *  1. payload Zod invalido -> null + dummy bcrypt rodado (timing defense)
  *  2. user nao existe -> null + dummy bcrypt rodado
- *  3. user sem passwordHash -> null + dummy bcrypt rodado (caller fara
- *     fallback Supabase + backfill)
+ *  3. user sem passwordHash -> null + dummy bcrypt rodado
  *  4. user com passwordHash, senha errada -> null (bcrypt real rodou)
  *  5. user com passwordHash, senha correta -> AuthorizedUser shape completo
- *  6. backfillPasswordHash aplica quando passwordHash is null
- *  7. backfillPasswordHash retorna applied=false em race (segundo concorrente)
  */
 
 import bcrypt from 'bcryptjs'
@@ -18,25 +14,19 @@ import bcrypt from 'bcryptjs'
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 const mockFindUnique = jest.fn()
-const mockUpdateMany = jest.fn()
 
 jest.mock('@/lib/prisma', () => ({
   prisma: {
     user: {
       findUnique: (...args: unknown[]) => mockFindUnique(...args),
-      updateMany: (...args: unknown[]) => mockUpdateMany(...args),
     },
   },
 }))
 
-import {
-  authorizeCredentials,
-  backfillPasswordHash,
-} from '@/lib/auth-credentials'
+import { authorizeCredentials } from '@/lib/auth-credentials'
 
 beforeEach(() => {
   mockFindUnique.mockReset()
-  mockUpdateMany.mockReset()
 })
 
 describe('authorizeCredentials', () => {
@@ -97,35 +87,6 @@ describe('authorizeCredentials', () => {
       userType: 'ADMIN',
       favoriteClub: 'FLAM',
     })
-  })
-})
-
-describe('backfillPasswordHash', () => {
-  test('6) updateMany com where passwordHash:null aplica em primeira chamada', async () => {
-    mockUpdateMany.mockResolvedValueOnce({ count: 1 })
-    const result = await backfillPasswordHash('u1', 'plaintext')
-    expect(result).toEqual({ applied: true })
-    expect(mockUpdateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ id: 'u1', passwordHash: null }),
-        data: expect.objectContaining({
-          passwordHash: expect.any(String),
-          updatedAt: expect.any(Date),
-        }),
-      }),
-    )
-  })
-
-  test('7) segundo concorrente race-safe vira no-op (count=0 -> applied=false)', async () => {
-    mockUpdateMany.mockResolvedValueOnce({ count: 0 })
-    const result = await backfillPasswordHash('u1', 'plaintext')
-    expect(result).toEqual({ applied: false })
-  })
-
-  test('7b) erro de DB nao lanca, retorna applied=false', async () => {
-    mockUpdateMany.mockRejectedValueOnce(new Error('db down'))
-    const result = await backfillPasswordHash('u1', 'plaintext')
-    expect(result).toEqual({ applied: false })
   })
 })
 

@@ -57,7 +57,7 @@ const assetUpdateSchema = z.object({
 })
 
 // Helper dev-mode: aceita cookie fs-admin-role quando não há sessão real
-function devAuthFallback(request: NextRequest): { user: User; supabaseId: string } | null {
+function devAuthFallback(request: NextRequest): { user: User; userId: string } | null {
   if (process.env.NODE_ENV !== 'development') return null
   const adminRole = request.cookies.get('fs-admin-role')?.value
   if (!adminRole) return null
@@ -81,7 +81,7 @@ function devAuthFallback(request: NextRequest): { user: User; supabaseId: string
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   }
-  return { user: dummyUser, supabaseId: 'dev-user' }
+  return { user: dummyUser, userId: 'dev-user' }
 }
 
 interface AssetParams {

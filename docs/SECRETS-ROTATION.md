@@ -7,9 +7,9 @@
 | `RAILWAY_TOKEN` | GitHub Secrets → Actions | Semestral | DevOps |
 | `DATABASE_URL_CI` | GitHub Secrets → Actions | Conforme necessário | DevOps |
 | `JWT_SECRET` | GitHub Secrets + Railway | Semestral | DevOps |
-| `SUPABASE_SERVICE_ROLE_KEY` | GitHub Secrets + Railway | Anual ou rotação de projeto | DevOps |
+| `AUTH_SECRET` | GitHub Secrets + Railway | Semestral | DevOps |
 
-> Nota: secrets Vercel legacy (`VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`) e `RAILWAY_REGISTRY_URL` foram removidos do GH em 2026-05-10 (TASK-P1-08, item 033 do loop railway-migration-remediate) — projeto migrado para Railway, registry uso default.
+> Nota: secrets Supabase (`SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_*`) e Vercel legacy (`VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`) foram removidos do GH na decomissão Supabase/Vercel (2026-05) — projeto migrado para Auth.js + Railway, registry uso default.
 
 ## Processo de Rotação
 

@@ -157,8 +157,7 @@ Para quando for fazer deploy:
 - [ ] Usar `.env.production` como referência
 - [ ] Armazenar secrets em:
   - **GitHub Secrets** (para CI/CD)
-  - **Vercel Environment Variables** (para deploy)
-  - **AWS Secrets Manager** (para infraestrutura)
+  - **Railway Environment Variables** (para deploy)
 - [ ] **NUNCA** commitar `.env` com valores reais no git
 
 ---

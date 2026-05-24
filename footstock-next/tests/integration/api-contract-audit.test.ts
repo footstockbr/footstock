@@ -36,18 +36,6 @@ jest.mock('@/lib/auth', () => ({
   serializeUser: jest.fn((u: Record<string, unknown>) => u),
 }))
 
-jest.mock('@/lib/supabase', () => ({
-  supabaseAdmin: {
-    auth: {
-      signInWithPassword: jest.fn(),
-      getUser: jest.fn(),
-    },
-  },
-  createSupabaseServerClient: jest.fn().mockResolvedValue({
-    auth: { getUser: jest.fn() },
-  }),
-}))
-
 jest.mock('@/lib/ratelimit', () => ({
   getAuthRateLimit: jest.fn().mockReturnValue({
     limit: jest.fn().mockResolvedValue({ success: true, reset: Date.now() + 60000 }),
@@ -82,7 +70,7 @@ function mockAuthUser(overrides?: {
 }) {
   const { getAuthUser } = require('@/lib/auth')
   getAuthUser.mockResolvedValue({
-    supabaseId: 'supabase-test-id',
+    userId: 'user-test-id',
     user: {
       id: overrides?.id ?? 'user-test-001',
       email: 'test@footstock.com',

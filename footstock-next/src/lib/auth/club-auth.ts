@@ -51,7 +51,7 @@ async function getClubDisplayName(ticker: string): Promise<string> {
  * injetados pelo middleware (quando disponíveis), ou do JWT como fallback.
  *
  * SEGURANÇA: clubId NUNCA vem de query params — apenas de headers do middleware
- * ou da sessão autenticada do Supabase.
+ * ou da sessão autenticada (Auth.js).
  */
 export async function getClubContext(): Promise<ClubContext | null> {
   const { headers } = await import('next/headers')
@@ -109,7 +109,7 @@ export async function getClubContext(): Promise<ClubContext | null> {
 export async function withClubAuth(): Promise<ClubContext> {
   const cookieStore = await cookies()
 
-  // DEV local fallback: usar fs_dev_auth + fs_dev_club_id quando não há sessão Supabase
+  // DEV local fallback: usar fs_dev_auth + fs_dev_club_id quando não há sessão Auth.js
   if (process.env.NODE_ENV !== 'production') {
     const devAuthRaw = cookieStore.get('fs_dev_auth')?.value
     const devClubId = cookieStore.get('fs_dev_club_id')?.value

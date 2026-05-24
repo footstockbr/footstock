@@ -28,18 +28,6 @@
 
 ---
 
-## NEXT_PUBLIC_SUPABASE_URL
-
-| Ambiente | Valor | Arquivo | Status |
-|----------|-------|---------|--------|
-| Dev local | `https://nxuekhsfvvxdwctthaux.supabase.co` | `.env` | Ativo (dev) |
-| Staging | Legado Supabase | `.env.staging` | **DEPRECATED** — migrar para Railway |
-| Produção | Legado Supabase | `.env.production` | **DEPRECATED** — migrar para Railway |
-
-> Após o cutover (item 016), remover completamente as refs a Supabase dos envs de staging/prod.
-
----
-
 ## Diretrizes
 
 1. **Nunca commitar valores reais** de `DATABASE_URL` ou `REDIS_URL` em produção.

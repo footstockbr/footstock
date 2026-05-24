@@ -49,7 +49,7 @@ const SUPER_ADMIN_AUTH = {
     fsBalance: 0, marginBlocked: 0, tourCompleted: false, ageVerificationPending: false,
     version: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
   },
-  supabaseId: 'admin-001',
+  userId: 'admin-001',
 }
 
 const NEWS_STUB = (id: string) => ({

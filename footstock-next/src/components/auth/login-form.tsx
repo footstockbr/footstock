@@ -52,9 +52,7 @@ function LoginForm() {
 
     // Em prod a sessao ja vem como cookie httpOnly `__Secure-authjs.session-token`
     // setado pelo Set-Cookie da resposta de /api/v1/auth/login (Auth.js v5 path).
-    // Nao chamamos supabase.auth.setSession porque o access_token e JWE Auth.js
-    // (nao JWT Supabase) e refresh_token = null — setSession lancaria e abortaria
-    // o redirect, mantendo o usuario travado no /login.
+    // O cliente nao precisa persistir o token manualmente — o cookie basta.
 
     // EVT-005: Login Concluido
     const userData = json.data.user;

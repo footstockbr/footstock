@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     const adminRole = request.cookies.get('fs-admin-role')?.value
     if (adminRole) {
       const dummyUser = { id: 'dev-user', email: 'dev@foot-stock.test', name: 'Dev User', adminRole: adminRole as AdminRole } as unknown as User
-      auth = { user: dummyUser, supabaseId: 'dev-user' }
+      auth = { user: dummyUser, userId: 'dev-user' }
     }
   }
 
@@ -83,7 +83,7 @@ export async function PUT(request: NextRequest) {
     const adminRole = request.cookies.get('fs-admin-role')?.value
     if (adminRole) {
       const dummyUser = { id: 'dev-user', email: 'dev@foot-stock.test', name: 'Dev User', adminRole: adminRole as AdminRole } as unknown as User
-      auth = { user: dummyUser, supabaseId: 'dev-user' }
+      auth = { user: dummyUser, userId: 'dev-user' }
     }
   }
 

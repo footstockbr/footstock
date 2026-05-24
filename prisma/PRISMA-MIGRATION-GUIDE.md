@@ -2,9 +2,15 @@
 
 **Projeto:** Foot Stock
 **ORM:** Prisma
-**Database:** PostgreSQL via Supabase
+**Database:** PostgreSQL (Railway-internal — `postgres.railway.internal`)
 **Schema:** `prisma/schema.prisma`
 **Gerado por:** `/db-migration-create` — 2026-03-28
+
+> NOTA (2026-05): O banco migrou de Supabase para Railway-internal Postgres.
+> Onde este guia menciona "Supabase SQL Editor" ou "painel Supabase", use o
+> banco Railway (via `psql` na connection string Railway ou Railway dashboard).
+> Não há RLS gerenciado por Supabase: as policies são aplicadas via migrations
+> Prisma. As menções a Supabase abaixo são históricas.
 
 ---
 
@@ -22,18 +28,18 @@ cp .env.example .env.local
 
 ## 2. Variáveis de Ambiente
 
-Adicionar ao `.env` (desenvolvimento) e ao painel do Supabase/Vercel (produção):
+Adicionar ao `.env` (desenvolvimento) e às variáveis de serviço Railway (produção):
 
 ```env
-# Supabase — Connection string via pgbouncer (pooled)
-# Formato: postgresql://[user]:[password]@[host]:[port]/[database]?pgbouncer=true
-DATABASE_URL="postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres?pgbouncer=true"
+# Railway Postgres — connection string (interna em produção)
+# Formato: postgresql://[user]:[password]@[host]:[port]/[database]
+DATABASE_URL="postgresql://postgres:[password]@postgres.railway.internal:5432/railway"
 
-# Supabase — Connection string direta (sem pool) — OBRIGATÓRIA para migrations
-DIRECT_URL="postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres"
+# Connection string direta — OBRIGATÓRIA para migrations
+DIRECT_URL="postgresql://postgres:[password]@postgres.railway.internal:5432/railway"
 ```
 
-> Ambas as URLs estão no painel Supabase em: **Settings → Database → Connection string**
+> As URLs estão no Railway dashboard em: **Postgres service → Variables → DATABASE_URL**.
 
 ---
 

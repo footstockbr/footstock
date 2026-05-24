@@ -148,7 +148,7 @@ async function getHandler(req: NextRequest) {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
-      auth = { user: dummyUser, supabaseId: 'dev-user' }
+      auth = { user: dummyUser, userId: 'dev-user' }
     }
   }
 
@@ -208,7 +208,7 @@ async function patchHandler(req: NextRequest) {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
-      auth = { user: dummyUser, supabaseId: 'dev-user' }
+      auth = { user: dummyUser, userId: 'dev-user' }
     }
   }
 

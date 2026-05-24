@@ -8,7 +8,7 @@
 // THREAT-009: Information disclosure via erros com dados financeiros
 //
 // Estes testes importam os route handlers diretamente e simulam
-// o middleware de auth via mock do @supabase/ssr.
+// o middleware de auth via mock de `@/lib/auth` getAuthUser.
 // ============================================================================
 
 import { NextRequest } from 'next/server'

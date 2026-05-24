@@ -76,7 +76,7 @@ export default function PrivacidadePage() {
         <p className="text-sm text-[#929AA5] leading-relaxed">
           Utilizamos criptografia em trânsito (TLS 1.3) e em repouso. O CPF é armazenado
           exclusivamente como hash SHA-256 com salt, impossibilitando recuperação do dado original.
-          Senhas são gerenciadas pelo Supabase Auth com bcrypt.
+          As senhas são armazenadas exclusivamente como hash bcrypt, nunca em texto puro.
         </p>
       </section>
 

@@ -1,70 +1,44 @@
 // ============================================================================
 // Foot Stock — Integration Tests: Auth Helpers
-// Configura o mock de Supabase para simular usuário autenticado nos testes
-// de rota (route handlers do Next.js App Router).
+// Configura o mock de autenticação (Auth.js) para simular usuário autenticado
+// nos testes de rota (route handlers do Next.js App Router).
 //
 // NUNCA chamar /auth/login para gerar tokens em testes de integração.
-// Simular autenticação diretamente via mock do @supabase/ssr.
+// Simular autenticação diretamente via mock de `@/lib/auth` getAuthUser.
 // ============================================================================
 
-import { createServerClient } from '@supabase/ssr'
+import { getAuthUser } from '@/lib/auth'
 
-// ─── Mock Supabase Client ─────────────────────────────────────────────────────
+// ─── Mock Auth.js (getAuthUser) ───────────────────────────────────────────────
 
 /**
- * Configura o mock do Supabase para retornar um usuário autenticado específico.
+ * Configura o mock para retornar um usuário autenticado específico.
  * Deve ser chamado em beforeEach para cada suite de testes de rota.
  *
- * @param supabaseUserId - ID do usuário no Supabase (= ID no banco Prisma)
+ * @param userId - ID do usuário (= ID no banco Prisma)
  */
-export function mockAuthAsUser(supabaseUserId: string): void {
-  const mockCreateClient = createServerClient as jest.Mock
-  mockCreateClient.mockReturnValue({
-    auth: {
-      getUser: jest.fn().mockResolvedValue({
-        data: { user: { id: supabaseUserId, email: 'mock@supabase.local' } },
-        error: null,
-      }),
-      getSession: jest.fn().mockResolvedValue({
-        data: { session: { expires_at: Math.floor(Date.now() / 1000) + 3600 } },
-        error: null,
-      }),
-    },
+export function mockAuthAsUser(userId: string): void {
+  const mockGetAuthUser = getAuthUser as jest.Mock
+  mockGetAuthUser.mockResolvedValue({
+    userId,
+    user: { id: userId, email: 'mock@integration-test.local' },
   })
 }
 
 /**
- * Configura o mock do Supabase para simular token inválido (401).
+ * Configura o mock para simular sessão inválida/ausente (401).
  */
 export function mockAuthInvalid(): void {
-  const mockCreateClient = createServerClient as jest.Mock
-  mockCreateClient.mockReturnValue({
-    auth: {
-      getUser: jest.fn().mockResolvedValue({
-        data: { user: null },
-        error: { message: 'JWT expired' },
-      }),
-      getSession: jest.fn().mockResolvedValue({
-        data: { session: null },
-        error: null,
-      }),
-    },
-  })
+  const mockGetAuthUser = getAuthUser as jest.Mock
+  mockGetAuthUser.mockResolvedValue(null)
 }
 
 /**
- * Configura o mock do Supabase para simular ausência de usuário no banco (401).
+ * Configura o mock para simular ausência de usuário no banco (401).
  */
 export function mockAuthUserNotFound(): void {
-  const mockCreateClient = createServerClient as jest.Mock
-  mockCreateClient.mockReturnValue({
-    auth: {
-      getUser: jest.fn().mockResolvedValue({
-        data: { user: { id: 'nonexistent-supabase-id' } },
-        error: null,
-      }),
-    },
-  })
+  const mockGetAuthUser = getAuthUser as jest.Mock
+  mockGetAuthUser.mockResolvedValue(null)
 }
 
 // ─── NextRequest Helper ───────────────────────────────────────────────────────

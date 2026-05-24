@@ -43,7 +43,7 @@ function getDevAuthFromCookie(request: NextRequest) {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   }
-  return { user: dummyUser, supabaseId: 'dev-user' }
+  return { user: dummyUser, userId: 'dev-user' }
 }
 
 export async function GET(request: NextRequest) {

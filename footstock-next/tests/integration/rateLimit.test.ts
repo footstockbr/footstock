@@ -131,14 +131,6 @@ jest.mock('@/lib/redis', () => {
 
 // ─── Mocks de dependências ────────────────────────────────────────────────────
 
-jest.mock('@/lib/supabase', () => ({
-  supabaseAdmin: {
-    auth: {
-      signInWithPassword: jest.fn(),
-    },
-  },
-}))
-
 jest.mock('@/lib/prisma', () => ({
   prisma: {
     user: {
@@ -310,91 +302,7 @@ describe.skip('TASK-026 — Rate Limiting Redis', () => {
     })
   })
 
-  // ── 2. POST /auth/login ────────────────────────────────────────────────────
-
-  describe('POST /auth/login — 5 falhas/15min por email', () => {
-    const { supabaseAdmin } = jest.requireMock('@/lib/supabase')
-    const { emailNotificationService } = jest.requireMock('@/lib/services/EmailNotificationService')
-
-    beforeEach(() => {
-      supabaseAdmin.auth.signInWithPassword.mockResolvedValue({
-        data: { session: null, user: null },
-        error: { message: 'Invalid credentials' },
-      })
-    })
-
-    it('retorna X-RateLimit-* em todas as respostas', async () => {
-      const { POST } = await import('@/app/api/v1/auth/login/route')
-      const res = await POST(makeRequest('POST', '/api/v1/auth/login', { email: 'test@test.com', password: 'wrong' }))
-
-      expect(res.headers.get('X-RateLimit-Limit')).toBe('5')
-      expect(res.headers.get('X-RateLimit-Remaining')).toBeDefined()
-    })
-
-    it('retorna 429 RATE_001 e envia BRUTE_FORCE_BLOCKED na 6a tentativa', async () => {
-      const { POST } = await import('@/app/api/v1/auth/login/route')
-      const email = 'victim@test.com'
-
-      // 5 falhas de autenticação
-      for (let i = 0; i < 5; i++) {
-        await POST(makeRequest('POST', '/api/v1/auth/login', { email, password: 'wrong' }))
-      }
-
-      // 6a tentativa — deve retornar 429 (bloqueio ativo)
-      const res = await POST(makeRequest('POST', '/api/v1/auth/login', { email, password: 'wrong' }))
-
-      expect(res.status).toBe(429)
-      const body = await res.json() as { error: { code: string; message: string } }
-      expect(body.error.code).toBe('RATE_001')
-      expect(body.error.message).toContain('bloqueada')
-
-      // Notificação deve ter sido enviada na 5a falha
-      expect(emailNotificationService.sendForType).toHaveBeenCalledWith(
-        'BRUTE_FORCE_BLOCKED',
-        email,
-        expect.any(Object)
-      )
-    })
-
-    it('login bem-sucedido não reseta o contador de falhas', async () => {
-      const { POST } = await import('@/app/api/v1/auth/login/route')
-      const { prisma } = jest.requireMock('@/lib/prisma')
-      const email = 'user@test.com'
-
-      // 4 falhas
-      for (let i = 0; i < 4; i++) {
-        await POST(makeRequest('POST', '/api/v1/auth/login', { email, password: 'wrong' }))
-      }
-
-      // Login bem-sucedido — não reseta contador
-      supabaseAdmin.auth.signInWithPassword.mockResolvedValueOnce({
-        data: {
-          session: { access_token: 'token', refresh_token: 'refresh', expires_at: 0 },
-          user: { id: 'user-1' },
-        },
-        error: null,
-      })
-      prisma.user.findUnique.mockResolvedValueOnce({ id: 'user-1', email, planType: 'JOGADOR' })
-
-      await POST(makeRequest('POST', '/api/v1/auth/login', { email, password: 'correct' }))
-
-      // Após sucesso, contador de falhas ainda existe (não resetou)
-      // Próxima falha deve atingir o threshold e bloquear
-      supabaseAdmin.auth.signInWithPassword.mockResolvedValueOnce({
-        data: { session: null, user: null },
-        error: { message: 'Invalid' },
-      })
-      const finalRes = await POST(makeRequest('POST', '/api/v1/auth/login', { email, password: 'wrong' }))
-
-      // 5a falha total → bloqueio ativado
-      expect(emailNotificationService.sendForType).toHaveBeenCalledWith('BRUTE_FORCE_BLOCKED', email, expect.any(Object))
-      // Próxima tentativa (6a ao total) deve retornar 429
-      const blockedRes = await POST(makeRequest('POST', '/api/v1/auth/login', { email, password: 'anything' }))
-      expect(blockedRes.status).toBe(429)
-    })
-  })
-
-  // ── 3. POST /api/v1/orders ─────────────────────────────────────────────────
+  // ── 2. POST /api/v1/orders ─────────────────────────────────────────────────
 
   describe('POST /api/v1/orders — 100 req/60s por userId (sliding window)', () => {
     it('retorna X-RateLimit-* em resposta de sucesso', async () => {

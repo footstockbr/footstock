@@ -10,7 +10,7 @@ import type { User, AdminRole } from '@/types'
 
 const VALID_ADMIN_ROLES = ['SUPER_ADMIN', 'ADMINISTRADOR']
 
-function devAuthFallback(request: NextRequest): { user: User; supabaseId: string } | null {
+function devAuthFallback(request: NextRequest): { user: User; userId: string } | null {
   if (process.env.NODE_ENV !== 'development') return null
   const adminRole = request.cookies.get('fs-admin-role')?.value
   if (!adminRole || !VALID_ADMIN_ROLES.includes(adminRole)) return null
@@ -23,7 +23,7 @@ function devAuthFallback(request: NextRequest): { user: User; supabaseId: string
       adminRole: adminRole as AdminRole, version: 0,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     },
-    supabaseId: 'dev-user',
+    userId: 'dev-user',
   }
 }
 

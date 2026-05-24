@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
-      auth = { user: dummyUser, supabaseId: 'dev-user' }
+      auth = { user: dummyUser, userId: 'dev-user' }
     }
   }
 

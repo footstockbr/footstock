@@ -2,11 +2,10 @@
 // Auth.js v5 session reader — decodifica cookie `(__Secure-)authjs.session-token`
 // ----------------------------------------------------------------------------
 // Lido por getAuthUser (lib/auth.ts e lib/auth/server.ts) e por outros helpers
-// que precisam resolver a identidade do usuario antes de fallback para Supabase.
+// que precisam resolver a identidade do usuario a partir da sessao Auth.js.
 //
 // Importacao DIRETA via `@auth/core/jwt` evita circular import com `@/auth`
-// (lib/auth.ts <-> auth.ts) — auth.ts depende de lib/auth para conflict
-// detection helpers.
+// (lib/auth.ts <-> auth.ts).
 //
 // Contrato deve casar com /api/v1/auth/login (mesmo salt + secret + cookie name).
 // ============================================================================

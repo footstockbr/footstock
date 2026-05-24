@@ -32,11 +32,11 @@ afterAll(async () => {
   await testPrisma.$disconnect()
 })
 
-// ─── Mock: Supabase SSR ───────────────────────────────────────────────────────
-// Supabase é um serviço externo — mockado em todos os testes de integração.
+// ─── Mock: Auth (Auth.js getAuthUser) ─────────────────────────────────────────
+// A autenticação é simulada via mock de `@/lib/auth` (ver helpers/auth.helper).
 // A integração real (service ↔ DB) é testada via Prisma direto.
-jest.mock('@supabase/ssr', () => ({
-  createServerClient: jest.fn(),
+jest.mock('@/lib/auth', () => ({
+  getAuthUser: jest.fn(),
 }))
 
 // ─── Mock: Redis ──────────────────────────────────────────────────────────────

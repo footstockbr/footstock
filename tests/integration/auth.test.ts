@@ -15,39 +15,8 @@ import { buildRegisterPayload, buildTestEmail } from './helpers/factory.helper'
 import { parseResponse } from './helpers/auth.helper'
 
 // ─── Import route handlers ────────────────────────────────────────────────────
-// Importados aqui para aproveitar o mock de @supabase/ssr do setup.ts.
-// Mock de Supabase para /auth/* garante que o Supabase Auth não seja chamado
-// diretamente (usamos Supabase apenas para validar JWT em endpoints protegidos).
-
-// Mock do Supabase Auth client para chamadas de registro/login
-jest.mock('@/lib/supabase/server', () => ({
-  createSupabaseServerClient: jest.fn(),
-}), { virtual: true })
-
-jest.mock('@/lib/auth/supabase-admin', () => ({
-  supabaseAdmin: {
-    auth: {
-      admin: {
-        createUser: jest.fn().mockResolvedValue({
-          data: { user: { id: 'new-supabase-id-001', email: 'test@integration-test.local' } },
-          error: null,
-        }),
-        getUserByEmail: jest.fn().mockResolvedValue({
-          data: { users: [] },
-          error: null,
-        }),
-      },
-      signInWithPassword: jest.fn().mockResolvedValue({
-        data: {
-          user: { id: 'supabase-id-mock', email: 'test@integration-test.local' },
-          session: { access_token: 'mock-access-token', refresh_token: 'mock-refresh-token' },
-        },
-        error: null,
-      }),
-      resetPasswordForEmail: jest.fn().mockResolvedValue({ data: {}, error: null }),
-    },
-  },
-}), { virtual: true })
+// A autenticação é tratada por Auth.js (Credentials + bcrypt); o registro
+// persiste via Prisma. Testes simulam sessão via mock de getAuthUser (setup.ts).
 
 // ─── Cenário 1 — Happy Path: Registro bem-sucedido ───────────────────────────
 
@@ -57,7 +26,7 @@ describe('POST /api/v1/auth/register', () => {
   })
 
   it('[happy] deve registrar usuário adulto com dados válidos → 201', async () => {
-    // Verificamos via serviço direto pois a rota depende de Supabase Admin API
+    // Verificamos via serviço direto (registro persiste via Prisma)
     const { UserRegistrationService } = await import('@/lib/services/UserRegistrationService').catch(() =>
       // Fallback: verificar que os dados chegam ao banco via Prisma direto
       ({ UserRegistrationService: null })

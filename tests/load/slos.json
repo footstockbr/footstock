@@ -17,7 +17,7 @@
       "p95_ms": 800,
       "p99_ms": 2000,
       "type": "auth",
-      "description": "Autenticação via Supabase JWT — alta criticidade"
+      "description": "Autenticação via Auth.js (JWE) — alta criticidade"
     },
     "assets_list": {
       "p95_ms": 200,

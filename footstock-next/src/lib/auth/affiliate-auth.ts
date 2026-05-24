@@ -32,7 +32,7 @@ export async function getAffiliateContext(): Promise<AffiliateContext | null> {
   try {
     const cookieStore = await cookies()
 
-    // DEV local fallback: usar cookie fs_dev_auth quando não há sessão Supabase
+    // DEV local fallback: usar cookie fs_dev_auth quando não há sessão Auth.js
     if (process.env.NODE_ENV !== 'production') {
       const devAuthRaw = cookieStore.get('fs_dev_auth')?.value
       const devAuthEmail = devAuthRaw ? decodeURIComponent(devAuthRaw) : null

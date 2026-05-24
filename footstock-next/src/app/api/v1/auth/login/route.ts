@@ -160,10 +160,10 @@ export async function POST(request: NextRequest) {
     // Headers base para respostas não bloqueadas
     let rlInfo = buildRlInfo(currentFailCount, failTtl)
 
-    // ─── 5. Auth.js path PRIMEIRO (TASK-3 dual-stack) ─────────────────────────
+    // ─── 5. Auth.js path ──────────────────────────────────────────────────────
     // authorizeCredentials roda Zod + bcrypt.compare contra Prisma.passwordHash
-    // com timing defense. Retorno nullable: null = falha Auth.js (sem hash OR
-    // hash invalido OR user nao existe). Caller decide se cabe Supabase fallback.
+    // com timing defense. Retorno nullable: null = falha de autenticacao (sem
+    // hash OR hash invalido OR user nao existe).
     const authjsUser = await authorizeCredentials({ email, password })
 
     let path: LoginPath = 'fail'

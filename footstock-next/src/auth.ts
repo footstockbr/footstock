@@ -6,8 +6,8 @@
 //  - provider Credentials (logica completa entrega TASK-4 / Item 3 do source)
 //  - callbacks jwt/session propagando campos custom (id, adminRole, planType,
 //    userType, favoriteClub) para o token e a session
-//  - callback signIn que invoca detectIdentityConflict/handleIdentityConflict
-//    quando ambos cookies (Auth.js + Supabase) estao presentes
+//  - callback signIn que higieniza cookies `sb-*` legados que possam ter
+//    sobrado no browser (sem fluxo de sessao externo)
 //
 // Roda apenas no Node runtime — importado pelo route handler em
 // app/api/auth/[...nextauth]/route.ts (que declara runtime='nodejs').
@@ -41,7 +41,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // TASK-3 (Item 3 do source.md): delega para `authorizeCredentials`
       // em src/lib/auth-credentials.ts (Zod parse + bcrypt.compare com
       // timing defense). Retorno nullable: null sinaliza CredentialsSignin
-      // para o caller (rota /api/v1/auth/login decide fallback Supabase).
+      // para o caller (rota /api/v1/auth/login).
       authorize: authorizeCredentials,
     }),
   ],

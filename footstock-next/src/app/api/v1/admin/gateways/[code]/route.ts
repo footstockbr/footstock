@@ -58,7 +58,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
-      auth = { user: dummyUser, supabaseId: 'dev-user' }
+      auth = { user: dummyUser, userId: 'dev-user' }
     }
   }
 

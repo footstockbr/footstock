@@ -50,7 +50,7 @@
 
 ## Requisito 8 — HTTPS e comunicação segura
 
-- [ ] 8.1 HTTPS obrigatório em produção (configurado no Vercel/Railway)
+- [ ] 8.1 HTTPS obrigatório em produção (configurado no Railway)
 - [ ] 8.2 Timeout de 5s para chamadas ao gateway externo
 - [ ] 8.3 Retry com backoff exponencial para falhas de rede
 

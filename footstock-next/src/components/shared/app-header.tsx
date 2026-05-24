@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { MarketSessionBadge } from "@/components/market/MarketSessionBadge";
 import { ROUTES } from "@/lib/constants/routes";
 
-// Dynamic import — evita SSR issues com Supabase hooks + React Query
+// Dynamic import — evita SSR issues com hooks client-only + React Query
 const NotificationBell = dynamic(
   () => import("@/components/notifications/NotificationBell").then((m) => ({ default: m.NotificationBell })),
   {

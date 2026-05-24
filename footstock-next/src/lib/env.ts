@@ -12,13 +12,6 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL é obrigatório'),
   DIRECT_URL: z.string().min(1, 'DIRECT_URL é obrigatório'),
 
-  // Supabase — DECOMISSIONADO (2026-05). Auth migrou para Auth.js, DB para
-  // Railway-internal Postgres. Vars mantidas opcionais apenas para tolerar
-  // ambientes legados com valores remanescentes; nenhum código as consome.
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url().optional(),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1).optional(),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
-
   // Redis
   REDIS_URL: z.string().min(1, 'REDIS_URL é obrigatório'),
 
@@ -32,7 +25,6 @@ const envSchema = z.object({
     .union([z.literal('true'), z.literal('false')])
     .optional()
     .default('true'),
-  AUTH_DRIVER: z.enum(['supabase', 'authjs', 'dual']).optional().default('authjs'),
   AUTH_ENABLE_LEGACY_CREDENTIALS: z
     .union([z.literal('true'), z.literal('false')])
     .optional()
@@ -41,15 +33,9 @@ const envSchema = z.object({
     .union([z.literal('true'), z.literal('false')])
     .optional()
     .default('false'),
-  // NXAUTH-04A — kill switch para conflito dual-cookie Auth.js vs Supabase.
-  // 'true' (default): força re-auth quando identities divergem; 'false': loga apenas (modo recovery).
-  AUTH_DUAL_COOKIE_STRICT: z
-    .union([z.literal('true'), z.literal('false')])
-    .optional()
-    .default('true'),
-  // NXAUTH-07 — quando 'true' roteia recovery flow para Auth.js Resend magic-link
-  // (passwordless). Default 'false' mantém Supabase resetPasswordForEmail durante
-  // transition. Liga junto com RESEND_API_KEY configurado.
+  // NXAUTH-07 — quando 'true' habilita o recovery flow via Auth.js Resend
+  // magic-link (passwordless). Default 'false' desativa o canal de recovery.
+  // Liga junto com RESEND_API_KEY configurado.
   AUTH_ENABLE_MAGIC_LINK_RESET: z
     .union([z.literal('true'), z.literal('false')])
     .optional()

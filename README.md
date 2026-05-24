@@ -9,7 +9,7 @@ O mercado de ações do futebol brasileiro.
 - **Database:** PostgreSQL (Railway Postgres)
 - **Cache:** Redis (Railway Redis)
 - **Motor:** Node.js standalone (Railway)
-- **Auth:** Supabase Auth + WebAuthn
+- **Auth:** Auth.js (NextAuth v5) + WebAuthn
 - **Monitoring:** Sentry
 - **Deploy:** Railway (web + motor + postgres + redis)
 

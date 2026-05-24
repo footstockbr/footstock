@@ -1,8 +1,13 @@
 # DB Migration Report — Foot Stock
 
+> **STATUS: HISTÓRICO / CONCLUÍDO.** Este relatório descreve o estado em
+> 2026-03-28, quando o banco era Supabase. Desde 2026-05 o banco de produção é
+> Railway-internal Postgres (`postgres.railway.internal`) e a autenticação é
+> Auth.js (NextAuth v5), não Supabase Auth. Manter apenas como registro histórico.
+
 **Projeto:** foot-stock
 **ORM:** Prisma
-**Database:** PostgreSQL (Supabase)
+**Database:** PostgreSQL (Supabase — histórico; atual: Railway-internal Postgres)
 **Data:** 2026-03-28
 **Referência LLD:** `output/docs/foot-stock/project/LLD.md` v1.2
 **Data-Integrity-Decision:** não disponível (executar `/skill:data-integrity-guard` para projetos com dados existentes)

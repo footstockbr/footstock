@@ -53,9 +53,6 @@ jobs:
           DIRECT_URL: ${{ secrets.DIRECT_URL_CI }}
           REDIS_URL: ${{ secrets.REDIS_URL_CI }}
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
-          NEXT_PUBLIC_SUPABASE_URL: 'https://test.supabase.co'
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test-anon-key-dummy-not-a-real-credential'
-          SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key-dummy-not-real'
           JWT_SECRET: 'test-jwt-secret-must-be-at-least-32-chars-long'
           MOTOR_SECRET_TOKEN: 'test-motor-token-dummy-not-a-real-credential'
           NODE_ENV: test
@@ -64,17 +61,13 @@ jobs:
         working-directory: footstock-next
         # CI Build step is a sanity gate — the deployable artifact is built by
         # Railway from footstock-next/Dockerfile (see railway.toml). That
-        # Dockerfile uses build-time placeholder values for the same vars
-        # (Supabase client constructors are eager at module load). Railway
-        # overrides at runtime via service env. To keep CI consistent with
-        # what Railway actually does, mirror those placeholders here.
+        # Dockerfile uses build-time placeholder values for the same vars.
+        # Railway overrides at runtime via service env. To keep CI consistent
+        # with what Railway actually does, mirror those placeholders here.
         run: npm run build
         env:
           DATABASE_URL: 'postgresql://build:build@localhost:5432/build'
           DIRECT_URL: 'postgresql://build:build@localhost:5432/build'
-          NEXT_PUBLIC_SUPABASE_URL: 'https://build-placeholder.supabase.co'
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: 'build-placeholder-anon-key'
-          SUPABASE_SERVICE_ROLE_KEY: 'build-placeholder-service-role-key'
           REDIS_URL: 'redis://localhost:6379'
           REDIS_DISABLED: 'true'
           JWT_SECRET: 'build-jwt-secret-placeholder-32-chars-min-len'

@@ -75,7 +75,7 @@ function makeUser(planType: 'JOGADOR' | 'CRAQUE' | 'LENDA') {
       ageVerificationPending: false,
       adminRole: null,
     },
-    supabaseId: 'supabase-1',
+    userId: 'user-1',
   }
 }
 

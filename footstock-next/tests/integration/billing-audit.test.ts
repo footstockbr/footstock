@@ -70,7 +70,7 @@ function createRequest(method: string, url: string, body?: object): NextRequest 
 function mockUser(overrides?: { planType?: 'JOGADOR' | 'CRAQUE' | 'LENDA' }) {
   const { getAuthUser } = require('@/lib/auth')
   getAuthUser.mockResolvedValue({
-    supabaseId: 'supabase-test',
+    userId: 'user-test-001',
     user: {
       id: 'user-test-001',
       email: 'test@footstock.com',

@@ -4,8 +4,7 @@
  * NXAUTH-04B — client helper para o token bridge Auth.js → motor.
  *
  * Usado pelos hooks SSE (useMarketTick, useAllMarketTicks) para obter um JWT
- * HS256 minted pelo `/api/v1/motor/token` (Auth.js session) em vez de ler
- * diretamente o `access_token` do Supabase.
+ * HS256 minted pelo `/api/v1/motor/token` a partir da sessão Auth.js.
  *
  * Refresh: agenda um callback ~60s antes do `expiresAt` (TTL = 5min, refresh
  * a cada ~4min). Mínimo de 5s para evitar tight loop em casos patológicos.
