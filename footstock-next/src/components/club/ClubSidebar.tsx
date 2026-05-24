@@ -17,7 +17,6 @@ import {
   MoreHorizontal,
   X,
 } from "lucide-react";
-import { createBrowserClient } from "@supabase/ssr";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants/routes";
 
@@ -73,14 +72,8 @@ export function ClubSidebar() {
     if (isLoggingOut) return;
     setIsLoggingOut(true);
     try {
-      // Logout via API: registra ClubAccessLog, invalida sessão Supabase e limpa cookies HttpOnly
+      // Logout via API: registra ClubAccessLog, invalida sessão Auth.js e limpa cookies HttpOnly
       await fetch('/api/v1/club/auth/logout', { method: 'POST', credentials: 'include' });
-      // Limpar sessão Supabase no cliente (fallback)
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      );
-      await supabase.auth.signOut();
       // fs-admin-role é não-httpOnly — pode ser limpo no cliente como reforço
       document.cookie = "fs-admin-role=; path=/; max-age=0";
       router.replace('/club/login');

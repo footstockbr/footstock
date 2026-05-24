@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { createBrowserClient } from '@supabase/ssr'
 
 /**
  * Monta silenciosamente o sync de subscription de push para usuarios que
@@ -19,13 +18,10 @@ export function PushSyncBootstrap() {
 
     const run = async () => {
       try {
-        const supabase = createBrowserClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        )
-        const { data } = await supabase.auth.getUser()
-        const userId = data.user?.id
-        if (!userId) return
+        const sessionRes = await fetch('/api/v1/auth/session', { credentials: 'include' })
+        if (!sessionRes.ok) return
+        const sessionData = await sessionRes.json()
+        if (!sessionData?.user?.id) return
 
         const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
         if (!vapidKey) return

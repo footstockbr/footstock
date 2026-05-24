@@ -18,7 +18,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 
 function getWebUrl() {
   const extra = Constants.expoConfig?.extra as { webUrl?: string } | undefined
-  return extra?.webUrl ?? 'https://footstock.app'
+  return extra?.webUrl ?? 'https://footstock.com.br'
 }
 
 export default function App() {

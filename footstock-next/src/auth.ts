@@ -22,13 +22,8 @@ import { cookies } from 'next/headers'
 import { authConfig } from '@/auth.config'
 import { createAuthjsAdapter } from '@/lib/auth/authjs-adapter'
 import { authorizeCredentials } from '@/lib/auth-credentials'
-import {
-  clearDualCookies,
-  detectIdentityConflict,
-  handleIdentityConflict,
-} from '@/lib/auth'
+import { clearDualCookies } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { createSupabaseServerClient } from '@/lib/supabase'
 import type { AdminRole, PlanType } from '@/lib/enums'
 
 const SUPABASE_COOKIE_PREFIX = 'sb-'
@@ -79,47 +74,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ user }) {
       if (!user?.id) return false
 
+      // Pos-decomissao Supabase: nao ha mais sessao Supabase para conflitar.
+      // Apenas higienizamos cookies `sb-*` legados que possam ter sobrado no
+      // browser, para nao confundir leitores de cookie defensivos.
       let cookieStore: Awaited<ReturnType<typeof cookies>>
       try {
         cookieStore = await cookies()
       } catch {
-        // Contexto sem cookies (ex: testes unitarios) — sem conflito possivel.
         return true
       }
 
-      const hasSupabaseCookie = cookieStore
+      const hasStaleSupabaseCookie = cookieStore
         .getAll()
         .some((c) => c.name.startsWith(SUPABASE_COOKIE_PREFIX))
-      if (!hasSupabaseCookie) return true
-
-      try {
-        const supabase = await createSupabaseServerClient()
-        const {
-          data: { user: supabaseUser },
-        } = await supabase.auth.getUser()
-        if (!supabaseUser) return true
-
-        const conflict = detectIdentityConflict(
-          { id: user.id, email: user.email ?? null },
-          { id: supabaseUser.id, email: supabaseUser.email ?? null },
-        )
-        if (!conflict) return true
-
-        const decision = await handleIdentityConflict(
-          true,
-          { id: user.id, email: user.email ?? null },
-          { id: supabaseUser.id, email: supabaseUser.email ?? null },
-        )
-        if (decision === null) {
-          await clearDualCookies()
-          return false
-        }
-        return true
-      } catch {
-        // Falha de leitura do Supabase nao bloqueia signIn — telemetria ja
-        // capturada em handleIdentityConflict quando aplicavel.
-        return true
+      if (hasStaleSupabaseCookie) {
+        await clearDualCookies()
       }
+      return true
     },
   },
 })

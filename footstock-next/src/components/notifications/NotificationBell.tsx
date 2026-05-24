@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { Bell } from 'lucide-react'
-import { createBrowserClient } from '@supabase/ssr'
 import { cn } from '@/lib/utils'
 import { useNotifications } from '@/hooks/useNotifications'
 import { NotificationDrawer } from './NotificationDrawer'
@@ -15,15 +14,20 @@ export function NotificationBell({ className }: NotificationBellProps) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
 
-  // Obter userId da sessão Supabase no client
+  // Obter userId da sessão Auth.js no client
   useEffect(() => {
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-    supabase.auth.getUser().then(({ data }) => {
-      setUserId(data.user?.id ?? null)
-    })
+    let active = true
+    fetch('/api/v1/auth/session', { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (active) setUserId(data?.user?.id ?? null)
+      })
+      .catch(() => {
+        if (active) setUserId(null)
+      })
+    return () => {
+      active = false
+    }
   }, [])
 
   const { unreadCount, isBouncing } = useNotifications(userId)

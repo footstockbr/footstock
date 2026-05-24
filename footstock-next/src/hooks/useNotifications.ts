@@ -1,11 +1,10 @@
 // hooks/useNotifications.ts
-// module-19 — Gerencia notificações com React Query + Supabase Realtime
+// module-19 — Gerencia notificações com React Query + polling
 
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { createBrowserClient } from '@supabase/ssr'
 import { toast } from 'sonner'
 import type { NotificationDTO } from '@/types'
 
@@ -101,53 +100,18 @@ export function useNotifications(userId?: string | null) {
     }
   }, [hasNextPage, isFetchingNextPage, page])
 
-  // Supabase Realtime subscription
+  // Polling de notificações (30s). Substitui o antigo Supabase Realtime —
+  // o backend já não emite broadcasts, então o refetch periódico é a fonte de novidades.
   useEffect(() => {
     if (!userId) return
 
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-
-    let realtimeConnected = false
-    let fallbackTimer: ReturnType<typeof setInterval> | null = null
-
-    const channel = supabase
-      .channel(`notifications:${userId}`)
-      .on('broadcast', { event: 'NEW_NOTIFICATION' }, (payload) => {
-        realtimeConnected = true
-        if (fallbackTimer) {
-          clearInterval(fallbackTimer)
-          fallbackTimer = null
-        }
-        // Invalidar queries para refetch
-        queryClient.invalidateQueries({ queryKey: ['notifications:unread-count'] })
-        queryClient.invalidateQueries({ queryKey: ['notifications', 'list'] })
-
-        // Adicionar nova notificação no início da lista
-        const newNotification = payload.payload as NotificationDTO
-        if (newNotification?.id) {
-          setAllNotifications((prev) => [newNotification, ...prev])
-        }
-      })
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          realtimeConnected = true
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          if (!realtimeConnected) {
-            // Fallback polling 30s
-            fallbackTimer = setInterval(() => {
-              queryClient.invalidateQueries({ queryKey: ['notifications:unread-count'] })
-              queryClient.invalidateQueries({ queryKey: ['notifications', 'list'] })
-            }, 30_000)
-          }
-        }
-      })
+    const timer = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ['notifications:unread-count'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'list'] })
+    }, 30_000)
 
     return () => {
-      supabase.removeChannel(channel)
-      if (fallbackTimer) clearInterval(fallbackTimer)
+      clearInterval(timer)
     }
   }, [userId, queryClient])
 

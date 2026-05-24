@@ -1,10 +1,15 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import type { WebAuthnCredential } from '@simplewebauthn/server'
+import { encode } from '@auth/core/jwt'
 import { createAuthenticationOptions, verifyAuthentication } from '@/lib/auth/webauthn'
-import { supabaseAdmin } from '@/lib/supabase'
+import { prisma } from '@/lib/prisma'
 import { ok, errors, error as apiError } from '@/lib/api'
 import { getWebAuthnRateLimit } from '@/lib/ratelimit'
+
+const AUTHJS_SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
+const AUTHJS_SALT_PROD = '__Secure-authjs.session-token'
+const AUTHJS_SALT_DEV = 'authjs.session-token'
 
 const AuthInitSchema = z.object({
   step: z.literal('init'),
@@ -22,7 +27,7 @@ const AuthVerifySchema = z.object({
  *
  * Dois passos:
  * - "init"   → gera authentication options com credenciais do usuário
- * - "verify" → verifica assinatura e retorna sessão Supabase
+ * - "verify" → verifica assinatura e retorna sessão Auth.js (JWE cookie)
  *
  * Rota pública (sem autenticação prévia necessária).
  *
@@ -110,24 +115,50 @@ export async function POST(request: NextRequest) {
 
       challengeStore.delete(`auth:${email}`)
 
-      // Criar sessão Supabase para o usuário autenticado via WebAuthn
-      // Gerar magic link pelo email diretamente — falha internamente se email não existir
-      const { data: linkData, error: linkError } =
-        await supabaseAdmin.auth.admin.generateLink({
-          type: 'magiclink',
-          email,
-        })
-
-      if (linkError || !linkData.properties) {
+      // Criar sessão Auth.js (JWE) para o usuário autenticado via WebAuthn.
+      // adminRole/planType/etc lidos do banco — nunca confiar em claims externos.
+      const dbUser = await prisma.user.findUnique({ where: { email } })
+      if (!dbUser) {
         return errors.unauthorized()
       }
 
-      return ok({
+      const secret = process.env.AUTH_SECRET
+      if (!secret) {
+        return errors.server()
+      }
+      const salt = process.env.NODE_ENV === 'production' ? AUTHJS_SALT_PROD : AUTHJS_SALT_DEV
+
+      const access_token = await encode({
+        token: {
+          id: dbUser.id,
+          sub: dbUser.id,
+          email: dbUser.email,
+          adminRole: dbUser.adminRole,
+          planType: dbUser.planType,
+          userType: dbUser.userType,
+          favoriteClub: dbUser.favoriteClub,
+        },
+        secret,
+        salt,
+        maxAge: AUTHJS_SESSION_MAX_AGE_SECONDS,
+      })
+
+      const res = ok({
         session: {
-          access_token: linkData.properties.hashed_token ?? '',
-          message: 'WebAuthn autenticado. Troque o token por sessão completa.',
+          access_token,
+          message: 'WebAuthn autenticado.',
         },
       })
+      res.cookies.set({
+        name: salt,
+        value: access_token,
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: AUTHJS_SESSION_MAX_AGE_SECONDS,
+      })
+      return res
     }
 
     return errors.validation('Parâmetro step inválido. Use "init" ou "verify".')

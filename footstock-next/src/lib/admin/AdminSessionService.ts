@@ -1,5 +1,5 @@
 import { getRedisClient } from '@/lib/redis'
-import { createSupabaseServerClient } from '@/lib/supabase'
+import { decodeAuthjsToken, readAuthjsSession } from '@/lib/auth/authjs-session'
 import { prisma } from '@/lib/prisma'
 import type { AdminRole } from '@/types'
 
@@ -7,28 +7,26 @@ const SESSION_TTL = 1800 // 30 minutos
 
 class AdminSessionService {
   /**
-   * Verifica sessão admin via Supabase Auth + admin_role no DB.
+   * Verifica sessão admin via Auth.js (Bearer token JWE ou cookie) + adminRole no DB.
    */
   async verifyAdminSession(
     sessionToken?: string
   ): Promise<{ valid: boolean; adminRole: AdminRole | null; userId: string | null }> {
     try {
-      const supabase = await createSupabaseServerClient()
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.getUser(sessionToken)
+      const payload = sessionToken
+        ? await decodeAuthjsToken(sessionToken)
+        : await readAuthjsSession()
 
-      if (error || !user) return { valid: false, adminRole: null, userId: null }
+      if (!payload?.id) return { valid: false, adminRole: null, userId: null }
 
       const dbUser = await prisma.user.findUnique({
-        where: { id: user.id },
+        where: { id: payload.id },
         select: { adminRole: true },
       })
 
       if (!dbUser?.adminRole) return { valid: false, adminRole: null, userId: null }
 
-      return { valid: true, adminRole: dbUser.adminRole as AdminRole, userId: user.id }
+      return { valid: true, adminRole: dbUser.adminRole as AdminRole, userId: payload.id }
     } catch {
       return { valid: false, adminRole: null, userId: null }
     }
@@ -63,7 +61,7 @@ class AdminSessionService {
   }
 
   /**
-   * Revoga sessão admin deletando chave Redis e invalidando Supabase.
+   * Revoga sessão admin deletando chave Redis e as sessões Auth.js do banco.
    */
   async revokeAdminSession(userId: string): Promise<void> {
     const redis = getRedisClient()
@@ -73,9 +71,8 @@ class AdminSessionService {
       } catch { /* ignora falha Redis */ }
     }
     try {
-      const supabase = await createSupabaseServerClient()
-      await supabase.auth.admin.signOut(userId)
-    } catch { /* ignora falha Supabase */ }
+      await prisma.session.deleteMany({ where: { userId } })
+    } catch { /* ignora falha de revogação de sessão */ }
   }
 }
 

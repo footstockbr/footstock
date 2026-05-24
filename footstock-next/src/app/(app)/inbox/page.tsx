@@ -7,19 +7,23 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { NotificationItem } from '@/components/notifications/NotificationItem'
 import { useNotifications } from '@/hooks/useNotifications'
 import { useEffect, useState } from 'react'
-import { createBrowserClient } from '@supabase/ssr'
 
 export default function InboxPage() {
   const [userId, setUserId] = useState<string | null>(null)
 
   useEffect(() => {
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-    supabase.auth.getUser().then(({ data }) => {
-      setUserId(data.user?.id ?? null)
-    })
+    let active = true
+    fetch('/api/v1/auth/session', { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (active) setUserId(data?.user?.id ?? null)
+      })
+      .catch(() => {
+        if (active) setUserId(null)
+      })
+    return () => {
+      active = false
+    }
   }, [])
 
   const {

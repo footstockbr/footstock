@@ -71,3 +71,35 @@ export async function readAuthjsSession(): Promise<AuthjsSessionPayload | null> 
 
   return null
 }
+
+/**
+ * Decodifica um JWE Auth.js recebido como Bearer token (clientes nativos
+ * Expo/iOS/Android, que nao podem ler cookies HttpOnly). O token e o mesmo
+ * `access_token` emitido por /api/v1/auth/login (encode com salt = nome do
+ * cookie). Tenta ambos os salts (prod + dev) para robustez cross-ambiente.
+ */
+export async function decodeAuthjsToken(
+  rawToken: string,
+): Promise<AuthjsSessionPayload | null> {
+  const secret = process.env.AUTH_SECRET
+  if (!secret || !rawToken) return null
+
+  const { decode } = await import('@auth/core/jwt')
+
+  for (const salt of [AUTHJS_COOKIE_PROD, AUTHJS_COOKIE_DEV]) {
+    try {
+      const decoded = await decode({ token: rawToken, secret, salt })
+      const id = decoded?.id ?? decoded?.sub
+      if (id) {
+        return {
+          id: String(id),
+          email: (decoded?.email as string | null | undefined) ?? null,
+        }
+      }
+    } catch {
+      // salt errado / token corrompido — tenta proximo salt
+    }
+  }
+
+  return null
+}

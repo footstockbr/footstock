@@ -1,18 +1,24 @@
 // ============================================================================
 // FootStock — POST /api/v1/club/auth/forgot-password
 // Reset de senha para representantes de clubes parceiros.
-// Usa Supabase Auth (mesmo mecanismo, email separado).
+// Usa Auth.js Resend magic-link (passwordless recovery). Email separado.
 // Rastreabilidade: TASK-015 sub-item 6, US-025
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createClient } from '@supabase/supabase-js'
+import * as Sentry from '@sentry/nextjs'
 import { getForgotPasswordRateLimit } from '@/lib/ratelimit'
+import { env } from '@/lib/env'
+import { signIn } from '@/auth'
 
 const ForgotSchema = z.object({
   email: z.string().email('E-mail inválido'),
 })
+
+function magicLinkEnabled(): boolean {
+  return env.AUTH_ENABLE_MAGIC_LINK_RESET === 'true' && Boolean(env.RESEND_API_KEY)
+}
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}))
@@ -38,15 +44,28 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // Enviar reset via Supabase Auth
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  const appUrl = env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
-  await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/club/login?reset=true`,
-  })
+  // Auth.js Resend magic-link (pós-decomissão Supabase). Falhas são silenciosas
+  // para não vazar se o email existe.
+  if (magicLinkEnabled()) {
+    try {
+      await signIn('resend', {
+        email,
+        redirect: false,
+        redirectTo: `${appUrl}/club/login?reset=true`,
+      })
+    } catch (err) {
+      Sentry.captureException(err, {
+        tags: { route: 'club/forgot-password', flow: 'authjs-magic-link' },
+      })
+    }
+  } else {
+    Sentry.captureMessage('club forgot-password requested but magic-link disabled', {
+      level: 'warning',
+      tags: { route: 'club/forgot-password' },
+    })
+  }
 
   // Sempre retornar sucesso para não vazar se o email existe
   return NextResponse.json({

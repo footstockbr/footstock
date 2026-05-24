@@ -5,7 +5,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
-import { createBrowserClient } from "@supabase/ssr";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants/routes";
 
@@ -31,11 +30,7 @@ function DesktopSidebar() {
     if (isLoggingOut) return;
     setIsLoggingOut(true);
     try {
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      );
-      await supabase.auth.signOut();
+      await fetch("/api/v1/auth/logout", { method: "POST", credentials: "include" });
       document.cookie = "fs-admin-role=; path=/; max-age=0";
       router.replace(ROUTES.LOGIN);
     } catch {

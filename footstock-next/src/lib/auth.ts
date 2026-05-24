@@ -2,7 +2,6 @@ import 'server-only'
 
 import { cookies } from 'next/headers'
 import * as Sentry from '@sentry/nextjs'
-import { createSupabaseServerClient } from '@/lib/supabase'
 import { env } from '@/lib/env'
 import { prisma } from '@/lib/prisma'
 import { readAuthjsSession } from '@/lib/auth/authjs-session'
@@ -122,11 +121,14 @@ function hashTag(value: string): string {
   return Math.abs(h).toString(16).padStart(8, '0')
 }
 
-// ─── Obter usuário autenticado a partir da sessão Supabase ─────────────────────
+// ─── Obter usuário autenticado a partir da sessão Auth.js ──────────────────────
+//
+// `supabaseId` mantido no retorno apenas por compatibilidade de shape com
+// callers existentes — passa a ser o id canônico do usuário (Prisma).
 
 export async function getAuthUser(): Promise<{ user: User; supabaseId: string } | null> {
   try {
-    // DEV local fallback: fs_dev_auth cookie bypassa Supabase em desenvolvimento
+    // DEV local fallback: fs_dev_auth cookie em desenvolvimento.
     if (process.env.NODE_ENV !== 'production') {
       const cookieStore = await cookies()
       const devAuthRaw = cookieStore.get('fs_dev_auth')?.value
@@ -139,10 +141,7 @@ export async function getAuthUser(): Promise<{ user: User; supabaseId: string } 
       }
     }
 
-    // Dual-stack PREFERRED: Auth.js v5 cookie `(__Secure-)authjs.session-token`.
-    // /api/v1/auth/login default em prod escreve esse cookie; sem este branch
-    // server components (admin/layout.tsx) e route handlers que usam getAuthUser
-    // retornariam null e mandariam redirect(/login), criando o bounce reportado.
+    // Cookie de sessão Auth.js v5 `(__Secure-)authjs.session-token`.
     const authjs = await readAuthjsSession()
     if (authjs?.id) {
       const dbUser = await prisma.user.findUnique({ where: { id: authjs.id } })
@@ -151,28 +150,7 @@ export async function getAuthUser(): Promise<{ user: User; supabaseId: string } 
       }
     }
 
-    // Usar getUser() em vez de getSession()+jwtVerify():
-    // - getUser() valida o token com Supabase Auth (network call)
-    // - Se o token expirou, tenta refresh automaticamente
-    // - createSupabaseServerClient() tem setAll funcional (persiste cookies refreshados)
-    //
-    // O root middleware.ts já faz refresh preventivo em todas as requests,
-    // mas esta chamada serve como safety net para Server Components que
-    // podem ser renderizados sem passar pelo middleware (e.g., revalidation).
-    const supabase = await createSupabaseServerClient()
-    const { data: { user: supabaseUser } } = await supabase.auth.getUser()
-    if (!supabaseUser?.id) return null
-
-    // Buscar usuário no banco — adminRole e planType SEMPRE do banco
-    const dbUser = await prisma.user.findUnique({
-      where: { id: supabaseUser.id },
-    })
-    if (!dbUser) return null
-
-    return {
-      supabaseId: supabaseUser.id,
-      user: serializeUser(dbUser),
-    }
+    return null
   } catch {
     return null
   }

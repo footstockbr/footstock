@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import * as Sentry from '@sentry/nextjs'
-import { supabaseAdmin } from '@/lib/supabase'
 import { message, errors } from '@/lib/api'
 import { getForgotPasswordRateLimit } from '@/lib/ratelimit'
 import { env } from '@/lib/env'
@@ -68,18 +67,13 @@ export async function POST(request: NextRequest) {
       return SAFE_RESPONSE
     }
 
-    // ─── Legacy Supabase reset (transition-safe fallback) ─────────────────────
-    Sentry.addBreadcrumb({
-      category: 'auth.legacy',
-      message: 'auth.legacy.resetPasswordForEmail',
-      level: 'info',
+    // Pós-decomissão Supabase: sem magic-link habilitado não há canal de recovery.
+    // Mantém resposta genérica (sem enumeration) — operador deve habilitar
+    // AUTH_ENABLE_MAGIC_LINK_RESET + RESEND_API_KEY para reativar o fluxo.
+    Sentry.captureMessage('forgot-password requested but magic-link disabled', {
+      level: 'warning',
+      tags: { route: 'forgot-password' },
     })
-
-    await supabaseAdmin.auth.resetPasswordForEmail(email, {
-      redirectTo: `${appUrl}/redefinir-senha`,
-    })
-
-    // Sempre retornar resposta genérica (Supabase não envia email se não houver cadastro)
     return SAFE_RESPONSE
   } catch {
     // Nunca revelar erro interno — resposta genérica (segurança)

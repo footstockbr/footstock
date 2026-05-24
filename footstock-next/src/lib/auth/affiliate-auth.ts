@@ -7,9 +7,9 @@
 // ============================================================================
 
 import { redirect } from 'next/navigation'
-import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
+import { readAuthjsSession } from '@/lib/auth/authjs-session'
 
 // Tipos de usuário elegíveis ao portal de afiliados
 const ELIGIBLE_AFFILIATE_TYPES = ['TIME_PARCEIRO', 'INFLUENCIADOR'] as const
@@ -58,30 +58,13 @@ export async function getAffiliateContext(): Promise<AffiliateContext | null> {
       }
     }
 
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, options)
-            })
-          },
-        },
-      }
-    )
-
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return null
+    const session = await readAuthjsSession()
+    if (!session?.id) return null
 
     // Busca código ativo E verifica elegibilidade pelo affiliateType
     const affiliateCode = await prisma.affiliateCode.findFirst({
       where: {
-        userId: user.id,
+        userId: session.id,
         active: true,
         affiliateType: { in: ELIGIBLE_AFFILIATE_TYPES as unknown as string[] },
       },
@@ -96,7 +79,7 @@ export async function getAffiliateContext(): Promise<AffiliateContext | null> {
     if (!affiliateCode) return null
 
     return {
-      userId: user.id,
+      userId: session.id,
       affiliateCodeId: affiliateCode.id,
       code: affiliateCode.code,
       commissionPercentage: Number(affiliateCode.commissionPercentage),

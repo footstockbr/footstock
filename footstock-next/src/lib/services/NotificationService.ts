@@ -2,7 +2,6 @@
 // module-19 — Serviço central de notificações (singleton)
 // T-014: 23 tipos, quiet hours 23h-7h BRT, preferências por canal, digest DIVIDEND_CREDITED
 
-import { createClient } from '@supabase/supabase-js'
 import { notificationRepository } from '@/lib/repositories/NotificationRepository'
 import { pushService } from '@/lib/services/PushService'
 import { emailNotificationService } from '@/lib/services/EmailNotificationService'
@@ -45,12 +44,6 @@ const DIGEST_TYPES = new Set<NotificationType>([
 ])
 
 class NotificationService {
-  private supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  )
-
   /**
    * Ponto de entrada único para todas as notificações.
    * Aplica: quiet hours, preferências de canal, digest, push, email.
@@ -102,9 +95,8 @@ class NotificationService {
 
     // ── 1. Canal in-app (persiste no banco) ────────────────────────────────
     const inAppEnabled = await notificationRepository.isChannelEnabled(userId, type, 'inApp', prefs)
-    let notification = null
     if (inAppEnabled) {
-      notification = await notificationRepository.create(options)
+      await notificationRepository.create(options)
 
       // EVT-033: notification_received — rastreia notificacao recebida
       try {
@@ -121,18 +113,8 @@ class NotificationService {
         // analytics nunca deve quebrar o fluxo de notificacoes
       }
 
-      // Broadcast Realtime para atualização imediata no frontend
-      try {
-        await this.supabase
-          .channel(`notifications:${userId}`)
-          .send({
-            type: 'broadcast',
-            event: 'NEW_NOTIFICATION',
-            payload: notification,
-          })
-      } catch (err) {
-        console.error('[NotificationService] Erro no broadcast Realtime:', err)
-      }
+      // Entrega ao frontend é feita por polling (useNotifications, 30s).
+      // O antigo broadcast Realtime via Supabase foi removido na decomissão.
     }
 
     // ── 2. Canal push ──────────────────────────────────────────────────────

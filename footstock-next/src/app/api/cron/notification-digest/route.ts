@@ -7,13 +7,6 @@ import { digestService } from '@/lib/services/DigestService'
 import { notificationRepository } from '@/lib/repositories/NotificationRepository'
 import { pushService } from '@/lib/services/PushService'
 import { quietHoursService } from '@/lib/services/QuietHoursService'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-)
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization')
@@ -48,7 +41,7 @@ export async function GET(req: NextRequest) {
         body = `Você recebeu dividendos de ${clubCount} clube${clubCount > 1 ? 's' : ''} hoje. Total: FS$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.`
       }
 
-      const notification = await notificationRepository.create({
+      await notificationRepository.create({
         userId,
         type: 'DIVIDEND_CREDITED',
         title,
@@ -56,12 +49,7 @@ export async function GET(req: NextRequest) {
         metadata: { digest: true, itemCount: items.length, totalValue: total, items },
       })
 
-      // Broadcast Realtime
-      try {
-        await supabase
-          .channel(`notifications:${userId}`)
-          .send({ type: 'broadcast', event: 'NEW_NOTIFICATION', payload: notification })
-      } catch { /* graceful */ }
+      // Entrega in-app via polling (useNotifications). Broadcast Realtime removido na decomissão Supabase.
 
       // Push: só enviar fora do horário de silêncio (DIVIDEND_CREDITED respeita quiet hours)
       const inQuietHours = quietHoursService.isQuietHour('DIVIDEND_CREDITED')

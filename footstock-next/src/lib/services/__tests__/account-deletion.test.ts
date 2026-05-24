@@ -6,6 +6,7 @@ const mockUpdate = jest.fn()
 const mockDeleteMany = jest.fn()
 const mockUpdateMany = jest.fn()
 const mockCreate = jest.fn()
+const mockSessionDeleteMany = jest.fn().mockResolvedValue({ count: 0 })
 
 jest.mock('@/lib/prisma', () => ({
   prisma: {
@@ -18,14 +19,9 @@ jest.mock('@/lib/prisma', () => ({
         dataAccessLog: { create: mockCreate },
       })
     ),
+    user: { findUnique: jest.fn().mockResolvedValue(null) },
+    session: { deleteMany: mockSessionDeleteMany },
   },
-}))
-
-const mockDeleteUser = jest.fn().mockResolvedValue({ error: null })
-jest.mock('@supabase/supabase-js', () => ({
-  createClient: jest.fn(() => ({
-    auth: { admin: { deleteUser: mockDeleteUser } },
-  })),
 }))
 
 // ─── Testes ───────────────────────────────────────────────────────────────────
@@ -35,8 +31,7 @@ describe('deleteAccount', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
-    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
-    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key'
+    mockSessionDeleteMany.mockResolvedValue({ count: 0 })
   })
 
   it('deve retornar success = true', async () => {
@@ -89,14 +84,14 @@ describe('deleteAccount', () => {
     })
   })
 
-  it('deve chamar supabase.auth.admin.deleteUser com o userId', async () => {
+  it('deve revogar sessões Auth.js via prisma.session.deleteMany com o userId', async () => {
     await deleteAccount(userId, 'NOT_USING')
 
-    expect(mockDeleteUser).toHaveBeenCalledWith(userId)
+    expect(mockSessionDeleteMany).toHaveBeenCalledWith({ where: { userId } })
   })
 
-  it('não deve lançar erro se Supabase falhar (aceitar inconsistência temporária)', async () => {
-    mockDeleteUser.mockRejectedValueOnce(new Error('Supabase offline'))
+  it('não deve lançar erro se revogação de sessão falhar (aceitar inconsistência temporária)', async () => {
+    mockSessionDeleteMany.mockRejectedValueOnce(new Error('DB offline'))
 
     await expect(deleteAccount(userId, 'NOT_USING')).resolves.toMatchObject({
       success: true,

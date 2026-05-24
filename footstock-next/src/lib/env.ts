@@ -12,10 +12,12 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL é obrigatório'),
   DIRECT_URL: z.string().min(1, 'DIRECT_URL é obrigatório'),
 
-  // Supabase
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url('NEXT_PUBLIC_SUPABASE_URL deve ser URL válida'),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+  // Supabase — DECOMISSIONADO (2026-05). Auth migrou para Auth.js, DB para
+  // Railway-internal Postgres. Vars mantidas opcionais apenas para tolerar
+  // ambientes legados com valores remanescentes; nenhum código as consome.
+  NEXT_PUBLIC_SUPABASE_URL: z.string().url().optional(),
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1).optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
 
   // Redis
   REDIS_URL: z.string().min(1, 'REDIS_URL é obrigatório'),
@@ -30,7 +32,7 @@ const envSchema = z.object({
     .union([z.literal('true'), z.literal('false')])
     .optional()
     .default('true'),
-  AUTH_DRIVER: z.enum(['supabase', 'authjs', 'dual']).optional().default('supabase'),
+  AUTH_DRIVER: z.enum(['supabase', 'authjs', 'dual']).optional().default('authjs'),
   AUTH_ENABLE_LEGACY_CREDENTIALS: z
     .union([z.literal('true'), z.literal('false')])
     .optional()
@@ -133,9 +135,6 @@ if (!_env.success && !isBuildPhase) {
 const buildFallback: z.infer<typeof envSchema> = {
   DATABASE_URL: 'postgresql://build:build@localhost:5432/build',
   DIRECT_URL: 'postgresql://build:build@localhost:5432/build',
-  NEXT_PUBLIC_SUPABASE_URL: 'https://build.supabase.co',
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'build-anon-key',
-  SUPABASE_SERVICE_ROLE_KEY: 'build-service-role-key',
   REDIS_URL: 'redis://localhost:6379',
   JWT_SECRET: 'build-jwt-secret-32-characters-min-length',
   MOTOR_SECRET_TOKEN: 'build-motor-token',

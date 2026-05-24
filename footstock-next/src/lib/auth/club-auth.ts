@@ -8,8 +8,8 @@
 
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
-import { createServerClient } from '@supabase/ssr'
 import { prisma } from '@/lib/prisma'
+import { readAuthjsSession } from '@/lib/auth/authjs-session'
 import { ADMIN_ROLE } from '@/lib/enums'
 
 // ---------------------------------------------------------------------------
@@ -77,30 +77,24 @@ export async function getClubContext(): Promise<ClubContext | null> {
     return { userId: xClubUserId, clubId: xClubId, clubName: xClubName, adminRole: 'CLUB_PARTNER' }
   }
 
-  // Fallback: verificar JWT diretamente
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
-  )
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
+  // Fallback: sessão Auth.js (cookie). cookieStore mantido para o dev fallback acima.
+  void cookieStore
+  const session = await readAuthjsSession()
+  if (!session?.id) return null
 
-  // Verificar adminRole no banco (nunca confiar no JWT para roles)
+  // adminRole e email SEMPRE lidos do banco (nunca confiar em claims para roles)
   const dbUser = await prisma.user.findUnique({
-    where: { id: user.id },
-    select: { adminRole: true },
+    where: { id: session.id },
+    select: { adminRole: true, email: true },
   })
   if (dbUser?.adminRole !== ADMIN_ROLE.CLUB_PARTNER) return null
 
-  // Resolver clubId: metadata → email pattern
-  const metaClubId = (user.user_metadata?.clubId as string | undefined)?.toUpperCase()
-  const emailClubId = deriveClubIdFromEmail(user.email ?? '')
-  const clubId = metaClubId ?? emailClubId
+  // Resolver clubId pelo padrão de email institucional
+  const clubId = deriveClubIdFromEmail(dbUser.email ?? '')
   if (!clubId) return null
 
   const clubName = await getClubDisplayName(clubId)
-  return { userId: user.id, clubId, clubName, adminRole: 'CLUB_PARTNER' }
+  return { userId: session.id, clubId, clubName, adminRole: 'CLUB_PARTNER' }
 }
 
 // ---------------------------------------------------------------------------
@@ -133,48 +127,29 @@ export async function withClubAuth(): Promise<ClubContext> {
     }
   }
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            )
-          } catch { /* Server Component — ignora set */ }
-        },
-      },
-    }
-  )
+  const session = await readAuthjsSession()
 
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
+  if (!session?.id) {
     redirect('/club/login')
   }
 
-  // adminRole SEMPRE lido do banco
+  // adminRole e email SEMPRE lidos do banco
   const dbUser = await prisma.user.findUnique({
-    where: { id: user.id },
-    select: { adminRole: true },
+    where: { id: session.id },
+    select: { adminRole: true, email: true },
   })
 
   if (dbUser?.adminRole !== ADMIN_ROLE.CLUB_PARTNER) {
     redirect('/club/login?error=unauthorized')
   }
 
-  // Resolver clubId: metadata → email pattern
-  const metaClubId = (user.user_metadata?.clubId as string | undefined)?.toUpperCase()
-  const emailClubId = deriveClubIdFromEmail(user.email ?? '')
-  const clubId = metaClubId ?? emailClubId
+  // Resolver clubId pelo padrão de email institucional
+  const clubId = deriveClubIdFromEmail(dbUser.email ?? '')
 
   if (!clubId) {
     redirect('/club/login?error=unauthorized')
   }
 
   const clubName = await getClubDisplayName(clubId)
-  return { userId: user.id, clubId, clubName, adminRole: 'CLUB_PARTNER' }
+  return { userId: session.id, clubId, clubName, adminRole: 'CLUB_PARTNER' }
 }

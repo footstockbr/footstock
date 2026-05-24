@@ -3,11 +3,9 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 import { Prisma } from '@prisma/client'
 import { auth } from '@/auth'
-import { env } from '@/lib/env'
+import { decodeAuthjsToken } from '@/lib/auth/authjs-session'
 import { prisma } from '@/lib/prisma'
 import { canAccess, type AdminResource } from '@/lib/auth/canAccess'
 import { hasPlanAccess } from '@/lib/auth/planAccess'
@@ -72,12 +70,38 @@ function errorResponse(code: string, message: string, status: number) {
 // a janela onde codigo handler novo poderia esquecer de stripar.
 
 // ---------------------------------------------------------------------------
-// withAuth — valida sessao Supabase e carrega usuario do BANCO
+// withAuth — valida sessao Auth.js e carrega usuario do BANCO
 // ---------------------------------------------------------------------------
 
 /**
+ * Carrega o usuario do banco aplicando o allowlist SAFE_USER_SELECT e a
+ * invariante de dominio (staff ADMIN/CLUB_PARTNER nao possui planType).
+ */
+async function loadSafeUser(userId: string) {
+  const dbUser = await prisma.user.findUnique({
+    where: { id: userId },
+    select: SAFE_USER_SELECT,
+  })
+  if (!dbUser) return null
+
+  // Invariante: contas administrativas/institucionais nao possuem plano de player.
+  if (dbUser.adminRole && dbUser.planType !== null) {
+    return prisma.user.update({
+      where: { id: dbUser.id },
+      data: { planType: null },
+      select: SAFE_USER_SELECT,
+    })
+  }
+  return dbUser
+}
+
+/**
  * Middleware de autenticacao para Route Handlers.
- * Valida Bearer token via Supabase e carrega o usuario do banco.
+ *
+ * Resolucao de identidade (Auth.js v5, pos-decomissao Supabase):
+ *  1. Bearer token / ?token= → JWE Auth.js (clientes nativos, EventSource)
+ *  2. Cookie de sessao Auth.js via auth() (browser fetch sem Bearer)
+ *  3. DEV: cookie HttpOnly fs_dev_auth
  *
  * SEGURANCA: adminRole e planType SEMPRE lidos do banco.
  * Claims JWT sao nao-confiaveis para autorizacao (podem ser forjados).
@@ -85,144 +109,51 @@ function errorResponse(code: string, message: string, status: number) {
 export function withAuth(handler: RouteHandler) {
   return async (req: NextRequest) => {
     try {
-      const supabase = createServerClient(
-        env.NEXT_PUBLIC_SUPABASE_URL,
-        env.SUPABASE_SERVICE_ROLE_KEY,
-        {
-          cookies: {
-            getAll: () => [],
-            setAll: () => {
-              /* noop — route handlers nao manipulam cookies */
-            },
-          },
-        }
-      )
-
       const authHeader = req.headers.get('Authorization')
       // SSE clients (EventSource) cannot set headers — accept ?token= query param as fallback
       const queryToken = req.nextUrl.searchParams.get('token')
       const token = authHeader?.replace('Bearer ', '') ?? queryToken ?? undefined
 
-      if (!token) {
-        // Dual-stack read: prefer cookie Auth.js v5 (`__Secure-authjs.session-token`).
-        // /api/v1/auth/login define esse cookie no Auth.js path (default em prod),
-        // entao todo request subsequente do browser carrega APENAS esse cookie
-        // (sem nenhum cookie Supabase `sb-*`). Sem este branch, /api/v1/me e demais
-        // rotas legacy retornariam 401 e o frontend bounce de volta pro /login.
-        try {
-          const session = await auth()
-          if (session?.user?.id) {
-            const dbUser = await prisma.user.findUnique({
-              where: { id: session.user.id },
-              select: SAFE_USER_SELECT,
-            })
-            if (dbUser) {
-              const normalizedUser =
-                dbUser.adminRole && dbUser.planType !== null
-                  ? await prisma.user.update({
-                      where: { id: dbUser.id },
-                      data: { planType: null },
-                      select: SAFE_USER_SELECT,
-                    })
-                  : dbUser
-              return handler(req, { user: normalizedUser as unknown as User })
-            }
-          }
-        } catch { /* Auth.js indisponivel — segue para Supabase cookie */ }
+      // ── Caminho Bearer/query token: decodifica JWE Auth.js ──────────────────
+      if (token) {
+        const payload = await decodeAuthjsToken(token)
+        if (!payload?.id) {
+          return errorResponse(ERROR_CODES.AUTH_010, ERROR_MESSAGES['AUTH-010'], 401)
+        }
+        const user = await loadSafeUser(payload.id)
+        if (!user) {
+          return errorResponse(ERROR_CODES.AUTH_010, ERROR_MESSAGES['AUTH-010'], 401)
+        }
+        return handler(req, { user: user as unknown as User })
+      }
 
-        // Fallback: cookie de sessão Supabase (browser fetch sem Bearer header)
-        try {
-          const cookieStore = await cookies()
-          // Collect cookies set during token refresh to apply to the response later
-          const pendingCookies: { name: string; value: string; options?: Record<string, unknown> }[] = []
-          const supabaseCookie = createServerClient(
-            env.NEXT_PUBLIC_SUPABASE_URL,
-            env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-            {
-              cookies: {
-                getAll: () => cookieStore.getAll(),
-                setAll(cookiesToSet) {
-                  pendingCookies.push(...cookiesToSet)
-                },
-              },
-            }
-          )
-          const { data: { user: cookieUser } } = await supabaseCookie.auth.getUser()
-          if (cookieUser) {
-            const dbUser = await prisma.user.findUnique({
-              where: { id: cookieUser.id },
-              select: SAFE_USER_SELECT,
-            })
-            if (dbUser) {
-              // Invariante: staff (ADMIN/CLUB_PARTNER) nao possui planType de player.
-              const normalizedUser =
-                dbUser.adminRole && dbUser.planType !== null
-                  ? await prisma.user.update({
-                      where: { id: dbUser.id },
-                      data: { planType: null },
-                      select: SAFE_USER_SELECT,
-                    })
-                  : dbUser
-              const response = await handler(req, { user: normalizedUser as unknown as User })
-              // Apply refreshed session cookies to the response so the browser
-              // receives updated tokens (prevents stale token → 401 loop).
-              for (const { name, value, options } of pendingCookies) {
-                response.cookies.set(name, value, options as Record<string, string>)
-              }
-              return response
-            }
-          }
-        } catch { /* cookie auth indisponível — continua para 401 */ }
-
-        // DEV local fallback: autenticação por cookie HttpOnly (sem Supabase)
-        if (process.env.NODE_ENV !== 'production') {
-          const devAuthRaw = req.cookies.get('fs_dev_auth')?.value
-          const devAuthEmail = devAuthRaw ? decodeURIComponent(devAuthRaw) : null
-          if (devAuthEmail) {
-            const devUser = await prisma.user.findUnique({
-              where: { email: devAuthEmail },
-              select: SAFE_USER_SELECT,
-            })
-            if (devUser) {
-              return handler(req, { user: devUser as unknown as User })
-            }
+      // ── Caminho cookie de sessao Auth.js (browser) ──────────────────────────
+      try {
+        const session = await auth()
+        if (session?.user?.id) {
+          const user = await loadSafeUser(session.user.id)
+          if (user) {
+            return handler(req, { user: user as unknown as User })
           }
         }
-        return errorResponse(ERROR_CODES.AUTH_010, ERROR_MESSAGES['AUTH-010'], 401)
+      } catch { /* Auth.js indisponivel — segue para dev fallback / 401 */ }
+
+      // ── DEV local fallback: cookie HttpOnly (sem Supabase) ──────────────────
+      if (process.env.NODE_ENV !== 'production') {
+        const devAuthRaw = req.cookies.get('fs_dev_auth')?.value
+        const devAuthEmail = devAuthRaw ? decodeURIComponent(devAuthRaw) : null
+        if (devAuthEmail) {
+          const devUser = await prisma.user.findUnique({
+            where: { email: devAuthEmail },
+            select: SAFE_USER_SELECT,
+          })
+          if (devUser) {
+            return handler(req, { user: devUser as unknown as User })
+          }
+        }
       }
 
-      const {
-        data: { user: supabaseUser },
-        error,
-      } = await supabase.auth.getUser(token)
-
-      if (error || !supabaseUser) {
-        return errorResponse(ERROR_CODES.AUTH_010, ERROR_MESSAGES['AUTH-010'], 401)
-      }
-
-      // SEGURANCA: adminRole e planType SEMPRE lidos do banco.
-      // Claims JWT sao nao-confiaveis para autorizacao (podem ser forjados).
-      const dbUser = await prisma.user.findUnique({
-        where: { id: supabaseUser.id },
-        select: SAFE_USER_SELECT,
-      })
-
-      if (!dbUser) {
-        return errorResponse(ERROR_CODES.AUTH_010, ERROR_MESSAGES['AUTH-010'], 401)
-      }
-
-      // Invariante de domínio: contas administrativas/institucionais (ADMIN/CLUB_PARTNER)
-      // nao possuem plano de player — planType deve ser sempre null.
-      const normalizedUser =
-        dbUser.adminRole && dbUser.planType !== null
-          ? await prisma.user.update({
-              where: { id: dbUser.id },
-              data: { planType: null },
-              select: SAFE_USER_SELECT,
-            })
-          : dbUser
-
-      return handler(req, { user: normalizedUser as unknown as User })
+      return errorResponse(ERROR_CODES.AUTH_010, ERROR_MESSAGES['AUTH-010'], 401)
     } catch {
       return errorResponse(ERROR_CODES.SYS_001, ERROR_MESSAGES['SYS-001'], 500)
     }

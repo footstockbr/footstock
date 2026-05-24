@@ -1,22 +1,27 @@
 // ============================================================================
 // FootStock — POST /api/v1/club/auth/login
 // Login exclusivo para clubes parceiros (role CLUB_PARTNER).
-// Usa Supabase Auth. Redireciona para /club/login se role incorreto.
+// Usa Auth.js (Credentials + JWE cookie). Redireciona para /club/login se role incorreto.
 // Rate limiting: 5 tentativas/min por email (TASK-015 sub-item 2).
 // Rastreabilidade: FDD painel-admin §2.12, MILESTONE-9 TASK-1/ST001, TASK-015
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { encode } from '@auth/core/jwt'
 import { prisma } from '@/lib/prisma'
+import { authorizeCredentials } from '@/lib/auth-credentials'
 import { getClubLoginRateLimit } from '@/lib/ratelimit'
 
 const LoginSchema = z.object({
-  email: z.string().email('E-mail inválido'),
+  email: z.string().email('E-mail inválido').transform((v) => v.trim().toLowerCase()),
   password: z.string().min(1, 'Senha obrigatória'),
 })
+
+// JWT Auth.js — alinhar com cookie name de auth.config para derivar a sessão
+const AUTHJS_SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
+const AUTHJS_SALT_PROD = '__Secure-authjs.session-token'
+const AUTHJS_SALT_DEV = 'authjs.session-token'
 
 function deriveClubIdFromEmail(email: string): string | null {
   const match = email.match(/^([^@]+)@footstock\.com$/)
@@ -38,7 +43,7 @@ export async function POST(request: NextRequest) {
 
   // Rate limiting: 5 tentativas por email por minuto
   const rl = getClubLoginRateLimit()
-  const rlResult = await rl.limit(email.toLowerCase())
+  const rlResult = await rl.limit(email)
   if (!rlResult.success) {
     return NextResponse.json(
       {
@@ -57,32 +62,10 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const cookieStore = await cookies()
+  // 1. Autenticar via Auth.js Credentials (Zod + bcrypt.compare com timing defense)
+  const authjsUser = await authorizeCredentials({ email, password })
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            )
-          } catch { /* ignora em Server Component */ }
-        },
-      },
-    }
-  )
-
-  // 1. Autenticar via Supabase Auth
-  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  })
-
-  if (authError || !authData.user) {
+  if (!authjsUser) {
     return NextResponse.json(
       { error: { code: 'AUTH-001', message: 'Email ou senha incorretos.' } },
       { status: 401 }
@@ -90,32 +73,17 @@ export async function POST(request: NextRequest) {
   }
 
   // 2. Verificar role CLUB_PARTNER no banco (nunca confiar só no JWT)
-  const dbUser = await prisma.user.findUnique({
-    where: { id: authData.user.id },
-    select: { adminRole: true },
-  })
-
-  if (dbUser?.adminRole !== 'CLUB_PARTNER') {
-    // Fazer logout e retornar 403
-    await supabase.auth.signOut()
+  if (authjsUser.adminRole !== 'CLUB_PARTNER') {
     return NextResponse.json(
-      {
-        error: {
-          code: 'ADMIN_050',
-          message: 'Email ou senha incorretos.',
-        },
-      },
+      { error: { code: 'ADMIN_050', message: 'Email ou senha incorretos.' } },
       { status: 403 }
     )
   }
 
-  // 3. Resolver clubId (metadata -> email pattern)
-  const metaClubId = (authData.user.user_metadata?.clubId as string | undefined)?.toUpperCase()
-  const emailClubId = deriveClubIdFromEmail(email)
-  const clubId = metaClubId ?? emailClubId
+  // 3. Resolver clubId pelo padrão de email institucional (sem user_metadata)
+  const clubId = deriveClubIdFromEmail(email)
 
   if (!clubId) {
-    await supabase.auth.signOut()
     return NextResponse.json(
       {
         error: {
@@ -134,7 +102,6 @@ export async function POST(request: NextRequest) {
   })
 
   if (!asset) {
-    await supabase.auth.signOut()
     return NextResponse.json(
       {
         error: {
@@ -149,17 +116,17 @@ export async function POST(request: NextRequest) {
   // 5. Atualizar lastLoginAt no ClubUser (se existir registro)
   try {
     await prisma.clubUser.updateMany({
-      where: { email: email.toLowerCase(), isActive: true },
+      where: { email, isActive: true },
       data: { lastLoginAt: new Date() },
     })
   } catch {
-    // ClubUser pode não existir (auth via Supabase direto) — não bloqueia login
+    // ClubUser pode não existir — não bloqueia login
   }
 
   // 6. Registrar acesso no log
   try {
     const clubUser = await prisma.clubUser.findUnique({
-      where: { email: email.toLowerCase() },
+      where: { email },
       select: { id: true },
     })
     if (clubUser) {
@@ -177,8 +144,32 @@ export async function POST(request: NextRequest) {
     // Log falhou — não bloqueia login
   }
 
-  // 7. Login bem-sucedido — sessão já foi criada pelo Supabase via cookies
-  return NextResponse.json({
+  // 7. Emitir sessão Auth.js (JWE cookie HttpOnly) — mesmo contrato que signIn faria
+  const salt = process.env.NODE_ENV === 'production' ? AUTHJS_SALT_PROD : AUTHJS_SALT_DEV
+  const secret = process.env.AUTH_SECRET
+  if (!secret) {
+    return NextResponse.json(
+      { error: { code: 'SRV_001', message: 'Erro de configuração do servidor.' } },
+      { status: 500 }
+    )
+  }
+
+  const access_token = await encode({
+    token: {
+      id: authjsUser.id,
+      sub: authjsUser.id,
+      email: authjsUser.email,
+      adminRole: authjsUser.adminRole,
+      planType: authjsUser.planType,
+      userType: authjsUser.userType,
+      favoriteClub: authjsUser.favoriteClub,
+    },
+    secret,
+    salt,
+    maxAge: AUTHJS_SESSION_MAX_AGE_SECONDS,
+  })
+
+  const res = NextResponse.json({
     success: true,
     data: {
       clubId: asset.ticker,
@@ -186,4 +177,14 @@ export async function POST(request: NextRequest) {
       message: 'Login realizado com sucesso.',
     },
   })
+  res.cookies.set({
+    name: salt,
+    value: access_token,
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: AUTHJS_SESSION_MAX_AGE_SECONDS,
+  })
+  return res
 }

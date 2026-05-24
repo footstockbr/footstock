@@ -92,18 +92,12 @@ export async function deleteAccount(
     })
   })
 
-  // Revogar sessões Supabase fora da transação (operação externa)
-  // Feito separadamente para não reverter anonimização se Supabase falhar
+  // Revogar sessões Auth.js fora da transação (não reverte anonimização se falhar)
   try {
-    const { createClient } = await import('@supabase/supabase-js')
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-    await supabase.auth.admin.deleteUser(userId)
+    await prisma.session.deleteMany({ where: { userId } })
   } catch (err) {
     // Log mas não reverter — conta já inutilizável sem email/cpfHash válidos
-    console.error('[account-deletion] Erro ao revogar sessão Supabase:', err)
+    console.error('[account-deletion] Erro ao revogar sessões Auth.js:', err)
   }
 
   return {
