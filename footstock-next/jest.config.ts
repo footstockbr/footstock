@@ -35,6 +35,5 @@ export default createJestConfig({
     // forem providos no jest setup. Coverage business logic preservada em motor/ unit tests.
     '/tests/integration/creditBonus.test.ts',
   ],
-  setupFilesAfterFramework: [],
 // coverageThreshold is valid Jest config but not in next/jest's InitialProjectOptions type
 } as never)
