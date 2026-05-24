@@ -104,6 +104,16 @@ export async function POST(request: NextRequest) {
       resolvedTicker = await resolveTickerFromText(`${title} ${content}`)
     }
 
+    // ADR Opcao A (blacksmith/adr/adr-news-ticker-assetids-sync.md): resolver Asset.id para manter ticker e assetIds sincronizados
+    let resolvedAssetId: string | null = null
+    if (resolvedTicker) {
+      const asset = await prisma.asset.findUnique({
+        where: { ticker: resolvedTicker },
+        select: { id: true },
+      })
+      resolvedAssetId = asset?.id ?? null
+    }
+
     const news = await prisma.news.create({
       data: {
         title,
@@ -111,7 +121,7 @@ export async function POST(request: NextRequest) {
         impact,
         sentiment,
         ticker: resolvedTicker,
-        assetIds: [],
+        assetIds: resolvedAssetId ? [resolvedAssetId] : [],
         source: source || null,
         isPublished,
         publishedAt: isPublished ? new Date() : null,

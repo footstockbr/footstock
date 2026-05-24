@@ -18,6 +18,7 @@ import type { ClassifiedNews } from '../NewsClassifier'
 // ---------------------------------------------------------------------------
 
 const mockNewsCreate = jest.fn()
+const mockAssetFindUnique = jest.fn()
 const mockPublish = jest.fn()
 
 jest.mock('@prisma/client', () => {
@@ -26,6 +27,7 @@ jest.mock('@prisma/client', () => {
     ...actual,
     PrismaClient: jest.fn().mockImplementation(() => ({
       news: { create: mockNewsCreate },
+      asset: { findUnique: mockAssetFindUnique },
     })),
     ImpactCategory: actual.ImpactCategory ?? {
       RESULTADO_ESPORTIVO: 'RESULTADO_ESPORTIVO',
@@ -72,15 +74,34 @@ describe('NewsPublisher', () => {
     publisher = new NewsPublisher(new PrismaClient(), redis)
 
     mockNewsCreate.mockReset()
+    mockAssetFindUnique.mockReset()
     mockPublish.mockReset()
+
     mockNewsCreate.mockResolvedValue({ id: 'uuid-test-123' })
+    mockAssetFindUnique.mockResolvedValue({ id: 'asset-uuid-123' })
     mockPublish.mockResolvedValue(1)
   })
 
-  test('[SUCCESS — Notícia relevante] DB + Redis + audit criados', async () => {
+  // -------------------------------------------------------------------------
+  // Caminhos de sucesso
+  // -------------------------------------------------------------------------
+
+  test('[SUCCESS — Notícia relevante] DB + Redis criados com ticker e assetId corretos', async () => {
     await publisher.publish(makeRaw(), makeClassified())
 
+    expect(mockAssetFindUnique).toHaveBeenCalledWith({
+      where: { ticker: 'FLM' },
+      select: { id: true },
+    })
     expect(mockNewsCreate).toHaveBeenCalledTimes(1)
+    expect(mockNewsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          ticker: 'FLM',
+          assetIds: ['asset-uuid-123'],
+        }),
+      })
+    )
     expect(mockPublish).toHaveBeenCalledTimes(1)
 
     const publishedPayload = JSON.parse(mockPublish.mock.calls[0][1])
@@ -95,14 +116,61 @@ describe('NewsPublisher', () => {
     expect(mockPublish).not.toHaveBeenCalled()
   })
 
-  test('[EDGE — Ticker vazio] apenas DB, sem Redis', async () => {
+  // -------------------------------------------------------------------------
+  // Edge cases de ticker
+  // -------------------------------------------------------------------------
+
+  test('[EDGE — Ticker vazio] asset.findUnique nao chamado; assetIds vazio; sem Redis', async () => {
     await publisher.publish(makeRaw(), makeClassified({ ticker: '', relevance: 0.9 }))
 
+    expect(mockAssetFindUnique).not.toHaveBeenCalled()
     expect(mockNewsCreate).toHaveBeenCalledTimes(1)
+    expect(mockNewsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          ticker: null,
+          assetIds: [],
+        }),
+      })
+    )
     expect(mockPublish).not.toHaveBeenCalled()
   })
 
-  test('[ERROR — DB falha] não publica no Redis, sem exceção propagada', async () => {
+  test('[EDGE — Ticker resolvido mas Asset nao encontrado no banco] ticker gravado, assetIds vazio, warn emitido', async () => {
+    const { logger } = require('../../utils/logger')
+    mockAssetFindUnique.mockResolvedValue(null)
+
+    await publisher.publish(makeRaw(), makeClassified())
+
+    expect(mockAssetFindUnique).toHaveBeenCalledTimes(1)
+    expect(mockNewsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          ticker: 'FLM',
+          assetIds: [],
+        }),
+      })
+    )
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("nao encontrado em assets")
+    )
+  })
+
+  test('[EDGE — asset.findUnique lanca exception] nao cria News, nao publica Redis, loga erro', async () => {
+    const { logger } = require('../../utils/logger')
+    mockAssetFindUnique.mockRejectedValue(new Error('Asset DB Error'))
+
+    await expect(publisher.publish(makeRaw(), makeClassified())).resolves.toBeUndefined()
+    expect(mockNewsCreate).not.toHaveBeenCalled()
+    expect(mockPublish).not.toHaveBeenCalled()
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Erro ao salvar no DB'))
+  })
+
+  // -------------------------------------------------------------------------
+  // Caminhos de falha de infraestrutura
+  // -------------------------------------------------------------------------
+
+  test('[ERROR — DB falha no news.create] nao publica no Redis, sem excecao propagada', async () => {
     const { logger } = require('../../utils/logger')
     mockNewsCreate.mockRejectedValue(new Error('DB Error'))
 
@@ -111,16 +179,20 @@ describe('NewsPublisher', () => {
     expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Erro ao salvar no DB'))
   })
 
-  test('[DEGRADED — Redis falha após DB salvo] sem exceção propagada', async () => {
+  test('[DEGRADED — Redis falha apos DB salvo] sem excecao propagada, DB preservado', async () => {
     const { logger } = require('../../utils/logger')
     mockPublish.mockRejectedValue(new Error('Redis Error'))
 
     await expect(publisher.publish(makeRaw(), makeClassified())).resolves.toBeUndefined()
     expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Erro ao publicar no Redis'))
-    expect(mockNewsCreate).toHaveBeenCalledTimes(1) // DB salvo
+    expect(mockNewsCreate).toHaveBeenCalledTimes(1)
   })
 
-  test('[INFRA] payload Redis tem formato NewsInjectEvent válido', async () => {
+  // -------------------------------------------------------------------------
+  // Contrato de payload Redis
+  // -------------------------------------------------------------------------
+
+  test('[INFRA] payload Redis tem formato NewsInjectEvent valido', async () => {
     await publisher.publish(makeRaw(), makeClassified())
 
     expect(mockPublish).toHaveBeenCalled()

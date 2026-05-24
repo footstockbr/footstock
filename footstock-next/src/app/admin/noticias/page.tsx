@@ -11,7 +11,7 @@ interface NewsItem {
   content: string
   impact: string
   sentiment: string
-  ticker: string
+  ticker: string | null
   assetIds: string[]
   source?: string | null
   isPublished: boolean

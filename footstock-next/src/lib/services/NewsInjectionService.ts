@@ -84,6 +84,7 @@ export class NewsInjectionService {
         content: dto.content ?? '',
         impact: dto.impactCategory,
         sentiment: sentimentEnum,
+        ticker: asset.ticker,
         assetIds: [asset.id],
         source: dto.source ?? 'Admin',
         isPublished: true,

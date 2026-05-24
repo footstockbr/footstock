@@ -109,6 +109,16 @@ export async function PATCH(request: NextRequest, { params }: NewsParams) {
     if (sentiment !== undefined) updateData.sentiment = sentiment
     if (ticker !== undefined) {
       updateData.ticker = ticker || null
+      // ADR Opcao A (blacksmith/adr/adr-news-ticker-assetids-sync.md): manter ticker e assetIds sincronizados em updates
+      if (ticker) {
+        const asset = await prisma.asset.findUnique({
+          where: { ticker },
+          select: { id: true },
+        })
+        updateData.assetIds = asset ? [asset.id] : []
+      } else {
+        updateData.assetIds = []
+      }
     }
     if (isArchived !== undefined) {
       updateData.isArchived = isArchived

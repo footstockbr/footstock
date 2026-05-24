@@ -43,18 +43,49 @@ export async function POST(request: NextRequest) {
   })
 
   let resolved = 0
+  let resolvedWithAsset = 0
+  let noAssetMatch = 0
+  let failed = 0
+
+  console.log(`[batch-resolve] Iniciando: ${unlinked.length} noticias sem ticker`)
+
   for (const news of unlinked) {
-    const ticker = await resolveTickerFromText(`${news.title} ${news.content}`)
-    if (ticker) {
-      await prisma.news.update({
-        where: { id: news.id },
-        data: { ticker },
-      })
-      resolved++
+    try {
+      const ticker = await resolveTickerFromText(`${news.title} ${news.content}`)
+      if (ticker) {
+        const asset = await prisma.asset.findUnique({
+          where: { ticker },
+          select: { id: true },
+        })
+        const assetId = asset?.id ?? null
+
+        await prisma.news.update({
+          where: { id: news.id },
+          data: {
+            ticker,
+            ...(assetId ? { assetIds: [assetId] } : {}),
+          },
+        })
+        resolved++
+        if (assetId) resolvedWithAsset++
+        else noAssetMatch++
+      }
+    } catch (err) {
+      failed++
+      console.error(`[batch-resolve] Falha ao processar news ${news.id}: ${(err as Error).message}`)
     }
   }
 
+  console.log(`[batch-resolve] Concluido: resolved=${resolved} with_asset=${resolvedWithAsset} no_asset=${noAssetMatch} failed=${failed}`)
+
   return NextResponse.json({
-    data: { total: unlinked.length, resolved, remaining: unlinked.length - resolved },
+    data: {
+      total: unlinked.length,
+      resolved,
+      resolved_with_asset: resolvedWithAsset,
+      no_asset_match: noAssetMatch,
+      remaining: unlinked.length - resolved,
+      failed,
+    },
   })
 }

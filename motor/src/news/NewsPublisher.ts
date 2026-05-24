@@ -47,16 +47,44 @@ export class NewsPublisher {
 
       // GAP-014: PrismaClient gerado pode não incluir modelo 'news' no tipo estático
       // quando rodando no motor Railway com client separado. Type assertion mínima tipada.
+      // ADR: blacksmith/adr/adr-news-ticker-assetids-sync.md — Opcao A (ticker + assetIds sincronizados)
       type PrismaWithNews = { news: { create: (args: { data: Record<string, unknown> }) => Promise<{ id: string }> } }
+      type PrismaWithAsset = {
+        asset: { findUnique: (args: { where: { ticker: string }; select: { id: boolean } }) => Promise<{ id: string } | null> }
+      } & PrismaWithNews
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      const prismaWithNews = this.prisma as unknown as PrismaWithNews
-      const news = await prismaWithNews.news.create({
+      const prismaWithAsset = this.prisma as unknown as PrismaWithAsset
+
+      let assetId: string | null = null
+      if (classified.ticker) {
+        const asset = await prismaWithAsset.asset.findUnique({
+          where: { ticker: classified.ticker },
+          select: { id: true },
+        })
+        assetId = asset?.id ?? null
+        if (!assetId) {
+          logger.warn(`[NewsPublisher] Ticker '${classified.ticker}' nao encontrado em assets — assetIds ficara vazio`)
+        }
+      }
+
+      logger.info(JSON.stringify({
+        event: 'news_publisher_persist',
+        title: raw.title.slice(0, 80),
+        classified_ticker: classified.ticker || null,
+        classified_relevance: classified.relevance,
+        classified_impact: classified.impactCategory,
+        asset_id_resolved: assetId,
+        will_persist_ticker: !!(classified.ticker),
+      }))
+
+      const news = await prismaWithAsset.news.create({
         data: {
           title: raw.title,
           content: raw.description ?? raw.title,
           impact: this.resolveImpactCategory(classified.impactCategory),
           sentiment: sentimentEnum,
-          assetIds: classified.ticker ? [classified.ticker] : [],
+          ticker: classified.ticker || null,
+          assetIds: assetId ? [assetId] : [],
           source: raw.source,
           isPublished: true,
           publishedAt: new Date(raw.publishedAt),
