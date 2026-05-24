@@ -42,10 +42,10 @@ export async function verifyAgeViaFlagCheck(
   const cpfHash = hashCPF(cpf)
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS)
 
+    try {
       const response = await fetch(`${apiUrl}/verify`, {
         method: 'POST',
         headers: {
@@ -55,8 +55,6 @@ export async function verifyAgeViaFlagCheck(
         body: JSON.stringify({ cpfHash }),
         signal: controller.signal,
       })
-
-      clearTimeout(timeoutId)
 
       // Sucesso — parsear response
       if (response.ok) {
@@ -115,6 +113,8 @@ export async function verifyAgeViaFlagCheck(
           message: `FlagCheck indisponível após ${MAX_RETRIES + 1} tentativas`,
         },
       }
+    } finally {
+      clearTimeout(timeoutId)
     }
   }
 

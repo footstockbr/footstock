@@ -73,17 +73,61 @@ export function getRedisClient(): Redis | null {
 // ─── Aliases para compatibilidade com código legado ──────────────────────────
 
 /**
- * Alias de compatibilidade: retorna a instância Redis singleton.
+ * Alias de compatibilidade: expõe a instância Redis singleton.
  * Módulos legados importam `redisPublisher` para operações get/set/publish etc.
- * Quando REDIS_URL não está configurada, retorna um proxy no-op (fail-open).
+ *
+ * É um Proxy LAZY: importar `@/lib/redis` (ou qualquer service/route que importe
+ * `redisPublisher`) não instancia mais o cliente ioredis. `getRedisClient()` só
+ * é chamado no primeiro acesso real a um método/propriedade. Isso elimina o
+ * side-effect de import que abria socket ioredis em testes Jest (e mantinha
+ * timers de reconexão pendentes, impedindo o worker de encerrar).
+ *
+ * O comportamento de produção é preservado: no primeiro uso real, o cliente é
+ * criado com `lazyConnect: false` e demais opções de `buildRedisOptions()`
+ * inalteradas. Quando REDIS_URL não está configurada, cai no no-op (fail-open).
  */
+type NoopPipeline = {
+  incr: (..._args: unknown[]) => NoopPipeline
+  expire: (..._args: unknown[]) => NoopPipeline
+  incrbyfloat: (..._args: unknown[]) => NoopPipeline
+  exec: () => Promise<null>
+}
+
+const _noopPipeline: NoopPipeline = new Proxy({} as NoopPipeline, {
+  get: (_target, prop) => {
+    if (prop === 'then') return undefined
+    if (prop === 'exec') return () => Promise.resolve(null)
+    return () => _noopPipeline
+  },
+})
+
 const _noopProxy = new Proxy({} as Redis, {
   get: (_target, prop) => {
     if (prop === 'then') return undefined // não é uma Promise
+    if (prop === 'pipeline') return () => _noopPipeline
     return (..._args: unknown[]) => Promise.resolve(null)
   },
 })
-export const redisPublisher: Redis = getRedisClient() ?? _noopProxy
+
+function resolveRedisPublisher(): Redis {
+  return getRedisClient() ?? _noopProxy
+}
+
+export const redisPublisher: Redis = new Proxy({} as Redis, {
+  get: (_target, prop) => {
+    if (prop === 'then') return undefined // impede assimilação por await/Promise
+    if (prop === Symbol.toStringTag) return 'RedisLazyPublisher'
+
+    const client = resolveRedisPublisher()
+    const value = Reflect.get(client, prop, client)
+    // Métodos do ioredis dependem de `this`; preservar o binding ao cliente real.
+    return typeof value === 'function' ? value.bind(client) : value
+  },
+  set: (_target, prop, value) => {
+    const client = resolveRedisPublisher()
+    return Reflect.set(client, prop, value, client)
+  },
+})
 
 /** Cria um subscriber Redis dedicado (conexão separada). */
 export function createSubscriber(): Redis | null {
