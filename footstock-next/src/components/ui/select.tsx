@@ -150,6 +150,7 @@ export function NativeSelect({
         data-testid={testId}
         aria-label={placeholder}
         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+        style={{ colorScheme: 'dark', backgroundColor: '#1E2329', color: '#EAECEF' }}
       >
         {placeholder && <option value="">{placeholder}</option>}
         {options.map((o) => (
