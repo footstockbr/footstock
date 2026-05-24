@@ -87,6 +87,16 @@ healthServer.listen(PORT, () => {
 async function main() {
   logger.info(`[motor] Iniciando instância: ${MOTOR_ID}`)
 
+  // M052: garante coluna halted_until em assets (IF NOT EXISTS — idempotente).
+  // Roda antes de qualquer query Prisma que referencie a coluna.
+  {
+    const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! })
+    const mc = new PrismaClient({ adapter })
+    await mc.$executeRaw`ALTER TABLE assets ADD COLUMN IF NOT EXISTS halted_until TIMESTAMPTZ`
+    await mc.$disconnect()
+    logger.info('[motor] Schema check: coluna halted_until OK')
+  }
+
   const redis = await RedisClientService.getInstance()
   const leader = new LeaderElection(redis, MOTOR_ID)
   const engine = new MarketEngine(redis)
