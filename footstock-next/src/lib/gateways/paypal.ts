@@ -151,7 +151,7 @@ export class PayPalGateway implements IGateway {
 
   // ─── parseWebhookEvent ────────────────────────────────────────────────────
 
-  parseWebhookEvent(payload: string): WebhookEvent {
+  async parseWebhookEvent(payload: string): Promise<WebhookEvent> {
     let parsed: Record<string, unknown>
     try {
       parsed = JSON.parse(payload) as Record<string, unknown>

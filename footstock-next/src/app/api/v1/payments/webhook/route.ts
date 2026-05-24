@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getGatewayByHeader, detectGatewayType } from '@/lib/gateways/GatewayFactory'
+import { GatewayRetryableError } from '@/lib/gateways/IGateway'
 import { validateWebhookByGateway } from '@/lib/gateways/webhook-validator'
 import { getWebhookRateLimit } from '@/lib/ratelimit'
 import { normalizeIp } from '@/middleware/rateLimit'
@@ -104,8 +105,25 @@ export async function POST(request: NextRequest) {
   // 5. Parse do evento
   let event: Awaited<ReturnType<typeof gateway.parseWebhookEvent>>
   try {
-    event = gateway.parseWebhookEvent(rawBody)
-  } catch {
+    event = await gateway.parseWebhookEvent(rawBody)
+  } catch (parseErr) {
+    // Erro TRANSITÓRIO (ex.: GET de enriquecimento do MP falhou): o evento pode ser válido.
+    // Responder 503 (retryable) e logar REJECTED (não-bloqueante para reprocessamento, pois a
+    // dedup só considera ACCEPTED). NÃO devolver 200, que sinalizaria "não reenviar".
+    if (parseErr instanceof GatewayRetryableError) {
+      await webhookAuditService.logWebhook({
+        gateway: gatewayEnum,
+        status: 'REJECTED',
+        hmacValid: true,
+        ipAddress: originalIp,
+        errorMessage: `Enriquecimento indeterminado (retry): ${parseErr.message}`,
+      })
+      return NextResponse.json(
+        { error: { code: 'PAYMENT_ENRICH_RETRY', message: 'Status indeterminado — reenviar.' } },
+        { status: 503 }
+      )
+    }
+    // Erro TERMINAL: payload malformado ou status não mapeável. 200 para o provedor parar.
     await webhookAuditService.logWebhook({
       gateway: gatewayEnum,
       status: 'REJECTED',
@@ -116,7 +134,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true }, { status: 200 })
   }
 
-  // 5. Idempotência: checar WebhookAuditLog por transactionId
+  // 5b. Idempotência: só consideramos DUPLICATA quando já houve um ACCEPTED (processamento
+  // financeiro concluído com sucesso). Logs REJECTED de tentativas anteriores que falharam NÃO
+  // bloqueiam reprocessamento — é isso que permite o retry do provedor recuperar uma falha.
   if (event.transactionId) {
     const duplicate = await prisma.webhookAuditLog.findFirst({
       where: {
@@ -125,22 +145,22 @@ export async function POST(request: NextRequest) {
       },
     })
     if (duplicate) {
+      await webhookAuditService.logWebhook({
+        gateway: gatewayEnum,
+        eventType: event.eventType,
+        transactionId: event.transactionId,
+        subscriptionId: event.subscriptionId,
+        status: 'DUPLICATE',
+        hmacValid: true,
+        ipAddress: originalIp,
+      })
       return NextResponse.json({ received: true }, { status: 200 })
     }
   }
 
-  // 6. Log do webhook aceito
-  await webhookAuditService.logWebhook({
-    gateway: gatewayEnum,
-    eventType: event.eventType,
-    transactionId: event.transactionId,
-    subscriptionId: event.subscriptionId,
-    status: 'ACCEPTED',
-    hmacValid: true,
-    ipAddress: originalIp,
-  })
-
-  // 7. Processar evento por tipo
+  // 6. Processar evento por tipo. O ACCEPTED só é gravado APÓS os efeitos financeiros
+  // concluírem (ver final do try) — assim uma falha não fica registrada como aceita e o
+  // próximo reenvio do provedor reprocessa em vez de cair como duplicata.
   try {
     if (event.eventType === 'PAYMENT_CONFIRMED') {
       // Buscar subscription para obter userId
@@ -151,7 +171,30 @@ export async function POST(request: NextRequest) {
 
       if (subscription) {
         // Ativar plano do usuário
-        await planService.upgradeUser(subscription.userId, event.subscriptionId)
+        const upgradeResult = await planService.upgradeUser(subscription.userId, event.subscriptionId)
+
+        // Estado terminal (CANCELLED/EXPIRED/SUSPENDED/CANCELLATION_LOCK): a assinatura NÃO
+        // foi ativada. Registrar Payment PAID / comissão / analytics aqui criaria um pagamento
+        // "pago" para uma assinatura morta. Logar e encerrar sem efeitos colaterais financeiros.
+        if (upgradeResult === 'NOT_ACTIVATABLE') {
+          console.warn(
+            `[webhook] PAYMENT_CONFIRMED para assinatura em estado terminal — pagamento não registrado. ` +
+            `subscriptionId=${event.subscriptionId} transactionId=${event.transactionId}`
+          )
+          // Decisão TERMINAL: não há o que ativar. Logar ACCEPTED para que reenvios do provedor
+          // caiam como DUPLICATE (não reprocessar) — não é uma falha transitória que mereça retry.
+          await webhookAuditService.logWebhook({
+            gateway: gatewayEnum,
+            eventType: event.eventType,
+            transactionId: event.transactionId,
+            subscriptionId: event.subscriptionId,
+            status: 'ACCEPTED',
+            hmacValid: true,
+            ipAddress: originalIp,
+            errorMessage: 'Assinatura em estado terminal — sem efeitos financeiros',
+          })
+          return NextResponse.json({ received: true }, { status: 200 })
+        }
 
         // P5 league bonus: PLAN_UPGRADED
         leagueEventRecorder.recordForAllActiveLeagues(subscription.userId, 'PLAN_UPGRADED', { planType: subscription.planType }).catch(() => {})
@@ -275,9 +318,38 @@ export async function POST(request: NextRequest) {
       })
     }
   } catch (err) {
+    // Falha durante os efeitos financeiros (DB, gateway, etc). NÃO logar ACCEPTED — o
+    // processamento não concluiu. Logar REJECTED (não-bloqueante, pois dedup só olha ACCEPTED)
+    // e devolver 503 para que o provedor reenvie. O reprocessamento é idempotente:
+    // payment.upsert por gatewayTransactionId, upgradeUser -> ALREADY_ACTIVE, comissão skipDuplicates.
     console.error('[webhook] Erro ao processar evento:', err)
-    // Não retornar erro — já foi logado; reprocessamento via dunning se necessário
+    await webhookAuditService.logWebhook({
+      gateway: gatewayEnum,
+      eventType: event.eventType,
+      transactionId: event.transactionId,
+      subscriptionId: event.subscriptionId,
+      status: 'REJECTED',
+      hmacValid: true,
+      ipAddress: originalIp,
+      errorMessage: `Falha ao processar evento (retry): ${err instanceof Error ? err.message : String(err)}`,
+    })
+    return NextResponse.json(
+      { error: { code: 'PAYMENT_PROCESS_RETRY', message: 'Falha transitória no processamento — reenviar.' } },
+      { status: 503 }
+    )
   }
+
+  // Sucesso: efeitos financeiros concluídos. Gravar ACCEPTED agora (e não antes) garante que
+  // só um processamento de fato concluído bloqueie reenvios futuros como DUPLICATE.
+  await webhookAuditService.logWebhook({
+    gateway: gatewayEnum,
+    eventType: event.eventType,
+    transactionId: event.transactionId,
+    subscriptionId: event.subscriptionId,
+    status: 'ACCEPTED',
+    hmacValid: true,
+    ipAddress: originalIp,
+  })
 
   return NextResponse.json({ received: true }, { status: 200 })
 }

@@ -7,6 +7,7 @@
 
 import { createHmac, timingSafeEqual } from 'crypto'
 import type { IGateway, GatewayCheckoutInput, GatewayCheckoutResult, WebhookEvent } from './IGateway'
+import { GatewayRetryableError } from './IGateway'
 import { CHECKOUT_EXPIRY_MINUTES, GATEWAY_TIMEOUT_MS, WEBHOOK_REPLAY_WINDOW_MS } from '@/lib/constants/payment-security'
 import { env } from '@/lib/env'
 
@@ -157,9 +158,57 @@ export class MercadoPagoGateway implements IGateway {
     }
   }
 
+  // ─── fetchPaymentStatus ────────────────────────────────────────────────────
+
+  /**
+   * Resolve o status real de um pagamento via GET /v1/payments/{id}.
+   * Retorna null em QUALQUER falha (token ausente, timeout, HTTP != 2xx, JSON inválido):
+   * o chamador trata null como "status indeterminado" e segue para rejeição silenciosa,
+   * jamais ativando o plano sem confirmação explícita de aprovação.
+   */
+  private async fetchPaymentStatus(
+    paymentId: string
+  ): Promise<{ status?: string; externalReference?: string; amount?: number } | null> {
+    const accessToken = env.MERCADO_PAGO_ACCESS_TOKEN
+    if (!accessToken) {
+      console.warn('[MERCADO_PAGO] fetchPaymentStatus: MERCADO_PAGO_ACCESS_TOKEN ausente — sem enriquecimento')
+      return null
+    }
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), GATEWAY_TIMEOUT_MS)
+    try {
+      const response = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${accessToken}` },
+        signal: controller.signal,
+      })
+      if (!response.ok) {
+        console.warn(`[MERCADO_PAGO] fetchPaymentStatus: HTTP ${response.status} para payment ${paymentId}`)
+        return null
+      }
+      const body = await response.json() as {
+        status?: string
+        external_reference?: string
+        transaction_amount?: number
+      }
+      return {
+        status:            body.status,
+        externalReference: body.external_reference,
+        amount:            body.transaction_amount,
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'erro desconhecido'
+      console.warn(`[MERCADO_PAGO] fetchPaymentStatus falhou para payment ${paymentId}: ${msg}`)
+      return null
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+
   // ─── parseWebhookEvent ────────────────────────────────────────────────────
 
-  parseWebhookEvent(payload: string): WebhookEvent {
+  async parseWebhookEvent(payload: string): Promise<WebhookEvent> {
     let parsed: Record<string, unknown>
     try {
       parsed = JSON.parse(payload) as Record<string, unknown>
@@ -167,14 +216,54 @@ export class MercadoPagoGateway implements IGateway {
       throw new Error(`[MERCADO_PAGO] Payload JSON malformado: ${payload.substring(0, 200)}`)
     }
 
-    // Extrair dados do evento MP
-    const type      = parsed.type as string
-    const action    = parsed.action as string
-    const dataId    = (parsed.data as Record<string, string>)?.id ?? ''
-    const extRef    = (parsed.data as Record<string, string>)?.external_reference
+    // Extrair dados do evento MP. data.id chega como string OU number conforme o evento;
+    // normalizar para string antes de compor a URL do GET e o transactionId do contrato.
+    const rawDataId = (parsed.data as Record<string, unknown>)?.id
+    const dataId    = typeof rawDataId === 'string' || typeof rawDataId === 'number'
+      ? String(rawDataId)
+      : ''
+    let extRef      = (parsed.data as Record<string, string>)?.external_reference
                    ?? (parsed as Record<string, string>).external_reference
                    ?? ''
-    const amount    = ((parsed.data as Record<string, number>)?.transaction_amount ?? 0) * 100
+    let amount      = ((parsed.data as Record<string, number>)?.transaction_amount ?? 0) * 100
+
+    let mpStatus = (parsed as Record<string, string>).status
+      ?? (parsed.data as Record<string, string>)?.status
+      ?? ''
+    const topic = (parsed as Record<string, string>).type
+      ?? (parsed as Record<string, string>).topic
+      ?? ''
+
+    // FOLLOW-UP do D9 resolvido: notificações `payment` podem chegar só com data.id e SEM
+    // status (ex.: action payment.created). Sem resolver o status real, um PIX/cartão que
+    // depois é aprovado nunca ativaria o plano. Buscamos GET /v1/payments/{id} APENAS quando:
+    // (a) o evento é de pagamento, (b) há data.id, (c) o payload não trouxe status. Falha de
+    // fetch (token ausente, timeout, HTTP != 2xx) faz fallback para o caminho de rejeição
+    // silenciosa — nunca para ativação indevida (mantém a invariante do D9).
+    if (!mpStatus && dataId && topic === 'payment') {
+      const fetched = await this.fetchPaymentStatus(dataId)
+      if (!fetched) {
+        // Não foi possível resolver o status (token ausente, timeout, HTTP != 2xx). O pagamento
+        // PODE ser válido — sinalizar retryable para o provedor reentregar, nunca descartar.
+        throw new GatewayRetryableError(
+          `[MERCADO_PAGO] status indeterminado para payment ${dataId}: enriquecimento falhou — retry`
+        )
+      }
+      {
+        mpStatus = fetched.status ?? ''
+        // Anti-confusão de assinatura: se o payload JÁ trouxe external_reference, ele deve
+        // bater com o do pagamento resolvido. Sem esta checagem, um payload forjado/inconsistente
+        // (ext_ref=A) com data.id de um pagamento de ext_ref=B ativaria a assinatura errada (A).
+        if (extRef && fetched.externalReference && fetched.externalReference !== extRef) {
+          throw new Error(
+            `[MERCADO_PAGO] external_reference divergente: payload=${extRef} ` +
+            `payment=${fetched.externalReference} — evento rejeitado`
+          )
+        }
+        if (!extRef && fetched.externalReference) extRef = fetched.externalReference
+        if (!amount && fetched.amount) amount = fetched.amount * 100
+      }
+    }
 
     if (!extRef) {
       throw new Error('[MERCADO_PAGO] subscriptionId (external_reference) ausente no evento')
@@ -182,11 +271,12 @@ export class MercadoPagoGateway implements IGateway {
 
     // Mapear status para eventType
     let eventType: WebhookEvent['eventType']
-    const mpStatus = (parsed as Record<string, string>).status
-      ?? (parsed.data as Record<string, string>)?.status
-      ?? ''
 
-    if (mpStatus === 'approved' || action === 'payment.created' && type === 'payment') {
+    // Só 'approved' confirma pagamento. O bug anterior usava
+    // `approved || action === 'payment.created' && type === 'payment'`, que por
+    // precedência de operador (&& antes de ||) confirmava qualquer payment.created
+    // — inclusive PIX/cartão ainda não pago — ativando plano sem aprovação.
+    if (mpStatus === 'approved') {
       eventType = 'PAYMENT_CONFIRMED'
     } else if (mpStatus === 'rejected' || mpStatus === 'cancelled') {
       eventType = 'PAYMENT_FAILED'

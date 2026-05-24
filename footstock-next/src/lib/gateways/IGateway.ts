@@ -46,6 +46,20 @@ export interface WebhookEvent {
   rawPayload:     string
 }
 
+/**
+ * Erro de parsing/enriquecimento TRANSITÓRIO: o evento pode ser válido, mas não foi possível
+ * determinar seu estado agora (ex.: GET /v1/payments/{id} do Mercado Pago falhou por timeout
+ * ou indisponibilidade). O webhook deve responder com status retryable (5xx) para que o
+ * provedor reentregue, em vez de 200 (que seria interpretado como "recebido, não reenviar").
+ * Distingue-se de um Error comum, que indica payload terminalmente inválido/não mapeável.
+ */
+export class GatewayRetryableError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'GatewayRetryableError'
+  }
+}
+
 // ─── Interface principal ──────────────────────────────────────────────────────
 
 /** Contrato comum para todos os gateways de pagamento */
@@ -67,9 +81,11 @@ export interface IGateway {
 
   /**
    * Parseia payload de webhook e normaliza para WebhookEvent.
-   * @throws Error com mensagem descritiva para payloads malformados
+   * Assíncrono: alguns gateways (ex.: Mercado Pago) recebem notificações que trazem
+   * apenas um id de recurso e exigem um GET ao gateway para resolver o status real.
+   * @throws Error com mensagem descritiva para payloads malformados ou status não mapeado
    */
-  parseWebhookEvent(payload: string): WebhookEvent
+  parseWebhookEvent(payload: string): Promise<WebhookEvent>
 
   /**
    * Cancela a renovação automática de uma assinatura no gateway.

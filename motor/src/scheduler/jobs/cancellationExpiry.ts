@@ -1,14 +1,12 @@
 // ============================================================================
-// Foot Stock Motor — Cron Job: cancellation-expiry
-// Migrado de footstock-next/src/app/api/cron/cancellation-expiry/route.ts
-// Schedule: 0 5 * * * (diário 05:00 UTC = 02:00 UTC-3)
+// Foot Stock Motor — Cron Job: cancellation-expiry (Option C)
+// Proxy HTTP para footstock-next/src/app/api/cron/cancellation-expiry/route.ts.
+// Regra de negocio (downgrade T+7, fechar posicoes) vive na rota Next (fonte unica).
+// Schedule: 0 5 * * * (diario 05:00 UTC).
 // ============================================================================
 
-import { logger } from '../../utils/logger'
+import { cronProxy } from '../cronProxy'
 
 export async function cancellationExpiryJob(): Promise<void> {
-  logger.info('[cron/cancellation-expiry] Iniciando job...')
-  // TODO: migrar lógica de processCancellationExpiries
-  //       para motor/src/services/cron/cancellation-expiry.ts
-  logger.info('[cron/cancellation-expiry] Job concluído (stub).')
+  await cronProxy('cancellation-expiry')
 }

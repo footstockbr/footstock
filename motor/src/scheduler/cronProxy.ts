@@ -13,6 +13,13 @@ const DEFAULT_TIMEOUT_MS = 60_000
 interface CronProxyOptions {
   apiVersion?: 'v0' | 'v1'
   timeoutMs?: number
+  /**
+   * Quando true (default), um corpo JSON com `errors > 0` é tratado como falha do job
+   * (lança erro) mesmo com HTTP 2xx. Sem isto, um cron que liquidou posições mas falhou em
+   * algumas ficaria "verde" no scheduler, mascarando inconsistências financeiras.
+   * Jobs cujo contrato aceita falha parcial silenciosa podem passar false explicitamente.
+   */
+  failOnBodyErrors?: boolean
 }
 
 function getRequiredEnv(key: string): string {
@@ -35,7 +42,7 @@ export async function cronProxy(
   jobName: string,
   options: CronProxyOptions = {}
 ): Promise<void> {
-  const { apiVersion = 'v0', timeoutMs = DEFAULT_TIMEOUT_MS } = options
+  const { apiVersion = 'v0', timeoutMs = DEFAULT_TIMEOUT_MS, failOnBodyErrors = true } = options
   const cronSecret = getRequiredEnv('CRON_SECRET')
   const url = buildUrl(jobName, apiVersion)
   const startedAt = Date.now()
@@ -67,6 +74,34 @@ export async function cronProxy(
     const payloadText = await response.text().catch(() => '')
     const payloadSummary =
       payloadText.length > 0 ? payloadText.slice(0, 200) : '<empty>'
+
+    // Falha parcial reportada no corpo: HTTP 2xx não basta. Se a route devolveu um contador
+    // de falha no TOPO do JSON (`errors` ou `failed`) com N > 0, o job processou com
+    // inconsistências e o scheduler NÃO deve marcar sucesso (senão um cancelamento que falhou
+    // em fechar posição passa despercebido).
+    // LIMITAÇÃO CONHECIDA: contadores ANINHADOS (ex.: dunning devolve { dunning: { errors } })
+    // NÃO são detectados aqui. Rotas devem expor um contador de falha no topo da resposta para
+    // serem cobertas; caso contrário continuam "verdes" mesmo com falha parcial.
+    if (failOnBodyErrors && payloadText.length > 0) {
+      let bodyErrors: number | undefined
+      try {
+        const parsed = JSON.parse(payloadText) as { errors?: unknown; failed?: unknown }
+        const counter = typeof parsed.errors === 'number' ? parsed.errors
+          : typeof parsed.failed === 'number' ? parsed.failed
+          : undefined
+        bodyErrors = counter
+      } catch {
+        // corpo não-JSON: não dá para inferir erros — segue como sucesso HTTP
+      }
+      if (bodyErrors !== undefined && bodyErrors > 0) {
+        logger.error(
+          `[cron/${jobName}] Job reportou ${bodyErrors} falha(s) apos ${durationMs}ms — payload: ${payloadSummary}`
+        )
+        throw new Error(
+          `[cron-proxy] ${jobName} concluiu com ${bodyErrors} falha(s) (HTTP ${response.status}, ${durationMs}ms)`
+        )
+      }
+    }
 
     logger.info(
       `[cron/${jobName}] Job concluido em ${durationMs}ms (HTTP ${response.status}) — payload: ${payloadSummary}`

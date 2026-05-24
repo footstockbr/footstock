@@ -1,29 +1,33 @@
 // ============================================================================
-// Foot Stock Motor — Teste unitário do job cancellation-expiry
+// Foot Stock Motor — Teste unitário do job cancellation-expiry (Option C)
+// Valida que o job invoca cronProxy('cancellation-expiry') (deixou de ser stub).
 // ============================================================================
 
 import { cancellationExpiryJob } from '../cancellationExpiry'
-import { logger } from '../../../utils/logger'
 
-jest.mock('../../../utils/logger', () => ({
-  logger: {
-    info: jest.fn(),
-    error: jest.fn(),
-  },
+jest.mock('../../cronProxy', () => ({
+  cronProxy: jest.fn().mockResolvedValue(undefined),
 }))
+
+import { cronProxy } from '../../cronProxy'
 
 describe('cancellationExpiryJob', () => {
   beforeEach(() => {
     jest.clearAllMocks()
   })
 
-  test('deve logar início e fim sem lançar erro', async () => {
+  test('chama cronProxy com o nome kebab-case correto', async () => {
     await expect(cancellationExpiryJob()).resolves.not.toThrow()
-    expect(logger.info).toHaveBeenCalledWith(
-      '[cron/cancellation-expiry] Iniciando job...'
+    expect(cronProxy).toHaveBeenCalledTimes(1)
+    expect(cronProxy).toHaveBeenCalledWith('cancellation-expiry')
+  })
+
+  test('propaga erro do cronProxy (scheduler captura via try/catch externo)', async () => {
+    ;(cronProxy as jest.Mock).mockRejectedValueOnce(
+      new Error('[cron-proxy] cancellation-expiry falhou: HTTP 500')
     )
-    expect(logger.info).toHaveBeenCalledWith(
-      '[cron/cancellation-expiry] Job concluído (stub).'
+    await expect(cancellationExpiryJob()).rejects.toThrow(
+      '[cron-proxy] cancellation-expiry falhou: HTTP 500'
     )
   })
 })

@@ -127,7 +127,7 @@ export async function processRenewalReminders(): Promise<ProcessResult> {
     where: {
       status:                 'ACTIVE',
       expiresAt:              { lte: sevenDaysFromNow, gt: now },
-      // renewalReminderSentAt not in schema — use updatedAt or separate tracking
+      renewalReminderSentAt:  null, // só candidatos ainda não lembrados
     },
     select: { id: true, userId: true, planType: true, expiresAt: true },
   })
@@ -138,10 +138,24 @@ export async function processRenewalReminders(): Promise<ProcessResult> {
         (sub.expiresAt!.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)
       )
 
-      await prisma.subscription.update({
-        where: { id: sub.id },
-        data:  { updatedAt: now },
+      // Claim atômico: só notifica quem efetivamente marcou renewalReminderSentAt agora.
+      // updateMany com renewalReminderSentAt:null no WHERE garante idempotência forte sob
+      // concorrência (duas execuções simultâneas não enviam lembrete em duplicidade) — o
+      // filtro no findMany sozinho não basta. Trade-off: se a notificação falhar após o
+      // claim, o lembrete (não-crítico) é perdido sem retry.
+      // Repetir TODOS os predicados do findMany no claim: entre a leitura e o claim a
+      // assinatura pode ter sido cancelada, renovada ou expirada — sem revalidar, enviaríamos
+      // um lembrete stale (ex.: para quem acabou de renovar). status/janela/null juntos.
+      const claim = await prisma.subscription.updateMany({
+        where: {
+          id:                    sub.id,
+          status:                'ACTIVE',
+          expiresAt:             { lte: sevenDaysFromNow, gt: now },
+          renewalReminderSentAt: null,
+        },
+        data:  { renewalReminderSentAt: now },
       })
+      if (claim.count !== 1) continue // outro processo reivindicou OU estado mudou — não notificar
 
       await NotificationStub.notify(sub.userId, 'PLAN_CANCEL_ALERT', {
         planType:       sub.planType,

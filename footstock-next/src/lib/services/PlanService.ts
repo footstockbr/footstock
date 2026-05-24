@@ -35,6 +35,17 @@ export interface CheckoutResult {
   subscriptionId: string
 }
 
+/**
+ * Resultado explícito de upgradeUser, consumido pelo webhook para decidir se deve
+ * registrar Payment PAID / comissão / analytics. Antes o retorno era void e qualquer
+ * skip silencioso (estado terminal) era indistinguível de uma ativação real.
+ * - ACTIVATED:       assinatura passou a ACTIVE nesta chamada.
+ * - ALREADY_ACTIVE:  já estava ACTIVE (idempotência / renovação) — pagamento ainda é válido.
+ * - NOT_ACTIVATABLE: estado terminal (CANCELLED/EXPIRED/SUSPENDED/CANCELLATION_LOCK) —
+ *                    NÃO registrar pagamento como PAID.
+ */
+export type UpgradeResult = 'ACTIVATED' | 'ALREADY_ACTIVE' | 'NOT_ACTIVATABLE'
+
 // Mapeia string de gateway para GatewayType enum
 function resolveGatewayType(gateway: string): GatewayType {
   const map: Record<string, GatewayType> = {
@@ -171,7 +182,7 @@ export class PlanService extends BaseService {
   }
 
   /** Ativa plano após confirmação de webhook — operação idempotente */
-  async upgradeUser(userId: string, subscriptionId: string): Promise<void> {
+  async upgradeUser(userId: string, subscriptionId: string): Promise<UpgradeResult> {
     const [subscription, user] = await Promise.all([
       prisma.subscription.findUnique({ where: { id: subscriptionId } }),
       prisma.user.findUnique({ where: { id: userId }, select: { planType: true, adminRole: true } }),
@@ -179,6 +190,16 @@ export class PlanService extends BaseService {
 
     if (!subscription) {
       throwPaymentError('NOT_FOUND', `subscriptionId=${subscriptionId} não encontrada`)
+    }
+
+    // Defesa contra IDs cruzados: ativar/cancelar deve operar só na assinatura do próprio
+    // usuário. Sem isto, uma chamada com (userId=A, subscriptionId=B) cancelaria as ACTIVE de A
+    // e ativaria a assinatura de B.
+    if (subscription.userId !== userId) {
+      throwPaymentError(
+        'NOT_FOUND',
+        `subscriptionId=${subscriptionId} não pertence a userId=${userId}`
+      )
     }
 
     if (user?.adminRole) {
@@ -189,7 +210,20 @@ export class PlanService extends BaseService {
     }
 
     // Idempotência: já ACTIVE → skip silencioso (PAYMENT_052)
-    if (subscription.status === 'ACTIVE') return
+    if (subscription.status === 'ACTIVE') return 'ALREADY_ACTIVE'
+
+    // R3-guard: não reativar assinatura em estado terminal a partir de webhook atrasado.
+    // PENDING (primeira cobrança) e PAST_DUE/TRIAL/TRIALING (recuperação de dunning/trial)
+    // permanecem ativáveis; CANCELLED/EXPIRED/SUSPENDED/CANCELLATION_LOCK não devem voltar
+    // a ACTIVE por um PAYMENT_CONFIRMED tardio (reversão de cancelamento tem fluxo próprio).
+    const NON_ACTIVATABLE_STATUSES = ['CANCELLED', 'EXPIRED', 'SUSPENDED', 'CANCELLATION_LOCK']
+    if (NON_ACTIVATABLE_STATUSES.includes(subscription.status)) {
+      console.warn(
+        `[PlanService.upgradeUser] Ignorando ativação de assinatura em estado terminal: ` +
+        `subscriptionId=${subscriptionId} status=${subscription.status}`
+      )
+      return 'NOT_ACTIVATABLE'
+    }
 
     // G-02: registrar plano anterior para cálculo de bônus diferencial em T+7
     const previousPlanType = user?.planType ?? null
@@ -199,25 +233,80 @@ export class PlanService extends BaseService {
     const upgradeBonusAmount = isUpgrade
       ? calcUpgradeBonusAmount(previousPlanType as PlanType, subscription.planType as PlanType)
       : 0
-    const hasBonusToSchedule = isUpgrade && upgradeBonusAmount > 0
     const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
 
-    // Transaction atômica: ativar subscription + atualizar user + agendar bônus T+7 (apenas upgrades)
-    await prisma.$transaction([
-      prisma.subscription.update({
-        where: { id: subscriptionId },
+    // R3: encerrar assinaturas ACTIVE anteriores na MESMA transação + preservar bônus pendente.
+    // Estes valores são preenchidos dentro da transação (leitura consistente).
+    let scheduledBonusAmount = upgradeBonusAmount
+    let bonusScheduleDate = sevenDaysFromNow
+
+    await prisma.$transaction(async (tx) => {
+      // Assinaturas ACTIVE anteriores deste usuário (qualquer plano), exceto a que está sendo ativada.
+      const priorActive = await tx.subscription.findMany({
+        where: { userId, status: 'ACTIVE', id: { not: subscriptionId } },
+        select: { id: true, bonusAmount: true, bonusScheduledAt: true, bonusCreditedAt: true },
+      })
+
+      for (const prior of priorActive) {
+        // Preservar bônus pendente (agendado e ainda não creditado): rolar para a nova assinatura.
+        // bonus-credit só credita status=ACTIVE, então sem isto o bônus da assinatura anterior
+        // seria perdido (ex.: upgrade CRAQUE->LENDA cairia de 23000 para 20000).
+        const isPendingBonus = prior.bonusScheduledAt !== null && prior.bonusCreditedAt === null
+        if (isPendingBonus) {
+          scheduledBonusAmount += prior.bonusAmount ? Number(prior.bonusAmount) : 0
+          if (prior.bonusScheduledAt && prior.bonusScheduledAt < bonusScheduleDate) {
+            bonusScheduleDate = prior.bonusScheduledAt // manter a promessa de data mais cedo
+          }
+        }
+
+        // Semântica "superseded by upgrade": CANCELLED + cancelledAt encerra a assinatura sem
+        // refund nem notificação de cancelamento. Marcar bonusCreditedAt evita qualquer
+        // crédito futuro caso o filtro do bonus-credit mude (o valor já foi transferido).
+        await tx.subscription.update({
+          where: { id: prior.id },
+          data: {
+            status: 'CANCELLED',
+            cancelledAt: new Date(),
+            bonusScheduledAt: null,
+            bonusCreditedAt: isPendingBonus ? new Date() : prior.bonusCreditedAt,
+          },
+        })
+      }
+
+      const hasBonusToScheduleTx = scheduledBonusAmount > 0
+      // Revalidação de status DENTRO da transação (fecha corrida ativação x refund/cancelamento).
+      // O status lido fora da tx pode ter mudado: um refund concorrente que setou CANCELLED
+      // seria sobrescrito de volta a ACTIVE por um where:{id} cego. O guard notIn garante
+      // que só ativamos se a assinatura ainda está num estado ativável; count=0 aborta a tx.
+      const activated = await tx.subscription.updateMany({
+        where: {
+          id: subscriptionId,
+          userId,
+          status: { notIn: [...NON_ACTIVATABLE_STATUSES, 'ACTIVE'] as never[] },
+        },
         data: {
           status:           'ACTIVE',
           previousPlanType: isUpgrade ? previousPlanType as never : null, // G-02
-          bonusScheduledAt: hasBonusToSchedule ? sevenDaysFromNow : null,
-          bonusAmount:      hasBonusToSchedule ? upgradeBonusAmount : null,
+          bonusScheduledAt: hasBonusToScheduleTx ? bonusScheduleDate : null,
+          bonusAmount:      hasBonusToScheduleTx ? scheduledBonusAmount : null,
         },
-      }),
-      prisma.user.update({
+      })
+      if (activated.count !== 1) {
+        throw Object.assign(
+          new Error(
+            `[PlanService.upgradeUser] Ativação abortada: assinatura ${subscriptionId} ` +
+            `mudou de estado durante a transação (provável refund/cancelamento concorrente).`
+          ),
+          { code: 'PAYMENT_ACTIVATION_RACE', statusCode: 409 }
+        )
+      }
+      await tx.user.update({
         where: { id: userId },
         data:  { planType: subscription.planType },
-      }),
-    ])
+      })
+    })
+
+    const hasBonusToSchedule = scheduledBonusAmount > 0
 
     // Notificação via G-003 stub
     await NotificationStub.notify(userId, 'PAYMENT_CONFIRMED', {
@@ -226,9 +315,9 @@ export class PlanService extends BaseService {
       subscriptionId,
     })
 
-    // Notificação de bônus agendado — apenas quando há upgrade com bônus elegível (T-021)
+    // Notificação de bônus agendado — quando há bônus a creditar (diferencial + pendente preservado)
     if (hasBonusToSchedule) {
-      const bonusDate = sevenDaysFromNow.toLocaleDateString('pt-BR', {
+      const bonusDate = bonusScheduleDate.toLocaleDateString('pt-BR', {
         day: '2-digit', month: 'short', year: 'numeric',
       })
       await prisma.notification.create({
@@ -236,7 +325,7 @@ export class PlanService extends BaseService {
           userId,
           type: 'BONUS_SCHEDULED',
           title: 'Bônus de upgrade agendado',
-          body: `Seu bônus de FS$ ${upgradeBonusAmount.toLocaleString('pt-BR')} será creditado em ${bonusDate}.`,
+          body: `Seu bônus de FS$ ${scheduledBonusAmount.toLocaleString('pt-BR')} será creditado em ${bonusDate}.`,
           isRead: false,
         },
       }).catch((err) =>
@@ -251,6 +340,8 @@ export class PlanService extends BaseService {
       .catch((err) =>
         console.error('[PlanService.upgradeUser] Falha no auto-enroll de liga:', err)
       )
+
+    return 'ACTIVATED'
   }
 
   /**

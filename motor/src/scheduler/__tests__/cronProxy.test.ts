@@ -79,6 +79,52 @@ describe('cronProxy', () => {
     await expect(cronProxy('scoring')).rejects.toThrow(/CRON_SECRET/)
   })
 
+  test('lanca erro se corpo 2xx reporta errors > 0 (falha parcial nao fica verde)', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => '{"processed":3,"errors":2,"details":[]}',
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
+
+    await expect(cronProxy('cancellation-expiry')).rejects.toThrow(/2 falha/)
+  })
+
+  test('lanca erro se corpo 2xx reporta failed > 0 (contrato alternativo)', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => '{"success":true,"credited":4,"failed":1}',
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
+
+    await expect(cronProxy('credit-dividends')).rejects.toThrow(/1 falha/)
+  })
+
+  test('errors:0 em corpo 2xx resolve normalmente', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => '{"processed":5,"errors":0}',
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
+
+    await expect(cronProxy('cancellation-expiry')).resolves.toBeUndefined()
+  })
+
+  test('failOnBodyErrors:false ignora errors > 0 no corpo', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => '{"processed":1,"errors":1}',
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
+
+    await expect(
+      cronProxy('scoring', { failOnBodyErrors: false })
+    ).resolves.toBeUndefined()
+  })
+
   test('normaliza trailing slash em FOOTSTOCK_NEXT_BASE_URL', async () => {
     process.env.FOOTSTOCK_NEXT_BASE_URL = 'http://next.test:3000/'
     const fetchMock = jest.fn().mockResolvedValue({
