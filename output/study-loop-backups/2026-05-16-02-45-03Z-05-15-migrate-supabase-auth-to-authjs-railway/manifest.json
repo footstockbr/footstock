@@ -1,0 +1,8 @@
+{
+  "study_slug": "05-15-migrate-supabase-auth-to-authjs-railway",
+  "loop_path": "blacksmith/loop/05-15-migrate-supabase-auth-to-authjs-railway.md",
+  "backup_iso": "2026-05-16-02-45-03Z",
+  "original_sha256": "5ba1d87a81ccbe755cfe99447aef6737a541d32f18a1ef4fb206ecb1970e52ce",
+  "study_mode": "deep",
+  "rollback_applied": false
+}

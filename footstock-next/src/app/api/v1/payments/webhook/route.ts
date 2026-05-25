@@ -35,7 +35,14 @@ export async function POST(request: NextRequest) {
   const gatewayType = detectGatewayType(request.headers)
 
   if (!gateway || !gatewayType) {
-    // Rejeição silenciosa — não revelar detalhes de segurança ao chamador
+    // task-010: o corpo continua 200 silencioso (não vazar detalhe de segurança ao
+    // chamador), mas a rejeição precisa ser OBSERVÁVEL — uma confirmação de pagamento
+    // perdida por header de gateway desconhecido nunca pode passar despercebida.
+    // Sinal: console.error [ALERT] (capturado por log/monitoramento) + audit REJECTED.
+    // Inspeção pelo operador: WebhookAuditService.listLogs (painel admin), filtro status=REJECTED.
+    console.error('[webhook][ALERT] Webhook rejeitado: gateway não reconhecido nos headers', {
+      ipAddress: originalIp,
+    })
     await webhookAuditService.logWebhook({
       gateway: 'MERCADO_PAGO' as SubscriptionGateway, // fallback para log
       status: 'REJECTED',
@@ -58,6 +65,13 @@ export async function POST(request: NextRequest) {
   }
 
   if (!hmacValid) {
+    // task-010: idem ao gateway desconhecido — 200 silencioso no corpo, mas rejeição
+    // observável via [ALERT] + audit REJECTED. HMAC inválido recorrente pode indicar
+    // template de assinatura divergente (ver C8/task-012) e precisa ser percebido.
+    console.error('[webhook][ALERT] Webhook rejeitado: HMAC inválido', {
+      gateway: gatewayType,
+      ipAddress: originalIp,
+    })
     await webhookAuditService.logWebhook({
       gateway: gatewayEnum,
       status: 'REJECTED',
@@ -234,6 +248,32 @@ export async function POST(request: NextRequest) {
           gatewayTransactionId: event.transactionId,
           planType: subscription.planType as 'CRAQUE' | 'LENDA',
         })
+      } else {
+        // C4 (task-007): PAYMENT_CONFIRMED cujo subscriptionId não casa com nenhuma
+        // subscription. Antes, este caminho era pulado e caía no ACCEPTED/200 final —
+        // o pagamento ocorria, o plano nunca ativava e os reenvios viravam DUPLICATE,
+        // sem nenhum rastro. Agora: sinal observável + status retryable (não-ACCEPTED),
+        // para cobrir tanto a corrida (webhook antes do commit da sub) quanto o
+        // mapeamento errado de subscriptionId (ex.: C7 PayPal), que o operador inspeciona
+        // via WebhookAuditService.listLogs (painel admin) filtrando status REJECTED.
+        console.error(
+          `[webhook][ALERT] PAYMENT_CONFIRMED para subscriptionId inexistente — plano NÃO ativado. ` +
+          `subscriptionId=${event.subscriptionId} transactionId=${event.transactionId} gateway=${gatewayType}`
+        )
+        await webhookAuditService.logWebhook({
+          gateway: gatewayEnum,
+          eventType: event.eventType,
+          transactionId: event.transactionId,
+          subscriptionId: event.subscriptionId,
+          status: 'REJECTED',
+          hmacValid: true,
+          ipAddress: originalIp,
+          errorMessage: 'Subscription não encontrada para PAYMENT_CONFIRMED',
+        })
+        return NextResponse.json(
+          { error: { code: 'PAYMENT_SUB_NOT_FOUND', message: 'Subscription não encontrada — reenviar.' } },
+          { status: 503 }
+        )
       }
     } else if (event.eventType === 'PAYMENT_FAILED') {
       // Marcar subscription como PAST_DUE para acionar dunning
@@ -272,20 +312,64 @@ export async function POST(request: NextRequest) {
     } else if (event.eventType === 'REFUND_COMPLETED') {
       const refundedSub = await prisma.subscription.findUnique({
         where: { id: event.subscriptionId },
-        select: { userId: true },
+        select: { userId: true, planType: true },
       })
 
       if (refundedSub) {
-        await prisma.$transaction([
-          prisma.subscription.update({
-            where: { id: event.subscriptionId },
-            data: { status: 'CANCELLED', cancelledAt: new Date() },
-          }),
-          prisma.user.update({
+        // C6 (task-009): só rebaixar para JOGADOR se a subscription reembolsada for de
+        // fato a vigente do usuário. Um refund tardio de um plano antigo (ex.: CRAQUE) não
+        // pode derrubar um plano superior já ativo (ex.: LENDA).
+        const TIER: Record<string, number> = { JOGADOR: 0, CRAQUE: 1, LENDA: 2 }
+        const [user, otherActive] = await Promise.all([
+          prisma.user.findUnique({
             where: { id: refundedSub.userId },
-            data: { planType: 'JOGADOR', fsBalance: 2000 },
+            select: { planType: true },
+          }),
+          prisma.subscription.findFirst({
+            where: {
+              userId: refundedSub.userId,
+              status: 'ACTIVE',
+              NOT: { id: event.subscriptionId },
+            },
+            select: { planType: true },
+            orderBy: { createdAt: 'desc' },
           }),
         ])
+
+        const refundedTier = TIER[refundedSub.planType] ?? 0
+        const currentTier = TIER[user?.planType ?? 'JOGADOR'] ?? 0
+        const hasOtherActiveGteTier =
+          otherActive != null && (TIER[otherActive.planType] ?? 0) >= refundedTier
+
+        // Downgrade apenas quando o plano vigente vem desta subscription: o tier atual do
+        // usuário é exatamente o do plano reembolsado E não há outra subscription ativa de
+        // tier igual/superior que sustente esse plano.
+        const shouldDowngrade = currentTier === refundedTier && !hasOtherActiveGteTier
+
+        if (shouldDowngrade) {
+          await prisma.$transaction([
+            prisma.subscription.update({
+              where: { id: event.subscriptionId },
+              data: { status: 'CANCELLED', cancelledAt: new Date() },
+            }),
+            prisma.user.update({
+              where: { id: refundedSub.userId },
+              data: { planType: 'JOGADOR', fsBalance: 2000 },
+            }),
+          ])
+        } else {
+          // Plano superior/diferente continua vigente: apenas cancelar a subscription
+          // reembolsada, sem tocar em planType nem fsBalance.
+          console.warn(
+            `[webhook] REFUND_COMPLETED de plano não-vigente — downgrade evitado. ` +
+            `subscriptionId=${event.subscriptionId} refundedTier=${refundedSub.planType} ` +
+            `currentPlan=${user?.planType ?? 'JOGADOR'}`
+          )
+          await prisma.subscription.update({
+            where: { id: event.subscriptionId },
+            data: { status: 'CANCELLED', cancelledAt: new Date() },
+          })
+        }
 
         // Anular comissões PENDING da subscription reembolsada
         // VOIDED = cancelado por refund — aparece como "Anulado" na UI, não como "Processando"
@@ -318,6 +402,31 @@ export async function POST(request: NextRequest) {
       })
     }
   } catch (err) {
+    // C5 (task-008): AUTH-009 lançado por upgradeUser (conta com adminRole) é uma condição
+    // PERMANENTE, não transitória. Tratá-lo como o erro genérico abaixo gerava 503 em loop —
+    // o provedor retentava indefinidamente sem nunca ativar. Aqui ele é terminal e observável:
+    // 200 (provedor para de reenviar) + audit REJECTED com motivo.
+    // NOTA: a política a montante (não criar a subscription para admin no checkout vs. permitir
+    // admin assinar) depende da decisão da task-001/task-004 e NÃO está resolvida aqui.
+    const errCode = (err as { code?: string })?.code
+    if (errCode === 'AUTH-009') {
+      console.error(
+        `[webhook][ALERT] PAYMENT_CONFIRMED bloqueado por AUTH-009 (adminRole) — terminal, sem retry. ` +
+        `subscriptionId=${event.subscriptionId} transactionId=${event.transactionId}`
+      )
+      await webhookAuditService.logWebhook({
+        gateway: gatewayEnum,
+        eventType: event.eventType,
+        transactionId: event.transactionId,
+        subscriptionId: event.subscriptionId,
+        status: 'REJECTED',
+        hmacValid: true,
+        ipAddress: originalIp,
+        errorMessage: 'AUTH-009: conta admin não ativável (terminal, não-retryable)',
+      })
+      return NextResponse.json({ received: true }, { status: 200 })
+    }
+
     // Falha durante os efeitos financeiros (DB, gateway, etc). NÃO logar ACCEPTED — o
     // processamento não concluiu. Logar REJECTED (não-bloqueante, pois dedup só olha ACCEPTED)
     // e devolver 503 para que o provedor reenvie. O reprocessamento é idempotente:

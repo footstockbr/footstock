@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants/routes";
+import { MOBILE_NAV_HREFS } from "@/components/shared/bottom-tab-bar";
 
 const BASE_NAV_ITEMS = [
   { href: ROUTES.MERCADO, label: "Mercado" },
@@ -17,8 +18,29 @@ const BASE_NAV_ITEMS = [
   { href: ROUTES.COMUNIDADE, label: "Comunidade" },
   { href: ROUTES.ASSESSOR, label: "Assessor IA" },
   { href: ROUTES.GLOSSARIO, label: "Glossário" },
+  { href: ROUTES.PLANOS, label: "Planos" },
   { href: ROUTES.PERFIL, label: "Perfil" },
 ];
+
+// Rotas que precisam estar acessiveis em AMBAS as navegacoes (desktop + mobile).
+// As duas listas de nav sao independentes (sem fonte unica), entao esta checagem
+// de paridade evita o drift que deixou /planos ausente no desktop (P3/C9).
+const REQUIRED_NAV_ROUTES: readonly string[] = [ROUTES.PLANOS];
+
+if (process.env.NODE_ENV !== "production") {
+  const desktopHrefs = new Set<string>(BASE_NAV_ITEMS.map((i) => i.href));
+  const mobileHrefs = new Set<string>(MOBILE_NAV_HREFS);
+  for (const route of REQUIRED_NAV_ROUTES) {
+    const inDesktop = desktopHrefs.has(route);
+    const inMobile = mobileHrefs.has(route);
+    if (inDesktop !== inMobile) {
+      throw new Error(
+        `[nav-parity] Rota obrigatoria "${route}" presente em ${inDesktop ? "desktop" : "mobile"} mas ausente em ${inDesktop ? "mobile" : "desktop"}. ` +
+          "Adicione o item correspondente em desktop-sidebar.tsx (BASE_NAV_ITEMS) e bottom-tab-bar.tsx (MAIN_TABS/DRAWER_ITEMS).",
+      );
+    }
+  }
+}
 
 function DesktopSidebar() {
   const pathname = usePathname();

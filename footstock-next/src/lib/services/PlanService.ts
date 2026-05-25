@@ -203,9 +203,14 @@ export class PlanService extends BaseService {
     }
 
     if (user?.adminRole) {
+      // C5 (task-008): condição PERMANENTE — uma conta admin não vira não-admin por reenvio.
+      // O marcador `retryable: false` permite ao webhook tratá-la como terminal e quebrar o
+      // loop de 503, em vez de string-matchar o code. A política a montante (bloquear no
+      // checkout ou permitir admin assinar) depende da decisão da task-001/task-004.
       throw Object.assign(new Error('Contas administrativas não podem ter assinatura ativa.'), {
         code: 'AUTH-009',
         statusCode: 403,
+        retryable: false,
       })
     }
 

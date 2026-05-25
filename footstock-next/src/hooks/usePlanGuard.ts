@@ -30,8 +30,11 @@ async function fetchMe(): Promise<PlanTier> {
 
 export function usePlanGuard(): PlanGuardResult {
   const { data: plan, isLoading } = useSWR<PlanTier>('plan-guard', fetchMe, {
-    revalidateOnFocus: false,
-    dedupingInterval: 60_000, // revalida no máximo 1x/min
+    // task-005: a janela antiga (60s, sem revalidacao no foco) deixava os cards de
+    // /planos com o tier velho apos um pagamento. Revalidar ao focar a aba (retorno
+    // do gateway) e encurtar o dedupe fecha essa janela de staleness.
+    revalidateOnFocus: true,
+    dedupingInterval: 5_000,
   })
 
   const resolvedPlan = plan ?? 'JOGADOR'

@@ -32,6 +32,13 @@ const DRAWER_ITEMS = [
   { label: "Planos", href: ROUTES.PLANOS, emoji: "⭐" },
 ];
 
+// Conjunto de hrefs alcancaveis pela navegacao mobile (tabs + drawer).
+// Exportado para a checagem de paridade desktop/mobile em desktop-sidebar.tsx.
+export const MOBILE_NAV_HREFS: readonly string[] = [
+  ...MAIN_TABS.map((t) => t.href),
+  ...DRAWER_ITEMS.map((i) => i.href),
+];
+
 function BottomTabBar() {
   const pathname = usePathname();
   const router = useRouter();

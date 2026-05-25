@@ -4,9 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PlanType } from "@/lib/constants/plans";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ROUTES } from "@/lib/constants/routes";
 import { getAuthUser } from "@/lib/auth";
 import { PlanCTAButton } from "@/components/payments/PlanCTAButton";
+import { PlanRevalidateOnSuccess } from "@/components/payments/PlanRevalidateOnSuccess";
 
 export const metadata: Metadata = {
   title: "Planos — FootStock",
@@ -103,13 +105,25 @@ const PLANS = [
   },
 ];
 
-export default async function PlanosPage() {
+interface PlanosPageProps {
+  searchParams: Promise<{ payment?: string }>;
+}
+
+export default async function PlanosPage({ searchParams }: PlanosPageProps) {
   const auth = await getAuthUser();
+  // Politica do operador: admin nao deve acessar nem ver opcao de planos.
+  // Guard server-side e a fronteira de seguranca dura (o nav apenas esconde o link).
+  if (auth?.user.adminRole) {
+    redirect(ROUTES.CONTA);
+  }
   const userPlan = (auth?.user.planType as PlanType) ?? PlanType.JOGADOR;
   const userPlanLevel = PLAN_ORDER[userPlan] ?? 1;
+  const { payment } = await searchParams;
+  const paymentSucceeded = payment === "success";
 
   return (
     <div data-testid="planos-page" className="px-4 md:px-8 pt-4 pb-8 max-w-5xl mx-auto">
+      <PlanRevalidateOnSuccess active={paymentSucceeded} />
       <div className="text-center mb-8">
         <h1 className="text-xl font-bold text-[#EAECEF] mb-1">Escolha seu plano</h1>
         <p className="text-sm text-[#929AA5]">
@@ -211,6 +225,7 @@ export default async function PlanosPage() {
                 <PlanCTAButton
                   planType={plan.type as "CRAQUE" | "LENDA"}
                   label={ctaLabel}
+                  currentPlan={userPlan}
                   data-testid={`plano-cta-button-${plan.type.toLowerCase()}`}
                 />
               ) : (

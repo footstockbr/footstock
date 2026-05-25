@@ -1,0 +1,253 @@
+{
+  "name": "05-16-05-15-migrate-supabase-auth-to-authjs-railway",
+  "kind": "daily-loop",
+  "commercial_name": "Loop /loop --task: 05-16-05-15-migrate-supabase-auth-to-authjs-railway (9 itens: preparo + 7 TASKs Onda 1 Supabase Auth -> Auth.js v5 + Railway Postgres + finalizacao)",
+  "basic_flow": {
+    "brief_root": "/home/pedro/Repositórios/systemForge/output/workspace/foot-stock/blacksmith/loop-archives/05-16-05-15-migrate-supabase-auth-to-authjs-railway",
+    "docs_root": "/home/pedro/Repositórios/systemForge/output/workspace/foot-stock/blacksmith/loop-archives/05-16-05-15-migrate-supabase-auth-to-authjs-railway",
+    "wbs_root": "/home/pedro/Repositórios/systemForge/output/workspace/foot-stock/blacksmith/loop-archives/05-16-05-15-migrate-supabase-auth-to-authjs-railway",
+    "workspace_root": "/home/pedro/Repositórios/systemForge"
+  },
+  "project_details": {
+    "language": {
+      "pt-BR": true
+    },
+    "target_stack": {
+      "framework": "nextjs",
+      "auth": "next-auth@5.0.0-beta.31",
+      "adapter": "@auth/prisma-adapter",
+      "db": "postgres",
+      "hosting": "railway",
+      "hash": "bcryptjs@3"
+    }
+  },
+  "daily_loop": {
+    "version": "1.1.0",
+    "slug": "05-16-05-15-migrate-supabase-auth-to-authjs-railway",
+    "task_description": "Loop /loop --task: Onda 1 migracao Foot Stock de Supabase Auth (bloqueado por exceed_db_size_quota) para Auth.js v5 beta + @auth/prisma-adapter + Railway Postgres. 7 TASKs atomicas (schema M054 -> split config + middleware -> login dual-stack com backfill/timing/race -> logout dual-cookie -> seed bcrypt -> change-password bcrypt -> deploy prod + smoke 5 personas). Materializadas como 9 itens numerados (001 preparo + 002..008 intermediarias + 009 finalizacao).",
+    "loop_root": "/home/pedro/Repositórios/systemForge/output/workspace/foot-stock/blacksmith/loop-archives/05-16-05-15-migrate-supabase-auth-to-authjs-railway",
+    "progress_path": "PROGRESS.md",
+    "tasks_dir": "tasks",
+    "log_path": "_LOOP-LOG.md",
+    "source_config_path": null,
+    "do_command": "/loop:noop-fallback",
+    "review_done_command": "/daily-loop:review-done",
+    "review_command": "/daily-loop:review",
+    "total_items": 9,
+    "task_types": {
+      "001": "task",
+      "002": "task",
+      "003": "task",
+      "004": "task",
+      "005": "task",
+      "006": "task",
+      "007": "task",
+      "008": "task",
+      "009": "task"
+    },
+    "clear_between_items": true,
+    "iteration_template": {
+      "mode": "task",
+      "exec": [
+        "/loop:iteraction:create-task --task {target}",
+        "/loop:iteraction:review-created-task --task {target}",
+        "/loop:iteraction:execute-task --task {target}",
+        "/loop:iteraction:review-executed-task --task {target}"
+      ],
+      "clear_between_items": true,
+      "kimi_pair_template": [
+        "/cmd:kimi-pair-analyse --task {target}",
+        "/cmd:kimi-pair-execute --task {target}"
+      ]
+    },
+    "buckets": [
+      {
+        "id": "T-opus-standard",
+        "model": "opus",
+        "effort": "standard",
+        "task_file": "tasks/T-opus-standard.md",
+        "items": [
+          {
+            "id": "001",
+            "commands": []
+          },
+          {
+            "id": "009",
+            "commands": []
+          }
+        ]
+      },
+      {
+        "id": "T-opus-high",
+        "model": "opus",
+        "effort": "high",
+        "task_file": "tasks/T-opus-high.md",
+        "items": [
+          {
+            "id": "002",
+            "commands": []
+          },
+          {
+            "id": "003",
+            "commands": []
+          },
+          {
+            "id": "004",
+            "commands": []
+          },
+          {
+            "id": "005",
+            "commands": []
+          },
+          {
+            "id": "006",
+            "commands": []
+          },
+          {
+            "id": "007",
+            "commands": []
+          },
+          {
+            "id": "008",
+            "commands": []
+          }
+        ]
+      }
+    ],
+    "items_index": {
+      "001": {
+        "target": "tasks/items/task-001-preparo.md",
+        "kind": "preparo",
+        "bucket": "T-opus-standard",
+        "task_type": "task",
+        "model": null,
+        "effort": null,
+        "kimi_eligible": false,
+        "kimi_pair": false,
+        "kimi_pair_reason": "kind=preparo",
+        "commands": []
+      },
+      "002": {
+        "target": "tasks/items/task-002-schema-migration-m054.md",
+        "kind": "iteration",
+        "bucket": "T-opus-high",
+        "task_type": "task",
+        "model": null,
+        "effort": null,
+        "kimi_eligible": false,
+        "kimi_pair": false,
+        "kimi_pair_reason": "to be evaluated by /loop:individual-analysis",
+        "commands": [],
+        "delegate_kind": "implementation"
+      },
+      "003": {
+        "target": "tasks/items/task-003-authjs-config-route-middleware.md",
+        "kind": "iteration",
+        "bucket": "T-opus-high",
+        "task_type": "task",
+        "model": null,
+        "effort": null,
+        "kimi_eligible": false,
+        "kimi_pair": false,
+        "kimi_pair_reason": "to be evaluated by /loop:individual-analysis",
+        "commands": [],
+        "delegate_kind": "implementation"
+      },
+      "004": {
+        "target": "tasks/items/task-004-login-dual-stack.md",
+        "kind": "iteration",
+        "bucket": "T-opus-high",
+        "task_type": "task",
+        "model": null,
+        "effort": null,
+        "kimi_eligible": false,
+        "kimi_pair": false,
+        "kimi_pair_reason": "to be evaluated by /loop:individual-analysis",
+        "commands": [],
+        "delegate_kind": "implementation"
+      },
+      "005": {
+        "target": "tasks/items/task-005-logout-cleardualcookies.md",
+        "kind": "iteration",
+        "bucket": "T-opus-high",
+        "task_type": "task",
+        "model": null,
+        "effort": null,
+        "kimi_eligible": false,
+        "kimi_pair": false,
+        "kimi_pair_reason": "to be evaluated by /loop:individual-analysis",
+        "commands": [],
+        "delegate_kind": "implementation"
+      },
+      "006": {
+        "target": "tasks/items/task-006-seed-prisma-bcrypt.md",
+        "kind": "iteration",
+        "bucket": "T-opus-high",
+        "task_type": "task",
+        "model": null,
+        "effort": null,
+        "kimi_eligible": false,
+        "kimi_pair": false,
+        "kimi_pair_reason": "to be evaluated by /loop:individual-analysis",
+        "commands": [],
+        "delegate_kind": "implementation"
+      },
+      "007": {
+        "target": "tasks/items/task-007-change-password-bcrypt.md",
+        "kind": "iteration",
+        "bucket": "T-opus-high",
+        "task_type": "task",
+        "model": null,
+        "effort": null,
+        "kimi_eligible": false,
+        "kimi_pair": false,
+        "kimi_pair_reason": "to be evaluated by /loop:individual-analysis",
+        "commands": [],
+        "delegate_kind": "implementation"
+      },
+      "008": {
+        "target": "tasks/items/task-008-deploy-prod-smoke.md",
+        "kind": "iteration",
+        "bucket": "T-opus-high",
+        "task_type": "task",
+        "model": null,
+        "effort": null,
+        "kimi_eligible": false,
+        "kimi_pair": false,
+        "kimi_pair_reason": "to be evaluated by /loop:individual-analysis",
+        "commands": [],
+        "delegate_kind": "implementation"
+      },
+      "009": {
+        "target": "tasks/items/task-009-finalizacao.md",
+        "kind": "finalizacao",
+        "bucket": "T-opus-standard",
+        "task_type": "task",
+        "model": null,
+        "effort": null,
+        "kimi_eligible": false,
+        "kimi_pair": false,
+        "kimi_pair_reason": "kind=finalizacao",
+        "commands": []
+      }
+    },
+    "finalization": {
+      "task": "tasks/items/task-009-finalizacao.md",
+      "review_command": "/loop:iteraction:review-executed-loop --name 05-16-05-15-migrate-supabase-auth-to-authjs-railway",
+      "commands": []
+    }
+  },
+  "metadata": {
+    "schema_version": "V3",
+    "created_by": "/loop:create-structure",
+    "created_at": "2026-05-16T00:00:00-03:00",
+    "creation_completed_at": "2026-05-16T00:00:00-03:00",
+    "total_items": 9,
+    "source_lines": 623,
+    "source_path": "output/workspace/foot-stock/blacksmith/loop/05-15-migrate-supabase-auth-to-authjs-railway.md",
+    "mode": "task",
+    "do_command_hint": "/loop:iteraction:execute-task",
+    "review_command_hint": "/loop:iteraction:review-executed-task",
+    "next_phase": "/loop:individual-analysis --name 05-16-05-15-migrate-supabase-auth-to-authjs-railway"
+  }
+}

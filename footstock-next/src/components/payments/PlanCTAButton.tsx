@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { CheckoutButton } from '@/components/payments/CheckoutButton'
+import { CheckoutButton, ALREADY_HAS_PLAN_MESSAGE } from '@/components/payments/CheckoutButton'
 import { useAnalytics } from '@/hooks/useAnalytics'
 import { usePlanGuard } from '@/hooks/usePlanGuard'
 
 type PlanType = 'CRAQUE' | 'LENDA'
+type CurrentPlan = 'JOGADOR' | 'CRAQUE' | 'LENDA'
 
 
 const TIER_ORDER: Record<string, number> = {
@@ -20,15 +21,23 @@ interface PlanCTAButtonProps {
   label: string
   /** Feature que motivou o upgrade prompt (ex: 'planos_page') */
   featureBlocked?: string
+  /**
+   * Plano atual resolvido server-side (fonte unica de verdade — task-006).
+   * Quando fornecido, prevalece sobre o usePlanGuard (SWR) e e repassado ao
+   * CheckoutButton, garantindo que texto do card e guard usem a mesma fonte.
+   */
+  currentPlan?: CurrentPlan
   'data-testid'?: string
   className?: string
 }
 
-export function PlanCTAButton({ planType, label, featureBlocked = 'planos_page', className, ...props }: PlanCTAButtonProps) {
+export function PlanCTAButton({ planType, label, featureBlocked = 'planos_page', currentPlan: currentPlanProp, className, ...props }: PlanCTAButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { track } = useAnalytics()
-  const { plan: currentPlan } = usePlanGuard()
+  const { plan: guardPlan } = usePlanGuard()
+  // Prop server-side prevalece; SWR e fallback para usos sem prop (ex: PremiumFeatureCard).
+  const currentPlan = currentPlanProp ?? guardPlan
 
   // EVT-019: plan_upgrade_clicked — when user clicks the upgrade CTA button
   function handleUpgradeClick() {
@@ -36,7 +45,7 @@ export function PlanCTAButton({ planType, label, featureBlocked = 'planos_page',
     const currentTierOrder = TIER_ORDER[currentPlan] ?? -1
     const selectedTierOrder = TIER_ORDER[planType] ?? -1
     if (selectedTierOrder <= currentTierOrder) {
-      setError('Você já possui este plano ou superior.')
+      setError(ALREADY_HAS_PLAN_MESSAGE)
       return
     }
 
@@ -60,7 +69,11 @@ export function PlanCTAButton({ planType, label, featureBlocked = 'planos_page',
   return (
     <>
       {error && (
-        <div className="mb-2 text-sm text-red-400 bg-red-900/20 p-2 rounded border border-red-700/50">
+        <div
+          data-testid="plan-cta-block-reason"
+          role="alert"
+          className="mb-2 text-sm text-red-400 bg-red-900/20 p-2 rounded border border-red-700/50"
+        >
           {error}
         </div>
       )}
@@ -105,7 +118,7 @@ export function PlanCTAButton({ planType, label, featureBlocked = 'planos_page',
               Escolha a forma de pagamento para continuar
             </p>
 
-            <CheckoutButton planType={planType} label={label} />
+            <CheckoutButton planType={planType} label={label} currentPlan={currentPlan} />
 
             <button
               type="button"

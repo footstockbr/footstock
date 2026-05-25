@@ -14,7 +14,30 @@ const TIER_ORDER: Record<string, number> = {
   'LENDA': 2,
 }
 
+// Mapeia codigos de bloqueio do servidor (PlanService) para copy humana especifica,
+// eliminando o erro generico (criterio Zero Silencio). Codigos: PlanService.ts.
+export const CHECKOUT_BLOCK_MESSAGES: Record<string, string> = {
+  'AUTH-009': 'Contas administrativas não podem contratar planos.',
+  'ORDER_081': 'Você já possui uma assinatura ativa para este plano.',
+  'PAYMENT_054': 'Este plano não está disponível a partir do seu plano atual.',
+  'DECLINED': 'Pagamento recusado. Verifique os dados ou tente outro método de pagamento.',
+}
+
+// Bloqueio cliente (tier guard) — compartilhado com PlanCTAButton.
+export const ALREADY_HAS_PLAN_MESSAGE = 'Você já possui este plano ou superior.'
+
+// Estado de pagamento pendente (C1): NAO e bloqueio, e aviso de que ja existe
+// uma intencao de pagamento em aberto. Comunicado de forma distinta do erro.
+export const PENDING_PAYMENT_MESSAGE =
+  'Você já tem um pagamento pendente para este plano. Conclua ou aguarde a confirmação antes de tentar novamente.'
+
+function resolveBlockMessage(code: string | undefined, fallback: string | undefined): string {
+  if (code && CHECKOUT_BLOCK_MESSAGES[code]) return CHECKOUT_BLOCK_MESSAGES[code]
+  return fallback ?? 'Não foi possível iniciar o pagamento. Tente novamente.'
+}
+
 type PlanType = 'CRAQUE' | 'LENDA'
+type CurrentPlan = 'JOGADOR' | 'CRAQUE' | 'LENDA'
 type Gateway = 'MERCADO_PAGO' | 'PAGSEGURO' | 'PAYPAL' | 'PIX'
 type Period = 'MONTHLY' | 'YEARLY'
 
@@ -30,6 +53,12 @@ interface CheckoutButtonProps {
   label?: string
   defaultPeriod?: Period
   className?: string
+  /**
+   * Plano atual resolvido server-side (fonte unica de verdade — task-006).
+   * Quando fornecido, prevalece sobre o usePlanGuard (SWR) para o tier guard,
+   * eliminando a divergencia com o texto do card de /planos (C2/H5).
+   */
+  currentPlan?: CurrentPlan
 }
 
 export function CheckoutButton({
@@ -37,14 +66,18 @@ export function CheckoutButton({
   label,
   defaultPeriod = 'MONTHLY',
   className,
+  currentPlan: currentPlanProp,
 }: CheckoutButtonProps) {
   const [gateway, setGateway] = useState<Gateway>('MERCADO_PAGO')
   const [period] = useState<Period>(defaultPeriod)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [pending, setPending] = useState<string | null>(null)
   const [pixOpen, setPixOpen] = useState(false)
   const { track } = useAnalytics()
-  const { plan: currentPlan } = usePlanGuard()
+  const { plan: guardPlan } = usePlanGuard()
+  // Prop server-side prevalece; SWR e fallback para usos sem prop (ex: subscription-manage).
+  const currentPlan = currentPlanProp ?? guardPlan
   const planSelectedTracked = useRef(false)
 
   // EVT-021: payment_gateway_selected — when user changes the gateway
@@ -64,7 +97,8 @@ export function CheckoutButton({
     const currentTierOrder = TIER_ORDER[currentPlan] ?? -1
     const selectedTierOrder = TIER_ORDER[planType] ?? -1
     if (selectedTierOrder <= currentTierOrder) {
-      setError('Você já possui este plano ou superior.')
+      setPending(null)
+      setError(ALREADY_HAS_PLAN_MESSAGE)
       return
     }
 
@@ -86,6 +120,7 @@ export function CheckoutButton({
 
     setLoading(true)
     setError(null)
+    setPending(null)
 
     // Abrir a aba do gateway de forma sincrona no gesto do usuario para nao ser
     // bloqueada por popup blocker (a URL so fica disponivel apos o fetch async).
@@ -104,11 +139,21 @@ export function CheckoutButton({
 
       if (!res.ok) {
         checkoutWindow?.close()
-        setError(json?.error?.message ?? 'Erro ao iniciar pagamento.')
+        setError(resolveBlockMessage(json?.error?.code, json?.error?.message))
         return
       }
 
       const redirectUrl: string = json?.data?.redirectUrl
+
+      // C1: short-circuit de pagamento pendente — o servidor retorna 201 com um
+      // redirect para /planos?payment=pending (sem chamada ao gateway). Tratar como
+      // AVISO distinto, nunca abrir a aba (que so mostraria a propria pagina /planos).
+      if (redirectUrl && /[?&]payment=pending\b/.test(redirectUrl)) {
+        checkoutWindow?.close()
+        setPending(PENDING_PAYMENT_MESSAGE)
+        return
+      }
+
       if (redirectUrl) {
         if (checkoutWindow) {
           checkoutWindow.opener = null
@@ -166,8 +211,22 @@ export function CheckoutButton({
         </Button>
 
         {error && (
-          <p className="text-xs text-[#F6465D] text-center" role="alert">
+          <p
+            data-testid="checkout-block-reason"
+            className="text-xs text-[#F6465D] text-center"
+            role="alert"
+          >
             {error}
+          </p>
+        )}
+
+        {pending && (
+          <p
+            data-testid="checkout-pending-notice"
+            className="text-xs text-[#F0B90B] text-center"
+            role="status"
+          >
+            {pending}
           </p>
         )}
       </div>
