@@ -66,7 +66,7 @@ export function useAllMarketTicks(): MarketTickMap {
       if (!minted || closed) return
 
       const baseUrl = process.env.NEXT_PUBLIC_STREAM_URL ?? 'https://stream.footstock.com.br'
-      const url = `${baseUrl}/market?token=${encodeURIComponent(minted.token)}`
+      const url = `${baseUrl}/stream/market?token=${encodeURIComponent(minted.token)}`
       const es = new EventSource(url)
       esRef.current = es
 
