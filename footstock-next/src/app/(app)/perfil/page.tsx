@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { getAuthUser } from "@/lib/auth";
 import { ProfileInfo } from "@/components/profile/profile-info";
@@ -20,7 +21,14 @@ export default async function PerfilPage() {
   const auth = await getAuthUser();
 
   if (!auth) {
-    redirect(ROUTES.LOGIN);
+    // DIAGNOSTICO TEMPORARIO (perfil logout): telemetria via console/Sentry esta
+    // sendo engolida nesta rota em prod, entao expomos o estado no proprio
+    // redirect. `g=perfil` prova que o guard da page.tsx e a origem do bounce;
+    // `c=` lista os NOMES de cookies presentes (sem valores) no momento da
+    // falha. Reverter apos diagnostico.
+    const jar = await cookies();
+    const names = jar.getAll().map((c) => c.name).join("|");
+    redirect(`${ROUTES.LOGIN}?g=perfil&c=${encodeURIComponent(names)}`);
   }
 
   const { user } = auth;
