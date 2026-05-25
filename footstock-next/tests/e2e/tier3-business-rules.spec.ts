@@ -24,9 +24,8 @@
  *   BR-11: GET /api/v1/subscriptions/me retorna bonusScheduledAt e bonusCreditedAt
  *   BR-12: Cron de bonus 7 dias responde sem erro 500
  *
- * FLAGCHECK MAIORIDADE (T-023):
+ * MAIORIDADE — autodeclaracao (T-023):
  *   BR-13: Registro com CPF de menor retorna erro AUTH
- *   BR-14: GET /api/v1/me retorna campo ageVerificationPending
  *
  * NOMES FICTICIOS (T-024):
  *   BR-15: GET /api/v1/assets retorna campo ficticiousName (nao real name)
@@ -257,7 +256,7 @@ test.describe('T-021: Bonus 7 Dias — TIER 3', () => {
   })
 })
 
-test.describe('T-023: FlagCheck Maioridade — TIER 3', () => {
+test.describe('T-023: Maioridade (autodeclaracao) — TIER 3', () => {
   test('BR-11: Registro com dados de menor de idade retorna erro de validacao', async ({
     request,
   }) => {
@@ -285,39 +284,6 @@ test.describe('T-023: FlagCheck Maioridade — TIER 3', () => {
 
     const body = await res.json()
     expect(body.success).toBe(false)
-  })
-
-  test('BR-12: GET /api/v1/me retorna campo ageVerificationPending', async ({ request }) => {
-    const loginRes = await request.post('/api/v1/auth/login', {
-      data: { email: USERS.craque.email, password: USERS.craque.password },
-    })
-    expect(loginRes.status()).toBe(200)
-
-    const meRes = await request.get('/api/v1/me', {
-      headers: { cookie: loginRes.headers()['set-cookie'] ?? '' },
-    })
-
-    expect(meRes.status()).toBe(200)
-    const body = await meRes.json()
-
-    // O campo pode estar em niveis diferentes
-    const profile = body.data ?? body
-    // ageVerificationPending deve ser boolean ou null
-    const agePending = profile.ageVerificationPending ?? false
-    expect(typeof agePending).toBe('boolean')
-  })
-
-  test('BR-13: Cron de retry de verificacao de idade responde sem erro 500', async ({
-    request,
-  }) => {
-    const res = await request.post('/api/cron/age-verification-retry', {
-      headers: {
-        authorization: `Bearer ${process.env.CRON_SECRET ?? 'test-secret'}`,
-      },
-    })
-
-    expect([200, 401, 403, 404]).toContain(res.status())
-    expect(res.status()).not.toBe(500)
   })
 })
 

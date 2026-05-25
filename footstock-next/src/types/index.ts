@@ -143,7 +143,6 @@ export interface User {
   fsBalance: number
   marginBlocked: number
   tourCompleted: boolean
-  ageVerificationPending: boolean
   adminRole?: AdminRole | null
   /** Campo de locking otimista — use para enviar em operações de escrita (optimistic UI). */
   version: number

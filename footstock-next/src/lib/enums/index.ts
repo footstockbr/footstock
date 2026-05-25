@@ -223,7 +223,7 @@ export const NOTIFICATION_TYPE = {
   BALANCE_ZERO: 'BALANCE_ZERO',
   /** Saldo FS$ resetado pelo administrador (T-019) */
   BALANCE_RESET: 'BALANCE_RESET',
-  /** Verificação de maioridade pendente — FlagCheck indisponível no cadastro (T-023) */
+  /** [legado] Maioridade pendente. Não é mais emitido: maioridade virou autodeclaração no cadastro (T-023). Valor mantido por compat de enum. */
   AGE_VERIFICATION_PENDING: 'AGE_VERIFICATION_PENDING',
   /** Verificação de maioridade concluída com sucesso (T-023) */
   AGE_VERIFICATION_COMPLETED: 'AGE_VERIFICATION_COMPLETED',

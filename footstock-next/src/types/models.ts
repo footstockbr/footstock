@@ -38,7 +38,6 @@ export interface User {
   fsBalance: number;
   marginBlocked: number;
   tourCompleted: boolean;
-  ageVerificationPending: boolean;
   adminRole: AdminRole | null;
   version: number;
   createdAt: string;

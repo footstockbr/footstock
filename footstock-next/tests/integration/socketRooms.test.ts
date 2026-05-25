@@ -72,7 +72,6 @@ function makeUser(planType: 'JOGADOR' | 'CRAQUE' | 'LENDA') {
       fsBalance: 2000,
       marginBlocked: 0,
       tourCompleted: true,
-      ageVerificationPending: false,
       adminRole: null,
     },
     userId: 'user-1',

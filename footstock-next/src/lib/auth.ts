@@ -179,7 +179,6 @@ export function serializeUser(dbUser: {
   fsBalance: { toNumber(): number } | null
   marginBlocked: { toNumber(): number } | null
   tourCompleted: boolean
-  ageVerificationPending: boolean
   adminRole?: string | null
   version?: number
   createdAt: Date
@@ -199,7 +198,6 @@ export function serializeUser(dbUser: {
     fsBalance: dbUser.fsBalance?.toNumber() ?? 0,
     marginBlocked: dbUser.marginBlocked?.toNumber() ?? 0,
     tourCompleted: dbUser.tourCompleted,
-    ageVerificationPending: dbUser.ageVerificationPending,
     adminRole: (dbUser.adminRole as User['adminRole']) ?? null,
     version: dbUser.version ?? 0,
     createdAt: dbUser.createdAt.toISOString(),

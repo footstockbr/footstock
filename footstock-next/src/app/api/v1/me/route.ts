@@ -54,7 +54,7 @@ async function patchHandler(req: NextRequest, { user }: AuthContext) {
       id: true, name: true, email: true, phone: true, bio: true,
       favoriteClub: true, favoriteClubDisplayName: true,
       investorProfile: true, planType: true, tourCompleted: true,
-      ageVerificationPending: true, userType: true, adminRole: true,
+      userType: true, adminRole: true,
       createdAt: true, updatedAt: true,
     },
   })

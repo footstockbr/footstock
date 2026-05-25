@@ -46,7 +46,7 @@ const SUPER_ADMIN_AUTH = {
     adminRole: 'SUPER_ADMIN',
     phone: null, birthDate: '', favoriteClub: '', favoriteClubDisplayName: null,
     userType: 'NORMAL', investorProfile: 'INICIANTE', planType: 'JOGADOR',
-    fsBalance: 0, marginBlocked: 0, tourCompleted: false, ageVerificationPending: false,
+    fsBalance: 0, marginBlocked: 0, tourCompleted: false, 
     version: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
   },
   userId: 'admin-001',

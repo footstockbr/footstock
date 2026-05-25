@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { getRedisClient } from '@/lib/redis'
 import { registerSchema } from '@/lib/schemas/auth.schema'
 import { hashCPF } from '@/lib/utils/crypto'
-import { verifyAge, verifyAgeWithFlagCheck } from '@/lib/services/age-verification'
+import { verifyAge } from '@/lib/services/age-verification'
 import { getRegisterRateLimit } from '@/lib/ratelimit'
 import { CLUB_DISPLAY_NAMES } from '@/lib/constants/clubs'
 import { ERROR_CODES, ERROR_MESSAGES } from '@/lib/constants/errors'
@@ -34,15 +34,15 @@ const DUMMY_HASH = '$2a$12$' + '.'.repeat(53)
 // caso raro de colisao com afiliados ja existentes (ID-006 do Codex).
 const AFFILIATE_CODE_RETRY = 5
 
-// TTL do reservation lock (ID-005 do Codex). Suficiente para FlagCheck
-// (~3s tipico, ate 10s no timeout) + bcrypt(12) + transaction. Apos isso o
-// lock expira automaticamente mesmo em crash. Acquire via SET NX EX.
+// TTL do reservation lock (ID-005 do Codex). Suficiente para bcrypt(12) +
+// transaction. Apos isso o lock expira automaticamente mesmo em crash.
+// Acquire via SET NX EX.
 const REGISTRATION_LOCK_TTL_SECONDS = 60
 
 // CAS release (ID-NEW-006 Codex round 3): so deleta a chave SE o valor bater
 // com o token desta requisicao. Sem isso, request A apos TTL overrun roda
-// `del()` na lock que ja pertence a request B, abrindo janela para C entrar
-// e pagar FlagCheck de novo. Token aleatorio via randomUUID() + KEYS[1]/ARGV[1].
+// `del()` na lock que ja pertence a request B. Token aleatorio via
+// randomUUID() + KEYS[1]/ARGV[1].
 const LOCK_RELEASE_LUA = `
 if redis.call("GET", KEYS[1]) == ARGV[1] then
   return redis.call("DEL", KEYS[1])
@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
     }
   } catch (rlErr) {
     // Rate limiter indisponivel (Redis offline) — fail-CLOSED em cadastro.
-    // Sem o limiter, atacante pode driblar 3/hr e consumir FlagCheck/bcrypt.
+    // Sem o limiter, atacante pode driblar 3/hr e consumir bcrypt.
     // ID-003 do Codex review. Login mantem fail-open porque ja tem outras
     // defesas (counters por email); register nao tem fallback equivalente.
     console.error('[register] rate limiter indisponivel (fail-closed):', (rlErr as Error).message)
@@ -198,8 +198,15 @@ export async function POST(req: NextRequest) {
     }
 
     // ── 3. Verificar maioridade por data de nascimento declarada (VAL-002) ──────
+    // Modelo atual: autodeclaração (confirmação do usuário). Menor declarado é
+    // bloqueado aqui, antes de qualquer escrita no Prisma.
     const basicAgeCheck = verifyAge(birthDate)
     if (!basicAgeCheck.isAdult) {
+      // EVT-004: Verificacao de Idade Bloqueada — UUID aleatorio (sem derivacao de CPF).
+      mixpanelServer.track(`anon-${randomUUID()}`, 'age_verification_blocked', {
+        verification_method: 'dob_calculation',
+        step: 1,
+      })
       const res = NextResponse.json(
         { success: false, error: { code: ERROR_CODES.VAL_002, message: ERROR_MESSAGES['VAL-002'] } },
         { status: 400 }
@@ -209,13 +216,11 @@ export async function POST(req: NextRequest) {
     }
 
     // ── 3a-lock. Reservation locks (ID-005 + ID-NEW-003) ─────────────────────
-    // Antes de gastar FlagCheck (call externa potencialmente paga) + bcrypt(12),
-    // adquire DOIS locks Redis: um em email (normalizado) e outro em cpfHash.
-    // Fecha tres janelas de race:
+    // Antes do bcrypt(12) + transaction, adquire DOIS locks Redis: um em email
+    // (normalizado) e outro em cpfHash. Fecha duas janelas de race:
     //  (a) mesmo CPF + emails diferentes (so 1 vence email-uniq, mas todos
-    //      pagavam FlagCheck antes do lock CPF + email);
-    //  (b) mesmo email + CPFs diferentes (mesma logica simetrica);
-    //  (c) duplo paid-call ao FlagCheck para o mesmo CPF concorrente.
+    //      gastavam bcrypt antes do lock CPF + email);
+    //  (b) mesmo email + CPFs diferentes (mesma logica simetrica).
     // Ordem fixa email -> cpf evita deadlock entre pares (A,B) e (B,A).
     const emailKey = email.trim().toLowerCase()
     const lockEmail = await acquireRegistrationLock(`email:${emailKey}`)
@@ -245,29 +250,6 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-
-    // ── 3b. FlagCheck — verificação de maioridade via CPF (T-023) ─────────────
-    // Roda ANTES da criação do usuário: sem Supabase, não há compensação possível,
-    // então abortamos antes de qualquer escrita no Prisma se o FlagCheck bloquear.
-    const flagCheckResult = await verifyAgeWithFlagCheck(cpf, birthDate)
-
-    if (!flagCheckResult.isAdult) {
-      // EVT-004: Verificacao de Idade Bloqueada — usa UUID aleatorio (sem
-      // derivacao de CPF). ID-007 do Codex: cpfHash slice e privacy-sensitive
-      // e correlacionavel via offline guessing se CPF_HASH_SALT vazar.
-      mixpanelServer.track(`anon-${randomUUID()}`, 'age_verification_blocked', {
-        verification_method: flagCheckResult.method === 'flagcheck' ? 'flagcheck' : 'dob_calculation',
-        step: 1,
-      })
-      const res = NextResponse.json(
-        { success: false, error: { code: ERROR_CODES.AUTH_011, message: ERROR_MESSAGES['AUTH-011'] } },
-        { status: 403 }
-      )
-      applyRateLimitHeaders(res, rlInfo)
-      return res
-    }
-
-    const isAgePending = flagCheckResult.pending
 
     // ── 3c. Resolver favoriteClubDisplayName via constante local ─────────────
     const favoriteClubDisplayName = CLUB_DISPLAY_NAMES[favoriteClub] ?? null
@@ -322,18 +304,17 @@ export async function POST(req: NextRequest) {
           passwordHash,
           referredByCode: referrerAffiliateCodeId ? referredByCode : null,
           investorProfile: 'INICIANTE',
-          ageVerificationPending: isAgePending,
           tourCompleted: false,
         },
       })
 
-      // 6b2. Registrar verificação de idade (T-023)
+      // 6b2. Registrar verificação de idade (T-023) — autodeclaração
       await tx.ageVerification.create({
         data: {
           userId: newUser.id,
           cpfHash,
           isAdult: true,
-          method: flagCheckResult.method === 'flagcheck' ? 'FLAGCHECK' : 'AUTODECLARATION',
+          method: 'AUTODECLARATION',
           verifiedAt: new Date(),
         },
       })
@@ -457,8 +438,8 @@ export async function POST(req: NextRequest) {
       user.id,
       'signup_completed',
       {
-        age_verified: !isAgePending,
-        age_verification_method: flagCheckResult.method === 'flagcheck' ? 'flagcheck' : 'self_declaration_fallback',
+        age_verified: true,
+        age_verification_method: 'self_declaration',
       },
       hasAnalyticsConsent
     )
@@ -513,26 +494,9 @@ export async function POST(req: NextRequest) {
       ).catch((notifErr: unknown) => console.error('[register] Falha ao notificar REFERRAL_JOINED:', notifErr))
     }
 
-    // ── 6h. Notificação de verificação pendente (T-023) ──────────────────────
-    if (isAgePending) {
-      sendNotification(
-        user.id,
-        NOTIFICATION_TYPE.AGE_VERIFICATION_PENDING,
-        {
-          title: 'Verificação de maioridade em andamento',
-          body: 'Sua verificação de maioridade está sendo processada. Algumas funcionalidades estarão restritas até a conclusão.',
-        }
-      ).catch((notifErr: unknown) => console.error('[register] Falha ao notificar AGE_VERIFICATION_PENDING:', notifErr))
-    }
-
     // ── 7. Resposta (sem sessao) ──────────────────────────────────────────────
     // Frontend faz signIn via /api/v1/auth/login (mesmo path do login-form), que
     // chama authorizeCredentials -> bcrypt.compare -> setCookie Auth.js v5.
-    // ID-004 (Codex): nao expor `method` (flagcheck|self_declaration) nem
-    // `verified` no payload publico — leak de cobertura do provider FlagCheck
-    // (atacante aprende se CPF esta na base do provedor). Frontend so precisa
-    // saber se ha pendencia para mostrar banner; detalhe vem por endpoint
-    // autenticado posterior.
     const res = NextResponse.json(
       {
         success: true,
@@ -545,7 +509,6 @@ export async function POST(req: NextRequest) {
             affiliateCode: newAffiliateCode,
           },
           requiresOnboarding: true,
-          ageVerificationPending: isAgePending,
         },
       },
       { status: 201 }

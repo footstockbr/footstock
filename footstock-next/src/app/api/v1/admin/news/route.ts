@@ -37,7 +37,6 @@ function getDevAuthFromCookie(request: NextRequest) {
     fsBalance: 0,
     marginBlocked: 0,
     tourCompleted: false,
-    ageVerificationPending: false,
     adminRole: adminRole as AdminRole,
     version: 0,
     createdAt: new Date().toISOString(),

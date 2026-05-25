@@ -34,7 +34,6 @@ const SAFE_USER_SELECT = {
   favoriteClub: true,
   fsBalance: true,
   marginBlocked: true,
-  ageVerificationPending: true,
   referredByCode: true,
   favoriteClubDisplayName: true,
   bio: true,

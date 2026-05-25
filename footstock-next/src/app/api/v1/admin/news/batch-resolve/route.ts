@@ -19,7 +19,7 @@ function devAuthFallback(request: NextRequest): { user: User; userId: string } |
       id: 'dev-user', email: 'dev@foot-stock.test', name: 'Dev User',
       phone: null, birthDate: '', favoriteClub: '', favoriteClubDisplayName: null,
       userType: 'NORMAL', investorProfile: 'INICIANTE', planType: 'JOGADOR',
-      fsBalance: 0, marginBlocked: 0, tourCompleted: false, ageVerificationPending: false,
+      fsBalance: 0, marginBlocked: 0, tourCompleted: false, 
       adminRole: adminRole as AdminRole, version: 0,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     },
