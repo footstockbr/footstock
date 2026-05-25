@@ -21,6 +21,7 @@ const mockPrisma = {
   asset: {
     findUnique: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn(),
   },
 }
 
@@ -36,7 +37,7 @@ describe('AdminMarketActions', () => {
     )
   })
 
-  test('PAUSE_ASSET chama engine.pauseAsset e registra log', async () => {
+  test('PAUSE_ASSET chama engine.pauseAsset, persiste DB e registra log', async () => {
     const action: AdminAction = {
       type: 'PAUSE_ASSET',
       assetId: 'asset_001',
@@ -46,13 +47,19 @@ describe('AdminMarketActions', () => {
       timestamp: Date.now(),
     }
 
+    mockPrisma.asset.update.mockResolvedValue({})
+
     const result = await actions.handle(action)
     expect(result.success).toBe(true)
     expect(mockEngine.pauseAsset).toHaveBeenCalledWith('asset_001', 'HALT_ASSET')
+    expect(mockPrisma.asset.update).toHaveBeenCalledWith({
+      where: { id: 'asset_001' },
+      data: { isHalted: true, haltReason: 'HALT_ASSET', haltedUntil: null },
+    })
     expect(mockLogger.log).toHaveBeenCalledWith(action)
   })
 
-  test('RESUME_ASSET chama engine.resumeAsset e registra log', async () => {
+  test('RESUME_ASSET persiste DB antes de retomar engine e registra log', async () => {
     const action: AdminAction = {
       type: 'RESUME_ASSET',
       assetId: 'asset_001',
@@ -62,8 +69,14 @@ describe('AdminMarketActions', () => {
       timestamp: Date.now(),
     }
 
+    mockPrisma.asset.update.mockResolvedValue({})
+
     const result = await actions.handle(action)
     expect(result.success).toBe(true)
+    expect(mockPrisma.asset.update).toHaveBeenCalledWith({
+      where: { id: 'asset_001' },
+      data: { isHalted: false, haltReason: null, haltedUntil: null },
+    })
     expect(mockEngine.resumeAsset).toHaveBeenCalledWith('asset_001')
     expect(mockLogger.log).toHaveBeenCalledWith(action)
   })
@@ -112,7 +125,7 @@ describe('AdminMarketActions', () => {
     expect(mockEngine.pauseAsset).not.toHaveBeenCalled()
   })
 
-  test('HALT_ALL chama engine.haltAll e retorna contagem', async () => {
+  test('HALT_ALL chama engine.haltAll, persiste DB e retorna contagem', async () => {
     const action: AdminAction = {
       type: 'HALT_ALL',
       assetId: undefined,
@@ -122,14 +135,20 @@ describe('AdminMarketActions', () => {
       timestamp: Date.now(),
     }
 
+    mockPrisma.asset.updateMany.mockResolvedValue({ count: 5 })
+
     const result = await actions.handle(action)
     expect(result.success).toBe(true)
     expect(result.message).toContain('5')
     expect(mockEngine.haltAll).toHaveBeenCalled()
+    expect(mockPrisma.asset.updateMany).toHaveBeenCalledWith({
+      where: { isHalted: false },
+      data: { isHalted: true, haltReason: 'HALT_ALL', haltedUntil: null },
+    })
     expect(mockLogger.log).toHaveBeenCalledWith(action)
   })
 
-  test('RESUME_ALL chama engine.resumeAll e retorna contagem', async () => {
+  test('RESUME_ALL persiste DB antes de retomar engine e retorna contagem', async () => {
     const action: AdminAction = {
       type: 'RESUME_ALL',
       assetId: undefined,
@@ -139,9 +158,15 @@ describe('AdminMarketActions', () => {
       timestamp: Date.now(),
     }
 
+    mockPrisma.asset.updateMany.mockResolvedValue({ count: 3 })
+
     const result = await actions.handle(action)
     expect(result.success).toBe(true)
     expect(result.message).toContain('3')
+    expect(mockPrisma.asset.updateMany).toHaveBeenCalledWith({
+      where: { isHalted: true },
+      data: { isHalted: false, haltReason: null, haltedUntil: null },
+    })
     expect(mockEngine.resumeAll).toHaveBeenCalled()
   })
 

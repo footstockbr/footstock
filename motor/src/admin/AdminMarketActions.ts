@@ -44,6 +44,10 @@ export class AdminMarketActions {
     if (!action.assetId) return { success: false, message: 'assetId obrigatório' }
 
     this.engine.pauseAsset(action.assetId, 'HALT_ASSET')
+    await this.prisma.asset.update({
+      where: { id: action.assetId },
+      data: { isHalted: true, haltReason: 'HALT_ASSET', haltedUntil: null },
+    })
     await this.auditLogger.log(action)
 
     return { success: true, message: `Ativo ${action.assetId} pausado` }
@@ -52,6 +56,10 @@ export class AdminMarketActions {
   private async handleResumeAsset(action: AdminAction): Promise<{ success: boolean; message: string }> {
     if (!action.assetId) return { success: false, message: 'assetId obrigatório' }
 
+    await this.prisma.asset.update({
+      where: { id: action.assetId },
+      data: { isHalted: false, haltReason: null, haltedUntil: null },
+    })
     this.engine.resumeAsset(action.assetId)
     await this.auditLogger.log(action)
 
@@ -111,11 +119,19 @@ export class AdminMarketActions {
 
   private async handleHaltAll(action: AdminAction): Promise<{ success: boolean; message: string }> {
     const count = this.engine.haltAll()
+    await this.prisma.asset.updateMany({
+      where: { isHalted: false },
+      data: { isHalted: true, haltReason: 'HALT_ALL', haltedUntil: null },
+    })
     await this.auditLogger.log(action)
     return { success: true, message: `HALT_ALL: ${count} ativos pausados` }
   }
 
   private async handleResumeAll(action: AdminAction): Promise<{ success: boolean; message: string }> {
+    await this.prisma.asset.updateMany({
+      where: { isHalted: true },
+      data: { isHalted: false, haltReason: null, haltedUntil: null },
+    })
     const count = this.engine.resumeAll()
     await this.auditLogger.log(action)
     return { success: true, message: `RESUME_ALL: ${count} ativos retomados` }
