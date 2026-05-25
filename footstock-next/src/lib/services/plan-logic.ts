@@ -59,7 +59,7 @@ export function calcSubscriptionAmount(planType: PlanType, period: 'monthly' | '
   const amounts: Record<PlanType, Record<'monthly' | 'yearly', number>> = {
     JOGADOR: { monthly: 0, yearly: 0 },
     CRAQUE:  { monthly: 100, yearly: 100 }, // R$1,00 — preço temporário de teste
-    LENDA:   { monthly: 100, yearly: 100 }, // R$1,00 — preço temporário de teste
+    LENDA:   { monthly: 120, yearly: 120 }, // R$1,20 — preço temporário de teste (difere de CRAQUE p/ evitar recusa por compra duplicada)
   }
   return amounts[planType][period]
 }
