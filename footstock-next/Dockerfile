@@ -28,14 +28,22 @@ ENV NODE_ENV=production
 
 # Build-time dummies para satisfazer constructors eager de modulos (Supabase
 # client init usa process.env.NEXT_PUBLIC_SUPABASE_URL diretamente, sem passar
-# pelo env.ts). Railway nao expoe env vars durante Docker build phase. Esses
-# valores NAO afetam runtime — sao sobrescritos pelas vars do Railway service.
+# pelo env.ts). Esses valores NAO afetam runtime de modulos server-side.
 ENV NEXT_PUBLIC_SUPABASE_URL=https://build-placeholder.supabase.co
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=build-placeholder-anon-key
 ENV SUPABASE_SERVICE_ROLE_KEY=build-placeholder-service-role-key
-ENV NEXT_PUBLIC_APP_URL=https://build.placeholder
-ENV NEXT_PUBLIC_STREAM_URL=https://build.placeholder
-ENV NEXT_PUBLIC_API_URL=https://build.placeholder
+
+# IMPORTANTE: variaveis NEXT_PUBLIC_* sao INLINADAS no bundle do cliente durante
+# `npm run build` — NAO sao sobrescritas por env de runtime. Declarar como ARG
+# permite que o Railway injete o valor real do service variable durante o build
+# (caso contrario o cliente vai a producao com `build.placeholder` gravado).
+# Default placeholder so vale para builds locais sem a var definida.
+ARG NEXT_PUBLIC_APP_URL=https://build.placeholder
+ARG NEXT_PUBLIC_STREAM_URL=https://build.placeholder
+ARG NEXT_PUBLIC_API_URL=https://build.placeholder
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_STREAM_URL=$NEXT_PUBLIC_STREAM_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PHASE=phase-production-build
 ENV DATABASE_URL=postgresql://build:build@localhost:5432/build
 ENV DIRECT_URL=postgresql://build:build@localhost:5432/build

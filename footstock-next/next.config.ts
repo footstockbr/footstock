@@ -5,6 +5,10 @@ const isDev = process.env.NODE_ENV === 'development'
 
 const sentryIngestHost = process.env.SENTRY_INGEST_HOST ?? 'https://ingest.sentry.io'
 
+// Origem do EventSource de market ticks (useMarketTick / useAllMarketTicks).
+// Precisa estar no connect-src do CSP senao o browser bloqueia a conexao SSE.
+const streamHost = process.env.NEXT_PUBLIC_STREAM_URL ?? 'https://stream.footstock.com.br'
+
 const securityHeaders = [
   { key: 'X-DNS-Prefetch-Control', value: 'on' },
   { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
@@ -20,7 +24,7 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data: blob: https:",
       "font-src 'self' https://fonts.gstatic.com",
-      `connect-src 'self' https://*.supabase.co ${sentryIngestHost} wss://*.supabase.co`,
+      `connect-src 'self' https://*.supabase.co ${sentryIngestHost} ${streamHost} wss://*.supabase.co`,
       "worker-src blob: 'self'",
       "frame-ancestors 'none'",
     ].join('; '),
