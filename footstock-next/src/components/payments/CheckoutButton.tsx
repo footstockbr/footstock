@@ -87,6 +87,12 @@ export function CheckoutButton({
     setLoading(true)
     setError(null)
 
+    // Abrir a aba do gateway de forma sincrona no gesto do usuario para nao ser
+    // bloqueada por popup blocker (a URL so fica disponivel apos o fetch async).
+    // Sem 'noopener' aqui: ele faz window.open retornar null e perderiamos o handle
+    // para setar location depois. opener e anulado abaixo apos definir a URL.
+    const checkoutWindow = window.open('', '_blank')
+
     try {
       const res = await fetch('/api/v1/payments/checkout', {
         method: 'POST',
@@ -97,17 +103,26 @@ export function CheckoutButton({
       const json = await res.json()
 
       if (!res.ok) {
+        checkoutWindow?.close()
         setError(json?.error?.message ?? 'Erro ao iniciar pagamento.')
         return
       }
 
       const redirectUrl: string = json?.data?.redirectUrl
       if (redirectUrl) {
-        window.location.href = redirectUrl
+        if (checkoutWindow) {
+          checkoutWindow.opener = null
+          checkoutWindow.location.href = redirectUrl
+        } else {
+          // Popup bloqueado: fallback para redirect na mesma aba.
+          window.location.href = redirectUrl
+        }
       } else {
+        checkoutWindow?.close()
         setError('URL de pagamento não recebida. Tente novamente.')
       }
     } catch {
+      checkoutWindow?.close()
       setError('Erro de conexão. Verifique sua internet e tente novamente.')
     } finally {
       setLoading(false)
@@ -147,7 +162,7 @@ export function CheckoutButton({
           onClick={handleCheckout}
           className={className}
         >
-          {loading ? 'Redirecionando...' : (label ?? `Assinar ${planType === 'CRAQUE' ? 'Craque' : 'Lenda'}`)}
+          {loading ? 'Abrindo pagamento...' : (label ?? `Assinar ${planType === 'CRAQUE' ? 'Craque' : 'Lenda'}`)}
         </Button>
 
         {error && (
