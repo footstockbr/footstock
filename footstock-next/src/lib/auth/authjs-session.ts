@@ -43,14 +43,33 @@ export async function readAuthjsSession(): Promise<AuthjsSessionPayload | null> 
     .filter((c): c is { name: string; value: string } => Boolean(c.value))
 
   if (presentCookies.length === 0) {
-    // Nenhum cookie de sessao Auth.js presente. Distinguir de "presente mas
-    // nao decodificou" e crucial para diagnosticar cookies legados/secret trocado.
-    Sentry.addBreadcrumb({
-      category: 'auth',
-      message: 'authjs_cookie_absent',
-      level: 'info',
-      data: { checked: cookieNames },
-    })
+    // Nenhum cookie de sessao Auth.js presente. Lista os nomes de cookies
+    // presentes (sem valores) para revelar cookies legados (next-auth.*/sb-*)
+    // que o reader v5 nao reconhece.
+    let presentNames: string[] = []
+    try {
+      presentNames = cookieStore.getAll().map((c) => c.name)
+    } catch {
+      // ignore
+    }
+    // Visitante sem NENHUM cookie = anonimo normal -> so breadcrumb (evita
+    // entupir o Sentry com cada load deslogado). Cookies presentes mas sem o
+    // token de sessao = SUSPEITO (cookie legado / sessao perdida) -> evento.
+    if (presentNames.length === 0) {
+      Sentry.addBreadcrumb({
+        category: 'auth',
+        message: 'authjs_cookie_absent_anonymous',
+        level: 'info',
+        data: { checked: cookieNames },
+      })
+    } else {
+      Sentry.captureMessage('authjs_cookie_absent', {
+        level: 'warning',
+        tags: { auth_fail_reason: 'cookie-absent' },
+        extra: { checked: cookieNames, cookieNamesPresent: presentNames },
+      })
+      await Sentry.flush(2000).catch(() => {})
+    }
     return null
   }
 
@@ -86,6 +105,7 @@ export async function readAuthjsSession(): Promise<AuthjsSessionPayload | null> 
     tags: { auth_fail_reason: 'cookie-undecodable' },
     extra: { cookieNames: presentCookies.map((c) => c.name) },
   })
+  await Sentry.flush(2000).catch(() => {})
   return null
 }
 

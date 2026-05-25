@@ -14,15 +14,37 @@ type AuthFailReason =
   | 'serialize-threw'
   | 'unexpected-throw'
 
-function reportAuthFail(reason: AuthFailReason, err?: unknown): void {
-  Sentry.addBreadcrumb({
-    category: 'auth',
-    message: 'getAuthUser_unresolved',
-    level: 'warning',
-    data: { reason },
-  })
+async function reportAuthFail(reason: AuthFailReason, err?: unknown): Promise<void> {
+  // 'no-cookie-session' e o caso NORMAL de visitante anonimo (ex: root page
+  // chama /api/v1/auth/session a cada load deslogado). Emitir evento aqui
+  // entupiria o Sentry. O sinal fino de "cookie presente mas nao resolveu"
+  // ja e emitido como EVENTO dentro de readAuthjsSession (cookie-absent com
+  // outros cookies / cookie-undecodable). Aqui fica so breadcrumb.
+  if (reason === 'no-cookie-session') {
+    Sentry.addBreadcrumb({
+      category: 'auth',
+      message: 'getAuthUser_unresolved',
+      level: 'info',
+      data: { reason },
+    })
+    return
+  }
+
+  // Casos genuinamente anormais e raros (id valido mas user sumiu, dado
+  // corrompido, throw inesperado): emitir evento + flush, pois o caller faz
+  // redirect(LOGIN) lançando NEXT_REDIRECT antes do transport enviar.
   if (err) {
     Sentry.captureException(err, { tags: { auth_fail_reason: reason } })
+  } else {
+    Sentry.captureMessage(`getAuthUser_unresolved:${reason}`, {
+      level: 'warning',
+      tags: { auth_fail_reason: reason },
+    })
+  }
+  try {
+    await Sentry.flush(2000)
+  } catch {
+    // flush best-effort — nunca bloquear o fluxo de auth por causa de telemetria.
   }
 }
 
@@ -102,20 +124,20 @@ export async function getAuthUser(): Promise<{ user: User; userId: string } | nu
         } catch (err) {
           // serializeUser lancou (ex: Decimal nulo) — falha fechada, mas
           // distinguimos do "sem sessao" para nao mascarar dado corrompido.
-          reportAuthFail('serialize-threw', err)
+          await reportAuthFail('serialize-threw', err)
           return null
         }
       }
       // Cookie decodificou mas o id nao existe no DB (token de outro DB,
       // usuario deletado, ou troca de banco). Distinto de "sem cookie".
-      reportAuthFail('user-not-found')
+      await reportAuthFail('user-not-found')
       return null
     }
 
-    reportAuthFail('no-cookie-session')
+    await reportAuthFail('no-cookie-session')
     return null
   } catch (err) {
-    reportAuthFail('unexpected-throw', err)
+    await reportAuthFail('unexpected-throw', err)
     return null
   }
 }
