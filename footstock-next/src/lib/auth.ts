@@ -15,6 +15,13 @@ type AuthFailReason =
   | 'unexpected-throw'
 
 async function reportAuthFail(reason: AuthFailReason, err?: unknown): Promise<void> {
+  // stdout SEMPRE (inclusive no-cookie-session) — canal de diagnostico que
+  // aparece em `railway logs` quando o transport Sentry nao entrega em prod.
+  // Sem PII: so o motivo e, quando ha erro, a message.
+  console.warn(
+    `[AUTH_FAIL] reason=${reason}${err instanceof Error ? ` err=${err.message}` : ''}`,
+  )
+
   // 'no-cookie-session' e o caso NORMAL de visitante anonimo (ex: root page
   // chama /api/v1/auth/session a cada load deslogado). Emitir evento aqui
   // entupiria o Sentry. O sinal fino de "cookie presente mas nao resolveu"

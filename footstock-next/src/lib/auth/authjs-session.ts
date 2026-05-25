@@ -55,6 +55,11 @@ export async function readAuthjsSession(): Promise<AuthjsSessionPayload | null> 
     // Visitante sem NENHUM cookie = anonimo normal -> so breadcrumb (evita
     // entupir o Sentry com cada load deslogado). Cookies presentes mas sem o
     // token de sessao = SUSPEITO (cookie legado / sessao perdida) -> evento.
+    // stdout SEMPRE — revela em `railway logs` se o cookie de sessao some na
+    // navegacao para /perfil (nomes de cookies presentes, sem valores).
+    console.warn(
+      `[AUTH_COOKIE] absent session-token; present=[${presentNames.join(',')}]`,
+    )
     if (presentNames.length === 0) {
       Sentry.addBreadcrumb({
         category: 'auth',
@@ -100,6 +105,11 @@ export async function readAuthjsSession(): Promise<AuthjsSessionPayload | null> 
 
   // Cookie(s) presentes mas nenhum decodificou: AUTH_SECRET trocado, cookie
   // legado (next-auth.*/sb-*), ou salt incompativel. Sinal forte de regressao.
+  console.warn(
+    `[AUTH_COOKIE] present-but-undecodable names=[${presentCookies
+      .map((c) => c.name)
+      .join(',')}]`,
+  )
   Sentry.captureMessage('authjs_cookie_present_but_undecodable', {
     level: 'warning',
     tags: { auth_fail_reason: 'cookie-undecodable' },
