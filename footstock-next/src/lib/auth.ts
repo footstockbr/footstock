@@ -1,9 +1,30 @@
 import 'server-only'
 
+import * as Sentry from '@sentry/nextjs'
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 import { readAuthjsSession } from '@/lib/auth/authjs-session'
 import type { User } from '@/types'
+
+// Motivo pelo qual getAuthUser nao resolveu a sessao. Emitido como breadcrumb
+// Sentry (sem PII) para dar visibilidade ao "logout fantasma" em RSC guardadas.
+type AuthFailReason =
+  | 'no-cookie-session'
+  | 'user-not-found'
+  | 'serialize-threw'
+  | 'unexpected-throw'
+
+function reportAuthFail(reason: AuthFailReason, err?: unknown): void {
+  Sentry.addBreadcrumb({
+    category: 'auth',
+    message: 'getAuthUser_unresolved',
+    level: 'warning',
+    data: { reason },
+  })
+  if (err) {
+    Sentry.captureException(err, { tags: { auth_fail_reason: reason } })
+  }
+}
 
 // ─── Higiene de cookies legados ────────────────────────────────────────────────
 //
@@ -76,12 +97,25 @@ export async function getAuthUser(): Promise<{ user: User; userId: string } | nu
     if (authjs?.id) {
       const dbUser = await prisma.user.findUnique({ where: { id: authjs.id } })
       if (dbUser) {
-        return { userId: dbUser.id, user: serializeUser(dbUser) }
+        try {
+          return { userId: dbUser.id, user: serializeUser(dbUser) }
+        } catch (err) {
+          // serializeUser lancou (ex: Decimal nulo) — falha fechada, mas
+          // distinguimos do "sem sessao" para nao mascarar dado corrompido.
+          reportAuthFail('serialize-threw', err)
+          return null
+        }
       }
+      // Cookie decodificou mas o id nao existe no DB (token de outro DB,
+      // usuario deletado, ou troca de banco). Distinto de "sem cookie".
+      reportAuthFail('user-not-found')
+      return null
     }
 
+    reportAuthFail('no-cookie-session')
     return null
-  } catch {
+  } catch (err) {
+    reportAuthFail('unexpected-throw', err)
     return null
   }
 }
@@ -113,8 +147,8 @@ export function serializeUser(dbUser: {
   userType: string
   investorProfile: string | null
   planType: string | null
-  fsBalance: { toNumber(): number }
-  marginBlocked: { toNumber(): number }
+  fsBalance: { toNumber(): number } | null
+  marginBlocked: { toNumber(): number } | null
   tourCompleted: boolean
   ageVerificationPending: boolean
   adminRole?: string | null
@@ -133,8 +167,8 @@ export function serializeUser(dbUser: {
     userType: dbUser.userType as User['userType'],
     investorProfile: (dbUser.investorProfile ?? 'INICIANTE') as User['investorProfile'],
     planType: (dbUser.planType ?? null) as User['planType'],
-    fsBalance: dbUser.fsBalance.toNumber(),
-    marginBlocked: dbUser.marginBlocked.toNumber(),
+    fsBalance: dbUser.fsBalance?.toNumber() ?? 0,
+    marginBlocked: dbUser.marginBlocked?.toNumber() ?? 0,
     tourCompleted: dbUser.tourCompleted,
     ageVerificationPending: dbUser.ageVerificationPending,
     adminRole: (dbUser.adminRole as User['adminRole']) ?? null,

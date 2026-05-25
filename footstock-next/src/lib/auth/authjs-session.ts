@@ -12,6 +12,7 @@
 
 import 'server-only'
 
+import * as Sentry from '@sentry/nextjs'
 import { cookies } from 'next/headers'
 
 const AUTHJS_COOKIE_PROD = '__Secure-authjs.session-token'
@@ -41,7 +42,17 @@ export async function readAuthjsSession(): Promise<AuthjsSessionPayload | null> 
     .map((name) => ({ name, value: cookieStore.get(name)?.value }))
     .filter((c): c is { name: string; value: string } => Boolean(c.value))
 
-  if (presentCookies.length === 0) return null
+  if (presentCookies.length === 0) {
+    // Nenhum cookie de sessao Auth.js presente. Distinguir de "presente mas
+    // nao decodificou" e crucial para diagnosticar cookies legados/secret trocado.
+    Sentry.addBreadcrumb({
+      category: 'auth',
+      message: 'authjs_cookie_absent',
+      level: 'info',
+      data: { checked: cookieNames },
+    })
+    return null
+  }
 
   // Dynamic import: @auth/core/jwt e ESM-only e quebra parse do Jest no
   // import top-level. Lazy load mantem testes que nao tocam o cookie verdes
@@ -68,6 +79,13 @@ export async function readAuthjsSession(): Promise<AuthjsSessionPayload | null> 
     }
   }
 
+  // Cookie(s) presentes mas nenhum decodificou: AUTH_SECRET trocado, cookie
+  // legado (next-auth.*/sb-*), ou salt incompativel. Sinal forte de regressao.
+  Sentry.captureMessage('authjs_cookie_present_but_undecodable', {
+    level: 'warning',
+    tags: { auth_fail_reason: 'cookie-undecodable' },
+    extra: { cookieNames: presentCookies.map((c) => c.name) },
+  })
   return null
 }
 
