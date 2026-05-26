@@ -54,6 +54,14 @@ export default async function AdminLayout({
     }
   }
 
+  // Logs distinguiveis (task-016): o caminho "sem usuario" ja e coberto por
+  // readAuthjsSession ([AUTH_COOKIE] absent/undecodable) e getAuthUser
+  // ([AUTH_FAIL] user-not-found). Aqui falta o estado "usuario autenticado mas
+  // SEM adminRole" — distinto de sessao ausente: a sessao resolveu, mas a conta
+  // nao e staff. Sem valor de cookie/secret/hash, apenas o motivo.
+  if (user && !user.adminRole) {
+    console.warn("[AUTH_FAIL] reason=authenticated-but-no-adminRole");
+  }
   if (!user || !user.adminRole) {
     redirect(ROUTES.LOGIN);
   }

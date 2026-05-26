@@ -23,7 +23,7 @@ const MAIN_TABS = [
   { label: "Ligas", icon: Trophy, href: ROUTES.LIGAS },
 ];
 
-const DRAWER_ITEMS = [
+export const DRAWER_ITEMS = [
   { label: "Dividendos", href: ROUTES.DIVIDENDOS, emoji: "💰" },
   { label: "Comunidade", href: ROUTES.COMUNIDADE, emoji: "💬" },
   { label: "Assessor IA", href: ROUTES.ASSESSOR, emoji: "🤖" },

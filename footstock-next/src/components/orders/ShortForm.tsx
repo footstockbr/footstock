@@ -39,7 +39,7 @@ interface OpenShortPosition {
 }
 
 export function ShortForm({ ticker, assetName, onSuccess, onClose }: ShortFormProps) {
-  const { hasAccess, plan } = usePlanGuard()
+  const { hasAccess, plan, isError: isPlanError } = usePlanGuard()
   const tick = useMarketTick(ticker)
   const { isOffline: isMotorOffline } = useMotorStatusContext()
   const { track } = useAnalytics()
@@ -59,16 +59,19 @@ export function ShortForm({ ticker, assetName, onSuccess, onClose }: ShortFormPr
   const marginRequired = notionalValue * SHORT_MARGIN_RATIO
   const dailyInterest = notionalValue * SHORT_DAILY_INTEREST_RATE
 
-  // EVT-015: upgrade_prompt_shown — when the locked state is rendered
+  // EVT-015: upgrade_prompt_shown — when the locked state is rendered.
+  // task-020: nao emitir o evento quando o plano falhou ao carregar — senao
+  // uma falha transitoria de /me dispara um upgrade_prompt_shown falso (como se
+  // o usuario fosse de tier inferior) e polui a telemetria de conversao.
   useEffect(() => {
-    if (!isLenda) {
+    if (!isLenda && !isPlanError) {
       track('upgrade_prompt_shown', {
         feature_blocked: 'short_selling',
         current_plan: plan as 'JOGADOR' | 'CRAQUE' | 'LENDA',
         required_plan: 'LENDA',
       })
     }
-  }, [isLenda, track, plan])
+  }, [isLenda, isPlanError, track, plan])
 
   // Guard de plano
   if (!isLenda) {

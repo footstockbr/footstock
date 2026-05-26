@@ -121,9 +121,48 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
   const { payment } = await searchParams;
   const paymentSucceeded = payment === "success";
 
+  // task-017: retorno do gateway nunca pode ser silencioso (Zero Silencio).
+  // Cada estado tem copy distinta e visivel. O caso success ainda dispara a
+  // revalidacao do plano via PlanRevalidateOnSuccess (abaixo).
+  const paymentBanner: { tone: "success" | "pending" | "failed"; message: string } | null =
+    payment === "success"
+      ? {
+          tone: "success",
+          message:
+            "Pagamento recebido. Atualizando seu plano. Se o plano nao aparecer, atualize a pagina em alguns segundos.",
+        }
+      : payment === "pending"
+        ? {
+            tone: "pending",
+            message:
+              "Ha um pagamento pendente para este plano. Aguarde a confirmacao ou conclua a tentativa aberta.",
+          }
+        : payment === "failed"
+          ? {
+              tone: "failed",
+              message:
+                "Pagamento recusado pelo gateway. Tente outro cartao ou metodo de pagamento.",
+            }
+          : null;
+
+  const BANNER_STYLES: Record<"success" | "pending" | "failed", string> = {
+    success: "border-[rgba(46,189,133,.4)] bg-[rgba(46,189,133,.08)] text-[#2EBD85]",
+    pending: "border-[rgba(240,185,11,.4)] bg-[rgba(240,185,11,.08)] text-[#F0B90B]",
+    failed: "border-[rgba(246,70,93,.4)] bg-[rgba(246,70,93,.08)] text-[#F6465D]",
+  };
+
   return (
     <div data-testid="planos-page" className="px-4 md:px-8 pt-4 pb-8 max-w-5xl mx-auto">
       <PlanRevalidateOnSuccess active={paymentSucceeded} />
+      {paymentBanner && (
+        <div
+          role="status"
+          data-testid={`planos-payment-banner-${payment}`}
+          className={`mb-6 rounded-lg border px-4 py-3 text-sm ${BANNER_STYLES[paymentBanner.tone]}`}
+        >
+          {paymentBanner.message}
+        </div>
+      )}
       <div className="text-center mb-8">
         <h1 className="text-xl font-bold text-[#EAECEF] mb-1">Escolha seu plano</h1>
         <p className="text-sm text-[#929AA5]">

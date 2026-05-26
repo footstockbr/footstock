@@ -203,7 +203,7 @@ function DividendRow({ dividend }: { dividend: Dividend }) {
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export function DividendosClient() {
-  const { hasAccess, isLoading: isPlanLoading } = usePlanGuard()
+  const { hasAccess, isLoading: isPlanLoading, isError: isPlanError } = usePlanGuard()
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
   const [page, setPage] = useState(1)
@@ -246,6 +246,25 @@ export function DividendosClient() {
 
   // T-11: bloquear acesso para plano Jogador
   if (isPlanLoading) return <Spinner />
+  // task-020: erro no fetch de /me nao pode renderizar um downgrade implicito
+  // (um LENDA veria o upsell de Craque por uma falha transitoria de rede).
+  // Mostramos um estado de erro/retry explicito (Zero Silencio).
+  if (isPlanError) {
+    return (
+      <div data-testid="dividendos-plan-error" className="min-h-screen bg-[#0B0E11] flex items-center justify-center px-4">
+        <div className="max-w-md text-center">
+          <h2 className="text-xl font-semibold text-[#EAECEF] mb-2">Nao foi possivel verificar seu plano</h2>
+          <p className="text-sm text-[#929AA5] mb-6">Houve uma falha ao carregar os dados da sua conta. Tente novamente.</p>
+          <Button
+            onClick={() => window.location.reload()}
+            className="w-full bg-[#F0B90B] hover:bg-[#D4A707] text-[#0c0b09] font-semibold"
+          >
+            Tentar novamente
+          </Button>
+        </div>
+      </div>
+    )
+  }
   if (!hasAccess('CRAQUE')) {
     return (
       <div data-testid="dividendos-upgrade-gate" className="min-h-screen bg-[#0B0E11] flex items-center justify-center px-4">

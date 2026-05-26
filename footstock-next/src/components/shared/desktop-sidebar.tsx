@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants/routes";
 import { MOBILE_NAV_HREFS } from "@/components/shared/bottom-tab-bar";
 
-const BASE_NAV_ITEMS = [
+export const BASE_NAV_ITEMS = [
   { href: ROUTES.MERCADO, label: "Mercado" },
   { href: ROUTES.PORTFOLIO, label: "Carteira" },
   { href: ROUTES.DIVIDENDOS, label: "Dividendos" },
@@ -25,7 +25,7 @@ const BASE_NAV_ITEMS = [
 // Rotas que precisam estar acessiveis em AMBAS as navegacoes (desktop + mobile).
 // As duas listas de nav sao independentes (sem fonte unica), entao esta checagem
 // de paridade evita o drift que deixou /planos ausente no desktop (P3/C9).
-const REQUIRED_NAV_ROUTES: readonly string[] = [ROUTES.PLANOS];
+export const REQUIRED_NAV_ROUTES: readonly string[] = [ROUTES.PLANOS];
 
 if (process.env.NODE_ENV !== "production") {
   const desktopHrefs = new Set<string>(BASE_NAV_ITEMS.map((i) => i.href));

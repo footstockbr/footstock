@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getGatewayByHeader, detectGatewayType } from '@/lib/gateways/GatewayFactory'
 import { GatewayRetryableError } from '@/lib/gateways/IGateway'
-import { validateWebhookByGateway } from '@/lib/gateways/webhook-validator'
+import { validateWebhookByGatewayDetailed } from '@/lib/gateways/webhook-validator'
 import { getWebhookRateLimit } from '@/lib/ratelimit'
 import { normalizeIp } from '@/middleware/rateLimit'
 import { planService } from '@/lib/services/PlanService'
@@ -57,19 +57,28 @@ export async function POST(request: NextRequest) {
 
   // 3. Validar assinatura HMAC
   // IMPORTANTE: validação ANTES do rate limit para não contar webhooks inválidos (TASK-026 spec §5)
-  let hmacValid: boolean
+  let validation: Awaited<ReturnType<typeof validateWebhookByGatewayDetailed>>
   try {
-    hmacValid = await validateWebhookByGateway(request.headers, rawBody, gatewayType)
+    validation = await validateWebhookByGatewayDetailed(request.headers, rawBody, gatewayType)
   } catch {
-    hmacValid = false
+    validation = { valid: false, reason: 'BAD_SIGNATURE' }
   }
 
-  if (!hmacValid) {
-    // task-010: idem ao gateway desconhecido — 200 silencioso no corpo, mas rejeição
-    // observável via [ALERT] + audit REJECTED. HMAC inválido recorrente pode indicar
-    // template de assinatura divergente (ver C8/task-012) e precisa ser percebido.
-    console.error('[webhook][ALERT] Webhook rejeitado: HMAC inválido', {
+  if (!validation.valid) {
+    // task-010 + task-019: 200 silencioso no corpo (não vazar detalhe de segurança),
+    // mas rejeição OBSERVÁVEL via [ALERT] + audit REJECTED. A taxonomia agora separa
+    // assinatura inválida/ausente de replay/timestamp expirado — antes ambos caíam na
+    // mensagem genérica "HMAC inválido", impedindo o operador de distinguir um secret/
+    // template divergente (C8/task-012) de um ataque de replay/clock-skew.
+    const reasonMessage =
+      validation.reason === 'TIMESTAMP_EXPIRED'
+        ? 'Timestamp expirado/replay (janela de replay excedida)'
+        : validation.reason === 'MISSING_SIGNATURE'
+          ? 'Assinatura ausente ou malformada nos headers'
+          : 'Assinatura HMAC inválida'
+    console.error('[webhook][ALERT] Webhook rejeitado: validação de assinatura falhou', {
       gateway: gatewayType,
+      reason: validation.reason,
       ipAddress: originalIp,
     })
     await webhookAuditService.logWebhook({
@@ -77,7 +86,7 @@ export async function POST(request: NextRequest) {
       status: 'REJECTED',
       hmacValid: false,
       ipAddress: originalIp,
-      errorMessage: 'HMAC inválido',
+      errorMessage: reasonMessage,
     })
     return NextResponse.json({ received: true }, { status: 200 })
   }

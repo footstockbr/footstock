@@ -161,27 +161,90 @@ export async function validatePayPalWebhook(
 
 // ─── Dispatcher ──────────────────────────────────────────────────────────────
 
+// task-019: motivo distinto de falha de validacao, para que o audit log do
+// webhook separe "assinatura HMAC invalida" de "timestamp expirado/replay"
+// (antes colapsados num unico `false` -> mensagem generica "HMAC inválido").
+export type WebhookValidationReason =
+  | 'OK'
+  | 'MISSING_SIGNATURE'
+  | 'BAD_SIGNATURE'
+  | 'TIMESTAMP_EXPIRED'
+
+export interface WebhookValidationResult {
+  valid: boolean
+  reason: WebhookValidationReason
+}
+
 /**
- * Valida HMAC pelo gateway detectado.
+ * Valida HMAC do Mercado Pago retornando o MOTIVO (nao so um booleano), para
+ * permitir ao webhook distinguir assinatura invalida de replay/timestamp.
+ */
+export function validateMercadoPagoHMACDetailed(
+  headers: Headers,
+  rawBody: string,
+  secret: string,
+): WebhookValidationResult {
+  try {
+    const xSignature = headers.get('x-signature') ?? ''
+    const xRequestId = headers.get('x-request-id') ?? ''
+
+    const tsMatch = xSignature.match(/ts=(\d+)/)
+    const v1Match = xSignature.match(/v1=([a-f0-9]+)/i)
+
+    if (!tsMatch || !v1Match) return { valid: false, reason: 'MISSING_SIGNATURE' }
+
+    const ts = tsMatch[1]
+    const v1 = v1Match[1]
+    if (!ts || !v1) return { valid: false, reason: 'MISSING_SIGNATURE' }
+
+    // Replay/timestamp (PAYMENT_002) — distinto de assinatura invalida.
+    if (!validateWebhookTimestamp(parseInt(ts, 10) * 1000)) {
+      return { valid: false, reason: 'TIMESTAMP_EXPIRED' }
+    }
+
+    const template = `id:${xRequestId};ts:${ts};`
+    const expected = createHmac('sha256', secret).update(template).digest('hex')
+
+    const expectedBuf = Buffer.from(expected, 'utf8')
+    const receivedBuf = Buffer.from(v1, 'utf8')
+
+    if (expectedBuf.length !== receivedBuf.length) {
+      timingSafeEqual(expectedBuf, Buffer.alloc(expectedBuf.length))
+      return { valid: false, reason: 'BAD_SIGNATURE' }
+    }
+
+    return timingSafeEqual(expectedBuf, receivedBuf)
+      ? { valid: true, reason: 'OK' }
+      : { valid: false, reason: 'BAD_SIGNATURE' }
+  } catch {
+    return { valid: false, reason: 'BAD_SIGNATURE' }
+  }
+}
+
+/**
+ * Valida HMAC pelo gateway detectado, retornando o motivo. PagSeguro/PayPal
+ * nao expoem timestamp local, entao colapsam em OK/BAD_SIGNATURE.
  * @throws Error se gateway não suportado
  */
-export async function validateWebhookByGateway(
-  headers:    Headers,
-  rawBody:    string,
-  gateway:    GatewayType
-): Promise<boolean> {
+export async function validateWebhookByGatewayDetailed(
+  headers: Headers,
+  rawBody: string,
+  gateway: GatewayType,
+): Promise<WebhookValidationResult> {
   switch (gateway) {
     case GatewayType.MERCADO_PAGO: {
       const secret = env.MERCADO_PAGO_WEBHOOK_SECRET ?? ''
-      return validateMercadoPagoHMAC(headers, rawBody, secret)
+      return validateMercadoPagoHMACDetailed(headers, rawBody, secret)
     }
     case GatewayType.PAGSEGURO: {
       const secret = env.PAGSEGURO_WEBHOOK_SECRET ?? ''
-      return validatePagSeguroHMAC(headers, rawBody, secret)
+      const valid = validatePagSeguroHMAC(headers, rawBody, secret)
+      return { valid, reason: valid ? 'OK' : 'BAD_SIGNATURE' }
     }
     case GatewayType.PAYPAL: {
       const webhookId = env.PAYPAL_WEBHOOK_ID ?? ''
-      return validatePayPalWebhook(headers, rawBody, webhookId)
+      const valid = await validatePayPalWebhook(headers, rawBody, webhookId)
+      return { valid, reason: valid ? 'OK' : 'BAD_SIGNATURE' }
     }
     default: {
       const err = new Error(`Gateway não suportado para validação HMAC: ${gateway}`) as Error & { code: string }
@@ -189,6 +252,20 @@ export async function validateWebhookByGateway(
       throw err
     }
   }
+}
+
+/**
+ * Valida HMAC pelo gateway detectado (booleano). Mantido para compatibilidade
+ * com callers que so precisam do resultado binario (ex.: paypal.ts).
+ * @throws Error se gateway não suportado
+ */
+export async function validateWebhookByGateway(
+  headers:    Headers,
+  rawBody:    string,
+  gateway:    GatewayType
+): Promise<boolean> {
+  const { valid } = await validateWebhookByGatewayDetailed(headers, rawBody, gateway)
+  return valid
 }
 
 // ─── Utilitários ─────────────────────────────────────────────────────────────
