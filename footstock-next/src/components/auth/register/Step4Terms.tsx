@@ -221,27 +221,27 @@ export function Step4Terms({ data, onComplete }: Step4Props) {
         />
       </fieldset>
 
-      {accountExists && (
+      {accountExists ? (
         <AccountExistsCard
           reason={accountExists.reason}
           emailHint={accountExists.reason === 'email' ? accountExists.emailHint : undefined}
           onDismiss={() => setAccountExists(null)}
         />
+      ) : (
+        <Button
+          data-testid="form-register-submit-button"
+          type="submit"
+          variant="primary"
+          size="lg"
+          fullWidth
+          isLoading={isSubmitting}
+          disabled={!consents.terms}
+          aria-disabled={!consents.terms}
+          className="mt-2"
+        >
+          Criar minha conta
+        </Button>
       )}
-
-      <Button
-        data-testid="form-register-submit-button"
-        type="submit"
-        variant="primary"
-        size="lg"
-        fullWidth
-        isLoading={isSubmitting}
-        disabled={!consents.terms}
-        aria-disabled={!consents.terms}
-        className="mt-2"
-      >
-        Criar minha conta
-      </Button>
     </form>
   )
 }
