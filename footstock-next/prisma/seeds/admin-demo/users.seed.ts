@@ -6,7 +6,13 @@
  * Invariante: saldos por plano — Jogador FS$2.000, Craque FS$5.000, Lenda FS$25.000
  */
 
+import bcrypt from 'bcryptjs'
 import type { Prisma, PrismaClient } from '@prisma/client'
+
+// Senha padrao dos usuarios de demo/teste. Alinha com DEV_TEST_USERS
+// (src/lib/constants/dev-test-users.ts). Override opcional via env.
+const DEV_PASSWORD = process.env.NEXT_PUBLIC_DEV_TEST_PASSWORD ?? 'FootStock@Dev2026!'
+const BCRYPT_ROUNDS = 12
 
 const DEMO_USERS = [
   {
@@ -120,18 +126,23 @@ export async function seedAdminDemoUsers(prisma: PrismaClient): Promise<void> {
     return
   }
 
+  const passwordHash = await bcrypt.hash(DEV_PASSWORD, BCRYPT_ROUNDS)
+
   for (const user of DEMO_USERS) {
     try {
+      // Staff (adminRole) nao recebe planType (CHECK constraint M058).
+      const isStaff = Boolean(user.adminRole)
       const createData: Prisma.UserCreateInput = {
         email: user.email,
+        passwordHash,
         name: user.name,
         cpfHash: user.cpfHash,
         birthDate: user.birthDate,
         favoriteClub: user.favoriteClub,
         investorProfile: user.investorProfile,
-        planType: user.planType,
+        planType: isStaff ? null : user.planType,
         fsBalance: user.fsBalance,
-        userType: 'NORMAL',
+        userType: isStaff ? 'ADMIN' : 'NORMAL',
       }
 
       if (user.adminRole) {
