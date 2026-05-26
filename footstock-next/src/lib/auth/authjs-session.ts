@@ -24,15 +24,21 @@ export type AuthjsSessionPayload = {
 }
 
 export async function readAuthjsSession(): Promise<AuthjsSessionPayload | null> {
-  const secret = process.env.AUTH_SECRET
-  if (!secret) return null
-
+  // Ler cookies() ANTES de qualquer early-return. O acesso a cookies() e o
+  // sinal que marca o segmento como dinamico. No build, AUTH_SECRET nao existe;
+  // se retornassemos por secret ausente ANTES de tocar cookies(), as rotas
+  // guardadas (admin, conta, assinatura, assessor, perfil/trofeus) seriam
+  // prerenderizadas e o redirect(/login) ficaria congelado como estatico
+  // (s-maxage 1 ano), servido a todos, inclusive usuarios autenticados.
   let cookieStore: Awaited<ReturnType<typeof cookies>>
   try {
     cookieStore = await cookies()
   } catch {
     return null
   }
+
+  const secret = process.env.AUTH_SECRET
+  if (!secret) return null
 
   // Tenta ambos os nomes (prod + dev) — robustez quando NODE_ENV nao bate
   // exatamente com o cookie presente (ex: preview deploys, teste com curl).

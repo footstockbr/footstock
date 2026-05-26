@@ -18,6 +18,13 @@ export const metadata: Metadata = {
   robots: "noindex, nofollow",
 };
 
+// Guarda de sessao server-side (getAuthUser le AUTH_SECRET + cookie). No build,
+// AUTH_SECRET nao existe e readAuthjsSession faz early-return ANTES de chamar
+// cookies(), entao o Next nao marca o segmento dinamico e congela o
+// redirect(/login) como prerender estatico (s-maxage 1 ano) servido a todos,
+// inclusive admins autenticados. force-dynamic garante render por-request.
+export const dynamic = "force-dynamic";
+
 export default async function AdminLayout({
   children,
 }: {
