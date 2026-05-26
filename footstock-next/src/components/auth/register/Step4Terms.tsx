@@ -7,6 +7,11 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ROUTES } from '@/lib/constants/routes'
 import type { WizardData } from '../register-wizard'
+import { AccountExistsCard } from './AccountExistsCard'
+
+type AccountExistsState =
+  | { reason: 'email'; emailHint: string }
+  | { reason: 'cpf' }
 
 interface Step4Props {
   data: WizardData
@@ -57,6 +62,7 @@ function ConsentItem({ id, label, description, required, checked, onChange, test
 export function Step4Terms({ data, onComplete }: Step4Props) {
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [accountExists, setAccountExists] = useState<AccountExistsState | null>(null)
   const [consents, setConsents] = useState({
     terms: false,
     marketing: false,
@@ -75,6 +81,9 @@ export function Step4Terms({ data, onComplete }: Step4Props) {
     }
 
     setIsSubmitting(true)
+    // Limpa card de conta-existente em retries (ex: usuario trocou email/cpf
+    // no wizard e voltou pra cá). Sem isso a UI mostra estado desatualizado.
+    setAccountExists(null)
     try {
       const payload = {
         name: data.name,
@@ -98,6 +107,24 @@ export function Step4Terms({ data, onComplete }: Step4Props) {
       const json = await res.json()
 
       if (!res.ok || !json.success) {
+        const code = json.error?.code as string | undefined
+        const meta = json.error?.meta as
+          | { reason?: 'email' | 'cpf'; emailHint?: string }
+          | undefined
+
+        // AUTH-004 (email) e AUTH-003 (CPF) viraram cards inline com CTA de
+        // login — toast generico nao orientava o usuario a recuperar a conta.
+        if (code === 'AUTH-004' && meta?.reason === 'email') {
+          // Fallback pra data.email garante string (meta.emailHint é optional no contrato wire).
+          const hint = meta.emailHint ?? data.email ?? ''
+          setAccountExists({ reason: 'email', emailHint: hint })
+          return
+        }
+        if (code === 'AUTH-003' && meta?.reason === 'cpf') {
+          setAccountExists({ reason: 'cpf' })
+          return
+        }
+
         toast.error(json.error?.message ?? 'Erro ao criar conta. Tente novamente.')
         return
       }
@@ -193,6 +220,14 @@ export function Step4Terms({ data, onComplete }: Step4Props) {
           onChange={() => toggleConsent('thirdParty')}
         />
       </fieldset>
+
+      {accountExists && (
+        <AccountExistsCard
+          reason={accountExists.reason}
+          emailHint={accountExists.reason === 'email' ? accountExists.emailHint : undefined}
+          onDismiss={() => setAccountExists(null)}
+        />
+      )}
 
       <Button
         data-testid="form-register-submit-button"
