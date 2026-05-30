@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { useDebounce } from '@/hooks/useDebounce'
 import type { WizardData } from '../register-wizard'
+import { ClubCrest } from '@/components/market/ClubCrest'
 
 interface ClubForSelection {
   ticker: string
@@ -105,17 +106,13 @@ export function Step3ClubSelect({ data, onNext }: Step3Props) {
                 : 'border-[rgba(240,185,11,.18)] bg-[#1E2329] text-[#929AA5] hover:border-[rgba(240,185,11,.35)]'
             )}
           >
-            {/* @ASSET_PLACEHOLDER: logo do clube {club.ticker} — PNG 32×32px, circular */}
-            <div
-              className={cn(
-                'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0',
-                selectedClub === club.ticker ? 'bg-[rgba(240,185,11,.2)]' : 'bg-[#1e1a12]'
-              )}
-            >
-              <span className="text-[10px] font-bold" aria-hidden="true">
-                {club.ticker.slice(0, 3)}
-              </span>
-            </div>
+            {/* Escudo com as cores reais do time equivalente */}
+            <ClubCrest
+              ticker={club.ticker}
+              colorPrimary={club.colors?.primary}
+              colorSecondary={club.colors?.secondary}
+              size={32}
+            />
             <div className="min-w-0">
               {/* Exibe realName para ajudar identificação — único local onde realName aparece na UI */}
               <p className="text-xs font-medium truncate">{club.realName}</p>

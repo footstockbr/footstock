@@ -70,7 +70,7 @@ export function MarketPageClient() {
           openPrice: number;
           sentiment: string;
           division: string;
-          colors: { primary: string };
+          colors: { primary: string; secondary: string };
           isHalted?: boolean;
         }) => {
           const change24h = a.openPrice > 0
@@ -85,6 +85,7 @@ export function MarketPageClient() {
             sparkData: [],
             division: a.division as AssetData["division"],
             clubColor: a.colors.primary,
+            clubColorSecondary: a.colors.secondary,
             halted: a.isHalted ?? false,
           };
         });

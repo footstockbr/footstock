@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ROUTES } from "@/lib/constants/routes";
 import { formatFS, formatPercent } from "@/lib/utils";
 import { PriceBadge } from "@/components/market/PriceBadge";
+import { ClubCrest } from "@/components/market/ClubCrest";
 
 export interface AssetData {
   ticker: string;
@@ -25,6 +26,7 @@ export interface AssetData {
   offline?: boolean;
   division?: "SERIE_A" | "SERIE_B";
   clubColor?: string;
+  clubColorSecondary?: string;
   /** Indica se o preço exibido tem delay server-side por plano */
   isDelayed?: boolean;
   /** Atraso em minutos (0 = tempo real) */
@@ -82,9 +84,11 @@ function AssetCard({ asset, isFavorite }: AssetCardProps) {
         className="block bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.2)] p-3 hover:border-[rgba(240,185,11,.35)] transition-colors"
       >
         <div className="flex items-center gap-2.5">
-          <div className="w-10 h-10 rounded-full bg-[#2B3139] flex items-center justify-center text-xs font-black text-[#F0B90B] shrink-0">
-            {asset.ticker.slice(0, 3)}
-          </div>
+          <ClubCrest
+            ticker={asset.ticker}
+            colorPrimary={asset.clubColor}
+            colorSecondary={asset.clubColorSecondary}
+          />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-sm font-mono font-bold text-[#EAECEF]">{asset.ticker}</span>
@@ -153,17 +157,12 @@ function AssetCard({ asset, isFavorite }: AssetCardProps) {
       )}
 
       <div className="flex items-center gap-2.5">
-        {/* Club avatar */}
-        <div
-          className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-black text-white shrink-0 border border-[rgba(240,185,11,.12)]"
-          style={{
-            background: asset.clubColor
-              ? `linear-gradient(145deg, ${asset.clubColor}, ${asset.clubColor}88)`
-              : "linear-gradient(145deg, #F0B90B, #8a6820)",
-          }}
-        >
-          {asset.ticker.slice(0, 3)}
-        </div>
+        {/* Club crest — cores reais do time (primaria + secundaria) */}
+        <ClubCrest
+          ticker={asset.ticker}
+          colorPrimary={asset.clubColor}
+          colorSecondary={asset.clubColorSecondary}
+        />
 
         {/* Info */}
         <div className="flex-1 min-w-0">

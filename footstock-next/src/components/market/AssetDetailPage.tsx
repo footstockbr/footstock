@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { IChartApi, type Range, type Time } from 'lightweight-charts'
 import { Lock, Info } from 'lucide-react'
 import { GlossaryInfoIcon } from '@/components/ui/glossary-info-icon'
+import { ClubCrest } from '@/components/market/ClubCrest'
 import { useMarketTick } from '@/hooks/useMarketTick'
 import { useCircuitBreakerAlert } from '@/hooks/useCircuitBreakerAlert'
 import { usePlanGuard } from '@/hooks/usePlanGuard'
@@ -158,16 +159,11 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
     <div data-testid="asset-detail-page" className="flex flex-col pb-32 md:pb-0">
       {/* Header */}
       <header data-testid="asset-detail-header" className="flex items-center gap-3 p-4 border-b border-[rgba(240,185,11,.08)]">
-        <div
-          className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-black text-white shrink-0 border border-[rgba(240,185,11,.12)]"
-          style={{
-            background: asset.colorPrimary
-              ? `linear-gradient(145deg, ${asset.colorPrimary}, ${asset.colorPrimary}88)`
-              : 'linear-gradient(145deg, #F0B90B, #8a6820)',
-          }}
-        >
-          {asset.ticker.slice(0, 3)}
-        </div>
+        <ClubCrest
+          ticker={asset.ticker}
+          colorPrimary={asset.colors?.primary ?? asset.colorPrimary}
+          colorSecondary={asset.colors?.secondary}
+        />
         <div>
           <h1 className="text-lg font-bold text-[#EAECEF]">{asset.displayName}</h1>
           <span className="text-xs text-[#929AA5] font-mono">{asset.ticker}</span>

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { AtivoClient } from "./ativo-client";
 import { prisma } from "@/lib/prisma";
 import { SponsorBanner } from "@/components/shared/sponsor-banner";
+import { ClubCrest } from "@/components/market/ClubCrest";
 
 interface Props {
   params: Promise<{ ticker: string }>;
@@ -101,12 +102,12 @@ export default async function AtivoPage({ params }: Props) {
       {/* Price hero */}
       <div className="px-4 pt-4 pb-3 border-b border-[rgba(240,185,11,.08)]">
         <div className="flex items-center gap-3 mb-3">
-          <div
-            className="w-12 h-12 rounded-full flex items-center justify-center text-sm font-black text-white shrink-0 border border-[rgba(240,185,11,.18)]"
-            style={{ background: "linear-gradient(145deg, #F0B90B, #8a6820)" }}
-          >
-            {ticker.slice(0, 3)}
-          </div>
+          <ClubCrest
+            ticker={ticker}
+            colorPrimary={asset.colorPrimary}
+            colorSecondary={asset.colorSecondary}
+            size={48}
+          />
           <div>
             <h1 className="text-lg font-bold text-[#EAECEF]">{asset.displayName}</h1>
             <p className="text-sm text-[#929AA5]">{divisionLabel}</p>
