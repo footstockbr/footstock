@@ -73,6 +73,23 @@ interface AssetCardProps {
   isFavorite?: boolean;
 }
 
+/** Selo de destaque do clube favorito (time do coracao) — estrela amarela + label. */
+function FavoriteBadge() {
+  return (
+    <span
+      data-testid="asset-card-favorite-badge"
+      className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-[#F0B90B] bg-[rgba(240,185,11,.14)] border border-[rgba(240,185,11,.4)] px-2 py-0.5 rounded-full"
+    >
+      <Star size={11} className="fill-[#F0B90B] text-[#F0B90B]" aria-hidden="true" />
+      Time do coração
+    </span>
+  );
+}
+
+// Estilo do card destacado para o clube favorito (borda+fundo dourados + anel).
+const FAVORITE_CARD_CLASSES =
+  "border-[rgba(240,185,11,.55)] bg-[rgba(240,185,11,.06)] shadow-[0_0_0_1px_rgba(240,185,11,.25)]";
+
 function AssetCard({ asset, isFavorite }: AssetCardProps) {
   const countdown = useHaltCountdown(asset.haltedUntil);
 
@@ -81,17 +98,34 @@ function AssetCard({ asset, isFavorite }: AssetCardProps) {
       <Link
         href={ROUTES.MERCADO_DETALHE(asset.ticker)}
         data-testid="asset-card"
-        className="block bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.2)] p-3 hover:border-[rgba(240,185,11,.35)] transition-colors"
+        className={cn(
+          "block bg-[#1E2329] rounded-lg border p-3 hover:border-[rgba(240,185,11,.35)] transition-colors",
+          isFavorite ? FAVORITE_CARD_CLASSES : "border-[rgba(240,185,11,.2)]"
+        )}
       >
+        {isFavorite && (
+          <div className="mb-2">
+            <FavoriteBadge />
+          </div>
+        )}
         <div className="flex items-center gap-2.5">
           <ClubCrest
             ticker={asset.ticker}
             colorPrimary={asset.clubColor}
             colorSecondary={asset.clubColorSecondary}
+            className={isFavorite ? "ring-2 ring-[#F0B90B] ring-offset-1 ring-offset-[#1E2329]" : undefined}
           />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-sm font-mono font-bold text-[#EAECEF]">{asset.ticker}</span>
+              {isFavorite && (
+                <Star
+                  data-testid={`asset-card-favorite-star-${asset.ticker}`}
+                  size={16}
+                  className="text-[#F0B90B] fill-[#F0B90B]"
+                  aria-label="Clube favorito"
+                />
+              )}
               <span
                 data-testid="asset-card-halted-badge"
                 aria-label="Negociação pausada temporariamente por circuit breaker"
@@ -133,11 +167,14 @@ function AssetCard({ asset, isFavorite }: AssetCardProps) {
       data-testid="asset-card"
       className={cn(
         "relative block bg-[#1E2329] rounded-lg border p-3 transition-all duration-150 hover:border-[rgba(240,185,11,.35)] hover:bg-[rgba(240,185,11,.04)] active:scale-[0.99]",
-        isFavorite
-          ? "border-[rgba(240,185,11,.3)]"
-          : "border-[rgba(240,185,11,.18)]"
+        isFavorite ? FAVORITE_CARD_CLASSES : "border-[rgba(240,185,11,.18)]"
       )}
     >
+      {isFavorite && (
+        <div className="mb-2">
+          <FavoriteBadge />
+        </div>
+      )}
       {asset.offline && (
         <WifiOff
           data-testid="asset-card-offline-icon"
@@ -162,6 +199,7 @@ function AssetCard({ asset, isFavorite }: AssetCardProps) {
           ticker={asset.ticker}
           colorPrimary={asset.clubColor}
           colorSecondary={asset.clubColorSecondary}
+          className={isFavorite ? "ring-2 ring-[#F0B90B] ring-offset-1 ring-offset-[#1E2329]" : undefined}
         />
 
         {/* Info */}
