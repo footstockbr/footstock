@@ -2,6 +2,7 @@
   "expo": {
     "name": "Foot Stock",
     "slug": "foot-stock-mobile",
+    "owner": "footstock",
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "footstockmobile",
@@ -38,17 +39,26 @@
           "action": "VIEW",
           "autoVerify": true,
           "data": [
-            { "scheme": "https", "host": "footstock.com.br" },
-            { "scheme": "https", "host": "www.footstock.com.br" }
+            {
+              "scheme": "https",
+              "host": "footstock.com.br"
+            },
+            {
+              "scheme": "https",
+              "host": "www.footstock.com.br"
+            }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
     "extra": {
-      "webUrl": "https://footstock.com.br",
-      "apiUrl": "https://api.footstock.com.br",
-      "streamUrl": "https://stream.footstock.com.br",
+      "webUrl": "https://www.footstock.com.br",
+      "apiUrl": "https://www.footstock.com.br",
+      "streamUrl": "https://www.footstock.com.br",
       "eas": {
         "projectId": "84d3ed49-7490-4a6a-abca-45613d996503"
       }
