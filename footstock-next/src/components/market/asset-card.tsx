@@ -222,7 +222,7 @@ function AssetCard({ asset, isFavorite }: AssetCardProps) {
               {SENTIMENT_LABELS[asset.sentiment]}
             </Badge>
           </div>
-          <p className="text-xs text-[#929AA5] truncate">{asset.displayName}</p>
+          <p className="text-xs text-[#929AA5] leading-snug line-clamp-2 break-words">{asset.displayName}</p>
         </div>
 
         {/* Price + spark */}
