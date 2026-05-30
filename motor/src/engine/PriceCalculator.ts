@@ -145,8 +145,25 @@ export class PriceCalculator {
       }
     }
 
+    // Freio de aproximação da banda do circuit breaker (mantém a meta diária sob
+    // o threshold de 8% sem derrubar os ativos). O congelamento de L9_DailyVolTarget
+    // só afeta o sigma de L1/L3; L2/L4/L5/L6 continuam empurrando o preço para fora
+    // da âncora, atingindo os 8% e disparando o CB em loop. Este freio reduz
+    // progressivamente apenas os deltas que AFASTAM o preço da âncora (closePrice)
+    // conforme ele se aproxima da banda; movimentos de volta ao centro nunca são
+    // freados. Notícias (CB a 20%) ficam isentas. Ver L10_CircuitBreaker.
+    const combinedDelta = cappedDelta + correlationDelta
+    const brakedDelta = this._applyApproachBrake(combinedDelta, state)
+    if (brakedDelta !== combinedDelta) {
+      layerResults.push({
+        layer: 'L9_5_ApproachBrake',
+        deltaPrice: brakedDelta - combinedDelta,
+        metadata: { combinedDelta, brakedDelta },
+      })
+    }
+
     // Preço candidato final (antes do CB trigger)
-    const candidatePrice = Math.max(NUDGE_MIN_PRICE, state.currentPrice + cappedDelta + correlationDelta)
+    const candidatePrice = Math.max(NUDGE_MIN_PRICE, state.currentPrice + brakedDelta)
 
     // L10: Circuit Breaker trigger — verifica candidatePrice vs closePrice
     const cbResult = this.l10.checkTrigger(candidatePrice, state)
@@ -158,13 +175,51 @@ export class PriceCalculator {
     }
 
     // Acumular variação diária para L9 (próximo tick)
-    const deltaFrac = state.currentPrice > 0 ? Math.abs(cappedDelta) / state.currentPrice : 0
+    const deltaFrac = state.currentPrice > 0 ? Math.abs(brakedDelta) / state.currentPrice : 0
     this.l9.accumulate(state, deltaFrac)
 
     // Persistir estados críticos no Redis de forma assíncrona (sem bloquear o tick)
     this._persistToRedis(state)
 
     return { newPrice: candidatePrice, layerResults, halted: false }
+  }
+
+  /**
+   * Freio de aproximação da banda do circuit breaker.
+   *
+   * Reduz progressivamente os deltas que AFASTAM o preço da âncora (closePrice)
+   * conforme o deslocamento líquido se aproxima do threshold do CB (8%):
+   *   - |net| < BRAKE_START (5%): sem freio.
+   *   - BRAKE_START <= |net| < BRAKE_FULL (7%): fator linear de 1 -> 0.
+   *   - |net| >= BRAKE_FULL (7%): deltas para fora são zerados.
+   * Movimentos de VOLTA ao centro (reduzem |net|) nunca são freados, então o
+   * preço sempre pode reverter. Notícias (newsImpactTicks > 0) ficam isentas
+   * porque têm threshold próprio de 20% no L10. O CB de 8% permanece como
+   * última linha de defesa para picos multi-camada/correlação.
+   */
+  private _applyApproachBrake(delta: number, state: AssetState): number {
+    if (delta === 0 || state.closePrice <= 0) return delta
+
+    // Notícia ativa: não freia (L10 tolera até 20% durante absorção).
+    if (state.newsImpact !== 0 && state.newsImpactTicks > 0) return delta
+
+    const net = (state.currentPrice - state.closePrice) / state.closePrice
+    const candidateNet = (state.currentPrice + delta - state.closePrice) / state.closePrice
+
+    // Só freia se o movimento aumenta o afastamento da âncora.
+    const movingOut = Math.abs(candidateNet) > Math.abs(net)
+    if (!movingOut) return delta
+
+    const BRAKE_START = 0.05 // 5%: começa a frear
+    const BRAKE_FULL = 0.07  // 7%: freio total (1% de folga até o CB de 8%)
+    const absNet = Math.abs(net)
+
+    let factor: number
+    if (absNet >= BRAKE_FULL) factor = 0
+    else if (absNet > BRAKE_START) factor = 1 - (absNet - BRAKE_START) / (BRAKE_FULL - BRAKE_START)
+    else factor = 1
+
+    return delta * factor
   }
 
   /**
