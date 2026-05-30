@@ -139,9 +139,14 @@ export class MarketEngine {
       state.isPaused = false
       state.haltReason = null
       state.haltResumeAt = null
-      // Fix C: âncora permanece no openPrice do dia para evitar re-trigger imediato do CB.
-      if (state.openPrice > 0) {
-        state.closePrice = state.openPrice
+      // Re-ancora o CB no preço de retomada. Ao disparar, o preço já se afastou
+      // >=8% da âncora (closePrice). Mantê-la (ou reusar openPrice, que no warm
+      // start é o mesmo valor congelado) faz o CB re-disparar no tick seguinte,
+      // criando um loop de halt permanente (sintoma: maioria dos ativos presa em
+      // "Pausado"). Re-centrar em currentPrice dá uma banda de 8% nova a partir de
+      // onde o ativo retomou — mesma semântica do reset de transição de sessão.
+      if (state.currentPrice > 0) {
+        state.closePrice = state.currentPrice
       }
       const sessionType = sessionManager.getCurrentSession()
       logger.info(`[engine] ${state.ticker} retomado após circuit breaker (closePrice=${state.closePrice.toFixed(4)}, currentPrice=${state.currentPrice.toFixed(4)})`)
