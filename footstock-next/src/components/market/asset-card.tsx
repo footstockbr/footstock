@@ -143,7 +143,7 @@ function AssetCard({ asset, isFavorite }: AssetCardProps) {
                 </span>
               )}
             </div>
-            <p className="text-xs text-[#929AA5] truncate">{asset.displayName}</p>
+            <p className="text-xs text-[#929AA5] leading-snug line-clamp-2 break-words">{asset.displayName}</p>
           </div>
           <div className="text-right shrink-0">
             <p
