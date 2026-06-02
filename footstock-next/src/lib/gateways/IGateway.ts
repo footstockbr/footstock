@@ -36,6 +36,16 @@ export interface GatewayCheckoutResult {
   expiresAt?:    string
 }
 
+/** Resultado de uma operação de estorno (refund) */
+export interface RefundResult {
+  /** ID do estorno no gateway (ou 'already_refunded' quando idempotente) */
+  refundId:        string
+  /** Status do estorno conforme o gateway (approved/pending/in_process) */
+  status:          string
+  /** true quando o pagamento já estava estornado (operação idempotente, sem novo estorno) */
+  alreadyRefunded: boolean
+}
+
 /** Evento normalizado de webhook */
 export interface WebhookEvent {
   eventType:      'PAYMENT_CONFIRMED' | 'PAYMENT_FAILED' | 'REFUND_COMPLETED'
@@ -99,4 +109,14 @@ export interface IGateway {
    * @param gatewaySubscriptionId — ID da assinatura recorrente no gateway
    */
   reactivateAutoRenewal(gatewaySubscriptionId: string): Promise<void>
+
+  /**
+   * Estorna (refund) um pagamento no gateway.
+   * @param gatewayTransactionId — ID do pagamento no gateway (Payment.gatewayTransactionId)
+   * @param amountCents — opcional: estorno parcial em centavos. Omitir = estorno total.
+   * @returns RefundResult com o id e status do estorno
+   * @throws GatewayRetryableError em falhas transitórias (timeout, 5xx) — chamador deve retentar
+   * @throws Error em falhas terminais (pagamento inexistente, gateway não suportado)
+   */
+  refundPayment(gatewayTransactionId: string, amountCents?: number): Promise<RefundResult>
 }

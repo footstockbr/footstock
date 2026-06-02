@@ -224,4 +224,14 @@ export class PayPalGateway implements IGateway {
   async reactivateAutoRenewal(gatewaySubscriptionId: string): Promise<void> {
     console.warn(`[PAYPAL] reactivateAutoRenewal stub — integração pendente. subscriptionId: ${gatewaySubscriptionId}`)
   }
+
+  async refundPayment(gatewayTransactionId: string): Promise<import('./IGateway').RefundResult> {
+    // Integração de estorno PayPal pendente. Falha terminal explícita para que o
+    // chamador NÃO rebaixe o plano achando que estornou.
+    throw new GatewayError(
+      `[PAYPAL] refundPayment não implementado — estorno manual necessário para ${gatewayTransactionId}`,
+      'PAYMENT_057',
+      501,
+    )
+  }
 }

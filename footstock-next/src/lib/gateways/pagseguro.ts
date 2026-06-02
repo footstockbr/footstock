@@ -183,4 +183,14 @@ export class PagSeguroGateway implements IGateway {
   async reactivateAutoRenewal(gatewaySubscriptionId: string): Promise<void> {
     console.warn(`[PAGSEGURO] reactivateAutoRenewal stub — integração pendente. subscriptionId: ${gatewaySubscriptionId}`)
   }
+
+  async refundPayment(gatewayTransactionId: string): Promise<import('./IGateway').RefundResult> {
+    // Integração de estorno PagSeguro pendente. Falha terminal explícita para que o
+    // chamador NÃO rebaixe o plano achando que estornou.
+    throw new GatewayError(
+      `[PAGSEGURO] refundPayment não implementado — estorno manual necessário para ${gatewayTransactionId}`,
+      'PAYMENT_057',
+      501,
+    )
+  }
 }

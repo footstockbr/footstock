@@ -6,7 +6,7 @@
 // ============================================================================
 
 import { createHmac, timingSafeEqual } from 'crypto'
-import type { IGateway, GatewayCheckoutInput, GatewayCheckoutResult, WebhookEvent } from './IGateway'
+import type { IGateway, GatewayCheckoutInput, GatewayCheckoutResult, WebhookEvent, RefundResult } from './IGateway'
 import { GatewayRetryableError } from './IGateway'
 import { CHECKOUT_EXPIRY_MINUTES, GATEWAY_TIMEOUT_MS, WEBHOOK_REPLAY_WINDOW_MS } from '@/lib/constants/payment-security'
 import { env } from '@/lib/env'
@@ -285,6 +285,89 @@ export class MercadoPagoGateway implements IGateway {
       gateway:        'MERCADO_PAGO',
       rawPayload:     payload,
     }
+  }
+
+  // ─── refundPayment ─────────────────────────────────────────────────────────
+
+  /**
+   * Estorna um pagamento no MercadoPago via POST /v1/payments/{id}/refunds.
+   *
+   * - Estorno total: body vazio. Estorno parcial: { amount } em REAIS (não centavos).
+   * - Idempotência via header X-Idempotency-Key (refund-{paymentId}) — reenvios não
+   *   geram estorno duplicado.
+   * - Pagamento já totalmente estornado: MP retorna 4xx; tratamos como alreadyRefunded
+   *   (operação idempotente bem-sucedida, não erro).
+   * - Timeout / 5xx: GatewayRetryableError — o chamador NÃO deve rebaixar o plano sem
+   *   confirmar o estorno.
+   *
+   * @param gatewayTransactionId paymentId do MP (Payment.gatewayTransactionId)
+   * @param amountCents opcional, estorno parcial em centavos
+   */
+  async refundPayment(gatewayTransactionId: string, amountCents?: number): Promise<RefundResult> {
+    const accessToken = env.MERCADO_PAGO_ACCESS_TOKEN
+    if (!accessToken) {
+      throw new GatewayError('[PAYMENT_010] MERCADO_PAGO_ACCESS_TOKEN não configurado', 'PAYMENT_010', 500)
+    }
+    if (!/^\d+$/.test(gatewayTransactionId)) {
+      throw new GatewayError(`[MERCADO_PAGO] paymentId inválido para refund: ${gatewayTransactionId}`, 'PAYMENT_055', 422)
+    }
+
+    const body = amountCents && amountCents > 0
+      ? JSON.stringify({ amount: Math.round(amountCents) / 100 })
+      : '{}'
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), GATEWAY_TIMEOUT_MS)
+    let response: Response
+    try {
+      response = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(gatewayTransactionId)}/refunds`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          // Idempotência: reenvio com mesma chave não duplica estorno
+          'X-Idempotency-Key': `refund-${gatewayTransactionId}`,
+        },
+        body,
+        signal: controller.signal,
+      })
+    } catch (err) {
+      // Timeout / rede: transitório — sinaliza retry, nunca rebaixa plano sem estornar
+      const msg = err instanceof Error ? err.message : 'erro desconhecido'
+      throw new GatewayRetryableError(`[MERCADO_PAGO] refund falhou (transitório) para ${gatewayTransactionId}: ${msg}`)
+    } finally {
+      clearTimeout(timeout)
+    }
+
+    if (response.ok) {
+      const json = await response.json().catch(() => ({})) as { id?: string | number; status?: string }
+      return {
+        refundId: json.id != null ? String(json.id) : 'unknown',
+        status: json.status ?? 'approved',
+        alreadyRefunded: false,
+      }
+    }
+
+    // 5xx → transitório (retry). 4xx → terminal.
+    const rawError = await response.text().catch(() => '')
+    if (response.status >= 500) {
+      throw new GatewayRetryableError(
+        `[MERCADO_PAGO] refund HTTP ${response.status} (transitório) para ${gatewayTransactionId}: ${rawError.slice(0, 200)}`
+      )
+    }
+
+    // 4xx: já estornado é o caso comum (idempotência) — tratamos como sucesso idempotente.
+    const lower = rawError.toLowerCase()
+    if (lower.includes('already') || lower.includes('refunded') || lower.includes('not allowed') || response.status === 404) {
+      console.warn(`[MERCADO_PAGO] refund idempotente/terminal para ${gatewayTransactionId}: HTTP ${response.status} ${rawError.slice(0, 160)}`)
+      return { refundId: 'already_refunded', status: 'approved', alreadyRefunded: true }
+    }
+
+    throw new GatewayError(
+      `[MERCADO_PAGO] refund rejeitado HTTP ${response.status} para ${gatewayTransactionId}: ${rawError.slice(0, 200)}`,
+      'PAYMENT_056',
+      422
+    )
   }
 
   /**
