@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
             where: { ticker: change.ticker },
             data: {
               currentPrice: change.newPrice,
-              openPrice:    change.newPrice,
+              // openPrice NAO alterado: pertence ao motor (evita divergência de %)
               closePrice:   change.newPrice,
               isHalted:     false,
               haltReason:   null,

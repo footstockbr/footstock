@@ -547,6 +547,11 @@ export class MarketEngine {
         where: { id: state.id },
         data: {
           currentPrice: state.currentPrice,
+          // Persistir openPrice para manter consistência com o cálculo de %
+          // exibido no /mercado (usa DB openPrice). Sem isso, restore-from-seed
+          // ou outras operações admin que alteram DB.openPrice criam divergência
+          // entre o % da página e o % do SSE do motor.
+          openPrice: state.openPrice,
           volume: BigInt(safeVolume),
         },
       })

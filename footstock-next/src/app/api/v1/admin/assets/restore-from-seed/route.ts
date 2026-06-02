@@ -116,7 +116,9 @@ export async function POST(request: NextRequest) {
             data: {
               fairValue:    c.newPrice,
               currentPrice: c.newPrice,
-              openPrice:    c.newPrice,
+              // openPrice NAO é alterado: pertence ao motor (resetado via PRE_OPENING).
+              // Alterar aqui cria divergência: DB.openPrice=70 mas motor.memory.openPrice=1.02
+              // → change% na UI fica errada (ex: -98%) mesmo com preço correto.
               closePrice:   c.newPrice,
               isHalted:     false,
               haltReason:   null,
