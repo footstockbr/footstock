@@ -100,7 +100,7 @@ SUMÁRIO
     O Mercado de Ativos
     3.1 Clubes e Tickers
     O FootStock possui 40 ativos negociáveis — 20 da Série A e 20 da Série B do futebol brasileiro. Cada
-    clube é identificado por um ticker de 4 letras (ex: URU3 = Flamengo, POR4 = Palmeiras). Os nomes
+    clube é identificado por um ticker de 4 letras (ex: URU3 = Flamengo, POR3 = Palmeiras). Os nomes
     dos clubes são ficcionalizados para fins de simulação, mas os fundamentos financeiros são baseados
     em dados reais de 2024/2025.
     3.2 Valuation e Preço IPO

@@ -40,8 +40,8 @@ const SUSPICIOUS_POSTS = [
     daysAgo: 0.21, // 5h atrás
   },
   {
-    content: 'Invista em MAL4 e ganhe 300% em 1 semana. DM para estratégia exclusiva.',
-    ticker: 'MAL4',
+    content: 'Invista em MAL3 e ganhe 300% em 1 semana. DM para estratégia exclusiva.',
+    ticker: 'MAL3',
     flagCount: 4,
     daysAgo: 0.25, // 6h atrás
   },

@@ -68,8 +68,8 @@ describe('resolveTickerFromText', () => {
     expect(await resolveTickerFromText('Flamengo vence por 3 a 0')).toBe('URU3')
   })
 
-  test('[PASSO2] "palmeiras" → POR4', async () => {
-    expect(await resolveTickerFromText('Palmeiras conquista mais um título')).toBe('POR4')
+  test('[PASSO2] "palmeiras" → POR3', async () => {
+    expect(await resolveTickerFromText('Palmeiras conquista mais um título')).toBe('POR3')
   })
 
   test('[PASSO2] "corinthians" → TIM3', async () => {
@@ -84,12 +84,12 @@ describe('resolveTickerFromText', () => {
     expect(await resolveTickerFromText('Vitória vence o Bahia no clássico baiano')).toBe('LEB3')
   })
 
-  test('[PASSO2] "fortaleza" (ticker LEP4, não FOR3 ghost) → LEP4', async () => {
-    expect(await resolveTickerFromText('Fortaleza lidera o Nordeste')).toBe('LEP4')
+  test('[PASSO2] "fortaleza" (ticker LEP3, não FOR3 ghost) → LEP3', async () => {
+    expect(await resolveTickerFromText('Fortaleza lidera o Nordeste')).toBe('LEP3')
   })
 
-  test('[PASSO2] "juventude" (ticker IND4) → IND4', async () => {
-    expect(await resolveTickerFromText('Juventude conquista acesso à Série A')).toBe('IND4')
+  test('[PASSO2] "juventude" (ticker IND3) → IND3', async () => {
+    expect(await resolveTickerFromText('Juventude conquista acesso à Série A')).toBe('IND3')
   })
 
   // ─── Word-boundary: false positives eliminados ────────────────────────────
@@ -105,7 +105,7 @@ describe('resolveTickerFromText', () => {
   })
 
   test('[WB] "influência" NÃO dispara "flu" → null', async () => {
-    // "flu" removido; usar "fluminense" para GUE4
+    // "flu" removido; usar "fluminense" para GUE3
     expect(await resolveTickerFromText('O jogador tem muita influência no vestiário')).toBeNull()
   })
 
@@ -148,7 +148,7 @@ describe('resolveTickerFromText', () => {
   test('[PASSO1] Alias mais longo do DB vence alias mais curto', async () => {
     mockDb([
       { ticker: 'URU3', searchText: 'flamengo,rubro negro carioca' },
-      { ticker: 'TRI3', searchText: 'bahia' },
+      { ticker: 'TFN3', searchText: 'bahia' },
     ])
     // "rubro negro carioca" (18 chars) > "flamengo" (8 chars), ambos mapeiam URU3
     expect(await resolveTickerFromText('O rubro negro carioca domina o campeonato')).toBe('URU3')
@@ -156,9 +156,9 @@ describe('resolveTickerFromText', () => {
 
   // ─── Colisão de aliases: mais longo vence ────────────────────────────────
 
-  test('[COLUSAO] "tricolor carioca" (GUE4) vence "tricolor" ambíguo', async () => {
+  test('[COLUSAO] "tricolor carioca" (GUE3) vence "tricolor" ambíguo', async () => {
     // Tricolor pode ser Bahia, São Paulo ou Grêmio — versão composta é unívoca
-    expect(await resolveTickerFromText('O tricolor carioca passou das laranjeiras')).toBe('GUE4')
+    expect(await resolveTickerFromText('O tricolor carioca passou das laranjeiras')).toBe('GUE3')
   })
 
   test('[COLUSAO] "atletico mineiro" (GAL3) resolve antes de "atletico"', async () => {
@@ -170,9 +170,9 @@ describe('resolveTickerFromText', () => {
   test('[ACTIVE] ticker real → true', () => {
     expect(isActiveTicker('URU3')).toBe(true)
     expect(isActiveTicker('uru3')).toBe(true)   // case-insensitive
-    expect(isActiveTicker('LEP4')).toBe(true)   // tickers corrigidos (não FOR3)
+    expect(isActiveTicker('LEP3')).toBe(true)   // tickers corrigidos (não FOR3)
     expect(isActiveTicker('LEB3')).toBe(true)   // não VIT3
-    expect(isActiveTicker('IND4')).toBe(true)   // não JUV3
+    expect(isActiveTicker('IND3')).toBe(true)   // não JUV3
   })
 
   test('[ACTIVE] ticker ghost → false', () => {

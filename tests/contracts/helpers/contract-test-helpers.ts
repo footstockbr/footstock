@@ -78,14 +78,14 @@ try {
   // Fallback: tickers canônicos ficcionais do INTAKE (40 ativos)
   // TODO: substituir quando lib/constants/tickers.ts estiver disponível
   CANONICAL_TICKERS = [
-    'URU3', 'POR4', 'TIM3', 'TRI4', 'GAL3',
-    'FOG3', 'COL3', 'IMO3', 'RAP3', 'MAL4',
-    'TRI3', 'GUE4', 'TOR3', 'LEM3', 'BAL4',
-    'FUR3', 'VOA4', 'CON3', 'LEA3', 'LEB3',
-    'COE3', 'CAV4', 'DRA3', 'LEI4', 'PAN3',
-    'VOZ3', 'GAP3', 'TIG4', 'DOU4', 'LEP4',
-    'PER3', 'IND4', 'TUB3', 'NAF3', 'TIV3',
-    'FAS3', 'MAC4', 'ABT4', 'LEI3', 'TIS3',
+    'URU3', 'POR3', 'TIM3', 'TRI3', 'GAL3',
+    'FOG3', 'COL3', 'IMO3', 'RAP3', 'MAL3',
+    'TFN3', 'GUE3', 'TOR3', 'LEM3', 'BAL3',
+    'FUR3', 'VOA3', 'CON3', 'LEA3', 'LEB3',
+    'COE3', 'CAV3', 'DRA3', 'LDI3', 'PAN3',
+    'VOZ3', 'GAP3', 'TIG3', 'DOU3', 'LEP3',
+    'PER3', 'IND3', 'TUB3', 'NAF3', 'TIV3',
+    'FAS3', 'MAC3', 'ABT3', 'LEI3', 'TIS3',
   ]
 }
 

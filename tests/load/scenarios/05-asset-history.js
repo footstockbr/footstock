@@ -26,7 +26,7 @@ const latencyTrend = new Trend('asset_history_latency_ms')
 const SLO_P95 = 500
 const SLO_P99 = 1000
 
-const TICKERS = ['URU3', 'POR4', 'TIM3', 'VOZ3']
+const TICKERS = ['URU3', 'POR3', 'TIM3', 'VOZ3']
 const PERIODS = ['1h', '1d', '5m']
 
 export const options = {

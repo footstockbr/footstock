@@ -20,7 +20,7 @@ import type { AssetState, ClusterParams } from '../../types/motor.types'
 
 const stateAfterDrift = (): AssetState => ({
   id: 'asset_cb',
-  ticker: 'POR4',
+  ticker: 'POR3',
   cluster: 'A_TOP',
   state: 'SP',
   // Preço derivou ~18% acima da âncora de abertura do dia e disparou o CB.

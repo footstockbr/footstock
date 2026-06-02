@@ -100,10 +100,10 @@ describe('NewsClassifier', () => {
     mockCreate
       .mockRejectedValueOnce(connError())
       .mockRejectedValueOnce(connError())
-      .mockResolvedValue(sonnetsResponse({ ticker: 'POR4', sentiment: 0.5, impactCategory: 'CONTRATACAO', relevance: 0.7 }))
+      .mockResolvedValue(sonnetsResponse({ ticker: 'POR3', sentiment: 0.5, impactCategory: 'CONTRATACAO', relevance: 0.7 }))
 
     const result = await classifier.classify(makeRawItem())
-    expect(result.ticker).toBe('POR4')
+    expect(result.ticker).toBe('POR3')
     expect(logger.error).not.toHaveBeenCalled()
   }, 10_000)
 

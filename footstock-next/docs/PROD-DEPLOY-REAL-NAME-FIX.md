@@ -75,7 +75,7 @@ Railway aciona build do Dockerfile, depois:
 psql "$PROD_DATABASE_URL" -c "SELECT migration_name, finished_at FROM _prisma_migrations WHERE migration_name LIKE '%M056%' OR migration_name LIKE '%M053-add-asset-players%';"
 
 # 3.2 Confirmar real_name populado nos 40
-psql "$PROD_DATABASE_URL" -c "SELECT COUNT(*) AS canonical_null FROM assets WHERE real_name IS NULL AND ticker IN ('URU3','POR4','TIM3','TRI4','GAL3','IMO3','COL3','GUE4','BAL4','MAL4','FOG3','FUR3','FOR3','TRI3','RAP3','RBB3','CUI3','VIT3','JUV3','MIR3','LEI3','NTL3','AVA3','GOI3','CHA3','PON3','GUA3','OPE3','SAM3','TIS3','LON3','FIG3','PAY3','CFC3','AME3','BSA3','CRB3','CSA3','ITA3','TON3');"
+psql "$PROD_DATABASE_URL" -c "SELECT COUNT(*) AS canonical_null FROM assets WHERE real_name IS NULL AND ticker IN ('URU3','POR3','TIM3','TRI3','GAL3','IMO3','COL3','GUE3','BAL3','MAL3','FOG3','FUR3','FOR3','TFN3','RAP3','RBB3','CUI3','VIT3','JUV3','MIR3','LEI3','NTL3','AVA3','GOI3','CHA3','PON3','GUA3','OPE3','SAM3','TIS3','LON3','FIG3','PAY3','CFC3','AME3','BSA3','CRB3','CSA3','ITA3','TON3');"
 # Esperado: 0
 
 # 3.3 Hit no endpoint publico (com cache CDN de 5min+10min stale — pode levar ate 15min para refletir)

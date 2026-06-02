@@ -24,11 +24,11 @@ import { prisma } from '@/lib/prisma'
 // Usado para validar saídas de LLM e para o fallback hardcoded.
 // ---------------------------------------------------------------------------
 export const ACTIVE_TICKERS = new Set([
-  'ABT4', 'BAL4', 'CAV4', 'COE3', 'COL3', 'CON3', 'DOU4', 'DRA3',
-  'FAS3', 'FOG3', 'FUR3', 'GAL3', 'GAP3', 'GUE4', 'IMO3', 'IND4',
-  'LEA3', 'LEB3', 'LEI3', 'LEI4', 'LEM3', 'LEP4', 'MAC4', 'MAL4',
-  'NAF3', 'PAN3', 'PER3', 'POR4', 'RAP3', 'TIG4', 'TIM3', 'TIS3',
-  'TIV3', 'TOR3', 'TRI3', 'TRI4', 'TUB3', 'URU3', 'VOA4', 'VOZ3',
+  'ABT3', 'BAL3', 'CAV3', 'COE3', 'COL3', 'CON3', 'DOU3', 'DRA3',
+  'FAS3', 'FOG3', 'FUR3', 'GAL3', 'GAP3', 'GUE3', 'IMO3', 'IND3',
+  'LEA3', 'LEB3', 'LEI3', 'LDI3', 'LEM3', 'LEP3', 'MAC3', 'MAL3',
+  'NAF3', 'PAN3', 'PER3', 'POR3', 'RAP3', 'TIG3', 'TIM3', 'TIS3',
+  'TIV3', 'TOR3', 'TFN3', 'TRI3', 'TUB3', 'URU3', 'VOA3', 'VOZ3',
 ])
 
 // ---------------------------------------------------------------------------
@@ -50,7 +50,7 @@ export const CANONICAL_TEAM_ALIASES: Record<string, string[]> = {
     'flamengo', 'fla', 'urubu', 'rubro-negro', 'rubro negro',
     'cr flamengo', 'flamenguistas', 'nacao rubro-negra',
   ],
-  POR4: [
+  POR3: [
     'palmeiras', 'verdao', 'porco', 'se palmeiras',
     'alviverde', 'palmeirenses', 'palestra italia',
   ],
@@ -58,7 +58,7 @@ export const CANONICAL_TEAM_ALIASES: Record<string, string[]> = {
     'corinthians', 'timao', 'coringao', 'sport club corinthians',
     'timozao', 'fiel torcida', 'sccp',
   ],
-  TRI4: [
+  TRI3: [
     'sao paulo', 'spfc', 'sao paulo fc',
     'tricolor paulista', 'soberano', 'morumbi', 'morumbis',
   ],
@@ -74,15 +74,15 @@ export const CANONICAL_TEAM_ALIASES: Record<string, string[]> = {
     'internacional', 'colorado', 'inter de porto alegre',
     'scr internacional', 'colorado gaucho',
   ],
-  GUE4: [
+  GUE3: [
     'fluminense', 'fluminense fc', 'tricolor carioca',
     'das laranjeiras', 'guerreiro carioca',
   ],
-  BAL4: [
+  BAL3: [
     'santos', 'peixe', 'santos fc', 'meninos da vila',
     'alvinegro praiano', 'vila belmiro', 'santistas',
   ],
-  MAL4: [
+  MAL3: [
     'vasco', 'vasco da gama', 'cruzmaltino', 'cruz-maltino',
     'gigante da colina', 'sao januario', 'vasco rj',
   ],
@@ -94,7 +94,7 @@ export const CANONICAL_TEAM_ALIASES: Record<string, string[]> = {
     'athletico-pr', 'athletico paranaense', 'furacao',
     'clube athletico paranaense', 'cap', 'athletico curitibano',
   ],
-  TRI3: [
+  TFN3: [
     'bahia', 'tricolor baiano', 'esquadrao de aco',
     'esporte clube bahia', 'ec bahia', 'bahianos',
   ],
@@ -103,7 +103,7 @@ export const CANONICAL_TEAM_ALIASES: Record<string, string[]> = {
     'cabuloso', 'cruzeirenses', 'cruzeiro mg',
   ],
   // ─── Série B e outros ────────────────────────────────────────────────────
-  LEP4: [
+  LEP3: [
     'fortaleza', 'leao do pici', 'fortaleza ec',
     'tricolor do pici', 'tricolor cearense', 'fortaleza ce',
   ],
@@ -111,7 +111,7 @@ export const CANONICAL_TEAM_ALIASES: Record<string, string[]> = {
     'vitoria', 'ec vitoria', 'leao da barra',
     'rubro-negro baiano', 'vitoria ba', 'vitoria salvador', 'ecvitoria',
   ],
-  IND4: [
+  IND3: [
     'juventude', 'ec juventude', 'caxias juventude',
     'papo juventude', 'indio juventude', 'juventude rs',
   ],
@@ -119,7 +119,7 @@ export const CANONICAL_TEAM_ALIASES: Record<string, string[]> = {
     'bragantino', 'rb bragantino', 'red bull bragantino',
     'massa bruta', 'touro da mogiana', 'braganca paulista',
   ],
-  DOU4: [
+  DOU3: [
     'cuiaba', 'cuiaba ec', 'dourado do pantanal',
     'cuiabanos', 'pantanal cuiaba',
   ],
@@ -131,7 +131,7 @@ export const CANONICAL_TEAM_ALIASES: Record<string, string[]> = {
     'novorizontino', 'novorizontino fc',
     'tigrinho do vale do peixe', 'novo horizonte',
   ],
-  LEI4: [
+  LDI3: [
     'avai', 'avai fc', 'leao da ilha sc',
     'avaiano', 'avai florianopolis',
   ],
@@ -139,7 +139,7 @@ export const CANONICAL_TEAM_ALIASES: Record<string, string[]> = {
     'chapecoense', 'chape', 'chapecoense sc',
     'verdao do oeste', 'chapeco',
   ],
-  MAC4: [
+  MAC3: [
     'ponte preta', 'aa ponte preta', 'ponte preta aa',
     'macaquinhos', 'majestoso ponte',
   ],
@@ -149,7 +149,7 @@ export const CANONICAL_TEAM_ALIASES: Record<string, string[]> = {
   LEA3: [
     'paysandu', 'papao', 'paysandu sc', 'leao azul', 'paysan',
   ],
-  VOA4: [
+  VOA3: [
     'coritiba', 'coxa-branca', 'coritiba fc',
     'couto pereira', 'coritibanos', 'alviverde paranaense',
   ],
@@ -169,7 +169,7 @@ export const CANONICAL_TEAM_ALIASES: Record<string, string[]> = {
     'operario', 'operario-pr', 'operario ferroviario',
     'fantasma operario', 'operario esporte clube',
   ],
-  CAV4: [
+  CAV3: [
     'tombense', 'tombense fc', 'cavalo de aco',
     'tombos', 'tombense mg',
   ],
@@ -184,7 +184,7 @@ export const CANONICAL_TEAM_ALIASES: Record<string, string[]> = {
     'ceara', 'vozao', 'ceara sc', 'ceara sporting club',
     'cearense', 'vozao ce',
   ],
-  ABT4: [
+  ABT3: [
     'sao bernardo', 'sao bernardo fc',
     'tigre do grande abc', 'ec sao bernardo',
   ],
@@ -200,7 +200,7 @@ export const CANONICAL_TEAM_ALIASES: Record<string, string[]> = {
     'nautico', 'timbu', 'nautico recife',
     'clube nautico capibaribe', 'timbu pernambucano',
   ],
-  TIG4: [
+  TIG3: [
     'joinville', 'jec', 'joinville esporte clube',
     'joinvilenses', 'joinville sc',
   ],

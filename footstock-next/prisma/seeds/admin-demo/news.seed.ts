@@ -43,7 +43,7 @@ const newsSeed = async () => {
       },
       {
         id: 'n002',
-        title: 'POR4 reforça elenco com contratações milionárias',
+        title: 'POR3 reforça elenco com contratações milionárias',
         content:
           'Clube português anuncia três novas contratações de peso para o elenco. Investimento total estimado em €5 milhões para reforçar defesa e ataque.',
         impact: 'ESPORTIVA_MAJORITARIA',
@@ -94,9 +94,9 @@ const newsSeed = async () => {
       },
       {
         id: 'n005',
-        title: 'BAL4 promovida à Série A após campanha histórica',
+        title: 'BAL3 promovida à Série A após campanha histórica',
         content:
-          'Após 5 anos na Série B, BAL4 conquistou seu retorno à primeira divisão com campanha impressionante. Torcida celebra retorno histórico.',
+          'Após 5 anos na Série B, BAL3 conquistou seu retorno à primeira divisão com campanha impressionante. Torcida celebra retorno histórico.',
         impact: 'ESPORTIVA_MAJORITARIA',
         sentiment: 'BULLISH',
         assetIds: ['bal4'],

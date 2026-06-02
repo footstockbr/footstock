@@ -27,7 +27,7 @@ const SLO_P95 = 200
 const SLO_P99 = 500
 
 // Tickers reais do seed data (A_TOP + B_LIQUID)
-const TICKERS = ['URU3', 'POR4', 'TIM3', 'FOG3', 'GAL3', 'VOZ3', 'LEP4', 'COE3']
+const TICKERS = ['URU3', 'POR3', 'TIM3', 'FOG3', 'GAL3', 'VOZ3', 'LEP3', 'COE3']
 
 export const options = {
   scenarios: {

@@ -76,8 +76,8 @@ function toSerieBSeed(index: number, ticker: string): ClubSeedData {
 // ─── Club tickers in order (must match CLUBS array in clubs.ts) ─────────────
 
 const SERIE_A_TICKERS = [
-  'URU3', 'POR4', 'TIM3', 'TRI4', 'GAL3', 'IMO3', 'COL3', 'GUE4',
-  'BAL4', 'MAL4', 'FOG3', 'FUR3', 'FOR3', 'TRI3', 'RAP3', 'RBB3',
+  'URU3', 'POR3', 'TIM3', 'TRI3', 'GAL3', 'IMO3', 'COL3', 'GUE3',
+  'BAL3', 'MAL3', 'FOG3', 'FUR3', 'FOR3', 'TFN3', 'RAP3', 'RBB3',
   'CUI3', 'VIT3', 'JUV3', 'MIR3',
 ]
 

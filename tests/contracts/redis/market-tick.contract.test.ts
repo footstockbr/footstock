@@ -61,7 +61,7 @@ describe('Contrato market:tick', () => {
   })
 
   it('[SUCCESS] assertContractShape valida payload correto sem lançar erro', () => {
-    const tick = createMockTick('POR4')
+    const tick = createMockTick('POR3')
     expect(() =>
       assertContractShape(MarketTickSchema, tick, 'market:tick'),
     ).not.toThrow()

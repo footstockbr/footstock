@@ -17,17 +17,17 @@ const ALIAS_SEED: AliasSeedEntry[] = [
   { alias: 'FLA4', assetTicker: 'URU3' },
   { alias: 'FLM3', assetTicker: 'URU3' },
   { alias: 'FLM4', assetTicker: 'URU3' },
-  // Palmeiras → POR4
-  { alias: 'PAL3', assetTicker: 'POR4' },
-  { alias: 'PAL4', assetTicker: 'POR4' },
-  { alias: 'PALM4', assetTicker: 'POR4' },
+  // Palmeiras → POR3
+  { alias: 'PAL3', assetTicker: 'POR3' },
+  { alias: 'PAL4', assetTicker: 'POR3' },
+  { alias: 'PALM4', assetTicker: 'POR3' },
   // Corinthians → TIM3
   { alias: 'COR3', assetTicker: 'TIM3' },
   { alias: 'COR4', assetTicker: 'TIM3' },
   { alias: 'CORI4', assetTicker: 'TIM3' },
-  // São Paulo → TRI4
-  { alias: 'SAO3', assetTicker: 'TRI4' },
-  { alias: 'SPFC4', assetTicker: 'TRI4' },
+  // São Paulo → TRI3
+  { alias: 'SAO3', assetTicker: 'TRI3' },
+  { alias: 'SPFC4', assetTicker: 'TRI3' },
   // Atlético-MG → GAL3
   { alias: 'CAM3', assetTicker: 'GAL3' },
   { alias: 'ATL3', assetTicker: 'GAL3' },
@@ -47,24 +47,24 @@ const ALIAS_SEED: AliasSeedEntry[] = [
   // Cruzeiro → RAP3
   { alias: 'CRU3', assetTicker: 'RAP3' },
   { alias: 'CRU4', assetTicker: 'RAP3' },
-  // Vasco → MAL4
-  { alias: 'VAS3', assetTicker: 'MAL4' },
-  { alias: 'VAS4', assetTicker: 'MAL4' },
-  // Bahia → TRI3
-  { alias: 'BAH3', assetTicker: 'TRI3' },
-  { alias: 'BAH4', assetTicker: 'TRI3' },
-  // Fluminense → GUE4
-  { alias: 'FLU3', assetTicker: 'GUE4' },
-  { alias: 'FLU4', assetTicker: 'GUE4' },
+  // Vasco → MAL3
+  { alias: 'VAS3', assetTicker: 'MAL3' },
+  { alias: 'VAS4', assetTicker: 'MAL3' },
+  // Bahia → TFN3
+  { alias: 'BAH3', assetTicker: 'TFN3' },
+  { alias: 'BAH4', assetTicker: 'TFN3' },
+  // Fluminense → GUE3
+  { alias: 'FLU3', assetTicker: 'GUE3' },
+  { alias: 'FLU4', assetTicker: 'GUE3' },
   // RB Bragantino → RBB3
   { alias: 'RBB4', assetTicker: 'RBB3' },
   { alias: 'BRAG3', assetTicker: 'RBB3' },
   // Fortaleza → FOR3
   { alias: 'FOR4', assetTicker: 'FOR3' },
   { alias: 'FORT3', assetTicker: 'FOR3' },
-  // Santos → BAL4
-  { alias: 'SAN3', assetTicker: 'BAL4' },
-  { alias: 'SAN4', assetTicker: 'BAL4' },
+  // Santos → BAL3
+  { alias: 'SAN3', assetTicker: 'BAL3' },
+  { alias: 'SAN4', assetTicker: 'BAL3' },
   // Athletico-PR → FUR3
   { alias: 'CAP3', assetTicker: 'FUR3' },
   { alias: 'CAP4', assetTicker: 'FUR3' },

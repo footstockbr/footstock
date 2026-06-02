@@ -28,7 +28,7 @@ const SLO_P95 = 500
 const SLO_P99 = 1000
 const CACHE_MISS_THRESHOLD_MS = 2000 // cache miss pode ser mais lento
 
-const TICKERS_FILTER = ['URU3', 'POR4', undefined] // undefined = sem filtro
+const TICKERS_FILTER = ['URU3', 'POR3', undefined] // undefined = sem filtro
 
 export const options = {
   scenarios: {

@@ -35,7 +35,7 @@ const TEST_USERS: TestUser[] = [
     planType: 'JOGADOR',
     adminRole: 'ADMINISTRADOR',
     fsBalance: 2000,
-    favoriteClub: 'POR4',
+    favoriteClub: 'POR3',
   },
   {
     email: 'monitor@foot-stock.test',
@@ -53,7 +53,7 @@ const TEST_USERS: TestUser[] = [
     planType: 'JOGADOR',
     adminRole: 'EDITOR',
     fsBalance: 2000,
-    favoriteClub: 'TRI4',
+    favoriteClub: 'TRI3',
   },
   {
     email: 'moderador@foot-stock.test',
@@ -71,7 +71,7 @@ const TEST_USERS: TestUser[] = [
     planType: 'CRAQUE',
     adminRole: undefined,
     fsBalance: 5000,
-    favoriteClub: 'GUE4',
+    favoriteClub: 'GUE3',
   },
   {
     email: 'lenda@foot-stock.test',

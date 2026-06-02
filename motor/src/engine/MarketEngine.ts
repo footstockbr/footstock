@@ -166,15 +166,15 @@ export class MarketEngine {
   // MANTER EM SINCRONIA com ipo-pricing-2026.ts ao recalibrar.
   private static readonly CANONICAL_FAIR_VALUES: Record<string, number> = {
     // Série A
-    URU3: 40.00, POR4: 36.76, TIM3: 33.60, TRI4: 32.21, GUE4: 28.60,
+    URU3: 40.00, POR3: 36.76, TIM3: 33.60, TRI3: 32.21, GUE3: 28.60,
     GAL3: 26.01, FOG3: 23.14, COL3: 22.75, TOR3: 20.29, FUR3: 18.65,
-    IMO3: 17.18, BAL4: 16.35, MAL4: 15.30, RAP3: 13.95, TRI3: 12.22,
-    LEB3: 11.28, VOA4: 10.45, LEM3: 9.47, CON3: 8.07, LEA3: 8.00,
+    IMO3: 17.18, BAL3: 16.35, MAL3: 15.30, RAP3: 13.95, TFN3: 12.22,
+    LEB3: 11.28, VOA3: 10.45, LEM3: 9.47, CON3: 8.07, LEA3: 8.00,
     // Série B
-    LEP4: 12.00, VOZ3: 10.56, LEI3: 8.80, COE3: 8.00, IND4: 8.32,
-    DOU4: 11.15, GAP3: 5.78, TIG4: 8.98, PER3: 4.51, DRA3: 7.19,
-    LEI4: 7.00, PAN3: 4.79, TIV3: 5.83, TIS3: 5.40, FAS3: 4.33,
-    MAC4: 3.75, NAF3: 3.75, ABT4: 3.00, TUB3: 3.22, CAV4: 3.03,
+    LEP3: 12.00, VOZ3: 10.56, LEI3: 8.80, COE3: 8.00, IND3: 8.32,
+    DOU3: 11.15, GAP3: 5.78, TIG3: 8.98, PER3: 4.51, DRA3: 7.19,
+    LDI3: 7.00, PAN3: 4.79, TIV3: 5.83, TIS3: 5.40, FAS3: 4.33,
+    MAC3: 3.75, NAF3: 3.75, ABT3: 3.00, TUB3: 3.22, CAV3: 3.03,
   }
 
   private async loadAssets(): Promise<void> {

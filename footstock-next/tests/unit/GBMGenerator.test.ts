@@ -30,11 +30,11 @@ describe('GBMGenerator', () => {
   describe('hashTicker', () => {
     it('retorna um numero consistente para o mesmo ticker', () => {
       expect(hashTicker('URU3')).toBe(hashTicker('URU3'))
-      expect(hashTicker('POR4')).toBe(hashTicker('POR4'))
+      expect(hashTicker('POR3')).toBe(hashTicker('POR3'))
     })
 
     it('retorna numeros diferentes para tickers diferentes', () => {
-      expect(hashTicker('URU3')).not.toBe(hashTicker('POR4'))
+      expect(hashTicker('URU3')).not.toBe(hashTicker('POR3'))
       expect(hashTicker('TIM3')).not.toBe(hashTicker('GAL3'))
     })
   })
@@ -239,7 +239,7 @@ describe('GBMGenerator', () => {
 
     it('gera resultados diferentes para tickers diferentes', () => {
       const candles1 = generateCandlesForPeriod('URU3', 120, 'A_TOP', '1D', endDate)
-      const candles2 = generateCandlesForPeriod('POR4', 110, 'A_TOP', '1D', endDate)
+      const candles2 = generateCandlesForPeriod('POR3', 110, 'A_TOP', '1D', endDate)
 
       // Pelo menos alguns closes devem ser diferentes
       const closes1 = candles1.map((c) => c.close)

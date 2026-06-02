@@ -78,7 +78,7 @@ describe('PATCH /api/v1/me — Mass Assignment (THREAT-001)', () => {
 
     const req = buildNextRequest('PATCH', '/api/v1/me', {
       name: 'Nome Atualizado',
-      favoriteClub: 'POR4',
+      favoriteClub: 'POR3',
     })
 
     const res = await handler.PATCH(req as NextRequest)
@@ -87,7 +87,7 @@ describe('PATCH /api/v1/me — Mass Assignment (THREAT-001)', () => {
     // Verificar no banco que a atualização foi persistida
     const dbUser = await testPrisma.user.findUnique({ where: { id: testUser.id } })
     expect(dbUser!.name).toBe('Nome Atualizado')
-    expect(dbUser!.favoriteClub).toBe('POR4')
+    expect(dbUser!.favoriteClub).toBe('POR3')
   })
 
   it('[seguranca] não deve permitir elevar adminRole via PATCH → THREAT-001', async () => {
