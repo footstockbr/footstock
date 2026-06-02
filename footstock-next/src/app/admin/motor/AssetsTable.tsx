@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ShieldBan, ShieldCheck, Zap } from 'lucide-react'
+import { ShieldCheck, Zap } from 'lucide-react'
+import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { hasAdminRole } from '@/lib/utils/admin-roles'
@@ -43,7 +44,6 @@ interface AssetsTableProps {
 export function AssetsTable({ adminRole }: AssetsTableProps) {
   const queryClient = useQueryClient()
   const canHalt = hasAdminRole(adminRole, 'ADMINISTRADOR')
-  const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
   const [confirmAction, setConfirmAction] = useState<{
     ticker: string
     action: 'FORCE' | 'RELEASE'
@@ -57,8 +57,11 @@ export function AssetsTable({ adminRole }: AssetsTableProps) {
   })
 
   const showToast = (msg: string, type: 'ok' | 'err' = 'ok') => {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 3000)
+    if (type === 'ok') {
+      toast.success(msg, { duration: 3000 })
+    } else {
+      toast.error(msg, { duration: 3000 })
+    }
   }
 
   const haltMutation = useMutation({
@@ -124,16 +127,6 @@ export function AssetsTable({ adminRole }: AssetsTableProps) {
 
   return (
     <div data-testid="admin-motor-assets-table" className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4 relative">
-      {/* Toast */}
-      {toast && (
-        <div className={cn(
-          'absolute top-3 right-3 z-10 text-xs px-3 py-1.5 rounded-lg font-medium',
-          toast.type === 'ok' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
-        )}>
-          {toast.msg}
-        </div>
-      )}
-
       {/* Modal de confirmacao */}
       {confirmAction && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">

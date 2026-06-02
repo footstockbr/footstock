@@ -13,6 +13,7 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -85,7 +86,6 @@ export function AliasManagement({ ticker, displayName }: AliasManagementProps) {
   const queryClient = useQueryClient()
   const [newAlias, setNewAlias] = useState('')
   const [aliasError, setAliasError] = useState<string | null>(null)
-  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null)
 
   const queryKey = ['admin', 'aliases', ticker]
@@ -131,8 +131,11 @@ export function AliasManagement({ ticker, displayName }: AliasManagementProps) {
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   function showToast(type: 'success' | 'error', message: string) {
-    setToast({ type, message })
-    setTimeout(() => setToast(null), 4000)
+    if (type === 'success') {
+      toast.success(message, { duration: 3000 })
+    } else {
+      toast.error(message, { duration: 3000 })
+    }
   }
 
   function handleAdd() {
@@ -170,20 +173,6 @@ export function AliasManagement({ ticker, displayName }: AliasManagementProps) {
           {aliases.length} alias{aliases.length !== 1 ? 'es' : ''}
         </span>
       </div>
-
-      {/* Toast feedback */}
-      {toast && (
-        <div
-          role="alert"
-          className={`rounded-md px-3 py-2 text-sm ${
-            toast.type === 'success'
-              ? 'bg-green-900/50 text-green-300'
-              : 'bg-red-900/50 text-red-300'
-          }`}
-        >
-          {toast.message}
-        </div>
-      )}
 
       {/* Lista de aliases */}
       {isLoading && (

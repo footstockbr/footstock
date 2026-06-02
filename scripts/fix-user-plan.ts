@@ -95,7 +95,7 @@ async function main() {
     const cancelled = await tx.subscription.updateMany({
       where: {
         userId: user.id,
-        status: { in: ['ACTIVE', 'TRIAL', 'TRIALING', 'PENDING', 'PAST_DUE', 'CANCELLATION_LOCK'] },
+        status: { in: ['ACTIVE', 'TRIAL', 'PENDING', 'PAST_DUE', 'CANCELLATION_LOCK'] },
       },
       data: { status: 'CANCELLED', cancelledAt: now },
     })

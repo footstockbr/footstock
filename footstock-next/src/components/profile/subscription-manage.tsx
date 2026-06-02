@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { toast } from "sonner";
 import { Button, Modal } from "@/components/ui";
 import { CheckoutButton } from "@/components/payments/CheckoutButton";
 
@@ -12,7 +13,6 @@ export function SubscriptionManage({ planType }: SubscriptionManageProps) {
   const [isCancelOpen, setIsCancelOpen] = useState(false);
   const [isChangeOpen, setIsChangeOpen] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
-  const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
   const isCraque = planType === "CRAQUE";
   const isLenda  = planType === "LENDA";
@@ -24,10 +24,10 @@ export function SubscriptionManage({ planType }: SubscriptionManageProps) {
     try {
       const res = await fetch("/api/v1/subscriptions/me", { method: "DELETE" });
       if (!res.ok) throw new Error();
-      setToast({ type: "success", msg: "Cancelamento solicitado. Você mantém acesso até o fim do período." });
+      toast.success("Cancelamento solicitado. Você mantém acesso até o fim do período.", { duration: 2000 });
       setIsCancelOpen(false);
     } catch {
-      setToast({ type: "error", msg: "Não foi possível cancelar. Tente novamente." });
+      toast.error("Não foi possível cancelar. Tente novamente.", { duration: 2000 });
     } finally {
       setIsCancelling(false);
     }
@@ -35,27 +35,6 @@ export function SubscriptionManage({ planType }: SubscriptionManageProps) {
 
   return (
     <>
-      {toast && (
-        <div
-          role="alert"
-          className={`fixed bottom-24 left-4 right-4 z-50 p-3 rounded-lg text-sm ${
-            toast.type === "success"
-              ? "bg-[rgba(34,197,94,.15)] border border-[rgba(34,197,94,.3)] text-[#2EBD85]"
-              : "bg-[rgba(239,68,68,.15)] border border-[rgba(239,68,68,.3)] text-[#F6465D]"
-          }`}
-        >
-          {toast.msg}
-          <button
-            type="button"
-            onClick={() => setToast(null)}
-            className="ml-2 opacity-70 hover:opacity-100"
-            aria-label="Fechar aviso"
-          >
-            ×
-          </button>
-        </div>
-      )}
-
       <div className="flex items-center gap-2">
         {(isCraque || isLenda) && (
           <Button
