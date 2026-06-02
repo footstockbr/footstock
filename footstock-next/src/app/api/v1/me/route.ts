@@ -46,6 +46,21 @@ async function patchHandler(req: NextRequest, { user }: AuthContext) {
     return NextResponse.json({ success: false, errors }, { status: 400 })
   }
 
+  // favoriteClub tem FK para assets.ticker (M059). Validar existência aqui evita
+  // um erro 500 de violação de FK e devolve um 400 amigável (Zero Silencio).
+  if (parsed.data.favoriteClub) {
+    const club = await prisma.asset.findUnique({
+      where: { ticker: parsed.data.favoriteClub },
+      select: { ticker: true },
+    })
+    if (!club) {
+      return NextResponse.json(
+        { success: false, errors: [{ field: 'favoriteClub', message: 'Clube favorito inválido.' }] },
+        { status: 400 },
+      )
+    }
+  }
+
   // Apenas campos presentes no body são atualizados (undefined = ignorado pelo Prisma)
   const updated = await prisma.user.update({
     where: { id: user.id },

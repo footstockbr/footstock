@@ -80,7 +80,7 @@ const TEST_USERS: TestUser[] = [
     planType: 'LENDA',
     adminRole: undefined,
     fsBalance: 25000,
-    favoriteClub: 'VOL4',
+    favoriteClub: 'MAL3',
   },
   {
     email: 'jogador@foot-stock.test',

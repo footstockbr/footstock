@@ -59,9 +59,11 @@ export async function deleteAccount(
         name: 'Usuário Deletado',
         phone: null,
         cpfHash: anonymizedCpfHash,
-        // birthDate e favoriteClub são NOT NULL no schema — usar valores placeholder
+        // birthDate é NOT NULL — placeholder. favoriteClub é nullable e tem FK
+        // para assets.ticker (M059): anonimização zera para NULL (um placeholder
+        // inválido tipo 'DEL' violaria a foreign key).
         birthDate: new Date('1900-01-01'), // Data claramente falsa (PII removido)
-        favoriteClub: 'DEL',              // Placeholder de 3 chars (campo VarChar 10)
+        favoriteClub: null,
         adminRole: null,
         tourCompleted: false,
         investorProfile: 'INICIANTE',

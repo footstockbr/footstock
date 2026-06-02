@@ -23,7 +23,7 @@ const FALLBACK_POOL: RawNewsItem[] = [
     publishedAt: '2026-01-15T10:00:00.000Z',
   },
   {
-    url: 'https://www.espnbrasil.com.br/futebol/noticia/placeholder-por4-001',
+    url: 'https://www.espnbrasil.com.br/futebol/noticia/placeholder-por3-001',
     title: '[POR3] Porco do Parque anuncia contratação de peso',
     description: 'Reforço ofensivo eleva expectativa de desempenho esportivo e financeiro.',
     source: 'ESPN Brasil',
@@ -37,7 +37,7 @@ const FALLBACK_POOL: RawNewsItem[] = [
     publishedAt: '2026-01-17T09:00:00.000Z',
   },
   {
-    url: 'https://ge.globo.com/futebol/noticia/placeholder-bal4-001',
+    url: 'https://ge.globo.com/futebol/noticia/placeholder-bal3-001',
     title: '[BAL3] Baleia da Vila sofre goleada e cai na tabela',
     description: 'Sequência negativa pressiona sentimento e aumenta volatilidade no papel.',
     source: 'Globo Esporte',
@@ -72,14 +72,14 @@ const FALLBACK_POOL: RawNewsItem[] = [
     publishedAt: '2026-01-22T19:00:00.000Z',
   },
   {
-    url: 'https://www.lance.com.br/noticia/placeholder-tri4-001',
+    url: 'https://www.lance.com.br/noticia/placeholder-tri3-001',
     title: '[TRI3] Tricolor do Morumbi anuncia novo técnico internacional',
     description: 'Mudança no comando técnico aumenta expectativa de recuperação de performance.',
     source: 'Lance!',
     publishedAt: '2026-01-23T15:00:00.000Z',
   },
   {
-    url: 'https://ge.globo.com/futebol/noticia/placeholder-dou4-001',
+    url: 'https://ge.globo.com/futebol/noticia/placeholder-dou3-001',
     title: '[DOU3] Dourado do Pantanal vende destaque para o exterior',
     description: 'Negócio melhora caixa e gera leitura positiva para fundamentos do clube.',
     source: 'Globo Esporte',
@@ -93,7 +93,7 @@ const FALLBACK_POOL: RawNewsItem[] = [
     publishedAt: '2026-01-25T22:00:00.000Z',
   },
   {
-    url: 'https://www.lance.com.br/noticia/placeholder-por4-002',
+    url: 'https://www.lance.com.br/noticia/placeholder-por3-002',
     title: '[POR3] Porco do Parque vence clássico e confirma favoritismo',
     description: 'Sequência de bons resultados sustenta tendência de alta no ativo.',
     source: 'Lance!',
@@ -107,7 +107,7 @@ const FALLBACK_POOL: RawNewsItem[] = [
     publishedAt: '2026-01-27T10:00:00.000Z',
   },
   {
-    url: 'https://www.espnbrasil.com.br/futebol/noticia/placeholder-lep4-001',
+    url: 'https://www.espnbrasil.com.br/futebol/noticia/placeholder-lep3-001',
     title: '[LEP3] Leao do Pici é eliminado precocemente em mata-mata',
     description: 'Queda em competição amplia risco esportivo no curto prazo.',
     source: 'ESPN Brasil',
@@ -142,7 +142,7 @@ const FALLBACK_POOL: RawNewsItem[] = [
     publishedAt: '2026-02-01T11:00:00.000Z',
   },
   {
-    url: 'https://ge.globo.com/futebol/noticia/placeholder-bal4-002',
+    url: 'https://ge.globo.com/futebol/noticia/placeholder-bal3-002',
     title: '[BAL3] Baleia da Vila anuncia novo patrocínio e plano financeiro',
     description: 'Reestruturação melhora perspectiva de caixa e reduz percepção de risco.',
     source: 'Globo Esporte',

@@ -25,9 +25,12 @@ export const updateProfileSchema = z.object({
     )
     .nullable()
     .optional(),
+  // Ticker do clube favorito. Tem FK para assets.ticker (M059): além do formato,
+  // o handler valida existência no banco antes de gravar (evita erro 500 de FK).
   favoriteClub: z
     .string()
-    .max(10, 'Clube favorito deve ter no máximo 10 caracteres.')
+    .regex(/^[A-Z]{2,5}\d{1,2}$/, 'Clube favorito inválido.')
+    .nullable()
     .optional(),
   investorProfile: z
     .nativeEnum(
