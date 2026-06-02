@@ -12,12 +12,43 @@ import {
   shouldDowngradeToJogador,
   type SubscriptionForLogic,
 } from '@/lib/services/plan-logic'
-import type { PlanType } from '@/lib/enums'
+import { PLAN_HIERARCHY, type PlanType } from '@/lib/enums'
 
 export interface ProcessResult {
   processed: number
   errors: number
   details: Array<{ subscriptionId: string; action: string; error?: string }>
+}
+
+const OPEN_SUBSCRIPTION_STATUSES = [
+  'ACTIVE',
+  'TRIAL',
+  'TRIALING',
+  'PAST_DUE',
+  'CANCELLATION_LOCK',
+] as const
+
+function plansAtOrAbove(planType: PlanType): PlanType[] {
+  return (['JOGADOR', 'CRAQUE', 'LENDA'] as PlanType[]).filter(
+    (plan) => PLAN_HIERARCHY[plan] >= PLAN_HIERARCHY[planType]
+  )
+}
+
+async function hasOpenSubscriptionAtOrAbove(
+  userId: string,
+  excludedSubscriptionId: string,
+  planType: PlanType
+): Promise<boolean> {
+  const replacement = await prisma.subscription.findFirst({
+    where: {
+      userId,
+      id: { not: excludedSubscriptionId },
+      status: { in: OPEN_SUBSCRIPTION_STATUSES as unknown as never[] },
+      planType: { in: plansAtOrAbove(planType) as never[] },
+    },
+    select: { id: true },
+  })
+  return replacement !== null
 }
 
 /** Processa subscriptions expiradas: suspende contas ou faz downgrade definitivo */
@@ -47,10 +78,41 @@ export async function processExpiredSubscriptions(): Promise<ProcessResult> {
       }
 
       if (shouldSuspendAccount(subForLogic, now)) {
-        await prisma.$transaction([
-          prisma.subscription.update({ where: { id: sub.id }, data: { status: 'EXPIRED' } }),
-          prisma.user.update({ where: { id: sub.userId }, data: { status: 'SUSPENDED' } }),
-        ])
+        const planType = sub.planType as PlanType
+        if (await hasOpenSubscriptionAtOrAbove(sub.userId, sub.id, planType)) {
+          await prisma.subscription.updateMany({
+            where: { id: sub.id, status: 'ACTIVE', expiresAt: { lt: now } },
+            data: { status: 'EXPIRED' },
+          })
+          result.details.push({ subscriptionId: sub.id, action: 'EXPIRED_STALE_REPLACED' })
+          result.processed++
+          continue
+        }
+
+        const suspended = await prisma.$transaction(async (tx) => {
+          const claim = await tx.subscription.updateMany({
+            where: {
+              id: sub.id,
+              status: 'ACTIVE',
+              cancelledAt: null,
+              expiresAt: { lt: now },
+            },
+            data: { status: 'EXPIRED' },
+          })
+          if (claim.count !== 1) return false
+
+          const userUpdate = await tx.user.updateMany({
+            where: { id: sub.userId, planType: sub.planType as never },
+            data: { status: 'SUSPENDED' },
+          })
+          return userUpdate.count === 1
+        })
+
+        if (!suspended) {
+          result.details.push({ subscriptionId: sub.id, action: 'SKIPPED_STATUS_OR_PLAN_CHANGED' })
+          continue
+        }
+
         await NotificationStub.notify(sub.userId, 'PLAN_CANCEL_ALERT', {
           planName: sub.planType,
           expiresAt: sub.expiresAt!.toISOString(),
@@ -90,13 +152,44 @@ export async function processExpiredSubscriptions(): Promise<ProcessResult> {
 
       if (!shouldDowngradeToJogador(subForLogic, now)) continue
 
-      await prisma.$transaction([
-        prisma.subscription.update({ where: { id: sub.id }, data: { status: 'CANCELLED' } }),
-        prisma.user.update({
-          where: { id: sub.userId },
+      const planType = sub.planType as PlanType
+      if (await hasOpenSubscriptionAtOrAbove(sub.userId, sub.id, planType)) {
+        await prisma.subscription.updateMany({
+          where: {
+            id: sub.id,
+            status: { in: ['EXPIRED', 'SUSPENDED'] as never[] },
+            expiresAt: { lt: sevenDaysAgo },
+          },
+          data: { status: 'CANCELLED' },
+        })
+        result.details.push({ subscriptionId: sub.id, action: 'CANCELLED_STALE_REPLACED' })
+        result.processed++
+        continue
+      }
+
+      const downgraded = await prisma.$transaction(async (tx) => {
+        const claim = await tx.subscription.updateMany({
+          where: {
+            id: sub.id,
+            status: { in: ['EXPIRED', 'SUSPENDED'] as never[] },
+            expiresAt: { lt: sevenDaysAgo },
+          },
+          data: { status: 'CANCELLED' },
+        })
+        if (claim.count !== 1) return false
+
+        const userUpdate = await tx.user.updateMany({
+          where: { id: sub.userId, planType: sub.planType as never },
           data: { planType: 'JOGADOR', fsBalance: 2000, status: 'ACTIVE' },
-        }),
-      ])
+        })
+        return userUpdate.count === 1
+      })
+
+      if (!downgraded) {
+        result.details.push({ subscriptionId: sub.id, action: 'SKIPPED_STATUS_OR_PLAN_CHANGED' })
+        continue
+      }
+
       await NotificationStub.notify(sub.userId, 'PLAN_CANCEL_ALERT', {
         planName: sub.planType,
         reason: 'downgraded',
@@ -186,20 +279,43 @@ export async function processCancelledSubscriptions(): Promise<ProcessResult> {
     where: {
       cancelledAt: { not: null },
       expiresAt: { lt: now },
-      status: { notIn: ['CANCELLED'] as never[] },
+      status: { notIn: ['CANCELLED', 'CANCELLATION_LOCK'] as never[] },
     },
     select: { id: true, userId: true, planType: true, expiresAt: true },
   })
 
   for (const sub of cancelled) {
     try {
-      await prisma.$transaction([
-        prisma.subscription.update({ where: { id: sub.id }, data: { status: 'CANCELLED' } }),
-        prisma.user.update({
-          where: { id: sub.userId },
+      const planType = sub.planType as PlanType
+      if (await hasOpenSubscriptionAtOrAbove(sub.userId, sub.id, planType)) {
+        await prisma.subscription.updateMany({
+          where: { id: sub.id, status: { notIn: ['CANCELLED', 'CANCELLATION_LOCK'] as never[] } },
+          data: { status: 'CANCELLED' },
+        })
+        result.details.push({ subscriptionId: sub.id, action: 'CANCELLED_STALE_REPLACED' })
+        result.processed++
+        continue
+      }
+
+      const finalized = await prisma.$transaction(async (tx) => {
+        const claim = await tx.subscription.updateMany({
+          where: { id: sub.id, status: { notIn: ['CANCELLED', 'CANCELLATION_LOCK'] as never[] } },
+          data: { status: 'CANCELLED' },
+        })
+        if (claim.count !== 1) return false
+
+        const userUpdate = await tx.user.updateMany({
+          where: { id: sub.userId, planType: sub.planType as never },
           data: { planType: 'JOGADOR', fsBalance: 2000 },
-        }),
-      ])
+        })
+        return userUpdate.count === 1
+      })
+
+      if (!finalized) {
+        result.details.push({ subscriptionId: sub.id, action: 'SKIPPED_STATUS_OR_PLAN_CHANGED' })
+        continue
+      }
+
       result.details.push({ subscriptionId: sub.id, action: 'CANCELLED_FINALIZED' })
       result.processed++
     } catch (err) {

@@ -39,21 +39,24 @@ async function closeAllOpenPositions(userId: string, subscriptionId: string): Pr
       if (side === 'SHORT') {
         await shortService.closeShort(userId, pos.id, currentPrice, 'COMPULSORY_LIQUIDATION')
       } else if (Number(pos.leverageMultiplier) > 1) {
-        await leverageService.forceCloseLeveraged(pos.id, currentPrice, 'CANCELLATION_LOCK_FINAL_EXPIRY')
+        const didClose = await leverageService.forceCloseLeveraged(pos.id, currentPrice, 'CANCELLATION_LOCK_FINAL_EXPIRY')
+        if (!didClose) continue
       } else {
         // LONG simples: encerra via update direto (liquidação a mercado)
         // Credita o valor de mercado ao saldo (value = qty * price)
         const liquidationValue = Number(pos.quantity) * currentPrice
-        await prisma.$transaction(async (tx) => {
+        const didClose = await prisma.$transaction(async (tx) => {
+          const claim = await tx.position.updateMany({
+            where: { id: pos.id, userId, status: 'OPEN' },
+            data: { status: 'CLOSED', quantity: 0 },
+          })
+          if (claim.count !== 1) return false
+
           const user = await tx.user.findUniqueOrThrow({ where: { id: userId } })
           const balanceBefore = Number(user.fsBalance)
           await tx.user.update({
             where: { id: userId },
             data: { fsBalance: balanceBefore + liquidationValue },
-          })
-          await tx.position.update({
-            where: { id: pos.id },
-            data: { status: 'CLOSED', quantity: 0 },
           })
           await tx.transaction.create({
             data: {
@@ -71,7 +74,10 @@ async function closeAllOpenPositions(userId: string, subscriptionId: string): Pr
               balanceAfter: balanceBefore + liquidationValue,
             },
           })
+
+          return true
         })
+        if (!didClose) continue
       }
 
       // Auditoria

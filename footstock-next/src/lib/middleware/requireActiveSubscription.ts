@@ -49,13 +49,13 @@ export async function requireActiveSubscription(
   const sub = await prisma.subscription.findFirst({
     where: {
       userId,
-      status: { in: ['ACTIVE', 'TRIAL', 'CANCELLATION_LOCK'] },
+      status: 'CANCELLATION_LOCK',
     },
     orderBy: { createdAt: 'desc' },
     select: { status: true, cancellationLockExpiresAt: true },
   })
 
-  if (!sub || sub.status !== 'CANCELLATION_LOCK') return null // acesso normal
+  if (!sub) return null // acesso normal
 
   const expiresAt = sub.cancellationLockExpiresAt
   const hoursRemaining = expiresAt

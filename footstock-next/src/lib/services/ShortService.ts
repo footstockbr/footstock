@@ -145,6 +145,14 @@ export class ShortService {
     const pnl = (avgPrice - currentPrice) * Number(position.quantity) - interestAccrued - closeFee
 
     const result = await prisma.$transaction(async (tx) => {
+      const claim = await tx.position.updateMany({
+        where: { id: positionId, userId, side: 'SHORT', status: 'OPEN' },
+        data: { status: 'CLOSED', quantity: 0 },
+      })
+      if (claim.count !== 1) {
+        throw new AppError('ORDER_053', 422, { message: 'Posição não é um short aberto.' })
+      }
+
       const user = await tx.user.findUniqueOrThrow({ where: { id: userId } })
 
       const balanceBefore = Number(user.fsBalance)
@@ -155,11 +163,6 @@ export class ShortService {
       await tx.user.update({
         where: { id: userId },
         data: { fsBalance: newBalance, marginBlocked: newMarginBlocked },
-      })
-
-      await tx.position.update({
-        where: { id: positionId },
-        data: { status: 'CLOSED', quantity: 0 },
       })
 
       const transaction = await tx.transaction.create({

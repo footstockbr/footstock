@@ -9,20 +9,26 @@ import type { PlanType } from '@/lib/enums'
 import type { AssetListItem } from '@/types/market'
 import { prisma } from '@/lib/prisma'
 
+function normalizePlanType(planType: PlanType | null | undefined): PlanType {
+  return planType === 'CRAQUE' || planType === 'LENDA' || planType === 'JOGADOR'
+    ? planType
+    : 'JOGADOR'
+}
+
 /**
  * Retorna o delay em SEGUNDOS para exibição no frontend (campo _delaySeconds).
  * Converte de ms para s.
  */
-export function getDelaySeconds(planType: PlanType): number {
-  return Math.floor((DELAY_BY_PLAN[planType] ?? 0) / 1000)
+export function getDelaySeconds(planType: PlanType | null | undefined): number {
+  return Math.floor(DELAY_BY_PLAN[normalizePlanType(planType)] / 1000)
 }
 
 /**
  * Retorna o label humano do delay para o DelayBadge.
  * Retorna null para plano LENDA (sem delay).
  */
-export function getDelayLabel(planType: PlanType): string | null {
-  const delayMs = DELAY_BY_PLAN[planType] ?? 0
+export function getDelayLabel(planType: PlanType | null | undefined): string | null {
+  const delayMs = DELAY_BY_PLAN[normalizePlanType(planType)]
   if (delayMs === 0) return null
   const secs = delayMs / 1000
   if (secs >= 3600) {
@@ -39,7 +45,7 @@ export function getDelayLabel(planType: PlanType): string | null {
 /**
  * Retorna o header Cache-Control adequado para o plano.
  */
-export function getCacheHint(planType: PlanType): string {
+export function getCacheHint(planType: PlanType | null | undefined): string {
   const secs = getDelaySeconds(planType)
   if (secs === 0) return 'private, max-age=2'
   return `private, max-age=${secs}`
@@ -52,9 +58,9 @@ export function getCacheHint(planType: PlanType): string {
  */
 export async function applyPriceDelay(
   asset: AssetListItem,
-  planType: PlanType
+  planType: PlanType | null | undefined
 ): Promise<AssetListItem> {
-  const delayMs = DELAY_BY_PLAN[planType] ?? 0
+  const delayMs = DELAY_BY_PLAN[normalizePlanType(planType)]
   if (delayMs === 0) return asset
 
   const targetDate = new Date(Date.now() - delayMs)
@@ -97,9 +103,9 @@ export async function applyPriceDelay(
  */
 export async function applyDelayBatch(
   assets: AssetListItem[],
-  planType: PlanType
+  planType: PlanType | null | undefined
 ): Promise<AssetListItem[]> {
-  const delayMs = DELAY_BY_PLAN[planType] ?? 0
+  const delayMs = DELAY_BY_PLAN[normalizePlanType(planType)]
   if (delayMs === 0 || assets.length === 0) return assets
 
   const targetDate = new Date(Date.now() - delayMs)

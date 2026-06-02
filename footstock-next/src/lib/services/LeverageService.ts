@@ -321,15 +321,15 @@ export class LeverageService {
    * simplesmente liquida a posição ao preço informado.
    * Aplica floor de FS$0 no retorno ao usuário (nunca saldo negativo por esta operação).
    */
-  async forceCloseLeveraged(positionId: string, currentPrice: number, reason: string): Promise<void> {
-    await prisma.$transaction(async (tx) => {
+  async forceCloseLeveraged(positionId: string, currentPrice: number, reason: string): Promise<boolean> {
+    return prisma.$transaction(async (tx) => {
       const position = await tx.position.findUnique({
         where: { id: positionId },
         include: { asset: { select: { ticker: true } } },
       })
 
-      if (!position || position.status !== 'OPEN') return
-      if (Number(position.leverageMultiplier) <= 1) return
+      if (!position || position.status !== 'OPEN') return false
+      if (Number(position.leverageMultiplier) <= 1) return false
 
       const user = await tx.user.findUniqueOrThrow({ where: { id: position.userId } })
       const balanceBefore = Number(user.fsBalance)
@@ -344,17 +344,18 @@ export class LeverageService {
       const returnToUser = Math.max(0, netReturn)
       const newMarginBlocked = Math.max(0, Number(user.marginBlocked) - leverageAmount)
 
+      const claim = await tx.position.updateMany({
+        where: { id: positionId, status: 'OPEN' },
+        data: { status: 'CLOSED', quantity: 0 },
+      })
+      if (claim.count !== 1) return false
+
       await tx.user.update({
         where: { id: position.userId },
         data: {
           fsBalance: balanceBefore + returnToUser,
           marginBlocked: newMarginBlocked,
         },
-      })
-
-      await tx.position.update({
-        where: { id: positionId },
-        data: { status: 'CLOSED', quantity: 0 },
       })
 
       await tx.transaction.create({
@@ -373,6 +374,8 @@ export class LeverageService {
           balanceAfter: balanceBefore + returnToUser,
         },
       })
+
+      return true
     })
   }
 }

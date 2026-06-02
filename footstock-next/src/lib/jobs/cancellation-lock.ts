@@ -64,7 +64,8 @@ async function liquidateRestrictedPositions(
         await shortService.closeShort(userId, pos.id, pos.currentPrice, 'COMPULSORY_LIQUIDATION')
       } else if (pos.isLeveraged) {
         // Encerramento compulsório de posição alavancada LONG a preço de mercado
-        await leverageService.forceCloseLeveraged(pos.id, pos.currentPrice, 'CANCELLATION_LOCK_FORCED_LIQUIDATION')
+        const didClose = await leverageService.forceCloseLeveraged(pos.id, pos.currentPrice, 'CANCELLATION_LOCK_FORCED_LIQUIDATION')
+        if (!didClose) continue
       }
 
       // Registro de auditoria

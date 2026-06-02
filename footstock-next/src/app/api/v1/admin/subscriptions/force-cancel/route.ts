@@ -86,6 +86,17 @@ export async function POST(request: NextRequest) {
         },
       })
 
+      // Encerrar checkouts/renovações pendentes do usuário. Sem isto, um webhook
+      // válido de uma PENDING antiga poderia ativar plano após o force-cancel.
+      await tx.subscription.updateMany({
+        where: {
+          userId,
+          id: { not: sub.id },
+          status: { in: ['PENDING', 'PAST_DUE', 'TRIALING'] },
+        },
+        data: { status: 'CANCELLED', cancelledAt: now },
+      })
+
       // Registro de auditoria obrigatório
       await tx.adminMarketAction.create({
         data: {
