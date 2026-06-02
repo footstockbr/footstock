@@ -1,85 +1,176 @@
-// ValuationService — Fórmulas de valuation dos ativos (clubes)
-// EV → Equity → Float → IPO Price → Initial Supply
+// ============================================================================
+// ValuationService — Metodologia de Precificação IPO FootStock
+// Fonte: "Fundamentos Econômico-Financeiros e Precificação IPO" (Abril 2026,
+//        Vinicius Paiva / Economista-Chefe). Base: Relatório Convocados 2025
+//        (exercício 2024). Paridade FS$1,00 = R$1,00 no lançamento.
+//
+// Substitui a metodologia anterior (Sports Value: receita×3 + patrimônio×0.5),
+// abandonada pelo documento por usar valor de marca/plantel (estimativas de
+// terceiros, não-auditáveis) em vez de receita auditada × rating de crédito.
+//
+// Fórmula de 5 passos (única e rastreável — componente único receita×rating):
+//   1. EV = receita_2024 × múltiplo(rating);  Equity = max(EV − dívida, 10% receita)
+//   2. Free-float % = f(dívida/receita)
+//   3. Float (R$) = Equity × free-float%
+//   4. Preço-alvo = escala logarítmica por receita dentro da divisão (faixa rígida)
+//   5. Cotas = round(Float / preço-alvo, lote 50.000);  IPO = Float / cotas
+//      Fair Value inicial do motor (L2 mean reversion) = Preço IPO
+// ============================================================================
 
+/** Rating Convocados (escala AAA→E) */
+export type ConvocadosRating = 'AAA' | 'AA' | 'A' | 'BBB+' | 'BBB' | 'BB' | 'B' | 'C' | 'D' | 'E'
+
+export type ValuationDivision = 'SERIE_A' | 'SERIE_B'
+
+// ─── Passo 1: múltiplo de Enterprise Value por rating ───────────────────────
+const RATING_EV_MULTIPLE: Record<ConvocadosRating, number> = {
+  AAA: 4.0,
+  AA: 4.0,
+  A: 3.5,
+  'BBB+': 3.0,
+  BBB: 3.0,
+  BB: 2.5,
+  B: 2.0,
+  C: 1.5,
+  D: 1.2,
+  E: 1.0,
+}
+
+/** Piso do Equity: 10% da receita (garante que nenhum clube chegue a equity zero) */
+const EQUITY_FLOOR_PCT = 0.10
+
+// ─── Passo 4: faixas rígidas de preço por divisão (piso/teto absolutos) ──────
+const DIVISION_PRICE_RANGE: Record<ValuationDivision, { min: number; max: number }> = {
+  SERIE_A: { min: 8, max: 40 },
+  SERIE_B: { min: 3, max: 12 },
+}
+
+// ─── Passo 5: lote mínimo de cotas ──────────────────────────────────────────
+const SHARE_LOT = 50_000
+
+// ─── Entradas e saídas ──────────────────────────────────────────────────────
+
+/** Fundamentos econômico-financeiros de um clube (exercício 2024) */
 export interface ClubFinancials {
-  /** Receita anual em R$ mil */
+  ticker: string
+  division: ValuationDivision
+  /** Receita total 2024 em R$ */
   revenue: number
-  /** Dívida total em R$ mil */
+  /** Rating Convocados */
+  rating: ConvocadosRating
+  /** Dívida operacional estimada em R$ */
   debt: number
-  /** Patrimônio líquido em R$ mil */
-  equity: number
-  /** Free float % (0-1) */
-  freeFloat: number
 }
 
-export interface ValuationResult {
-  ev: number
+/** Resultado completo da precificação IPO de um clube */
+export interface IPOPricing {
+  ticker: string
+  division: ValuationDivision
+  enterpriseValue: number
   equityValue: number
-  float: number
+  debtToRevenue: number
+  freeFloatPct: number
+  floatBRL: number
+  targetPrice: number
+  shares: number
   ipoPrice: number
-  initialSupply: number
+  /** Fair Value inicial do motor (= ipoPrice) */
+  fairValue: number
 }
 
-export class ValuationService {
-  /**
-   * Enterprise Value = Receita × múltiplo setor (3x) + Patrimônio × 0.5
-   */
-  static calculateEV(financials: ClubFinancials): number {
-    const revenueMultiple = 3.0
-    const equityFactor = 0.5
-    return financials.revenue * revenueMultiple + financials.equity * equityFactor
-  }
+// ─── Passo 1 — Enterprise Value e Equity ────────────────────────────────────
 
-  /**
-   * Equity Value = max(EV - dívida, EV × 0.10) — floor de 10%
-   */
-  static calculateEquity(ev: number, debt: number): number {
-    const floor = ev * 0.10
-    return Math.max(ev - debt, floor)
-  }
-
-  /**
-   * Float = Equity Value × free float %
-   */
-  static calculateFloat(equityValue: number, freeFloat: number): number {
-    return equityValue * freeFloat
-  }
-
-  /**
-   * Preço IPO em escala logarítmica normalizada
-   * Normaliza o float (R$ mil) para faixa FS$ 5-50
-   */
-  static calculateIPOPrice(float: number): number {
-    const MIN_PRICE = 5
-    const MAX_PRICE = 50
-    const LOG_MIN = Math.log(1_000)     // float mínimo esperado: R$ 1M
-    const LOG_MAX = Math.log(5_000_000) // float máximo esperado: R$ 5B
-
-    const logFloat = Math.log(Math.max(float, 1))
-    const normalized = (logFloat - LOG_MIN) / (LOG_MAX - LOG_MIN)
-    const price = MIN_PRICE + normalized * (MAX_PRICE - MIN_PRICE)
-
-    return Math.max(MIN_PRICE, Math.min(MAX_PRICE, Math.round(price * 100) / 100))
-  }
-
-  /**
-   * Supply inicial = Float / Preço IPO
-   */
-  static calculateInitialSupply(float: number, ipoPrice: number): number {
-    if (ipoPrice <= 0) throw new Error('IPO price must be positive')
-    return Math.round(float / ipoPrice)
-  }
-
-  /**
-   * Pipeline completo: Financials → ValuationResult
-   */
-  static calculate(financials: ClubFinancials): ValuationResult {
-    const ev = this.calculateEV(financials)
-    const equityValue = this.calculateEquity(ev, financials.debt)
-    const float = this.calculateFloat(equityValue, financials.freeFloat)
-    const ipoPrice = this.calculateIPOPrice(float)
-    const initialSupply = this.calculateInitialSupply(float, ipoPrice)
-
-    return { ev, equityValue, float, ipoPrice, initialSupply }
-  }
+/** EV = receita × múltiplo(rating) */
+export function calculateEnterpriseValue(revenue: number, rating: ConvocadosRating): number {
+  return revenue * RATING_EV_MULTIPLE[rating]
 }
+
+/** Equity = max(EV − dívida, 10% da receita) */
+export function calculateEquity(enterpriseValue: number, debt: number, revenue: number): number {
+  return Math.max(enterpriseValue - debt, revenue * EQUITY_FLOOR_PCT)
+}
+
+// ─── Passo 2 — Free-float por Dívida/Receita ────────────────────────────────
+
+/** Free-float %: <1,0x → 30%; 1,0–2,0x → 22%; >2,0x → 15% */
+export function calculateFreeFloatPct(debtToRevenue: number): number {
+  if (debtToRevenue < 1.0) return 0.30
+  if (debtToRevenue <= 2.0) return 0.22
+  return 0.15
+}
+
+// ─── Passo 4 — Preço-alvo por escala logarítmica (dentro da divisão) ─────────
+
+/**
+ * Preço-alvo por escala logarítmica: o clube de maior receita recebe o teto da
+ * faixa, o de menor recebe o piso; os intermediários são interpolados em log.
+ * Se houver um único clube (ou receitas iguais), retorna o teto da faixa.
+ */
+export function calculateLogTargetPrice(
+  revenue: number,
+  minRevenue: number,
+  maxRevenue: number,
+  division: ValuationDivision,
+): number {
+  const { min, max } = DIVISION_PRICE_RANGE[division]
+  if (maxRevenue <= minRevenue || revenue <= 0) return max
+  const normalized =
+    (Math.log(revenue) - Math.log(minRevenue)) / (Math.log(maxRevenue) - Math.log(minRevenue))
+  const clamped = Math.max(0, Math.min(1, normalized))
+  return min + clamped * (max - min)
+}
+
+// ─── Passo 5 — Número de cotas e preço IPO final ────────────────────────────
+
+/** Cotas = round(Float / preço-alvo) ao múltiplo de 50.000 mais próximo (mínimo 1 lote) */
+export function calculateShares(floatBRL: number, targetPrice: number): number {
+  if (targetPrice <= 0) throw new Error('targetPrice deve ser positivo')
+  const raw = floatBRL / targetPrice
+  const rounded = Math.round(raw / SHARE_LOT) * SHARE_LOT
+  return Math.max(SHARE_LOT, rounded)
+}
+
+// ─── Orquestrador por divisão ───────────────────────────────────────────────
+
+/**
+ * Precifica todos os clubes de UMA divisão (Passo 4 exige o ranking de receita
+ * da divisão inteira). Retorna o IPO/Fair Value de cada clube, com faixa rígida.
+ *
+ * @param clubs lista de clubes da MESMA divisão com seus fundamentos 2024
+ */
+export function priceDivision(clubs: ClubFinancials[]): IPOPricing[] {
+  if (clubs.length === 0) return []
+
+  const revenues = clubs.map((c) => c.revenue).filter((r) => r > 0)
+  const minRevenue = Math.min(...revenues)
+  const maxRevenue = Math.max(...revenues)
+
+  return clubs.map((club) => {
+    const enterpriseValue = calculateEnterpriseValue(club.revenue, club.rating)
+    const equityValue = calculateEquity(enterpriseValue, club.debt, club.revenue)
+    const debtToRevenue = club.revenue > 0 ? club.debt / club.revenue : Infinity
+    const freeFloatPct = calculateFreeFloatPct(debtToRevenue)
+    const floatBRL = equityValue * freeFloatPct
+    const targetPrice = calculateLogTargetPrice(club.revenue, minRevenue, maxRevenue, club.division)
+    const shares = calculateShares(floatBRL, targetPrice)
+    const ipoPrice = parseFloat((floatBRL / shares).toFixed(2))
+
+    return {
+      ticker: club.ticker,
+      division: club.division,
+      enterpriseValue,
+      equityValue,
+      debtToRevenue: parseFloat(debtToRevenue.toFixed(4)),
+      freeFloatPct,
+      floatBRL,
+      targetPrice: parseFloat(targetPrice.toFixed(2)),
+      shares,
+      ipoPrice,
+      fairValue: ipoPrice,
+    }
+  })
+}
+
+export const RATING_EV_MULTIPLE_TABLE = RATING_EV_MULTIPLE
+export const DIVISION_PRICE_RANGE_TABLE = DIVISION_PRICE_RANGE
+export const SHARE_LOT_SIZE = SHARE_LOT
