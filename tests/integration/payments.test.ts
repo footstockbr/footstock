@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Integration Tests: Payments Endpoints
+// FootStock — Integration Tests: Payments Endpoints
 // Cobre: POST /payments/checkout, POST /payments/webhook
 //
 // Segurança:

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — FallbackPool
+// FootStock Motor — FallbackPool
 // Pool de 20 notícias estáticas cobrindo ≥10 tickers.
 // Ativado quando feeds RSS estão offline > 15min.
 // Rastreabilidade: INT-046, INT-048

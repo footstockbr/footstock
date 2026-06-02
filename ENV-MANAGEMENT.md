@@ -1,4 +1,4 @@
-# ENV-MANAGEMENT — Foot Stock Railway Migration
+# ENV-MANAGEMENT — FootStock Railway Migration
 
 > Documentação de onde cada variável de ambiente vive após a migração para Railway (2026-05).
 

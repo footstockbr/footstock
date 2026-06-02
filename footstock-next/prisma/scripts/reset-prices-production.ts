@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Reset Asset Prices to Documentation Values
+// FootStock — Reset Asset Prices to Documentation Values
 //
 // Uso: npx tsx prisma/scripts/reset-prices-production.ts
 //      npx tsx prisma/scripts/reset-prices-production.ts --dry-run
@@ -192,7 +192,7 @@ async function main() {
   const dryRun = process.argv.includes('--dry-run')
 
   console.log('='.repeat(72))
-  console.log('  Foot Stock — Reset Asset Prices to Documentation Values')
+  console.log('  FootStock — Reset Asset Prices to Documentation Values')
   console.log(`  Mode: ${dryRun ? 'DRY RUN (no changes will be written)' : 'LIVE (writing to database)'}`)
   console.log(`  Database: ${process.env.DATABASE_URL?.replace(/\/\/.*@/, '//***@') ?? 'NOT SET'}`)
   console.log('='.repeat(72))

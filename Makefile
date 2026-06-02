@@ -4,7 +4,7 @@
 .PHONY: help setup reset health dev test dev-server docker-up docker-down docker-clean seed lint format typecheck all
 
 help:
-	@echo "Foot Stock — Targets de Desenvolvimento"
+	@echo "FootStock — Targets de Desenvolvimento"
 	@echo "========================================"
 	@echo ""
 	@echo "  make setup              — Setup completo do ambiente (instala deps, migrations, seeds)"

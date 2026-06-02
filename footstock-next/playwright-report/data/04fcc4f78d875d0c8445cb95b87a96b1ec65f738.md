@@ -28,7 +28,7 @@ Call log:
 ```ts
   1   | /**
   2   |  * TIER 2 — Cancelamento de Assinatura com Lock (T-010)
-  3   |  * Foot Stock / T-033 Verificacao E2E Completa de Gaps
+  3   |  * FootStock / T-033 Verificacao E2E Completa de Gaps
   4   |  *
   5   |  * Cenarios cobertos:
   6   |  *   CL-01: DELETE /api/v1/subscriptions/me muda status para CANCELLATION_LOCK

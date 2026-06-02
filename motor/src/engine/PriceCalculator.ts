@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — PriceCalculator
+// FootStock Motor — PriceCalculator
 // Orquestra as 10 camadas quantitativas (L1-L10) + CorrelationLayer.
 //
 // Pipeline canônico (T-009):

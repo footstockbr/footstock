@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Cron Job: card-updater
+// FootStock Motor — Cron Job: card-updater
 // Migrado de footstock-next/src/app/api/cron/card-updater/route.ts
 // Schedule: 0 8 * * * (diário 08:00 UTC)
 // ============================================================================

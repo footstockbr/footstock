@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — LeverageInterestRunner
+// FootStock Motor — LeverageInterestRunner
 // Cobra juros diários de posições LONG alavancadas (leverage=2).
 //
 // INTAKE: alavancagem 2x exclusiva do plano Lenda.

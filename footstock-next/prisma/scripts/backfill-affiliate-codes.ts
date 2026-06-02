@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Backfill: criar AffiliateCode para usuários existentes sem código
+// FootStock — Backfill: criar AffiliateCode para usuários existentes sem código
 //
 // Uso: npx tsx prisma/scripts/backfill-affiliate-codes.ts
 //

@@ -1,4 +1,4 @@
-# Análise de Escalabilidade — Foot Stock
+# Análise de Escalabilidade — FootStock
 
 **Rastreabilidade INTAKE:** INT-123
 **Data:** 2026-03-31
@@ -13,7 +13,7 @@
 
 ## Visão Geral
 
-O Foot Stock é um mercado de ativos de futebol com componentes intensivos de tempo real (WebSocket para preços e ordens). As projeções abaixo cobrem 3 fases de crescimento com estimativas baseadas nos pricing oficiais dos serviços (Vercel, Railway, Supabase, Redis — 2026).
+O FootStock é um mercado de ativos de futebol com componentes intensivos de tempo real (WebSocket para preços e ordens). As projeções abaixo cobrem 3 fases de crescimento com estimativas baseadas nos pricing oficiais dos serviços (Vercel, Railway, Supabase, Redis — 2026).
 
 ---
 

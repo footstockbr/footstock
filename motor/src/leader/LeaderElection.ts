@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Leader Election
+// FootStock Motor — Leader Election
 // Redis SETNX + heartbeat + fencing token + release atômico via Lua script.
 // ============================================================================
 

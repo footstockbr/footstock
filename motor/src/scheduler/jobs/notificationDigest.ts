@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Cron Job: notification-digest
+// FootStock Motor — Cron Job: notification-digest
 // Migrado de footstock-next/src/app/api/cron/notification-digest/route.ts
 // Schedule: 0 10 * * *
 // ============================================================================

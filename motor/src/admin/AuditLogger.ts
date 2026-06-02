@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — AuditLogger
+// FootStock Motor — AuditLogger
 // Persiste ações administrativas no banco via Prisma.
 // Falha silenciosa: erros de DB não interrompem a ação principal.
 // ============================================================================

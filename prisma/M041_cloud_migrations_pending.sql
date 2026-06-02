@@ -1,5 +1,5 @@
 -- ============================================================================
--- Foot Stock — Migrations pendentes para Supabase Cloud (M026 → M040)
+-- FootStock — Migrations pendentes para Supabase Cloud (M026 → M040)
 -- Gerado em: 2026-04-01
 -- Estado do cloud antes deste script: M025 aplicado, M026-M040 ausentes.
 -- Exceções já aplicadas no cloud: M036 (bio), colunas suspended_at/suspension_reason.

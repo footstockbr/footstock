@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Contrato de Enums Globais
+// FootStock — Contrato de Enums Globais
 // Verifica fonte única e unicidade de ImpactCategory, PlanType, NotificationType
 // Rastreabilidade: INT-002, INT-044 | US-CT-002 | module-28/TASK-3/ST001
 // ============================================================================

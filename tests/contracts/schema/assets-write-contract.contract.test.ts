@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Contrato de Escrita em Assets
+// FootStock — Contrato de Escrita em Assets
 // Verifica que nenhuma rota Next.js escreve currentPrice diretamente
 // Apenas o motor de preços atualiza via Redis
 // Rastreabilidade: INT-001, INT-098 | US-CT-001 | module-28/TASK-2/ST004

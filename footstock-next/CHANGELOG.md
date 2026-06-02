@@ -1,6 +1,6 @@
 # Changelog
 
-Todas as mudanças notáveis do Foot Stock são documentadas neste arquivo.
+Todas as mudanças notáveis do FootStock são documentadas neste arquivo.
 
 O formato segue [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/spec/v2.0.0.html).
@@ -32,7 +32,7 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/spec/v2.0.
 
 _(baseado em BUDGET.md — release notes não encontradas)_
 
-Versão de produção do Foot Stock. Todos os ajustes finais aplicados,
+Versão de produção do FootStock. Todos os ajustes finais aplicados,
 imperfeições identificadas nos testes corrigidas, sistema publicado e
 documentação de entrega preparada.
 
@@ -228,7 +228,7 @@ _(baseado em BUDGET.md — release notes não encontradas)_
 - Login com email e senha com rate limiting (10 tentativas a cada 5 minutos)
 - Infraestrutura de biometria WebAuthn (Face ID / Touch ID) — botão presente, ativação completa em milestone futura
 - Recuperação de senha (solicitar link → receber email → redefinir → login)
-- Splash screen animada com logo do Foot Stock (2.8 segundos, tema escuro)
+- Splash screen animada com logo do FootStock (2.8 segundos, tema escuro)
 - Design system dark-only com 82 tokens de design e 21 componentes base
 - Navegação mobile-first com barra inferior responsiva
 - Sistema de permissões RBAC com 6 perfis hierárquicos (SuperAdmin, Administrador, Monitor, Editor, Moderador, Club Partner) e controle de 25 recursos

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "=== Foot Stock — Demo Milestone 7 ==="
+echo "=== FootStock — Demo Milestone 7 ==="
 echo ""
 
 # Verificar .env

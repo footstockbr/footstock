@@ -1,4 +1,4 @@
-# Accessibility Tasks — Foot Stock (footstock-next)
+# Accessibility Tasks — FootStock (footstock-next)
 
 > Gerado em: 2026-04-01 | Total: 10 tasks
 

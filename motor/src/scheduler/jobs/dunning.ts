@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Cron Job: dunning (Wave 1 / Option C)
+// FootStock Motor — Cron Job: dunning (Wave 1 / Option C)
 // Proxy HTTP para footstock-next/src/app/api/cron/dunning/route.ts.
 // Schedule: 0 4 * * *
 // ============================================================================

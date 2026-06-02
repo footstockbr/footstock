@@ -1,4 +1,4 @@
-# Foot Stock Mobile (Expo WebView)
+# FootStock Mobile (Expo WebView)
 
 Aplicativo mobile para iOS e Android usando Expo + WebView, com desbloqueio biométrico antes de abrir o app web.
 

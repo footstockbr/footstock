@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Testes: Sponsor soft delete e audit trail
+// FootStock — Testes: Sponsor soft delete e audit trail
 // Fonte: module-24/TASK-7/ST002
 // ============================================================================
 

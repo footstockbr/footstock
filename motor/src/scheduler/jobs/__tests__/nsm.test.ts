@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Teste unitário do job nsm (Wave 3 / Option C)
+// FootStock Motor — Teste unitário do job nsm (Wave 3 / Option C)
 // Valida que o job invoca cronProxy com apiVersion v1.
 // ============================================================================
 

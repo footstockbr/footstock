@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Integration Tests: Auth Helpers
+// FootStock — Integration Tests: Auth Helpers
 // Configura o mock de autenticação (Auth.js) para simular usuário autenticado
 // nos testes de rota (route handlers do Next.js App Router).
 //

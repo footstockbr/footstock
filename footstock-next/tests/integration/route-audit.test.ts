@@ -3,7 +3,7 @@
 
 /**
  * TASK-1 — Auditoria de Rotas e Navegação
- * module-29-integration / Foot Stock
+ * module-29-integration / FootStock
  *
  * Verifica que todas as rotas do sistema existem no workspace,
  * que o middleware tem as regras de proteção corretas,

@@ -1,6 +1,6 @@
 -- ============================================================
 -- M046 — SEED RETROATIVO: price_history + opened_at
--- Foot Stock — Colar no Supabase SQL Editor
+-- FootStock — Colar no Supabase SQL Editor
 -- ============================================================
 -- O que faz:
 --   1. Corrige opened_at das posições de teste para cobrir 30 dias

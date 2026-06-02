@@ -1,4 +1,4 @@
-# DB Migration Report — Foot Stock
+# DB Migration Report — FootStock
 
 > **STATUS: HISTÓRICO / CONCLUÍDO.** Este relatório descreve o estado em
 > 2026-03-28, quando o banco era Supabase. Desde 2026-05 o banco de produção é
@@ -217,7 +217,7 @@ npx prisma migrate resolve --rolled-back init_foot_stock_schema
 
 ### ⚠️ Atenção: ON DELETE em cascatas
 
-O Prisma usa `ON DELETE RESTRICT` por padrão. Para o Foot Stock:
+O Prisma usa `ON DELETE RESTRICT` por padrão. Para o FootStock:
 - `users` nunca devem ser deletados (LGPD: anonimização, não exclusão)
 - Recomendar soft delete via campo `deletedAt` em `users` no futuro
 - `RESTRICT` é seguro para o escopo atual
@@ -248,4 +248,4 @@ O Prisma usa `ON DELETE RESTRICT` por padrão. Para o Foot Stock:
 
 ---
 
-*Gerado por `/db-migration-create` — Foot Stock — 2026-03-28*
+*Gerado por `/db-migration-create` — FootStock — 2026-03-28*

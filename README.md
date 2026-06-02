@@ -1,4 +1,4 @@
-# Foot Stock
+# FootStock
 
 O mercado de ações do futebol brasileiro.
 

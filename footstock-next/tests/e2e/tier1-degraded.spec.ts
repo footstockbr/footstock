@@ -1,6 +1,6 @@
 /**
  * TIER 1 — Modo Degradado (T-005)
- * Foot Stock / T-033 Verificacao E2E Completa de Gaps
+ * FootStock / T-033 Verificacao E2E Completa de Gaps
  *
  * Cenarios cobertos:
  *   DG-01: Health check retorna status do motor (online/degraded)

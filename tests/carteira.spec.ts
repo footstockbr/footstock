@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — E2E: /carteira com Posições, Shorts, Extrato (Playwright)
+// FootStock — E2E: /carteira com Posições, Shorts, Extrato (Playwright)
 // Rastreabilidade: INT-034, INT-035, INT-036
 // ============================================================================
 

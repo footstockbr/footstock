@@ -1,4 +1,4 @@
-# Styling Tasks — Foot Stock
+# Styling Tasks — FootStock
 > Gerado por `/nextjs:styling` em 2026-04-02
 
 ---

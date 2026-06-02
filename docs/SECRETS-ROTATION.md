@@ -1,4 +1,4 @@
-# Secrets Rotation Policy — Foot Stock
+# Secrets Rotation Policy — FootStock
 
 ## Secrets Gerenciados
 

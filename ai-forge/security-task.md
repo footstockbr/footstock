@@ -1,4 +1,4 @@
-# Security Tasks — Foot Stock
+# Security Tasks — FootStock
 
 > Gerado por: `/nextjs:security`  
 > Data: 2026-04-02  

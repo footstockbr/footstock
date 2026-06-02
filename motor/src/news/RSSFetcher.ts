@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — RSSFetcher
+// FootStock Motor — RSSFetcher
 // Fetch periódico de feeds RSS com deduplicação Redis (TTL 48h),
 // retry exponencial (1s→2s→4s) e fallback pool automático.
 // Rastreabilidade: INT-046, INT-048, INT-128

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Cron Job: expire-dividends (Wave 1 / Option C)
+// FootStock Motor — Cron Job: expire-dividends (Wave 1 / Option C)
 // Proxy HTTP para footstock-next/src/app/api/cron/expire-dividends/route.ts.
 // Schedule: 0 8 * * *
 // ============================================================================

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — engineConfig
+// FootStock Motor — engineConfig
 // Parâmetros por cluster lidos do banco (hot-reload sem restart do servidor).
 // ============================================================================
 

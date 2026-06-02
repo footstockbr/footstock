@@ -1,5 +1,5 @@
 # Forms — Auditoria e Tasks
-**Projeto:** Foot Stock  
+**Projeto:** FootStock  
 **Workspace:** `output/workspace/foot-stock/footstock-next/src`  
 **Data:** 2026-04-02  
 **Status:** PENDENTE

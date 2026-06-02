@@ -1,6 +1,6 @@
 /**
  * TIER 1 — Circuit Breaker (T-004)
- * Foot Stock / T-033 Verificacao E2E Completa de Gaps
+ * FootStock / T-033 Verificacao E2E Completa de Gaps
  *
  * Cenarios cobertos:
  *   CB-01: Admin ativa halt em ativo especifico via API

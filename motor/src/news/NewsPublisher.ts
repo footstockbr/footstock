@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — NewsPublisher
+// FootStock Motor — NewsPublisher
 // Persiste notícia classificada no DB + publica no Redis (condicional).
 // Rastreabilidade: INT-046, INT-049
 // ============================================================================

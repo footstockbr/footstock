@@ -10,7 +10,7 @@ type Env = keyof typeof environments
 const testEnv = (process.env.TEST_ENV as Env) || 'development'
 
 /**
- * Playwright config para testes E2E do Foot Stock.
+ * Playwright config para testes E2E do FootStock.
  * Requer servidor rodando: `npm run dev` ou `npm run start`
  *
  * Ambientes:

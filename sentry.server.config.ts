@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Sentry Server Configuration (Node.js / API Routes)
+// FootStock — Sentry Server Configuration (Node.js / API Routes)
 // Rastreabilidade: INT-110, module-27/TASK-1
 // ============================================================================
 

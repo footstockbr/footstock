@@ -1,6 +1,6 @@
 /**
  * TIER 2 — Portal do Clube (T-015)
- * Foot Stock / T-033 Verificacao E2E Completa de Gaps
+ * FootStock / T-033 Verificacao E2E Completa de Gaps
  *
  * Cenarios cobertos:
  *   CP-01: GET /api/v1/club/affiliate/bank disponivel para CLUB_REP

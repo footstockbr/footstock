@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Teste unitário do job session-transition
+// FootStock Motor — Teste unitário do job session-transition
 // ============================================================================
 
 import { sessionTransitionJob } from '../sessionTransition'

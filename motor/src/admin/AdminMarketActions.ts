@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — AdminMarketActions
+// FootStock Motor — AdminMarketActions
 // Handler que processa ações admin e as aplica no MarketEngine.
 // Cada ação é auditada via AuditLogger.
 // ============================================================================

@@ -1,5 +1,5 @@
 /**
- * k6 Load Test — Foot Stock
+ * k6 Load Test — FootStock
  * Rastreabilidade: INT-123, TASK-3/ST002
  *
  * Uso:

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Sentry Client Configuration (browser)
+// FootStock — Sentry Client Configuration (browser)
 // Rastreabilidade: INT-110, module-27/TASK-1
 // ============================================================================
 

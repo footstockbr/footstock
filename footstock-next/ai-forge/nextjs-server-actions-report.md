@@ -1,4 +1,4 @@
-# Server Actions Report — Foot Stock
+# Server Actions Report — FootStock
 
 > Gerado por `/nextjs:server-actions` em 2026-04-02
 

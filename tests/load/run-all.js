@@ -1,5 +1,5 @@
 /**
- * Orquestrador de Load Tests — Foot Stock
+ * Orquestrador de Load Tests — FootStock
  *
  * Uso:
  *   Smoke (padrão):  BASE_URL=http://localhost:3000 AUTH_TOKEN=xxx k6 run tests/load/run-all.js

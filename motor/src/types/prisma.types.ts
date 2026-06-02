@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Tipos Prisma locais
+// FootStock Motor — Tipos Prisma locais
 // O motor usa um cliente Prisma não gerado (stub), portanto os tipos de modelo
 // precisam ser declarados aqui, derivados do schema.prisma canônico.
 // ============================================================================

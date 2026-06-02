@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Order Contract (motor-local mirror)
+// FootStock Motor — Order Contract (motor-local mirror)
 // Espelha lib/contracts/order-contract.ts para uso no Railway motor.
 // Source of truth: lib/contracts/order-contract.ts — manter sincronizado.
 // Rastreabilidade: TASK-6/ST001-ST003 (auditoria module-14)

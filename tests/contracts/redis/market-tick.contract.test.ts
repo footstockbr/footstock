@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Contrato market:tick
+// FootStock — Contrato market:tick
 // Verifica formato, frequência SLA e cobertura de 40 tickers
 // Rastreabilidade: INT-098 | US-005 | module-28/TASK-1/ST002+ST004
 // ============================================================================

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Fee Constants (motor-local mirror)
+// FootStock Motor — Fee Constants (motor-local mirror)
 // Espelha lib/constants/limits OPERATIONAL_FEES para uso no Railway motor.
 // Source of truth: lib/constants/limits.ts — manter sincronizado.
 // Rastreabilidade: TASK-7/ST001 (auditoria module-14)

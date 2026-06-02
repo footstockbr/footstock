@@ -1,4 +1,4 @@
-# PRD: Acessibilidade e Semântica — Foot Stock (footstock-next)
+# PRD: Acessibilidade e Semântica — FootStock (footstock-next)
 
 > Gerado em: 2026-04-01 | Escopo: `src/` (excluindo node_modules)
 > Stack: Next.js 15 + Tailwind CSS + Radix primitives customizados
@@ -19,7 +19,7 @@
 - **`userScalable: false`** em `src/app/layout.tsx:44` — impede zoom para usuários com baixa visão
 
 ### Imagens (WCAG 1.1.1)
-- Logo com `alt="Foot Stock"` ✅
+- Logo com `alt="FootStock"` ✅
 - Imagem do ativo com `alt={asset.displayName}` ✅
 - Ícones Lucide têm `aria-hidden="true"` ✅
 

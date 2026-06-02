@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — E2E: Aba Dividendos em /carteira (Playwright)
+// FootStock — E2E: Aba Dividendos em /carteira (Playwright)
 // Cobre: listagem, filtros, reinvestimento, paginação, acessibilidade básica.
 // Requer servidor rodando em BASE_URL com sessão de teste injetada.
 // Rastreabilidade: INT-072, INT-073, INT-074

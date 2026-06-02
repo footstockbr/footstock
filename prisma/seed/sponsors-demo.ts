@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Seed: Patrocinador de demonstração
+// FootStock — Seed: Patrocinador de demonstração
 // Cria 1 AdSponsor ativo com banners em home_top e market_top.
 // Idempotente (upsert por id fixo).
 // Uso: npx tsx prisma/seed/sponsors-demo.ts
@@ -18,12 +18,12 @@ async function seedDemoSponsor(): Promise<void> {
     home_top: {
       imageUrl: 'https://placehold.co/728x90/F0B90B/000000?text=Foot+Stock+Demo',
       linkUrl: 'https://footstock.app',
-      altText: 'Foot Stock - Bolsa de Valores do Futebol',
+      altText: 'FootStock - Bolsa de Valores do Futebol',
     },
     market_top: {
       imageUrl: 'https://placehold.co/728x90/1B1D2A/F0B90B?text=Invista+nos+Clubes',
       linkUrl: 'https://footstock.app/mercado',
-      altText: 'Mercado de Ativos - Foot Stock',
+      altText: 'Mercado de Ativos - FootStock',
     },
   }
 
@@ -31,7 +31,7 @@ async function seedDemoSponsor(): Promise<void> {
     where: { id: 'demo-sponsor-001' },
     create: {
       id: 'demo-sponsor-001',
-      name: 'Foot Stock Demo Partner',
+      name: 'FootStock Demo Partner',
       logo: null,
       banners,
       activeLigaId: null,

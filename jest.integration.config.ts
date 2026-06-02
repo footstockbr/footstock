@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Jest Integration Config
+// FootStock — Jest Integration Config
 // Testes de integração com banco de dados real (PostgreSQL).
 // Banco de teste separado obrigatório: TEST_DATABASE_URL
 // ============================================================================

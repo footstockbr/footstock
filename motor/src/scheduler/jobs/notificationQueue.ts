@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Cron Job: notification-queue
+// FootStock Motor — Cron Job: notification-queue
 // Migrado de footstock-next/src/app/api/cron/notification-queue/route.ts
 // Schedule: 0 10 * * *
 // ============================================================================

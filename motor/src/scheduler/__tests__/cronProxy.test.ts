@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Teste unitário do cronProxy (Option C)
+// FootStock Motor — Teste unitário do cronProxy (Option C)
 // ============================================================================
 
 import { cronProxy } from '../cronProxy'

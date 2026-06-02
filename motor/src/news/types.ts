@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Tipos locais para o módulo de notícias
+// FootStock Motor — Tipos locais para o módulo de notícias
 // ImpactCategory espelhada do schema Prisma (não importar @prisma/client diretamente)
 // ============================================================================
 

@@ -1,6 +1,6 @@
 # Motor — Architecture Decision Records
 
-**Projeto:** Foot Stock Motor (Serviço Standalone Railway)
+**Projeto:** FootStock Motor (Serviço Standalone Railway)
 **Data:** 2026-03-28
 
 ---

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — SSE Endpoint /stream/market
+// FootStock Motor — SSE Endpoint /stream/market
 // Subscreve no canal Redis market:tick e faz stream para o cliente.
 // Migrado do Vercel (footstock-next) para o motor em 2026-05-06.
 // Item 006: gate JWT + DELAY_BY_PLAN via PriceBuffer.

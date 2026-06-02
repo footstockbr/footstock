@@ -1,4 +1,4 @@
-# FINAL READINESS — Foot Stock
+# FINAL READINESS — FootStock
 
 **Data:** 2026-04-01
 **Versao:** 1.0

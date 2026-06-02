@@ -1,6 +1,6 @@
 # NOTICE — Atribuições de Software de Terceiros
 
-**Projeto:** Foot Stock  
+**Projeto:** FootStock  
 **Gerado em:** 2026-04-01  
 **Gerado por:** /dependency-audit
 

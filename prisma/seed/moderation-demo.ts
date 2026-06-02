@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Seed: Dados de demonstração de moderação
+// FootStock — Seed: Dados de demonstração de moderação
 // Popula blacklist com 5 palavras de demo.
 // Idempotente (upsert por palavra).
 // Uso: npx tsx prisma/seed/moderation-demo.ts

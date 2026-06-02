@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Seed: ContentModerationRules (T-028)
+// FootStock — Seed: ContentModerationRules (T-028)
 // 5 regras de moderação de conteúdo pré-seeded com isEnabled=false
 // ============================================================================
 

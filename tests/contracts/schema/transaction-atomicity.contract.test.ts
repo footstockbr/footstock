@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Contrato de Atomicidade de Transações
+// FootStock — Contrato de Atomicidade de Transações
 // Verifica cálculo de saldo, atomicidade Prisma e taxas por plano
 // Rastreabilidade: INT-011, INT-018 | US-007 | module-28/TASK-2/ST003
 // ============================================================================

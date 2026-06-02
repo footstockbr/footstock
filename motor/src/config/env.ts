@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Validação de Variáveis de Ambiente
+// FootStock Motor — Validação de Variáveis de Ambiente
 // Falha rápido (fail-fast) se variáveis obrigatórias estiverem ausentes.
 // ============================================================================
 

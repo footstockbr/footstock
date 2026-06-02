@@ -1,4 +1,4 @@
-# Anti-Hacking Tasks — Foot Stock
+# Anti-Hacking Tasks — FootStock
 Data: 2026-04-02
 
 ---

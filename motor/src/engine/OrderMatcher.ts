@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — OrderMatcher
+// FootStock Motor — OrderMatcher
 // Verifica ordens LIMIT e OCO a cada tick e executa quando condições atingidas.
 // Rastreabilidade: INT-012, INT-013 / TASK-3
 // ============================================================================

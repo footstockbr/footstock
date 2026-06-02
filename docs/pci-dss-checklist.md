@@ -1,4 +1,4 @@
-# PCI-DSS Checklist — Foot Stock (Nível 4 — Gateway Tokenizado)
+# PCI-DSS Checklist — FootStock (Nível 4 — Gateway Tokenizado)
 
 **Versão:** 1.0 | **Data:** 2026-03-28 | **Scope:** lib/gateways/, app/api/v1/payments/
 

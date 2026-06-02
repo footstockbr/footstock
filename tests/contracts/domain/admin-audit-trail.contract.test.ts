@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Contrato de Audit Trail Administrativo
+// FootStock — Contrato de Audit Trail Administrativo
 // Verifica que toda ação admin gera registro em admin_market_actions
 // Rastreabilidade: INT-079, INT-080, INT-083 | US-023, US-024 | module-28/TASK-3/ST002
 // ============================================================================

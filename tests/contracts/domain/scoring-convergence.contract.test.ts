@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Contrato de Scoring de Liga
+// FootStock — Contrato de Scoring de Liga
 // Verifica estrutura do ScoreBreakdown, teto de 100pts e pilares
 // Rastreabilidade: INT-044, INT-046, INT-047 | US-017 | module-28/TASK-3/ST003
 // ============================================================================

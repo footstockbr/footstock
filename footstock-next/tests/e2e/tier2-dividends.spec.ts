@@ -1,6 +1,6 @@
 /**
  * TIER 2 — Dividendos (T-007)
- * Foot Stock / T-033 Verificacao E2E Completa de Gaps
+ * FootStock / T-033 Verificacao E2E Completa de Gaps
  *
  * Cenarios cobertos:
  *   DV-01: Pagina /dividendos carrega com filtros de tipo e status

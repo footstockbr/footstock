@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Testes unitários: calculateFee (Taxa Operacional Escalonada)
+// FootStock — Testes unitários: calculateFee (Taxa Operacional Escalonada)
 // Rastreabilidade: T-018 — Acceptance Criteria completos
 // ============================================================================
 

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Foot Stock",
+    "name": "FootStock",
     "slug": "foot-stock-mobile",
     "owner": "footstock",
     "version": "1.0.0",
@@ -21,7 +21,7 @@
         "applinks:www.footstock.com.br"
       ],
       "infoPlist": {
-        "NSFaceIDUsageDescription": "Use sua biometria para desbloquear o app Foot Stock."
+        "NSFaceIDUsageDescription": "Use sua biometria para desbloquear o app FootStock."
       }
     },
     "android": {

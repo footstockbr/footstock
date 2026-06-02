@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Integration Tests: Auth Endpoints
+// FootStock — Integration Tests: Auth Endpoints
 // Cobre: POST /auth/register, /auth/login, /auth/forgot-password
 //
 // Segurança testada:

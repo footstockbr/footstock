@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Testes: AutoModeration rules service
+// FootStock — Testes: AutoModeration rules service
 // Fonte: module-24/TASK-7/ST001
 // ============================================================================
 

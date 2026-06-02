@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Acessibilidade /mercado (Playwright + axe-core)
+// FootStock — Acessibilidade /mercado (Playwright + axe-core)
 // WCAG 2.1 AA: zero violations, navegação por teclado, aria-pressed, CLS.
 // Requer servidor rodando em BASE_URL (default: http://localhost:3000)
 // com usuário autenticado mockado via cookie de sessão.

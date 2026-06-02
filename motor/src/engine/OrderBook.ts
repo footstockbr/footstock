@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — OrderBook
+// FootStock Motor — OrderBook
 // Matching básico de ordens LIMIT, STOP_LOSS e TAKE_PROFIT.
 // ============================================================================
 

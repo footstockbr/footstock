@@ -1,4 +1,4 @@
-# Server Actions Tasks — Foot Stock
+# Server Actions Tasks — FootStock
 
 > Gerado por `/nextjs:server-actions` em 2026-04-02
 > Comando shell: `grep -rn '"use server"' src/ --include="*.ts" --include="*.tsx"` → 0 resultados

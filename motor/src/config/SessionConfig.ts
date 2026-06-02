@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — SessionConfig
+// FootStock Motor — SessionConfig
 // Configuração estática de sessões do mercado B3 (horários BRT + volatilidades).
 // Referência: B3 Bovespa — Horários de Negociação (segmento Bovespa).
 // ============================================================================

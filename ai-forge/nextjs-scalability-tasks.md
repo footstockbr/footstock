@@ -1,4 +1,4 @@
-# Foot Stock — Scalability Tasks
+# FootStock — Scalability Tasks
 
 > Gerado por `/nextjs:scalability` em 2026-04-02
 > Workspace: `output/workspace/foot-stock`

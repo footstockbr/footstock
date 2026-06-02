@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Contrato de Schema de Usuários
+// FootStock — Contrato de Schema de Usuários
 // Verifica modelo User no DMMF Prisma: colunas, tipos, enums
 // Rastreabilidade: INT-100 | US-026 | module-28/TASK-2/ST001+ST005
 // ============================================================================

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Migracao one-shot: ordens STOP_LOSS/TAKE_PROFIT standalone
+// FootStock Motor — Migracao one-shot: ordens STOP_LOSS/TAKE_PROFIT standalone
 // de JOGADOR/CRAQUE viram LIMIT preservando o preco-gatilho como preco-limite.
 //
 // Politica: CONVERT_TO_LIMIT (preserva preco-gatilho como preco-limite).

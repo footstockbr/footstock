@@ -2,7 +2,7 @@
  * @jest-environment node
  */
 // ============================================================================
-// Foot Stock — Testes completos de webhook: 3 gateways × 5 cenários
+// FootStock — Testes completos de webhook: 3 gateways × 5 cenários
 // Cobre: HMAC válido/inválido, idempotência, replay attack, rate limit
 // ============================================================================
 

@@ -1,4 +1,4 @@
-# Security Summary — Foot Stock
+# Security Summary — FootStock
 
 > Gerado por: `/nextjs:security`  
 > Data: 2026-04-02  

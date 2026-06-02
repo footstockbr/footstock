@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Contract Test Helpers
+// FootStock — Contract Test Helpers
 // Schemas Zod + assertion helpers + factories para testes de contrato
 // Rastreabilidade: module-28/TASK-0/ST003
 // ============================================================================

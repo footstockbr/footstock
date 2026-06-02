@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — MarketEngine
+// FootStock Motor — MarketEngine
 // Loop principal de ticks + gestão de estado de ativos + order matching.
 // ============================================================================
 

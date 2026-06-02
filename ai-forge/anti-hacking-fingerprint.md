@@ -1,4 +1,4 @@
-# Anti-Hacking Fingerprint — Foot Stock
+# Anti-Hacking Fingerprint — FootStock
 Data: 2026-04-02
 Gerado por: /nextjs:anti-hacking-review
 

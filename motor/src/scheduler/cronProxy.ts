@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Cron Proxy (HTTP orchestrator pattern, Option C)
+// FootStock Motor — Cron Proxy (HTTP orchestrator pattern, Option C)
 // Em vez de duplicar logica de footstock-next/src/lib/{services,jobs,prisma},
 // o motor (leader-elected) dispara HTTP autenticado para a route do next.
 // Idempotencia, retries e regras de negocio ficam na unica fonte da verdade.

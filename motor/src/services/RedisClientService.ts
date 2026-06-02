@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Redis Client Service (motor standalone)
+// FootStock Motor — Redis Client Service (motor standalone)
 // Publisher e Subscriber separados conforme exigido pelo protocolo Redis.
 // TODO: usar process.env.REDIS_URL com TLS quando NODE_ENV === 'production'
 // ============================================================================

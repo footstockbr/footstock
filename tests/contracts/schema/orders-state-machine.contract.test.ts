@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Contrato de State Machine de Ordens
+// FootStock — Contrato de State Machine de Ordens
 // Verifica transições válidas/inválidas do OrderStatus e integridade do enum
 // Rastreabilidade: INT-011, INT-012, INT-013 | US-007 | module-28/TASK-2/ST002
 //

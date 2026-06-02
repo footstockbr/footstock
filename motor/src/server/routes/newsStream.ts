@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — SSE Endpoint /stream/news
+// FootStock Motor — SSE Endpoint /stream/news
 // Subscreve no canal Redis news:inject e faz stream para o cliente.
 // Migrado do Vercel (footstock-next) para o motor em 2026-05-06.
 // ============================================================================

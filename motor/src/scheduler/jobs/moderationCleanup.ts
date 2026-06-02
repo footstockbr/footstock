@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Cron Job: moderation-cleanup
+// FootStock Motor — Cron Job: moderation-cleanup
 // Migrado de footstock-next/src/app/api/cron/moderation-cleanup/route.ts
 // Schedule: 0 3 * * *
 // ============================================================================

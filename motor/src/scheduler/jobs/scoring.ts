@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Cron Job: scoring (Wave 3 / Option C)
+// FootStock Motor — Cron Job: scoring (Wave 3 / Option C)
 // Proxy HTTP para footstock-next/src/app/api/cron/scoring/route.ts.
 // Schedule: 0 5 * * *
 // ============================================================================

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — AgentOrchestrator
+// FootStock Motor — AgentOrchestrator
 // Orquestra agentes com proporções por cluster A_TOP e B_ILLIQ.
 // Cap de impacto ±2% por tick para prevenir movimentos impossíveis.
 // ============================================================================

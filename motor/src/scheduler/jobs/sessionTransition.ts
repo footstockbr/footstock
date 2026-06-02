@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Cron Job: session-transition
+// FootStock Motor — Cron Job: session-transition
 // Migrado de footstock-next/src/app/api/cron/session-transition/route.ts
 // Schedule: * * * * * (a cada minuto — verifica transição de sessão de mercado)
 // ============================================================================

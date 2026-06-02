@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Parâmetros de Microestrutura por Cluster
+// FootStock Motor — Parâmetros de Microestrutura por Cluster
 // ============================================================================
 
 import type { AssetCluster, ClusterParams } from '../types/motor.types'

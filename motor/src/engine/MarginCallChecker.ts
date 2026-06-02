@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — MarginCallChecker
+// FootStock Motor — MarginCallChecker
 // Verifica margem de posições SHORT a cada tick e dispara alertas/liquidação.
 // Alert: perdas = 50% (restante < 50%) | Liquidação forçada: perdas = 80% (restante < 20%)
 // Rastreabilidade: INT-014 / TASK-4/ST003

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Contrato news:inject
+// FootStock — Contrato news:inject
 // Verifica formato do payload de notícias e validação de ImpactCategory
 // Rastreabilidade: INT-099 | US-014 | module-28/TASK-1/ST003
 // ============================================================================

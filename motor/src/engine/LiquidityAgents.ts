@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — LiquidityAgents
+// FootStock Motor — LiquidityAgents
 // 5 perfis de agentes de liquidez por cluster (T-009).
 // Wrapper sobre o AgentOrchestrator existente com mapeamento canônico.
 // ============================================================================

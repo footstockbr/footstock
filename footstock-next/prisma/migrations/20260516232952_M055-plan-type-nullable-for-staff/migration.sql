@@ -1,4 +1,4 @@
--- M055: Plan type nullable for staff (Foot Stock — staff vs player separation).
+-- M055: Plan type nullable for staff (FootStock — staff vs player separation).
 --
 -- CONTEXTO:
 --   Brief INTAKE.md §43-65: planType e conceito de player (Jogador/Craque/Lenda).

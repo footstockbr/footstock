@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Integration Tests: Segurança (Testes de Rota)
+// FootStock — Integration Tests: Segurança (Testes de Rota)
 // Cobre as principais ameaças do THREAT-MODEL.md
 //
 // THREAT-001: Mass assignment em PATCH /me → elevação de privilégio

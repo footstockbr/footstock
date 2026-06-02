@@ -2,7 +2,7 @@
  * @jest-environment node
  */
 // ============================================================================
-// Foot Stock — Testes de contrato compartilhado: IGateway
+// FootStock — Testes de contrato compartilhado: IGateway
 // Todos os gateways devem satisfazer esta suite
 // Referência: PAYMENT_020, PAYMENT_050, PAYMENT_052, PCI-DSS req. 1-3
 // ============================================================================

@@ -1,5 +1,5 @@
 # ============================================================================
-# Foot Stock — Next.js 15 Dockerfile (multi-stage standalone)
+# FootStock — Next.js 15 Dockerfile (multi-stage standalone)
 # Suporte a output: 'standalone' para deploy otimizado no Railway.
 # ============================================================================
 

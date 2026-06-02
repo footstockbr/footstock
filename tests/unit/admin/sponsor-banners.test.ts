@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Testes: SponsorBanner cross-module + cache Redis
+// FootStock — Testes: SponsorBanner cross-module + cache Redis
 // Fonte: module-24/TASK-3/ST008
 // ============================================================================
 

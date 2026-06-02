@@ -2,7 +2,7 @@
 // MIGRATION-EXEC SKIP marker
 
 // ============================================================================
-// Foot Stock — Testes de integração: Rate Limiting (TASK-026)
+// FootStock — Testes de integração: Rate Limiting (TASK-026)
 // Cobre os 6 endpoints críticos com sliding window Redis.
 // Redis mockado via jest para testes sem infra.
 // ============================================================================

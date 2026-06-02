@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Heartbeat Publisher
+// FootStock Motor — Heartbeat Publisher
 // Publica sinais de "motor vivo" no Redis a cada HEARTBEAT_INTERVAL_MS.
 // Chave: market:tick:latest (Unix ms) — TTL=60s.
 // Chave legada: motor:heartbeat — consumida por /lib/monitoring/health.ts.

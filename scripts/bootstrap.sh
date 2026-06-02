@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# bootstrap.sh — Setup completo do ambiente local Foot Stock
+# bootstrap.sh — Setup completo do ambiente local FootStock
 # Gerado por /dev-bootstrap-create (SystemForge)
 # Uso: ./scripts/bootstrap.sh [--reset|--health]
 set -euo pipefail

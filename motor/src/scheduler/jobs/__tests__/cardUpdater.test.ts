@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Teste unitário do job card-updater
+// FootStock Motor — Teste unitário do job card-updater
 // ============================================================================
 
 import { cardUpdaterJob } from '../cardUpdater'

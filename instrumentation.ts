@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Next.js Instrumentation
+// FootStock — Next.js Instrumentation
 // Código executado UMA VEZ no startup do servidor (runtime Node.js apenas).
 // Referência: https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation
 // ============================================================================

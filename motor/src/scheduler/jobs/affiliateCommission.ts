@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Cron Job: affiliate-commission
+// FootStock Motor — Cron Job: affiliate-commission
 // Migrado de footstock-next/src/app/api/cron/affiliate-commission/route.ts
 // Schedule: 0 6 * * *
 // ============================================================================

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Redis Mock para testes de contrato
+// FootStock — Redis Mock para testes de contrato
 // Isolamento total: nenhuma conexão Redis real
 // Rastreabilidade: module-28/TASK-1/ST001
 // ============================================================================

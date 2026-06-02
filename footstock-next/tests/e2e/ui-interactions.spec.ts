@@ -1,6 +1,6 @@
 /**
  * TASK-4 — Auditoria de UI Interactions e Estados
- * module-29-integration / Foot Stock
+ * module-29-integration / FootStock
  *
  * Testes Playwright E2E verificando:
  * - Zero botões órfãos (todos com onClick/href)

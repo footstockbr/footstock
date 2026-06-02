@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Teste unitário do job scoring (Wave 3 / Option C)
+// FootStock Motor — Teste unitário do job scoring (Wave 3 / Option C)
 // ============================================================================
 
 import { scoringJob } from '../scoring'

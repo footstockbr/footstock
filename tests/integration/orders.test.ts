@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Integration Tests: Orders Endpoints
+// FootStock — Integration Tests: Orders Endpoints
 // Cobre: POST /orders, GET /orders, GET /orders/:id, DELETE /orders/:id
 //
 // Testa service ↔ banco REAL (sem mocks de Prisma).

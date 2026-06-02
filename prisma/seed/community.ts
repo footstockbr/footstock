@@ -196,7 +196,7 @@ export async function seedCommunity() {
     { id: 'notif-009', userId: lenda.id, type: 'DIVIDEND_CREDITED' as const, title: 'Dividendo creditado', body: 'Você recebeu FS$ 45,00 de dividendo financeiro do Palmeiras (PAL3) referente ao mês de março.', isRead: true },
     { id: 'notif-010', userId: jogador.id, type: 'BONUS_CREDITED' as const, title: 'Bônus creditado', body: 'Você recebeu um bônus de FS$ 500 de boas-vindas em sua conta!', isRead: true },
     { id: 'notif-011', userId: craque.id, type: 'LEAGUE_RESULT' as const, title: 'Resultado da liga', body: 'A Liga dos Campeões Teste encerrou! Você ficou em 1º lugar e ganhou FS$ 1.000 de premiação.', isRead: false },
-    { id: 'notif-012', userId: jogador.id, type: 'ADMIN_BROADCAST' as const, title: 'Comunicado da Foot Stock', body: 'Manutenção programada neste sábado entre 02h e 04h. O mercado ficará temporariamente indisponível.', isRead: false },
+    { id: 'notif-012', userId: jogador.id, type: 'ADMIN_BROADCAST' as const, title: 'Comunicado da FootStock', body: 'Manutenção programada neste sábado entre 02h e 04h. O mercado ficará temporariamente indisponível.', isRead: false },
     { id: 'notif-013', userId: craque.id, type: 'CANCELLATION_LOCK_ACTIVE' as const, title: 'Trava de cancelamento ativa', body: 'Sua assinatura entrou no período de trava de 30 dias. O cancelamento poderá ser solicitado após esse período.', isRead: true },
     { id: 'notif-014', userId: lenda.id, type: 'CANCELLATION_LOCK_LIQUIDATED' as const, title: 'Trava de cancelamento encerrada', body: 'O período de trava de 30 dias da sua assinatura encerrou. Você pode cancelar a qualquer momento.', isRead: true },
   ]

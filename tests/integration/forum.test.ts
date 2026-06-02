@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Integration Tests: Forum Endpoints
+// FootStock — Integration Tests: Forum Endpoints
 // Cobre: POST /forum, GET /forum, DELETE /forum/:id
 //
 // Segurança:

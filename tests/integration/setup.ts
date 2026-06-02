@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Integration Tests: Setup Compartilhado
+// FootStock — Integration Tests: Setup Compartilhado
 // Isolamento via cleanup de dados de teste em afterEach.
 // NUNCA usa mocks de banco — Prisma conecta ao TEST_DATABASE_URL real.
 // ============================================================================

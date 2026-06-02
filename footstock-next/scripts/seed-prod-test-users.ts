@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock - Seed prod test users (Auth.js v5 path - bcrypt + Prisma upsert)
+// FootStock - Seed prod test users (Auth.js v5 path - bcrypt + Prisma upsert)
 //
 // Substitui o seed antigo baseado em Supabase Auth Admin API. Usa apenas
 // Prisma + bcryptjs. Cria/atualiza 9 usuarios DEV (DEV_TEST_USERS) com

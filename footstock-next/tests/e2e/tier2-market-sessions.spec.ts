@@ -1,6 +1,6 @@
 /**
  * TIER 2 — Sessoes de Mercado (T-008)
- * Foot Stock / T-033 Verificacao E2E Completa de Gaps
+ * FootStock / T-033 Verificacao E2E Completa de Gaps
  *
  * Cenarios cobertos:
  *   MS-01: GET /api/v1/market/session retorna sessao atual

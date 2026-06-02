@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — MotorTick Builder e Serialização
+// FootStock Motor — MotorTick Builder e Serialização
 // ============================================================================
 
 import type { MotorTick, AssetState, SessionType } from '../types/motor.types'

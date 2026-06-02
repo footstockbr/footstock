@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Integration Tests: Factory Helpers
+// FootStock — Integration Tests: Factory Helpers
 // Cria dados de teste únicos no banco real.
 // Todos os usuários usam domínio @integration-test.local para cleanup seguro.
 // ============================================================================

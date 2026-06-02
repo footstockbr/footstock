@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Cron Job: notification-ttl-cleanup
+// FootStock Motor — Cron Job: notification-ttl-cleanup
 // Migrado de footstock-next/src/app/api/cron/notification-ttl-cleanup/route.ts
 // Schedule: 0 4 * * *
 // ============================================================================

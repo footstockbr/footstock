@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Estado (UF) por Ticker
+// FootStock Motor — Estado (UF) por Ticker
 // Usado para correlação regional inter-ativos (mesmo estado = rho bonus).
 // INTAKE: clubes do mesmo estado recebem rho adicional de 0.10.
 // ============================================================================

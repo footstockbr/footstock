@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Integration Tests: Orders Engine (module-14)
+// FootStock — Integration Tests: Orders Engine (module-14)
 // Cobre INT-011..INT-021 (TASK-5/ST003)
 //
 // NOTA: Estes testes utilizam mocks de alto nível para simular o banco e Redis.

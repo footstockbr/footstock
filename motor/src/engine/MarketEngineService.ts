@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — MarketEngineService
+// FootStock Motor — MarketEngineService
 // Orquestrador das 10 camadas quantitativas + agentes de liquidez.
 // Re-exporta MarketEngine com interface de serviço explícita.
 // ============================================================================

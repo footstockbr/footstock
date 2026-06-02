@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Contratos Cross-Module (module-2 Shared Foundations)
+// FootStock Motor — Contratos Cross-Module (module-2 Shared Foundations)
 // Re-exports tipados dos artefatos de module-2 consumidos pelo motor Railway.
 // Atualizar paths conforme estrutura real do workspace Next.js.
 // ============================================================================

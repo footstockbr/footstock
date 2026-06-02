@@ -1,6 +1,6 @@
 /**
  * TIER 1 — Equity Factor em Ligas (T-006)
- * Foot Stock / T-033 Verificacao E2E Completa de Gaps
+ * FootStock / T-033 Verificacao E2E Completa de Gaps
  *
  * Cenarios cobertos:
  *   EQ-01: ScoringEngine calcula multiplicadores corretos por tipo de liga

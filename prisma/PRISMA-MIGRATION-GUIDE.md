@@ -1,6 +1,6 @@
-# Prisma Migration Guide — Foot Stock
+# Prisma Migration Guide — FootStock
 
-**Projeto:** Foot Stock
+**Projeto:** FootStock
 **ORM:** Prisma
 **Database:** PostgreSQL (Railway-internal — `postgres.railway.internal`)
 **Schema:** `prisma/schema.prisma`

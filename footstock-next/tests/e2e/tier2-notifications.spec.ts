@@ -1,6 +1,6 @@
 /**
  * TIER 2 — Notificacoes (T-014)
- * Foot Stock / T-033 Verificacao E2E Completa de Gaps
+ * FootStock / T-033 Verificacao E2E Completa de Gaps
  *
  * Cenarios cobertos:
  *   NT-01: GET /api/v1/notifications retorna lista de notificacoes

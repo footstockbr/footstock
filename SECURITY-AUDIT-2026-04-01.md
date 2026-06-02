@@ -149,7 +149,7 @@ Depois:
 
 ## Conclusão
 
-**Foot Stock está SEGURO para avançar para desenvolvimento.**
+**FootStock está SEGURO para avançar para desenvolvimento.**
 
 - ✅ Documentação de design completa e precisa
 - ✅ Infraestrutura de credenciais protegida

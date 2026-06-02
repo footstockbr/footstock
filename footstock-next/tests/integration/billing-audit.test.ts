@@ -1,6 +1,6 @@
 /**
  * TASK-3 — Auditoria de Billing e Planos
- * module-29-integration / Foot Stock
+ * module-29-integration / FootStock
  *
  * Verifica fluxo completo de billing: upgrade, cancelamento, direito de
  * arrependimento, expiração e bloqueio de features por plano.

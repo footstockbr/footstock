@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — CorrelationLayer
+// FootStock Motor — CorrelationLayer
 // Correlação inter-ativos por cluster + regional (extraída de PriceCalculator).
 // ============================================================================
 

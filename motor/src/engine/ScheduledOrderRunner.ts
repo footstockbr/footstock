@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — ScheduledOrderRunner
+// FootStock Motor — ScheduledOrderRunner
 // Executa ordens SCHEDULED no horário programado respeitando sessão de mercado.
 // Rastreabilidade: INT-015 / TASK-3/ST003
 // ============================================================================

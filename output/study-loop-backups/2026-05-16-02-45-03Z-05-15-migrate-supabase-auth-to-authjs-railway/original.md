@@ -1,4 +1,4 @@
-# Migrar autenticacao Foot Stock de Supabase para Auth.js v5 + Railway Postgres
+# Migrar autenticacao FootStock de Supabase para Auth.js v5 + Railway Postgres
 
 > Objetivo macro: substituir o backend de identidade Supabase Auth (atualmente bloqueado por `exceed_db_size_quota`) por Auth.js v5 (`next-auth@5.0.0-beta.31`) com `@auth/prisma-adapter` apontando para o Postgres ja hospedado na Railway, mantendo `User.id` estavel, preservando os 9 usuarios de teste DEV e desbloqueando o seed em producao.
 > Fluxo alvo: `/loop --task` (loop sobre execucao iterada de TASK-{k}.md, sem DCP — micro-architecture pontual fora de `delivery.json`).

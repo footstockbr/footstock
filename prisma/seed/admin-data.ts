@@ -116,7 +116,7 @@ export async function seedAdminData() {
     create: {
       id: 'sponsor-001',
       assetId: assets[0]!.id,
-      name: 'Brahma Parceiro Foot Stock',
+      name: 'Brahma Parceiro FootStock',
       logoUrl: 'https://picsum.photos/seed/brahma/200/80',
       contractStart: d(-30),
       contractEnd: d(60),

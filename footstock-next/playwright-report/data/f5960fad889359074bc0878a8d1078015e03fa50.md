@@ -130,7 +130,7 @@ Call log:
 ```ts
   1   | /**
   2   |  * TASK-4 — Auditoria de UI Interactions e Estados
-  3   |  * module-29-integration / Foot Stock
+  3   |  * module-29-integration / FootStock
   4   |  *
   5   |  * Testes Playwright E2E verificando:
   6   |  * - Zero botões órfãos (todos com onClick/href)

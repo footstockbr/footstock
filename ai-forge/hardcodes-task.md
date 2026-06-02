@@ -1,4 +1,4 @@
-# Hardcodes Task List — Foot Stock
+# Hardcodes Task List — FootStock
 
 **Gerado em:** 2026-04-01  
 **REPO_PATH:** `output/workspace/foot-stock`  

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — NewsClassifier
+// FootStock Motor — NewsClassifier
 // Classifica notícias via Claude Sonnet: ticker, impactCategory, sentiment, relevance.
 // Prompt caching no prefixo estático (primeiro content block da mensagem user +
 // cache_control), gate de 1024 tokens, versionamento do mapa de tickers e

@@ -1,4 +1,4 @@
-// Service Worker — Foot Stock Web Push
+// Service Worker — FootStock Web Push
 // module-19-inbox-notificacoes
 // EVT-046 e EVT-047: postMessage para client window (AnalyticsProvider escuta)
 
@@ -7,10 +7,10 @@ self.addEventListener('push', function (event) {
   try {
     data = event.data ? event.data.json() : {}
   } catch {
-    data = { title: 'Foot Stock', body: 'Nova notificação' }
+    data = { title: 'FootStock', body: 'Nova notificação' }
   }
 
-  var title = data.title || 'Foot Stock'
+  var title = data.title || 'FootStock'
   var options = {
     body: data.body || '',
     icon: '/icons/icon-192.png',

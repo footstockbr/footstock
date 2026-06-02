@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — SessionManager
+// FootStock Motor — SessionManager
 // Detecta sessão de mercado atual baseada no horário BRT via date-fns-tz.
 // Servidor Railway opera em TZ=UTC — toda conversão é explícita.
 // ============================================================================

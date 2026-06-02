@@ -1,6 +1,6 @@
 /**
  * TASK-5 — Fluxos E2E das 6 Jornadas Principais (ECU)
- * module-29-integration / Foot Stock
+ * module-29-integration / FootStock
  *
  * Valida as 6 jornadas críticas do usuário end-to-end com Playwright:
  *   F1: Cadastro → Onboarding → Dashboard

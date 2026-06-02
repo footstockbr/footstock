@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — AdminChannel
+// FootStock Motor — AdminChannel
 // Subscreve no canal motor:control e despacha ações ao MarketEngine.
 // TODO: usar process.env.REDIS_URL com TLS quando NODE_ENV === 'production'
 // ============================================================================

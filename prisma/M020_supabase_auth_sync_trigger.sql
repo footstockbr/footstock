@@ -1,5 +1,5 @@
 -- ============================================================================
--- Foot Stock — Supabase Auth Sync Trigger
+-- FootStock — Supabase Auth Sync Trigger
 -- ============================================================================
 -- Este trigger garante que quando um usuario e criado via Supabase Auth,
 -- um registro minimo e criado na tabela public.users.

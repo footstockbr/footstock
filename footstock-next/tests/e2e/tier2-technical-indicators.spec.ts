@@ -1,6 +1,6 @@
 /**
  * TIER 2 — Indicadores Tecnicos por Plano (T-011)
- * Foot Stock / T-033 Verificacao E2E Completa de Gaps
+ * FootStock / T-033 Verificacao E2E Completa de Gaps
  *
  * Cenarios cobertos:
  *   TI-01: Jogador acessa ativo — grafico sem indicadores avancados

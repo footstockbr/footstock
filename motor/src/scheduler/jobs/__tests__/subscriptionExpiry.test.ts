@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Teste unitário do job subscription-expiry (Wave 1 / Option C)
+// FootStock Motor — Teste unitário do job subscription-expiry (Wave 1 / Option C)
 // Valida que o job invoca cronProxy('subscription-expiry') com sucesso.
 // ============================================================================
 

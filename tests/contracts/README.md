@@ -1,4 +1,4 @@
-# Contract Tests — Foot Stock
+# Contract Tests — FootStock
 
 ## O que são testes de contrato?
 

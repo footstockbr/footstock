@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Integration Tests: Users Endpoints
+// FootStock — Integration Tests: Users Endpoints
 // Cobre: GET /me, PATCH /me, DELETE /me, GET /me/data, GET /me/export
 //
 // Segurança testada:

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Broadcaster
+// FootStock Motor — Broadcaster
 // Publica ticks no canal Redis market:tick.
 // TODO: usar process.env.REDIS_URL com TLS quando NODE_ENV === 'production'
 // ============================================================================

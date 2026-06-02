@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Cron Job: age-verification-retry
+// FootStock Motor — Cron Job: age-verification-retry
 // Migrado de footstock-next/src/app/api/cron/age-verification-retry/route.ts
 // Schedule: 0 6 * * *
 // ============================================================================

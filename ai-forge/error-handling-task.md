@@ -1,4 +1,4 @@
-# Error Handling & Loading States — Foot Stock
+# Error Handling & Loading States — FootStock
 > Gerado por `/nextjs:error-handling` em 2026-04-01
 
 ---

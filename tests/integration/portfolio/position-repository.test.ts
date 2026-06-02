@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Unit Tests: PositionRepository (module-15, TASK-6)
+// FootStock — Unit Tests: PositionRepository (module-15, TASK-6)
 // Cobre findByUserId, getSummary (com regressão GAP-001), getHistory (LOCF).
 // Rastreabilidade: INT-034, INT-035
 // ============================================================================

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Cron Job: interest-accrual (Wave 1 / Option C)
+// FootStock Motor — Cron Job: interest-accrual (Wave 1 / Option C)
 // Proxy HTTP para footstock-next/src/app/api/cron/interest-accrual/route.ts.
 // Schedule: 0 7 * * *
 // ============================================================================

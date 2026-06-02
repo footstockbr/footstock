@@ -1,4 +1,4 @@
-# PRD: Correções de Segurança — Foot Stock
+# PRD: Correções de Segurança — FootStock
 
 > Gerado por: `/nextjs:security`  
 > Data: 2026-04-02

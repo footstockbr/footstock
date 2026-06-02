@@ -1,4 +1,4 @@
-# Foot Stock — Scalability Report
+# FootStock — Scalability Report
 
 > Gerado por `/nextjs:scalability` em 2026-04-02
 > Config: `.claude/projects/foot-stock.json`

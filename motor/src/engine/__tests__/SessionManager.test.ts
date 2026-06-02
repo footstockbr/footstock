@@ -24,7 +24,7 @@ function brtNoDst(utcIso: string): Date {
   return new Date(utcIso)
 }
 
-// Foot Stock schedule (BRT):
+// FootStock schedule (BRT):
 //   CLOSED:       01:30 – 10:45
 //   PRE_OPENING:  10:45 – 11:00
 //   TRADING:      11:00 – 00:45 (next day)

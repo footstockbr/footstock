@@ -1,6 +1,6 @@
 -- ============================================================
 -- M047 — SEED DIVIDENDOS a partir das posições existentes
--- Foot Stock — Colar no Supabase SQL Editor
+-- FootStock — Colar no Supabase SQL Editor
 -- ============================================================
 -- O que faz:
 --   Gera dividendos para cada posição OPEN dos usuários de teste

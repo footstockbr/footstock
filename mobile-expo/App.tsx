@@ -40,7 +40,7 @@ export default function App() {
       }
 
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Desbloquear Foot Stock',
+        promptMessage: 'Desbloquear FootStock',
         cancelLabel: 'Cancelar',
         fallbackLabel: 'Usar senha do aparelho',
         disableDeviceFallback: false,
@@ -90,7 +90,7 @@ export default function App() {
         <SafeAreaView style={styles.centered} edges={['top', 'left', 'right', 'bottom']}>
           <StatusBar style="light" />
           <View style={styles.lockCard}>
-            <Text style={styles.title}>Foot Stock</Text>
+            <Text style={styles.title}>FootStock</Text>
             <Text style={styles.subtitle}>
               Desbloqueie com biometria para continuar.
             </Text>

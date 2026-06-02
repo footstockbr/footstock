@@ -1,6 +1,6 @@
 /**
  * Setup e Teardown Compartilhados — Testes E2E T-033
- * Foot Stock / Verificacao E2E Completa de Todos os Gaps
+ * FootStock / Verificacao E2E Completa de Todos os Gaps
  *
  * Usuarios de teste (criados via seed ou banco de staging):
  *   - JOGADOR: plano basico, 2 ordens/dia MARKET, sem LIMIT

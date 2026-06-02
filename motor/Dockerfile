@@ -1,5 +1,5 @@
 # ============================================================================
-# Foot Stock Motor — Dockerfile de Produção (standalone motor/)
+# FootStock Motor — Dockerfile de Produção (standalone motor/)
 # NOTA: Este Dockerfile assume que o build context é a RAIZ do repositório.
 #       Configure o serviço Railway com Root Directory = / (raiz do repo).
 #       O root Dockerfile do repo (../Dockerfile) é equivalente e preferido

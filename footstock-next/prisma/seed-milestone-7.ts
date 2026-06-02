@@ -1,6 +1,6 @@
 /**
  * Seed de Demonstração — Milestone 7
- * Foot Stock | module-19-inbox-notificacoes
+ * FootStock | module-19-inbox-notificacoes
  *
  * Execução: npx ts-node prisma/seed-milestone-7.ts
  *
@@ -100,7 +100,7 @@ async function seedForumPosts(users: { jogadorId: string; craqueId: string; lend
     },
     {
       userId: users.craqueId,
-      content: 'O conceito de fair value no Foot Stock é diferente do mercado real. Leiam o glossário!',
+      content: 'O conceito de fair value no FootStock é diferente do mercado real. Leiam o glossário!',
       ticker: null,
       likes: 0,
     },

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Playwright config (a11y only)
+// FootStock — Playwright config (a11y only)
 // ============================================================================
 
 import { defineConfig, devices } from '@playwright/test'

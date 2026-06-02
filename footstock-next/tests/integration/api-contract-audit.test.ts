@@ -3,7 +3,7 @@
 
 /**
  * TASK-2 — Auditoria de Contratos de API
- * module-29-integration / Foot Stock
+ * module-29-integration / FootStock
  *
  * Verifica schema ApiResponse<T>, níveis de autenticação por endpoint,
  * rate limiting e cobertura do Error Catalog (14 prefixos).

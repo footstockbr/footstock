@@ -1,4 +1,4 @@
-# Accessibility Summary — Foot Stock (footstock-next)
+# Accessibility Summary — FootStock (footstock-next)
 
 > Executado em: 2026-04-01 | 3 fases completas
 

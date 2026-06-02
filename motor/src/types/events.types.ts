@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Tipos de Eventos Redis
+// FootStock Motor — Tipos de Eventos Redis
 // ============================================================================
 
 import type { MotorTick, AdminAction } from './motor.types'

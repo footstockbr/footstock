@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Integration Tests: Global Setup
+// FootStock — Integration Tests: Global Setup
 // Valida que o banco de teste está acessível antes de rodar os testes.
 // ============================================================================
 

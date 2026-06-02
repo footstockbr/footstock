@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Cron Job: order-expiry (Wave 2 / Option C)
+// FootStock Motor — Cron Job: order-expiry (Wave 2 / Option C)
 // Proxy HTTP para footstock-next/src/app/api/cron/order-expiry/route.ts.
 // Schedule: 0 6 * * *
 // ============================================================================

@@ -1,4 +1,4 @@
-# ENV SETUP CHECKLIST — Foot Stock
+# ENV SETUP CHECKLIST — FootStock
 
 Gerado por `/env-creation` em **2026-04-01**
 

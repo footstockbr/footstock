@@ -1,7 +1,7 @@
 {
   "name": "foot-stock-motor",
   "version": "1.0.0",
-  "description": "Motor de mercado Foot Stock — serviço standalone Railway",
+  "description": "Motor de mercado FootStock — serviço standalone Railway",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",

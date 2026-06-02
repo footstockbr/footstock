@@ -1,4 +1,4 @@
-# Demo Milestone 7 — Foot Stock
+# Demo Milestone 7 — FootStock
 
 > **Nota infra (2026-05-06):** O sistema foi migrado de Vercel + Supabase para Railway consolidado.
 > Os comandos abaixo continuam válidos; o banco de dados local (Docker) é usado para demo.

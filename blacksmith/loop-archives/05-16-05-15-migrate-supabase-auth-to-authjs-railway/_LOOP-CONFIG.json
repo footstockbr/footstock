@@ -24,7 +24,7 @@
   "daily_loop": {
     "version": "1.1.0",
     "slug": "05-16-05-15-migrate-supabase-auth-to-authjs-railway",
-    "task_description": "Loop /loop --task: Onda 1 migracao Foot Stock de Supabase Auth (bloqueado por exceed_db_size_quota) para Auth.js v5 beta + @auth/prisma-adapter + Railway Postgres. 7 TASKs atomicas (schema M054 -> split config + middleware -> login dual-stack com backfill/timing/race -> logout dual-cookie -> seed bcrypt -> change-password bcrypt -> deploy prod + smoke 5 personas). Materializadas como 9 itens numerados (001 preparo + 002..008 intermediarias + 009 finalizacao).",
+    "task_description": "Loop /loop --task: Onda 1 migracao FootStock de Supabase Auth (bloqueado por exceed_db_size_quota) para Auth.js v5 beta + @auth/prisma-adapter + Railway Postgres. 7 TASKs atomicas (schema M054 -> split config + middleware -> login dual-stack com backfill/timing/race -> logout dual-cookie -> seed bcrypt -> change-password bcrypt -> deploy prod + smoke 5 personas). Materializadas como 9 itens numerados (001 preparo + 002..008 intermediarias + 009 finalizacao).",
     "loop_root": "/home/pedro/Repositórios/systemForge/output/workspace/foot-stock/blacksmith/loop-archives/05-16-05-15-migrate-supabase-auth-to-authjs-railway",
     "progress_path": "PROGRESS.md",
     "tasks_dir": "tasks",

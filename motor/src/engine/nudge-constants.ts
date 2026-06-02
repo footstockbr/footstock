@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Nudge constants
+// FootStock Motor — Nudge constants
 // Decisao I7: garantir que nenhum ativo fique mais de 5 minutos sem variar.
 // Apos NUDGE_TICKS ticks consecutivos sem mudanca de preco, injeta micro-choque
 // de NUDGE_DELTA na direcao do fairValue. Reseta contador a cada movimento real.

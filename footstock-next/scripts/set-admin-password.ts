@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock - set-admin-password (Bug A / ramificacao A1)
+// FootStock - set-admin-password (Bug A / ramificacao A1)
 //
 // Define `passwordHash` (bcrypt, 12 rounds) para UMA conta administrativa cujo
 // hash esta ausente (password_hash IS NULL), corrigindo o 401 AUTH-001 do login.

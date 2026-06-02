@@ -31,7 +31,7 @@ async function main() {
     throw new Error('[seed] ABORTADO — NODE_ENV=production. Seeds de demo são proibidos em produção.')
   }
 
-  console.log('\n🌱 Admin Demo Seed — Foot Stock')
+  console.log('\n🌱 Admin Demo Seed — FootStock')
   console.log('================================\n')
 
   // Skip users/news/financial if running just engagement seed

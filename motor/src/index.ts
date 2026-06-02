@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Entry Point
+// FootStock Motor — Entry Point
 // Gerencia leader election, inicialização e graceful shutdown.
 // ============================================================================
 

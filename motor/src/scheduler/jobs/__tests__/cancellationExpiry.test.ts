@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Teste unitário do job cancellation-expiry (Option C)
+// FootStock Motor — Teste unitário do job cancellation-expiry (Option C)
 // Valida que o job invoca cronProxy('cancellation-expiry') (deixou de ser stub).
 // ============================================================================
 

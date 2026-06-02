@@ -1,4 +1,4 @@
-# Boundaries Tasks — Foot Stock
+# Boundaries Tasks — FootStock
 
 > Gerado por `/nextjs:boundaries` em 2026-04-02
 

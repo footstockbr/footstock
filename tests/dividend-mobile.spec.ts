@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — E2E Mobile: DividendHistory em /carteira (Playwright)
+// FootStock — E2E Mobile: DividendHistory em /carteira (Playwright)
 // Viewport 390×844 (iPhone 14). Touch targets ≥ 44px, scroll, CLS < 0.05.
 // Rastreabilidade: INT-072, INT-073
 // ============================================================================

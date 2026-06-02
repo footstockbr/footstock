@@ -1,4 +1,4 @@
-# Foot Stock
+# FootStock
 
 Plataforma de investimentos simulados em ações de clubes de futebol brasileiro.
 
@@ -132,7 +132,7 @@ tests/e2e/            # Testes Playwright
 Para criar a tag de produção após o deploy:
 
 ```bash
-git tag -a v1.0.0 -m "Foot Stock v1.0.0 — Lançamento oficial"
+git tag -a v1.0.0 -m "FootStock v1.0.0 — Lançamento oficial"
 git push origin v1.0.0
 ```
 

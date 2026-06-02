@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — NewsQueue
+// FootStock Motor — NewsQueue
 // Fila FIFO em memória para notícias aguardando classificação (máx 50 itens).
 // Rastreabilidade: INT-046
 // ============================================================================

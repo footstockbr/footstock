@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Teste unitário do job financial-dividend
+// FootStock Motor — Teste unitário do job financial-dividend
 // ============================================================================
 
 import { financialDividendJob } from '../financialDividend'

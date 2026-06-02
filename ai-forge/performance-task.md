@@ -1,4 +1,4 @@
-# Performance Tasks — Foot Stock
+# Performance Tasks — FootStock
 > Gerado por `/nextjs:performance` em 2026-04-02
 > Config: `.claude/projects/foot-stock.json`
 > Workspace: `output/workspace/foot-stock`

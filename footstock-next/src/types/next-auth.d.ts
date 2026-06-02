@@ -1,5 +1,5 @@
 // Type augmentation para Auth.js v5 (next-auth@5.0.0-beta.31).
-// Estende Session.user, User e JWT com os campos do dominio Foot Stock
+// Estende Session.user, User e JWT com os campos do dominio FootStock
 // expostos via callbacks `jwt` e `session` (ver src/lib/authjs/config.ts).
 //
 // Rastreabilidade: TASK-002 (M054) do loop migrate-supabase-auth-to-authjs-railway.

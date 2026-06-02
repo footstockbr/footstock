@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Cron Job: leverage-interest
+// FootStock Motor — Cron Job: leverage-interest
 // Migrado de footstock-next/src/app/api/cron/leverage-interest/route.ts
 // Schedule: 30 7 * * *
 // ============================================================================

@@ -1,4 +1,4 @@
-# Anti-Hacking Review Report — Foot Stock
+# Anti-Hacking Review Report — FootStock
 Data: 2026-04-02
 Projeto: foot-stock (mercado de ações do futebol brasileiro)
 Fingerprint: Next.js 15.5.14 | React 19.2.4 | Node.js >=18.17.0

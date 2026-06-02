@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — OrderExecutor
+// FootStock Motor — OrderExecutor
 // Processa ordens MARKET pendentes a cada tick em batch seguro.
 // Rastreabilidade: INT-011 / TASK-2/ST001
 // ============================================================================

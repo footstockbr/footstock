@@ -1,6 +1,6 @@
 /**
  * TIER 3 — Regras de Negocio (T-018, T-019, T-020, T-021, T-023, T-024, T-026)
- * Foot Stock / T-033 Verificacao E2E Completa de Gaps
+ * FootStock / T-033 Verificacao E2E Completa de Gaps
  *
  * Cenarios cobertos:
  *

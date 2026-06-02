@@ -1,6 +1,6 @@
 -- ============================================================================
 -- CONSOLIDATED MIGRATION: M027 through M044
--- Foot Stock — SQL consolidado para Supabase SQL Editor
+-- FootStock — SQL consolidado para Supabase SQL Editor
 -- Gerado em: 2026-04-15
 --
 -- INSTRUCOES:

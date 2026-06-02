@@ -1,6 +1,6 @@
 /**
  * TIER 1 — Web Push Notifications (T-002)
- * Foot Stock / T-033 Verificacao E2E Completa de Gaps
+ * FootStock / T-033 Verificacao E2E Completa de Gaps
  *
  * Cenarios cobertos:
  *   PU-01: Endpoint VAPID public key disponivel e retorna chave valida

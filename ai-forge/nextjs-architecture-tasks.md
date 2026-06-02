@@ -8,7 +8,7 @@ config: .claude/projects/foot-stock.json
 </metadata>
 
 <overview>
-O projeto Foot Stock tem arquitetura layer-based sólida com lib/services, lib/repositories, hooks/ e types/ bem estruturados.
+O projeto FootStock tem arquitetura layer-based sólida com lib/services, lib/repositories, hooks/ e types/ bem estruturados.
 Os problemas centrais são: (1) duplicação de componentes UI entre components/feedback/ e components/ui/ — a maioria usa ui/ mas feedback/ tem versões canônicas mais completas; (2) utilitário fsCurrency redefinido localmente em 2 componentes quando formatFS já existe em lib/utils/formatCurrency; (3) PLAN_LABELS redefinido em 4 arquivos quando já centralizado em lib/constants/labels; (4) God Component em usuarios/page.tsx (1123 linhas, 26 useState).
 </overview>
 

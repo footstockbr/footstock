@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Sentry Edge Configuration (Edge Functions / Middleware)
+// FootStock — Sentry Edge Configuration (Edge Functions / Middleware)
 // Rastreabilidade: INT-110, module-27/TASK-1
 // ============================================================================
 

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — BaseAgent
+// FootStock Motor — BaseAgent
 // Classe base abstrata para agentes de mercado simulados.
 // Todos os agentes extendem BaseAgent e implementam decide().
 // ============================================================================

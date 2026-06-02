@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — Cron Scheduler (node-cron)
+// FootStock Motor — Cron Scheduler (node-cron)
 // 23 jobs migrados do Vercel (item 012 + item 026 P1-01).
 // Scheduler é OPT-IN via env MOTOR_SCHEDULER_ENABLED.
 // Apenas o leader executa jobs (gating via LeaderElection).

@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Integration Tests: Global Teardown
+// FootStock — Integration Tests: Global Teardown
 // Limpa todos os dados de teste residuais ao final da suite.
 // ============================================================================
 

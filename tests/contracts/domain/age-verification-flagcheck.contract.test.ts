@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock — Contrato de Verificação de Idade (ECA Digital / FlagCheck)
+// FootStock — Contrato de Verificação de Idade (ECA Digital / FlagCheck)
 // Verifica: CPF nunca em plaintext, fallback, shape da resposta, fluxos ECA
 // Rastreabilidade: INT-060, INT-109 | US-001 | module-28/TASK-3/ST004
 // ============================================================================

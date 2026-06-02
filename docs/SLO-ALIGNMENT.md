@@ -9,7 +9,7 @@
 
 ## Propósito
 
-Este documento define os SLOs iniciais do Foot Stock, derivados dos:
+Este documento define os SLOs iniciais do FootStock, derivados dos:
 - Thresholds k6 definidos em `tests/load/basic-load.js` (TASK-3/ST002)
 - Projeções de escala documentadas em `docs/SCALING.md` (TASK-3/ST001)
 

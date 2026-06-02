@@ -1,5 +1,5 @@
 // ============================================================================
-// Foot Stock Motor — MotorHealthService
+// FootStock Motor — MotorHealthService
 // Publica e verifica heartbeat do motor via Redis.
 // Delega publicação para heartbeat.ts (fonte de verdade das chaves).
 // Chaves publicadas:
