@@ -71,10 +71,16 @@ const envSchema = z.object({
   PAGSEGURO_TOKEN: z.string().min(1).optional(),
   PAGSEGURO_WEBHOOK_SECRET: z.string().min(1).optional(),
   PAGSEGURO_SANDBOX: z.string().optional(),
+  // Marketplace/seller id (ACCO_...). Carregado mas ainda nao consumido pelos
+  // gateways — wiring de split/marketplace exige mudanca em pagseguro.ts.
+  PAGSEGURO_MARKETPLACE_ID: z.string().min(1).optional(),
   PAYPAL_CLIENT_ID: z.string().min(1).optional(),
   PAYPAL_CLIENT_SECRET: z.string().min(1).optional(),
   PAYPAL_WEBHOOK_ID: z.string().min(1).optional(),
   PAYPAL_SANDBOX: z.string().optional(),
+  // Merchant/account id (Payer ID). Carregado mas ainda nao consumido pelos
+  // gateways — wiring de marketplace/partner exige mudanca em paypal.ts.
+  PAYPAL_MERCHANT_ID: z.string().min(1).optional(),
   CRON_SECRET: z.string().min(1).optional(),
 
   // Email (Resend)
