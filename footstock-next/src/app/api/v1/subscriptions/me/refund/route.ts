@@ -7,6 +7,12 @@ import { GatewayRetryableError, GatewayType } from '@/lib/gateways/IGateway'
 import type { PlanType } from '@/types'
 import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
 
+const REFUND_CONFIRMED_STATUSES = new Set(['approved', 'refunded', 'succeeded', 'success', 'completed'])
+
+function isRefundConfirmed(outcome: { status: string; alreadyRefunded: boolean }): boolean {
+  return outcome.alreadyRefunded || REFUND_CONFIRMED_STATUSES.has(outcome.status.toLowerCase())
+}
+
 // POST /api/v1/subscriptions/me/refund
 // Reembolso CDC Art. 49: acao explicita, separada do cancelamento simples.
 // Estorna de fato no gateway (Mercado Pago) ANTES de rebaixar o plano —
@@ -48,13 +54,20 @@ export async function POST() {
     })
 
     // Estorno real no gateway (apenas quando há pagamento PAID rastreável).
-    // Sem Payment PAID (ex.: ativação manual/admin sem cobrança), não há o que estornar
-    // no gateway — segue só com o downgrade, registrando que não houve estorno externo.
+    // Assinatura paga sem Payment PAID não pode perder acesso neste fluxo: sem o
+    // identificador do gateway, não há confirmação verificável de estorno.
     let refundOutcome: { refundId: string; status: string; alreadyRefunded: boolean } | null = null
     if (payment) {
       try {
         const gateway = getGateway(payment.gateway as unknown as GatewayType)
         refundOutcome = await gateway.refundPayment(payment.gatewayTransactionId)
+        if (!isRefundConfirmed(refundOutcome)) {
+          console.warn(
+            `[subscriptions/me/refund] estorno ainda nao confirmado pelo gateway: ` +
+            `payment=${payment.id} status=${refundOutcome.status}`
+          )
+          return errors.server('O estorno foi solicitado, mas ainda não foi confirmado pelo gateway. Tente novamente em instantes.')
+        }
       } catch (err) {
         // Transitório (timeout/5xx): não rebaixa, pede retry.
         if (err instanceof GatewayRetryableError) {
@@ -71,14 +84,31 @@ export async function POST() {
             : `Não foi possível processar o estorno (código ${code ?? statusCode}). Entre em contato com o suporte.`,
         )
       }
+    } else if (sub.amount > 0) {
+      console.error(`[subscriptions/me/refund] subscription ${sub.id} paga sem Payment PAID — downgrade bloqueado`)
+      return errors.validation('Pagamento pago não encontrado para estorno automático. Entre em contato com o suporte.')
     } else {
       console.warn(`[subscriptions/me/refund] subscription ${sub.id} sem Payment PAID — downgrade sem estorno de gateway`)
     }
 
     // Estorno confirmado (ou nada a estornar): efetiva cancelamento + downgrade em transação.
-    const updatedSub = await prisma.$transaction(async (tx) => {
-      const s = await tx.subscription.update({
-        where: { id: sub.id },
+    const { subscription: updatedSub, stateChanged } = await prisma.$transaction(async (tx) => {
+      if (payment) {
+        const paymentUpdate = await tx.payment.updateMany({
+          where: { id: payment.id, status: 'PAID' },
+          data: { status: 'REFUNDED' },
+        })
+        if (paymentUpdate.count === 0) {
+          const currentSub = await tx.subscription.findUniqueOrThrow({ where: { id: sub.id } })
+          return { subscription: currentSub, stateChanged: false }
+        }
+      }
+
+      const subUpdate = await tx.subscription.updateMany({
+        where: {
+          id: sub.id,
+          status: { in: ['ACTIVE', 'CANCELLATION_LOCK', 'PAST_DUE', 'TRIAL', 'TRIALING'] },
+        },
         data: {
           status: 'CANCELLED',
           cancelledAt: now,
@@ -92,12 +122,9 @@ export async function POST() {
         },
       })
 
-      // Marca o Payment como REFUNDED para histórico e idempotência do webhook MP
-      if (payment) {
-        await tx.payment.update({
-          where: { id: payment.id },
-          data: { status: 'REFUNDED' },
-        })
+      if (subUpdate.count === 0) {
+        const currentSub = await tx.subscription.findUniqueOrThrow({ where: { id: sub.id } })
+        return { subscription: currentSub, stateChanged: false }
       }
 
       await tx.user.update({
@@ -105,35 +132,38 @@ export async function POST() {
         data: { planType: 'JOGADOR', fsBalance: 2000 },
       })
 
-      return s
+      const currentSub = await tx.subscription.findUniqueOrThrow({ where: { id: sub.id } })
+      return { subscription: currentSub, stateChanged: true }
     })
 
-    const openShortCount = await prisma.position.count({
-      where: { userId: auth.user.id, side: 'SHORT', status: 'OPEN' },
-    }).catch(() => 0)
+    if (stateChanged) {
+      const openShortCount = await prisma.position.count({
+        where: { userId: auth.user.id, side: 'SHORT', status: 'OPEN' },
+      }).catch(() => 0)
 
-    mixpanelServer.trackSubscriptionCancelled(auth.user.id, {
-      plan: sub.planType as PlanType,
-      cancellation_reason: 'cooling_off_refund',
-      within_trial: true,
-      had_open_shorts: openShortCount > 0,
-    })
+      mixpanelServer.trackSubscriptionCancelled(auth.user.id, {
+        plan: sub.planType as PlanType,
+        cancellation_reason: 'cooling_off_refund',
+        within_trial: true,
+        had_open_shorts: openShortCount > 0,
+      })
 
-    await prisma.notification.create({
-      data: {
-        userId: auth.user.id,
-        type: 'PLAN_CANCEL_ALERT',
-        title: 'Cancelamento e reembolso confirmados',
-        body: refundOutcome?.alreadyRefunded
-          ? 'Seu plano foi cancelado. O estorno já havia sido processado anteriormente.'
-          : payment
-            ? 'Seu plano foi cancelado e o estorno foi solicitado ao Mercado Pago. O valor retorna em até 7 dias úteis pelo mesmo meio de pagamento.'
-            : 'Seu plano foi cancelado.',
-        isRead: false,
-      },
-    }).catch((err) => {
-      console.error('[subscriptions/me/refund POST] Erro ao criar notificacao:', err)
-    })
+      await prisma.notification.create({
+        data: {
+          userId: auth.user.id,
+          type: 'PLAN_CANCEL_ALERT',
+          title: 'Cancelamento e reembolso confirmados',
+          body: refundOutcome?.alreadyRefunded
+            ? 'Seu plano foi cancelado. O estorno já havia sido processado anteriormente.'
+            : payment
+              ? 'Seu plano foi cancelado e o estorno foi confirmado pelo Mercado Pago. O valor retorna em até 7 dias úteis pelo mesmo meio de pagamento.'
+              : 'Seu plano foi cancelado.',
+          isRead: false,
+        },
+      }).catch((err) => {
+        console.error('[subscriptions/me/refund POST] Erro ao criar notificacao:', err)
+      })
+    }
 
     return ok({
       id: updatedSub.id,
@@ -143,6 +173,7 @@ export async function POST() {
       refundRequested: updatedSub.refundRequested,
       isEligibleForRefund: true,
       cancellationMode: 'REFUND',
+      idempotent: !stateChanged,
       refund: refundOutcome
         ? { processed: true, refundId: refundOutcome.refundId, alreadyRefunded: refundOutcome.alreadyRefunded }
         : { processed: false, reason: 'no_paid_payment' },

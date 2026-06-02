@@ -163,6 +163,8 @@ export async function POST(request: NextRequest) {
   if (event.transactionId) {
     const duplicate = await prisma.webhookAuditLog.findFirst({
       where: {
+        gateway: gatewayEnum,
+        eventType: event.eventType,
         transactionId: event.transactionId,
         status: 'ACCEPTED',
       },
@@ -352,7 +354,7 @@ export async function POST(request: NextRequest) {
     } else if (event.eventType === 'REFUND_COMPLETED') {
       const refundedSub = await prisma.subscription.findUnique({
         where: { id: event.subscriptionId },
-        select: { userId: true, planType: true },
+        select: { userId: true, planType: true, cancelledAt: true },
       })
 
       if (refundedSub) {
@@ -384,61 +386,86 @@ export async function POST(request: NextRequest) {
         // usuário é exatamente o do plano reembolsado E não há outra subscription ativa de
         // tier igual/superior que sustente esse plano.
         const shouldDowngrade = currentTier === refundedTier && !hasOtherActiveGteTier
+        const refundCompletedAt = refundedSub.cancelledAt ?? new Date()
 
-        if (shouldDowngrade) {
-          await prisma.$transaction([
-            prisma.subscription.update({
+        await prisma.$transaction(async (tx) => {
+          if (shouldDowngrade) {
+            await tx.subscription.update({
               where: { id: event.subscriptionId },
-              data: { status: 'CANCELLED', cancelledAt: new Date() },
-            }),
-            prisma.user.update({
+              data: {
+                status: 'CANCELLED',
+                cancelledAt: refundCompletedAt,
+                refundRequested: true,
+                previousPlanType: refundedSub.planType,
+              },
+            })
+            await tx.user.update({
               where: { id: refundedSub.userId },
               data: { planType: 'JOGADOR', fsBalance: 2000 },
-            }),
-          ])
-        } else {
-          // Plano superior/diferente continua vigente: apenas cancelar a subscription
-          // reembolsada, sem tocar em planType nem fsBalance.
-          console.warn(
-            `[webhook] REFUND_COMPLETED de plano não-vigente — downgrade evitado. ` +
-            `subscriptionId=${event.subscriptionId} refundedTier=${refundedSub.planType} ` +
-            `currentPlan=${user?.planType ?? 'JOGADOR'}`
-          )
-          await prisma.subscription.update({
-            where: { id: event.subscriptionId },
-            data: { status: 'CANCELLED', cancelledAt: new Date() },
-          })
-        }
+            })
+          } else {
+            // Plano superior/diferente continua vigente: apenas cancelar a subscription
+            // reembolsada, sem tocar em planType nem fsBalance.
+            console.warn(
+              `[webhook] REFUND_COMPLETED de plano não-vigente — downgrade evitado. ` +
+              `subscriptionId=${event.subscriptionId} refundedTier=${refundedSub.planType} ` +
+              `currentPlan=${user?.planType ?? 'JOGADOR'}`
+            )
+            await tx.subscription.update({
+              where: { id: event.subscriptionId },
+              data: {
+                status: 'CANCELLED',
+                cancelledAt: refundCompletedAt,
+                refundRequested: true,
+                previousPlanType: refundedSub.planType,
+              },
+            })
+          }
 
-        // Anular comissões PENDING da subscription reembolsada
-        // VOIDED = cancelado por refund — aparece como "Anulado" na UI, não como "Processando"
-        // PAID já não é revertido (responsabilidade operacional do admin via painel)
-        await prisma.affiliateTransaction.updateMany({
-          where: {
-            subscriptionId: event.subscriptionId,
-            status: 'PENDING',
-          },
-          data: { status: 'VOIDED' },
+          // Anular comissões PENDING da subscription reembolsada.
+          // VOIDED = cancelado por refund — aparece como "Anulado" na UI, não como "Processando".
+          // PAID já não é revertido (responsabilidade operacional do admin via painel).
+          await tx.affiliateTransaction.updateMany({
+            where: {
+              subscriptionId: event.subscriptionId,
+              status: 'PENDING',
+            },
+            data: { status: 'VOIDED' },
+          })
+
+          await tx.payment.upsert({
+            where: { gatewayTransactionId: event.transactionId },
+            update: { status: 'REFUNDED' },
+            create: {
+              subscriptionId: event.subscriptionId,
+              amount: event.amount,
+              gateway: gatewayEnum,
+              gatewayTransactionId: event.transactionId,
+              status: 'REFUNDED',
+              userId: refundedSub.userId,
+            },
+          })
         })
       } else {
-        await prisma.subscription.updateMany({
-          where: { id: event.subscriptionId },
-          data: { status: 'CANCELLED', cancelledAt: new Date() },
-        })
-      }
-
-      await prisma.payment.upsert({
-        where: { gatewayTransactionId: event.transactionId },
-        update: { status: 'REFUNDED' },
-        create: {
-          subscriptionId: event.subscriptionId,
-          amount: event.amount,
+        console.error(
+          `[webhook][ALERT] REFUND_COMPLETED para subscriptionId inexistente. ` +
+          `subscriptionId=${event.subscriptionId} transactionId=${event.transactionId} gateway=${gatewayType}`
+        )
+        await webhookAuditService.logWebhook({
           gateway: gatewayEnum,
-          gatewayTransactionId: event.transactionId,
-          status: 'REFUNDED',
-          userId: refundedSub?.userId ?? '',
-        },
-      })
+          eventType: event.eventType,
+          transactionId: event.transactionId,
+          subscriptionId: event.subscriptionId,
+          status: 'REJECTED',
+          hmacValid: true,
+          ipAddress: originalIp,
+          errorMessage: 'Subscription não encontrada para REFUND_COMPLETED',
+        })
+        return NextResponse.json(
+          { error: { code: 'REFUND_SUB_NOT_FOUND', message: 'Subscription não encontrada — reenviar.' } },
+          { status: 503 }
+        )
+      }
     }
   } catch (err) {
     // C5 (task-008): AUTH-009 lançado por upgradeUser (conta com adminRole) é uma condição

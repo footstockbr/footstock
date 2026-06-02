@@ -312,9 +312,16 @@ export class MercadoPagoGateway implements IGateway {
       throw new GatewayError(`[MERCADO_PAGO] paymentId inválido para refund: ${gatewayTransactionId}`, 'PAYMENT_055', 422)
     }
 
-    const body = amountCents && amountCents > 0
-      ? JSON.stringify({ amount: Math.round(amountCents) / 100 })
-      : '{}'
+    let body = '{}'
+    let idempotencyKey = `refund-${gatewayTransactionId}`
+    if (amountCents !== undefined) {
+      if (!Number.isSafeInteger(amountCents) || amountCents <= 0) {
+        throw new GatewayError('[MERCADO_PAGO] valor de estorno inválido', 'PAYMENT_020', 422)
+      }
+      const roundedAmountCents = Math.round(amountCents)
+      body = JSON.stringify({ amount: Number((roundedAmountCents / 100).toFixed(2)) })
+      idempotencyKey = `refund-${gatewayTransactionId}-partial-${roundedAmountCents}`
+    }
 
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), GATEWAY_TIMEOUT_MS)
@@ -326,7 +333,7 @@ export class MercadoPagoGateway implements IGateway {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
           // Idempotência: reenvio com mesma chave não duplica estorno
-          'X-Idempotency-Key': `refund-${gatewayTransactionId}`,
+          'X-Idempotency-Key': idempotencyKey,
         },
         body,
         signal: controller.signal,
@@ -356,9 +363,14 @@ export class MercadoPagoGateway implements IGateway {
       )
     }
 
-    // 4xx: já estornado é o caso comum (idempotência) — tratamos como sucesso idempotente.
+    // 4xx: só tratamos como sucesso idempotente quando a mensagem afirmar que o pagamento
+    // ja estava estornado. 404/"not allowed" podem significar "não estornou dinheiro".
     const lower = rawError.toLowerCase()
-    if (lower.includes('already') || lower.includes('refunded') || lower.includes('not allowed') || response.status === 404) {
+    if (
+      lower.includes('already refunded') ||
+      lower.includes('already been refunded') ||
+      lower.includes('payment already refunded')
+    ) {
       console.warn(`[MERCADO_PAGO] refund idempotente/terminal para ${gatewayTransactionId}: HTTP ${response.status} ${rawError.slice(0, 160)}`)
       return { refundId: 'already_refunded', status: 'approved', alreadyRefunded: true }
     }
