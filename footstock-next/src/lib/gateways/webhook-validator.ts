@@ -14,7 +14,7 @@ import { env } from '@/lib/env'
 /**
  * Valida assinatura HMAC do Mercado Pago.
  * Header X-Signature formato: `ts=<timestamp>,v1=<hmac>`
- * String de validação: `id:<requestId>;ts:<ts>;`
+ * String de validação: `id:<data.id do body>;ts:<ts>;`
  */
 export function validateMercadoPagoHMAC(
   headers: Headers,
@@ -23,7 +23,6 @@ export function validateMercadoPagoHMAC(
 ): boolean {
   try {
     const xSignature  = headers.get('x-signature') ?? ''
-    const xRequestId  = headers.get('x-request-id') ?? ''
 
     // Extrair ts e v1 do header
     const tsMatch = xSignature.match(/ts=(\d+)/)
@@ -38,8 +37,15 @@ export function validateMercadoPagoHMAC(
     // Verificar janela de replay (PAYMENT_002)
     if (!validateWebhookTimestamp(parseInt(ts, 10) * 1000)) return false
 
+    // data.id do body — manifesto canônico MP: `id:{data.id};ts:{ts};`
+    let dataId = ''
+    try {
+      const parsed = JSON.parse(rawBody) as { data?: { id?: string | number } }
+      dataId = String(parsed?.data?.id ?? '')
+    } catch { /* body não-JSON */ }
+
     // Construir string de validação
-    const template = `id:${xRequestId};ts:${ts};`
+    const template = `id:${dataId};ts:${ts};`
     const expected  = createHmac('sha256', secret).update(template).digest('hex')
 
     // Comparação timing-safe (previne timing attacks)
@@ -186,7 +192,6 @@ export function validateMercadoPagoHMACDetailed(
 ): WebhookValidationResult {
   try {
     const xSignature = headers.get('x-signature') ?? ''
-    const xRequestId = headers.get('x-request-id') ?? ''
 
     const tsMatch = xSignature.match(/ts=(\d+)/)
     const v1Match = xSignature.match(/v1=([a-f0-9]+)/i)
@@ -202,7 +207,20 @@ export function validateMercadoPagoHMACDetailed(
       return { valid: false, reason: 'TIMESTAMP_EXPIRED' }
     }
 
-    const template = `id:${xRequestId};ts:${ts};`
+    // BUG FIX: o manifesto MP usa data.id do body, não o x-request-id do header.
+    // Referência: https://www.mercadopago.com.br/developers/en/docs/your-integrations/notifications/webhooks
+    // Formato canônico: `id:{data.id};ts:{ts};`
+    // O código anterior usava `id:{xRequestId};ts:{ts};` (errado) — todo webhook MP
+    // era rejeitado como BAD_SIGNATURE, impedindo a ativação de planos após pagamento.
+    let dataId = ''
+    try {
+      const parsed = JSON.parse(rawBody) as { data?: { id?: string | number } }
+      dataId = String(parsed?.data?.id ?? '')
+    } catch {
+      // body não-JSON: dataId fica vazio → HMAC vai falhar, comportamento correto
+    }
+
+    const template = `id:${dataId};ts:${ts};`
     const expected = createHmac('sha256', secret).update(template).digest('hex')
 
     const expectedBuf = Buffer.from(expected, 'utf8')
