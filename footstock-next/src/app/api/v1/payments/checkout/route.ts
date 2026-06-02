@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
       planType: planType as 'CRAQUE' | 'LENDA',
       gateway,
       period: period.toLowerCase() as 'monthly' | 'yearly',
+      userEmail: auth.user.email,
     })
 
     return created({

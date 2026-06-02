@@ -7,8 +7,6 @@ import { getWebhookRateLimit } from '@/lib/ratelimit'
 import { normalizeIp } from '@/middleware/rateLimit'
 import { planService } from '@/lib/services/PlanService'
 import { webhookAuditService } from '@/lib/services/WebhookAuditService'
-import { sendNotification } from '@/lib/services/NotificationService'
-import { NOTIFICATION_TYPE } from '@/lib/enums'
 import { leagueEventRecorder } from '@/lib/services/leagues/LeagueEventRecorder'
 import type { SubscriptionGateway } from '@prisma/client'
 import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
@@ -362,26 +360,25 @@ export async function POST(request: NextRequest) {
         // fato a vigente do usuário. Um refund tardio de um plano antigo (ex.: CRAQUE) não
         // pode derrubar um plano superior já ativo (ex.: LENDA).
         const TIER: Record<string, number> = { JOGADOR: 0, CRAQUE: 1, LENDA: 2 }
-        const [user, otherActive] = await Promise.all([
+        const [user, otherActiveSubs] = await Promise.all([
           prisma.user.findUnique({
             where: { id: refundedSub.userId },
             select: { planType: true },
           }),
-          prisma.subscription.findFirst({
+          prisma.subscription.findMany({
             where: {
               userId: refundedSub.userId,
               status: 'ACTIVE',
               NOT: { id: event.subscriptionId },
             },
             select: { planType: true },
-            orderBy: { createdAt: 'desc' },
           }),
         ])
 
         const refundedTier = TIER[refundedSub.planType] ?? 0
         const currentTier = TIER[user?.planType ?? 'JOGADOR'] ?? 0
         const hasOtherActiveGteTier =
-          otherActive != null && (TIER[otherActive.planType] ?? 0) >= refundedTier
+          otherActiveSubs.some((sub) => (TIER[sub.planType] ?? 0) >= refundedTier)
 
         // Downgrade apenas quando o plano vigente vem desta subscription: o tier atual do
         // usuário é exatamente o do plano reembolsado E não há outra subscription ativa de

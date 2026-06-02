@@ -16,7 +16,7 @@ import {
 } from './plan-logic'
 import { throwPaymentError } from '@/lib/errors/payment-errors'
 import { NotificationStub } from '@/lib/notifications/stubs/NotificationStub'
-import type { PlanType } from '@/lib/enums'
+import { PLAN_HIERARCHY, type PlanType } from '@/lib/enums'
 import { getGateway } from '@/lib/gateways/GatewayFactory'
 import { GatewayType } from '@/lib/gateways/IGateway'
 import type { GatewayCheckoutInput } from '@/lib/gateways/IGateway'
@@ -27,6 +27,7 @@ export interface CheckoutDTO {
   planType: PlanType
   period: 'monthly' | 'yearly'
   gateway: string
+  userEmail?: string
   amount?: number // calculado internamente se não fornecido
 }
 
@@ -82,7 +83,7 @@ export class PlanService extends BaseService {
     // Verificar plano atual do usuário
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { planType: true, adminRole: true },
+      select: { planType: true, adminRole: true, email: true },
     })
 
     // Contas administrativas são operacionais e não entram em fluxo de assinatura/billing.
@@ -96,11 +97,20 @@ export class PlanService extends BaseService {
     // Player sem planType (estado transitório pos-registro) trata como JOGADOR para canUpgrade.
     const effectiveCurrentPlan = (user?.planType ?? 'JOGADOR') as PlanType
     if (user && !canUpgrade(effectiveCurrentPlan, dto.planType)) {
-      // Permite downgrade via checkout apenas se assinatura atual está em CANCELLATION_LOCK
+      // Permite downgrade via checkout apenas se a assinatura atual está em
+      // CANCELLATION_LOCK e o destino é realmente um plano inferior.
       const lockedSub = await prisma.subscription.findFirst({
-        where: { userId, status: 'CANCELLATION_LOCK' },
+        where: {
+          userId,
+          status: 'CANCELLATION_LOCK',
+          planType: effectiveCurrentPlan as never,
+        },
       })
-      if (!lockedSub) {
+      const isDowngradeFromLockedPlan =
+        lockedSub != null &&
+        PLAN_HIERARCHY[dto.planType] < PLAN_HIERARCHY[lockedSub.planType as PlanType]
+
+      if (!isDowngradeFromLockedPlan) {
         throw Object.assign(new Error('Não é possível fazer downgrade via checkout'), {
           code: 'PAYMENT_054',
           statusCode: 422,
@@ -166,7 +176,7 @@ export class PlanService extends BaseService {
         currency:    'BRL',
         subscriptionId: subscription.id,
         userId,
-        userEmail:   '', // preenchido no caller quando disponível
+        userEmail:   dto.userEmail ?? user?.email ?? '',
         successUrl:  `${appUrl}/planos?payment=success&sub=${subscription.id}`,
         failureUrl:  `${appUrl}/planos?payment=failed`,
         pendingUrl:  `${appUrl}/planos?payment=pending&sub=${subscription.id}`,
@@ -232,11 +242,42 @@ export class PlanService extends BaseService {
 
     // G-02: registrar plano anterior para cálculo de bônus diferencial em T+7
     const previousPlanType = user?.planType ?? null
-    const isUpgrade = previousPlanType !== null && previousPlanType !== subscription.planType
+    const effectivePreviousPlanType = (previousPlanType ?? 'JOGADOR') as PlanType
+    const targetPlanType = subscription.planType as PlanType
+
+    // Downgrade pago só continua válido enquanto a assinatura superior ainda está
+    // em CANCELLATION_LOCK. Se o usuário reverteu a LENDA antes do webhook da
+    // CRAQUE chegar, a PENDING fica obsoleta e não pode derrubar o plano restaurado.
+    if (
+      PLAN_HIERARCHY[targetPlanType] < PLAN_HIERARCHY[effectivePreviousPlanType]
+    ) {
+      const lockedSub = await prisma.subscription.findFirst({
+        where: {
+          userId,
+          status: 'CANCELLATION_LOCK',
+          planType: effectivePreviousPlanType as never,
+        },
+        select: { id: true, planType: true },
+      })
+      if (!lockedSub) {
+        await prisma.subscription.updateMany({
+          where: { id: subscriptionId, userId, status: 'PENDING' },
+          data: { status: 'CANCELLED', cancelledAt: new Date() },
+        })
+        console.warn(
+          `[PlanService.upgradeUser] Downgrade obsoleto ignorado: ` +
+          `subscriptionId=${subscriptionId} currentPlan=${effectivePreviousPlanType} ` +
+          `targetPlan=${targetPlanType}`
+        )
+        return 'NOT_ACTIVATABLE'
+      }
+    }
+
+    const isUpgrade = PLAN_HIERARCHY[targetPlanType] > PLAN_HIERARCHY[effectivePreviousPlanType]
 
     // Calcular bônus diferencial (apenas upgrades elegíveis)
     const upgradeBonusAmount = isUpgrade
-      ? calcUpgradeBonusAmount(previousPlanType as PlanType, subscription.planType as PlanType)
+      ? calcUpgradeBonusAmount(effectivePreviousPlanType, targetPlanType)
       : 0
     const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
 
@@ -246,13 +287,22 @@ export class PlanService extends BaseService {
     let bonusScheduleDate = sevenDaysFromNow
 
     await prisma.$transaction(async (tx) => {
-      // Assinaturas ACTIVE anteriores deste usuário (qualquer plano), exceto a que está sendo ativada.
-      const priorActive = await tx.subscription.findMany({
-        where: { userId, status: 'ACTIVE', id: { not: subscriptionId } },
-        select: { id: true, bonusAmount: true, bonusScheduledAt: true, bonusCreditedAt: true },
+      // Assinaturas abertas anteriores deste usuário (qualquer plano), exceto a que está sendo ativada.
+      // CANCELLATION_LOCK substituída por downgrade pago deve sair do ciclo T+7d,
+      // mas manter forcedLiquidationAt para o job T+48h encerrar posições restritas.
+      const priorOpen = await tx.subscription.findMany({
+        where: { userId, status: { in: ['ACTIVE', 'CANCELLATION_LOCK'] as never[] }, id: { not: subscriptionId } },
+        select: {
+          id: true,
+          status: true,
+          cancelledAt: true,
+          bonusAmount: true,
+          bonusScheduledAt: true,
+          bonusCreditedAt: true,
+        },
       })
 
-      for (const prior of priorActive) {
+      for (const prior of priorOpen) {
         // Preservar bônus pendente (agendado e ainda não creditado): rolar para a nova assinatura.
         // bonus-credit só credita status=ACTIVE, então sem isto o bônus da assinatura anterior
         // seria perdido (ex.: upgrade CRAQUE->LENDA cairia de 23000 para 20000).
@@ -271,7 +321,9 @@ export class PlanService extends BaseService {
           where: { id: prior.id },
           data: {
             status: 'CANCELLED',
-            cancelledAt: new Date(),
+            cancelledAt: prior.cancelledAt ?? new Date(),
+            cancellationLockStartedAt: null,
+            cancellationLockExpiresAt: null,
             bonusScheduledAt: null,
             bonusCreditedAt: isPendingBonus ? new Date() : prior.bonusCreditedAt,
           },
@@ -291,7 +343,7 @@ export class PlanService extends BaseService {
         },
         data: {
           status:           'ACTIVE',
-          previousPlanType: isUpgrade ? previousPlanType as never : null, // G-02
+          previousPlanType: isUpgrade ? effectivePreviousPlanType as never : null, // G-02
           bonusScheduledAt: hasBonusToScheduleTx ? bonusScheduleDate : null,
           bonusAmount:      hasBonusToScheduleTx ? scheduledBonusAmount : null,
         },

@@ -58,6 +58,7 @@ export const POST = withAuth(async (req: NextRequest, { user }: AuthContext) => 
     planType,
     period,
     gateway: 'MERCADO_PAGO', // Pix via MP
+    userEmail: userRecord.email,
     amount,
   })
 

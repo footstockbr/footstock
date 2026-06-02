@@ -17,25 +17,26 @@ export async function PUT() {
   const now = new Date()
 
   try {
-    // Busca a assinatura mais recente do usuário
+    // Busca explicitamente a assinatura em CANCELLATION_LOCK. Uma assinatura
+    // PENDING criada para downgrade pode ser mais recente e não deve esconder
+    // a reversão disponível da assinatura superior.
     const sub = await prisma.subscription.findFirst({
-      where: { userId },
+      where: { userId, status: 'CANCELLATION_LOCK' },
       orderBy: { createdAt: 'desc' },
     })
 
-    if (!sub) return errors.notFound('Nenhuma assinatura encontrada.')
-
-    // Idempotência: já está ACTIVE → sucesso sem alterações
-    if (sub.status === 'ACTIVE') {
-      return ok({ reverted: true, status: 'ACTIVE', message: 'Assinatura já está ativa.' })
-    }
-
-    // Fora de CANCELLATION_LOCK: não é possível reverter
-    if (sub.status !== 'CANCELLATION_LOCK') {
+    if (!sub) {
+      const activeSub = await prisma.subscription.findFirst({
+        where: { userId, status: 'ACTIVE' },
+        orderBy: { createdAt: 'desc' },
+      })
+      if (activeSub) {
+        return ok({ reverted: true, status: 'ACTIVE', message: 'Assinatura já está ativa.' })
+      }
       return NextResponse.json(
         {
           error: 'REVERT_NOT_AVAILABLE',
-          message: `Reversão disponível apenas em status CANCELLATION_LOCK. Status atual: ${sub.status}`,
+          message: 'Reversão disponível apenas quando existe assinatura em CANCELLATION_LOCK.',
         },
         { status: 409 }
       )

@@ -1,7 +1,7 @@
 // ============================================================================
 // FootStock — Job: cancellation-lock (T+48h)
 // Cron a cada hora: liquida posições RESTRITAS (SHORT, OCO, alavancadas)
-// quando forcedLiquidationAt <= now e lock ainda ativo (não cancela assinatura)
+// quando forcedLiquidationAt <= now e lock ainda ativo ou já substituído por downgrade pago
 // Idempotente via forcedLiquidationExecutedAt — não reprocessa o mesmo lock
 // Dois crons distintos: este (T+48h) e cancellation-expiry (T+7d)
 // ============================================================================
@@ -114,8 +114,9 @@ async function liquidateRestrictedPositions(
 }
 
 /**
- * Processa liquidações forçadas T+48h em locks ativos.
- * NÃO cancela a assinatura — isso é responsabilidade do job de T+7d.
+ * Processa liquidações forçadas T+48h em locks ativos ou em locks já substituídos
+ * por downgrade pago. Neste segundo caso, a assinatura antiga já está CANCELLED,
+ * mas a obrigação de liquidar posições incompatíveis com o plano novo permanece.
  * Idempotente: só processa locks onde forcedLiquidationExecutedAt IS NULL.
  */
 export async function processForcedLiquidations(): Promise<ForcedLiquidationResult> {
@@ -126,11 +127,11 @@ export async function processForcedLiquidations(): Promise<ForcedLiquidationResu
   // Previne que múltiplas instâncias do cron processem o mesmo lock (multi-instance safety)
   const dueForLiquidation = await prisma.subscription.findMany({
     where: {
-      status: 'CANCELLATION_LOCK',
+      status: { in: ['CANCELLATION_LOCK', 'CANCELLED'] },
       forcedLiquidationAt: { lte: now },
       forcedLiquidationExecutedAt: null, // não processado ainda
     },
-    select: { id: true, userId: true, planType: true, forcedLiquidationAt: true },
+    select: { id: true, userId: true, planType: true, status: true, forcedLiquidationAt: true },
   })
 
   for (const sub of dueForLiquidation) {
@@ -138,7 +139,7 @@ export async function processForcedLiquidations(): Promise<ForcedLiquidationResu
     const claim = await prisma.subscription.updateMany({
       where: {
         id: sub.id,
-        status: 'CANCELLATION_LOCK',
+        status: { in: ['CANCELLATION_LOCK', 'CANCELLED'] },
         forcedLiquidationExecutedAt: null, // garantia de idempotência
       },
       data: { forcedLiquidationExecutedAt: now },
@@ -158,7 +159,7 @@ export async function processForcedLiquidations(): Promise<ForcedLiquidationResu
         select: { status: true },
       })
 
-      if (!currentSub || currentSub.status !== 'CANCELLATION_LOCK') {
+      if (!currentSub || !['CANCELLATION_LOCK', 'CANCELLED'].includes(currentSub.status)) {
         // Revert aconteceu ou status mudou: não processar
         result.details.push({ subscriptionId: sub.id, userId: sub.userId, action: 'SKIPPED_STATUS_CHANGED_AFTER_CLAIM' })
         continue
@@ -192,7 +193,9 @@ export async function processForcedLiquidations(): Promise<ForcedLiquidationResu
           userId: sub.userId,
           type: 'CANCELLATION_LOCK_LIQUIDATED',
           title: 'Posições restritas encerradas',
-          body: `${liquidated} posição(ões) encerrada(s)${failed > 0 ? ` (${failed} com falha — suporte notificado)` : ''}. Sua assinatura ainda pode ser revertida até o prazo de 7 dias.`,
+          body: currentSub.status === 'CANCELLATION_LOCK'
+            ? `${liquidated} posição(ões) encerrada(s)${failed > 0 ? ` (${failed} com falha — suporte notificado)` : ''}. Sua assinatura ainda pode ser revertida até o prazo de 7 dias.`
+            : `${liquidated} posição(ões) restrita(s) encerrada(s)${failed > 0 ? ` (${failed} com falha — suporte notificado)` : ''} após a troca para um plano incompatível.`,
           isRead: false,
         },
       }).catch(() => {})
