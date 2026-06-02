@@ -22,53 +22,10 @@ import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { redisPublisher } from '@/lib/redis'
 import { ok, errors } from '@/lib/api'
+import { IPO_PRICING_2026 } from '@/lib/constants/ipo-pricing-2026'
 
-// Fairvalues canônicos do seed (prisma/seeds/admin-demo/assets.seed.ts)
-// Fonte da verdade — não alterar sem atualizar o seed também.
-const SEED_FAIR_VALUES: Record<string, number> = {
-  // Série A
-  URU3: 120.00,
-  POR4: 110.00,
-  TIM3: 105.00,
-  GAL3: 100.00,
-  TRI4:  95.00,
-  FOG3:  70.00,
-  COL3:  65.00,
-  IMO3:  60.00,
-  RAP3:  58.00,
-  GUE4:  55.00,
-  TRI3:  52.00,
-  BAL4:  50.00,
-  MAL4:  35.00,
-  TOR3:  32.00,
-  FUR3:  28.00,
-  LEM3:  22.00,
-  VOA4:  20.00,
-  LEB3:  18.00,
-  CON3:  15.00,
-  LEA3:  12.00,
-  // Série B
-  COE3:  12.00,
-  LEP4:  11.50,
-  DRA3:  11.00,
-  VOZ3:  10.50,
-  PER3:  10.00,
-  GAP3:   9.50,
-  LEI3:   9.00,
-  IND4:   8.50,
-  PAN3:   8.00,
-  CAV4:   7.50,
-  LEI4:   7.00,
-  TIG4:   6.50,
-  DOU4:   6.00,
-  TUB3:   6.00,
-  NAF3:   5.50,
-  TIV3:   5.00,
-  FAS3:   5.00,
-  MAC4:   4.50,
-  ABT4:   4.00,
-  TIS3:   4.00,
-}
+// Fonte da verdade: tabela canônica de precificação IPO 2026 (doc Convocados 2025).
+// Restaura fairValue (= Preço IPO) E número de cotas (totalShares/currentSupply).
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthUser()
@@ -83,46 +40,51 @@ export async function POST(request: NextRequest) {
 
   try {
     const assets = await prisma.asset.findMany({
-      where: { ticker: { in: Object.keys(SEED_FAIR_VALUES) } },
+      where: { ticker: { in: Object.keys(IPO_PRICING_2026) } },
       select: { id: true, ticker: true, currentPrice: true, fairValue: true, currentSupply: true },
     })
 
     const changes: Array<{
-      ticker:   string
-      assetId:  string
-      oldPrice: number
-      oldFV:    number
-      newPrice: number
+      ticker:    string
+      assetId:   string
+      oldPrice:  number
+      oldFV:     number
+      newPrice:  number
+      newShares: number
     }> = []
 
     for (const asset of assets) {
-      const correctFV = SEED_FAIR_VALUES[asset.ticker]
-      if (!correctFV) continue
+      const pricing = IPO_PRICING_2026[asset.ticker]
+      if (!pricing) continue
       changes.push({
-        ticker:   asset.ticker,
-        assetId:  asset.id,
-        oldPrice: asset.currentPrice.toNumber(),
-        oldFV:    asset.fairValue.toNumber(),
-        newPrice: correctFV,
+        ticker:    asset.ticker,
+        assetId:   asset.id,
+        oldPrice:  asset.currentPrice.toNumber(),
+        oldFV:     asset.fairValue.toNumber(),
+        newPrice:  pricing.fairValue,
+        newShares: pricing.shares,
       })
     }
 
     if (!dryRun && changes.length > 0) {
-      // 1. Atualiza DB — inclui fairValue (fonte corrompida pelo antigo reset-prices)
+      // 1. Atualiza DB — fairValue (= Preço IPO), preço, cotas e marketCap canônicos.
+      //    openPrice TAMBÉM é resetado aqui porque é uma recalibração de IPO (não um
+      //    cancelamento parcial): o preço de abertura passa a ser o novo Preço IPO.
       await prisma.$transaction(
         changes.map(c =>
           prisma.asset.update({
             where: { id: c.assetId },
             data: {
-              fairValue:    c.newPrice,
-              currentPrice: c.newPrice,
-              // openPrice NAO é alterado: pertence ao motor (resetado via PRE_OPENING).
-              // Alterar aqui cria divergência: DB.openPrice=70 mas motor.memory.openPrice=1.02
-              // → change% na UI fica errada (ex: -98%) mesmo com preço correto.
-              closePrice:   c.newPrice,
-              isHalted:     false,
-              haltReason:   null,
-              haltedUntil:  null,
+              fairValue:     c.newPrice,
+              currentPrice:  c.newPrice,
+              openPrice:     c.newPrice,
+              closePrice:    c.newPrice,
+              currentSupply: BigInt(c.newShares),
+              totalShares:   BigInt(c.newShares),
+              marketCap:     parseFloat((c.newPrice * c.newShares).toFixed(2)),
+              isHalted:      false,
+              haltReason:    null,
+              haltedUntil:   null,
             },
           })
         )

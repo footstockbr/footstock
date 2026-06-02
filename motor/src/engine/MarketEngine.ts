@@ -159,18 +159,22 @@ export class MarketEngine {
     this.circuitBreakerTimers.set(assetId, cbTimer)
   }
 
-  // ─── fairValues canônicos do seed ───────────────────────────────────────────
-  // Fonte da verdade: prisma/seeds/admin-demo/assets.seed.ts
+  // ─── fairValues canônicos (Preço IPO) ───────────────────────────────────────
+  // Fonte da verdade: Tabela de Precificação IPO 2026 (doc Convocados 2025),
+  // espelhada em footstock-next/src/lib/constants/ipo-pricing-2026.ts.
   // Usados como fallback de recuperação quando o DB tem valores corrompidos.
+  // MANTER EM SINCRONIA com ipo-pricing-2026.ts ao recalibrar.
   private static readonly CANONICAL_FAIR_VALUES: Record<string, number> = {
-    URU3: 120, POR4: 110, TIM3: 105, GAL3: 100, TRI4:  95,
-    FOG3:  70, COL3:  65, IMO3:  60, RAP3:  58, GUE4:  55,
-    TRI3:  52, BAL4:  50, MAL4:  35, TOR3:  32, FUR3:  28,
-    LEM3:  22, VOA4:  20, LEB3:  18, CON3:  15, LEA3:  12,
-    COE3:  12, LEP4: 11.5, DRA3: 11, VOZ3: 10.5, PER3: 10,
-    GAP3: 9.5, LEI3:   9, IND4: 8.5, PAN3:   8, CAV4: 7.5,
-    LEI4:   7, TIG4: 6.5, DOU4:   6, TUB3:   6, NAF3: 5.5,
-    TIV3:   5, FAS3:   5, MAC4: 4.5, ABT4:   4, TIS3:   4,
+    // Série A
+    URU3: 40.00, POR4: 36.76, TIM3: 33.60, TRI4: 32.21, GUE4: 28.60,
+    GAL3: 26.01, FOG3: 23.14, COL3: 22.75, TOR3: 20.29, FUR3: 18.65,
+    IMO3: 17.18, BAL4: 16.35, MAL4: 15.30, RAP3: 13.95, TRI3: 12.22,
+    LEB3: 11.28, VOA4: 10.45, LEM3: 9.47, CON3: 8.07, LEA3: 8.00,
+    // Série B
+    LEP4: 12.00, VOZ3: 10.56, LEI3: 8.80, COE3: 8.00, IND4: 8.32,
+    DOU4: 11.15, GAP3: 5.78, TIG4: 8.98, PER3: 4.51, DRA3: 7.19,
+    LEI4: 7.00, PAN3: 4.79, TIV3: 5.83, TIS3: 5.40, FAS3: 4.33,
+    MAC4: 3.75, NAF3: 3.75, ABT4: 3.00, TUB3: 3.22, CAV4: 3.03,
   }
 
   private async loadAssets(): Promise<void> {
