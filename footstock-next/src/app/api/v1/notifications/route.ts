@@ -2,6 +2,33 @@ import { NextRequest } from 'next/server'
 import { getAuthUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { list, errors, parsePagination, buildPagination } from '@/lib/api'
+import type { NotificationDTO } from '@/types'
+
+function serializeNotification(n: {
+  id: string
+  userId: string
+  type: string
+  title: string
+  body: string
+  isRead: boolean
+  isArchived: boolean
+  data: unknown
+  createdAt: Date
+  expiresAt: Date | null
+}): NotificationDTO {
+  return {
+    id: n.id,
+    userId: n.userId,
+    type: n.type,
+    title: n.title,
+    body: n.body,
+    read: n.isRead,
+    archived: n.isArchived,
+    metadata: n.data as Record<string, unknown> | null,
+    createdAt: n.createdAt.toISOString(),
+    expiresAt: n.expiresAt?.toISOString() ?? null,
+  }
+}
 
 // GET /api/v1/notifications
 export async function GET(request: NextRequest) {
@@ -10,11 +37,13 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl
   const readParam = searchParams.get('read')
+  const archivedParam = searchParams.get('archived')
   const { page, limit, skip } = parsePagination(searchParams)
 
   try {
     const where = {
       userId: auth.user.id,
+      isArchived: archivedParam === null ? false : archivedParam === 'true',
       ...(readParam !== null && { isRead: readParam === 'true' }),
     }
 
@@ -28,19 +57,11 @@ export async function GET(request: NextRequest) {
       prisma.notification.count({ where }),
     ])
 
-    const serialized = notifications.map((n) => ({
-      id: n.id,
-      userId: n.userId,
-      type: n.type,
-      title: n.title,
-      body: n.body,
-      isRead: n.isRead,
-      data: n.data as Record<string, unknown> | null,
-      createdAt: n.createdAt.toISOString(),
-    }))
+    const serialized = notifications.map(serializeNotification)
 
     return list(serialized, buildPagination(page, limit, total))
-  } catch {
+  } catch (err) {
+    console.error('[notifications:list] Erro:', err instanceof Error ? err.message : err)
     return errors.server()
   }
 }

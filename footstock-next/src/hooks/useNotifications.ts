@@ -6,20 +6,18 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import type { NotificationDTO } from '@/types'
+import type { ApiListResponse, NotificationDTO } from '@/types'
 
 interface UnreadCountResponse {
   count: number
 }
 
-interface NotificationsListResponse {
-  data: NotificationDTO[]
-  pagination: {
-    page: number
-    limit: number
-    total: number
-    hasNext: boolean
-  }
+type NotificationsListResponse = ApiListResponse<NotificationDTO>
+
+type NotificationWireDTO = NotificationDTO & {
+  isRead?: boolean
+  isArchived?: boolean
+  data?: Record<string, unknown> | null
 }
 
 async function fetchUnreadCount(): Promise<number> {
@@ -32,7 +30,16 @@ async function fetchUnreadCount(): Promise<number> {
 async function fetchNotifications(page: number): Promise<NotificationsListResponse> {
   const res = await fetch(`/api/v1/notifications?page=${page}`)
   if (!res.ok) throw new Error('Erro ao carregar notificações.')
-  return res.json() as Promise<NotificationsListResponse>
+  const json = (await res.json()) as ApiListResponse<NotificationWireDTO>
+  return {
+    ...json,
+    data: json.data.map((notification) => ({
+      ...notification,
+      read: notification.read ?? notification.isRead ?? false,
+      archived: notification.archived ?? notification.isArchived ?? false,
+      metadata: notification.metadata ?? notification.data ?? null,
+    })),
+  }
 }
 
 async function patchMarkAsRead(id: string): Promise<NotificationDTO> {
@@ -60,7 +67,7 @@ export function useNotifications(userId?: string | null) {
     data: unreadCount = 0,
     isLoading: isLoadingCount,
   } = useQuery<number>({
-    queryKey: ['notifications:unread-count'],
+    queryKey: ['notifications:unread-count', userId],
     queryFn: fetchUnreadCount,
     staleTime: 30_000,
     refetchInterval: false,
@@ -71,8 +78,9 @@ export function useNotifications(userId?: string | null) {
   const {
     data: page1Data,
     isLoading: isLoadingList,
+    isError: isListError,
   } = useQuery<NotificationsListResponse>({
-    queryKey: ['notifications', 'list', 1],
+    queryKey: ['notifications', 'list', userId, 1],
     queryFn: () => fetchNotifications(1),
     staleTime: 30_000,
     enabled: !!userId,
@@ -106,8 +114,8 @@ export function useNotifications(userId?: string | null) {
     if (!userId) return
 
     const timer = setInterval(() => {
-      queryClient.invalidateQueries({ queryKey: ['notifications:unread-count'] })
-      queryClient.invalidateQueries({ queryKey: ['notifications', 'list'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications:unread-count', userId] })
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'list', userId] })
     }, 30_000)
 
     return () => {
@@ -130,11 +138,15 @@ export function useNotifications(userId?: string | null) {
   const markAsReadMutation = useMutation({
     mutationFn: patchMarkAsRead,
     onMutate: async (id) => {
-      // Optimistic: decrementar count
-      const prevCount = queryClient.getQueryData<number>(['notifications:unread-count'])
-      queryClient.setQueryData<number>(['notifications:unread-count'], (old = 0) =>
-        Math.max(0, old - 1)
-      )
+      const wasUnread = allNotifications.some((n) => n.id === id && !n.read)
+
+      // Optimistic: decrementar count apenas se a notificação ainda estava não lida.
+      const prevCount = queryClient.getQueryData<number>(['notifications:unread-count', userId])
+      if (wasUnread) {
+        queryClient.setQueryData<number>(['notifications:unread-count', userId], (old = 0) =>
+          Math.max(0, old - 1)
+        )
+      }
       // Optimistic: marcar na lista
       setAllNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, read: true } : n))
@@ -144,10 +156,10 @@ export function useNotifications(userId?: string | null) {
     onError: (_err, _id, context) => {
       // Reverter
       if (context?.prevCount !== undefined) {
-        queryClient.setQueryData(['notifications:unread-count'], context.prevCount)
+        queryClient.setQueryData(['notifications:unread-count', userId], context.prevCount)
       }
-      queryClient.invalidateQueries({ queryKey: ['notifications:unread-count'] })
-      queryClient.invalidateQueries({ queryKey: ['notifications', 'list'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications:unread-count', userId] })
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'list', userId] })
       toast.error('Erro ao marcar notificação. Tente novamente.')
     },
   })
@@ -156,8 +168,8 @@ export function useNotifications(userId?: string | null) {
   const markAllAsReadMutation = useMutation({
     mutationFn: patchMarkAllAsRead,
     onMutate: async () => {
-      const prevCount = queryClient.getQueryData<number>(['notifications:unread-count'])
-      queryClient.setQueryData<number>(['notifications:unread-count'], 0)
+      const prevCount = queryClient.getQueryData<number>(['notifications:unread-count', userId])
+      queryClient.setQueryData<number>(['notifications:unread-count', userId], 0)
       setAllNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
       return { prevCount }
     },
@@ -166,10 +178,10 @@ export function useNotifications(userId?: string | null) {
     },
     onError: (_err, _vars, context) => {
       if (context?.prevCount !== undefined) {
-        queryClient.setQueryData(['notifications:unread-count'], context.prevCount)
+        queryClient.setQueryData(['notifications:unread-count', userId], context.prevCount)
       }
-      queryClient.invalidateQueries({ queryKey: ['notifications:unread-count'] })
-      queryClient.invalidateQueries({ queryKey: ['notifications', 'list'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications:unread-count', userId] })
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'list', userId] })
       toast.error('Erro ao marcar notificações. Tente novamente.')
     },
   })
@@ -187,6 +199,6 @@ export function useNotifications(userId?: string | null) {
     isMarkingAllAsRead: markAllAsReadMutation.isPending,
     markAsReadError: markAsReadMutation.isError,
     markAllAsReadError: markAllAsReadMutation.isError,
-    isError: !!markAsReadMutation.isError || !!markAllAsReadMutation.isError,
+    isError: isListError || markAsReadMutation.isError || markAllAsReadMutation.isError,
   }
 }

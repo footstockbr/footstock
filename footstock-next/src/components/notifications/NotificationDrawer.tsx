@@ -24,6 +24,7 @@ export function NotificationDrawer({ isOpen, onClose, userId }: NotificationDraw
     markAsRead,
     markAllAsRead,
     isMarkingAllAsRead,
+    isError,
   } = useNotifications(userId)
 
   const sentinelRef = useRef<HTMLDivElement>(null)
@@ -126,6 +127,12 @@ export function NotificationDrawer({ isOpen, onClose, userId }: NotificationDraw
                 <Skeleton key={i} className="h-16 w-full rounded-md" />
               ))}
             </div>
+          ) : isError ? (
+            <EmptyState
+              icon={<Bell />}
+              title="Erro ao carregar notificações"
+              description="Não foi possível carregar as notificações. Tente novamente em instantes."
+            />
           ) : notifications.length === 0 ? (
             <EmptyState
               icon={<Bell />}

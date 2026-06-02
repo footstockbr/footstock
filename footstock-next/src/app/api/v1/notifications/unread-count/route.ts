@@ -11,7 +11,7 @@ export async function GET() {
   if (!auth) return errors.unauthorized()
 
   const userId = auth.user.id
-  const cacheKey = `notifications:unread:${userId}`
+  const cacheKey = `notifications:unread:v2:${userId}`
   const redis = getRedisClient()
 
   // ── Cache read ──────────────────────────────────────────────────────────────
@@ -31,7 +31,7 @@ export async function GET() {
   // ── DB query ────────────────────────────────────────────────────────────────
   try {
     const count = await prisma.notification.count({
-      where: { userId, isRead: false },
+      where: { userId, isRead: false, isArchived: false },
     })
 
     // ── Cache write ───────────────────────────────────────────────────────────
