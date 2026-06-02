@@ -216,53 +216,42 @@ export class MercadoPagoGateway implements IGateway {
       throw new Error(`[MERCADO_PAGO] Payload JSON malformado: ${payload.substring(0, 200)}`)
     }
 
-    // Extrair dados do evento MP. data.id chega como string OU number conforme o evento;
-    // normalizar para string antes de compor a URL do GET e o transactionId do contrato.
+    // Extrair data.id do payload — único campo coberto pelo HMAC além do ts.
     const rawDataId = (parsed.data as Record<string, unknown>)?.id
     const dataId    = typeof rawDataId === 'string' || typeof rawDataId === 'number'
       ? String(rawDataId)
       : ''
-    let extRef      = (parsed.data as Record<string, string>)?.external_reference
-                   ?? (parsed as Record<string, string>).external_reference
-                   ?? ''
-    let amount      = ((parsed.data as Record<string, number>)?.transaction_amount ?? 0) * 100
-
-    let mpStatus = (parsed as Record<string, string>).status
-      ?? (parsed.data as Record<string, string>)?.status
-      ?? ''
     const topic = (parsed as Record<string, string>).type
       ?? (parsed as Record<string, string>).topic
       ?? ''
 
-    // FOLLOW-UP do D9 resolvido: notificações `payment` podem chegar só com data.id e SEM
-    // status (ex.: action payment.created). Sem resolver o status real, um PIX/cartão que
-    // depois é aprovado nunca ativaria o plano. Buscamos GET /v1/payments/{id} APENAS quando:
-    // (a) o evento é de pagamento, (b) há data.id, (c) o payload não trouxe status. Falha de
-    // fetch (token ausente, timeout, HTTP != 2xx) faz fallback para o caminho de rejeição
-    // silenciosa — nunca para ativação indevida (mantém a invariante do D9).
-    if (!mpStatus && dataId && topic === 'payment') {
+    // HARDENING (D9+): status, external_reference e amount NÃO são cobertos pelo HMAC —
+    // um payload forjado pode conter esses campos alterados com data.id legítimo.
+    // Solução: ignorar qualquer valor do payload para esses campos e SEMPRE buscar via
+    // GET /v1/payments/{id}, independente de mpStatus já estar presente no payload.
+    // Exceção: eventos sem data.id (ex.: merchant_order, subscription) — sem API call.
+    let extRef  = ''
+    let amount  = 0
+    let mpStatus = ''
+
+    if (dataId && topic === 'payment') {
+      if (!/^\d+$/.test(dataId)) {
+        // data.id fora do formato numérico esperado pelo MP → rejeitar
+        throw new Error(`[MERCADO_PAGO] data.id com formato inválido: ${dataId}`)
+      }
+
       const fetched = await this.fetchPaymentStatus(dataId)
       if (!fetched) {
-        // Não foi possível resolver o status (token ausente, timeout, HTTP != 2xx). O pagamento
-        // PODE ser válido — sinalizar retryable para o provedor reentregar, nunca descartar.
+        // Não foi possível resolver o status (token ausente, timeout, HTTP != 2xx).
+        // Sinalizar retryable — o provedor reenvia, nunca ativamos sem confirmação.
         throw new GatewayRetryableError(
           `[MERCADO_PAGO] status indeterminado para payment ${dataId}: enriquecimento falhou — retry`
         )
       }
-      {
-        mpStatus = fetched.status ?? ''
-        // Anti-confusão de assinatura: se o payload JÁ trouxe external_reference, ele deve
-        // bater com o do pagamento resolvido. Sem esta checagem, um payload forjado/inconsistente
-        // (ext_ref=A) com data.id de um pagamento de ext_ref=B ativaria a assinatura errada (A).
-        if (extRef && fetched.externalReference && fetched.externalReference !== extRef) {
-          throw new Error(
-            `[MERCADO_PAGO] external_reference divergente: payload=${extRef} ` +
-            `payment=${fetched.externalReference} — evento rejeitado`
-          )
-        }
-        if (!extRef && fetched.externalReference) extRef = fetched.externalReference
-        if (!amount && fetched.amount) amount = fetched.amount * 100
-      }
+
+      mpStatus = fetched.status ?? ''
+      extRef   = fetched.externalReference ?? ''
+      amount   = fetched.amount ? Math.round(fetched.amount * 100) : 0
     }
 
     if (!extRef) {

@@ -175,6 +175,7 @@ export type WebhookValidationReason =
   | 'MISSING_SIGNATURE'
   | 'BAD_SIGNATURE'
   | 'TIMESTAMP_EXPIRED'
+  | 'CONFIG_MISSING'
 
 export interface WebhookValidationResult {
   valid: boolean
@@ -252,15 +253,18 @@ export async function validateWebhookByGatewayDetailed(
   switch (gateway) {
     case GatewayType.MERCADO_PAGO: {
       const secret = env.MERCADO_PAGO_WEBHOOK_SECRET ?? ''
+      if (!secret) return { valid: false, reason: 'CONFIG_MISSING' }
       return validateMercadoPagoHMACDetailed(headers, rawBody, secret)
     }
     case GatewayType.PAGSEGURO: {
       const secret = env.PAGSEGURO_WEBHOOK_SECRET ?? ''
+      if (!secret) return { valid: false, reason: 'CONFIG_MISSING' }
       const valid = validatePagSeguroHMAC(headers, rawBody, secret)
       return { valid, reason: valid ? 'OK' : 'BAD_SIGNATURE' }
     }
     case GatewayType.PAYPAL: {
       const webhookId = env.PAYPAL_WEBHOOK_ID ?? ''
+      if (!webhookId) return { valid: false, reason: 'CONFIG_MISSING' }
       const valid = await validatePayPalWebhook(headers, rawBody, webhookId)
       return { valid, reason: valid ? 'OK' : 'BAD_SIGNATURE' }
     }

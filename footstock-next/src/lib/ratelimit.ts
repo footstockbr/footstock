@@ -94,6 +94,20 @@ export function getWebhookRateLimit(): SlidingWindowRateLimiter {
   return _webhookRL
 }
 
+// ─── Checkout ────────────────────────────────────────────────────────────────
+
+let _checkoutRL: SlidingWindowRateLimiter | null = null
+
+/**
+ * Checkout de assinatura: 5 req / 5 min por userId.
+ * Previne abuso de criação de intents PENDING e cobranças acidentais.
+ * Chave Redis: rl:checkout:{userId}
+ */
+export function getCheckoutRateLimit(): SlidingWindowRateLimiter {
+  if (!_checkoutRL) _checkoutRL = new SlidingWindowRateLimiter(5, 5 * 60 * 1000, 'rl:checkout')
+  return _checkoutRL
+}
+
 // ─── Club ─────────────────────────────────────────────────────────────────────
 
 let _clubLoginRL: SlidingWindowRateLimiter | null = null

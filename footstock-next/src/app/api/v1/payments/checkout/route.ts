@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { getAuthUser } from '@/lib/auth'
 import { created, error, errors } from '@/lib/api'
 import { planService } from '@/lib/services/PlanService'
+import { getCheckoutRateLimit } from '@/lib/ratelimit'
 
 const CheckoutSchema = z.object({
   planType: z.enum(['CRAQUE', 'LENDA']),
@@ -14,6 +15,9 @@ const CheckoutSchema = z.object({
 export async function POST(request: NextRequest) {
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()
+
+  const rl = await getCheckoutRateLimit().limit(auth.user.id)
+  if (!rl.success) return errors.rateLimit('Muitas tentativas de checkout. Aguarde alguns minutos.')
 
   try {
     const body = await request.json()

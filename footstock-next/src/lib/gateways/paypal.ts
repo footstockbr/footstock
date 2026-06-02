@@ -185,9 +185,14 @@ export class PayPalGateway implements IGateway {
 
     switch (eventType) {
       case 'PAYMENT.CAPTURE.COMPLETED':
-      case 'CHECKOUT.ORDER.APPROVED':
         mappedEventType = 'PAYMENT_CONFIRMED'
         break
+      case 'CHECKOUT.ORDER.APPROVED':
+        // CHECKOUT.ORDER.APPROVED = pedido aprovado, NÃO captura concluída.
+        // Tratar como PAYMENT_CONFIRMED aqui ativaria plano antes do dinheiro ser capturado.
+        // O evento correto para ativação é PAYMENT.CAPTURE.COMPLETED.
+        console.warn(`[PAYPAL] CHECKOUT.ORDER.APPROVED descartado — aguardar PAYMENT.CAPTURE.COMPLETED`)
+        throw new Error('[PAYPAL] CHECKOUT.ORDER.APPROVED: aguardar PAYMENT.CAPTURE.COMPLETED para ativar plano')
       case 'PAYMENT.CAPTURE.DENIED':
       case 'PAYMENT.CAPTURE.DECLINED':
       case 'CHECKOUT.ORDER.VOIDED':

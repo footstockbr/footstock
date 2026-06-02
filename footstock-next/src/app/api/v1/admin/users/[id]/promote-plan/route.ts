@@ -24,7 +24,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const user = await prisma.user.findUnique({ where: { id } })
     if (!user) return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 })
 
-    // Staff (ADMIN / CLUB_PARTNER) nao possui plano de player — promocao nao se aplica.
     if (user.userType === 'ADMIN' || user.userType === 'CLUB_PARTNER') {
       return NextResponse.json(
         { error: 'CANNOT_PROMOTE_STAFF_PLAN', message: 'Contas administrativas/institucionais nao possuem plano de player.' },
@@ -37,24 +36,62 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Downgrade não permitido. Apenas promoção.' }, { status: 400 })
     }
 
-    const updated = await prisma.user.update({
-      where: { id },
-      data: { planType: newPlan },
+    const now       = new Date()
+    const expiresAt = new Date(now)
+    expiresAt.setFullYear(expiresAt.getFullYear() + 1)
+
+    // Transação: cancela subs não-terminais anteriores + cria ACTIVE manual + atualiza user
+    const updated = await prisma.$transaction(async (tx) => {
+      // Encerra subs anteriores (upgrade manual)
+      await tx.subscription.updateMany({
+        where: {
+          userId: id,
+          status: { in: ['ACTIVE', 'TRIAL', 'TRIALING', 'PENDING', 'PAST_DUE', 'CANCELLATION_LOCK'] },
+        },
+        data: { status: 'CANCELLED', cancelledAt: now },
+      })
+
+      // Cria subscription manual ACTIVE com gateway especial para rastreabilidade
+      const sub = await tx.subscription.create({
+        data: {
+          userId:    id,
+          planType:  newPlan,
+          gateway:   'MERCADO_PAGO', // fallback — schema não tem MANUAL; registrar no details
+          period:    'YEARLY',
+          amount:    0,
+          status:    'ACTIVE',
+          startsAt:  now,
+          expiresAt,
+        },
+      })
+
+      const updatedUser = await tx.user.update({
+        where: { id },
+        data: { planType: newPlan },
+      })
+
+      // Audit trail via adminMarketAction (modelo existente, sem depender de auditLog)
+      await tx.adminMarketAction.create({
+        data: {
+          adminId: auth.user.id,
+          action:  'PROMOTE_PLAN',
+          reason:  'ADMIN_MANUAL_PLAN_PROMOTION',
+          details: {
+            targetUserId:   id,
+            subscriptionId: sub.id,
+            from:           currentPlan ?? 'JOGADOR',
+            to:             newPlan,
+            expiresAt:      expiresAt.toISOString(),
+          },
+        },
+      })
+
+      return updatedUser
     })
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (prisma as any).auditLog?.create({
-      data: {
-        action: 'PROMOTE_PLAN',
-        targetId: id,
-        performedBy: auth.user.id,
-        metadata: JSON.stringify({ from: currentPlan, to: newPlan }),
-      },
-    }).catch(() => null)
-
     return NextResponse.json({ success: true, user: { id: updated.id, planType: newPlan } })
-  } catch (error) {
-    console.error('[PromotePlan]', error)
+  } catch (err) {
+    console.error('[PromotePlan]', err)
     return NextResponse.json({ error: 'Erro ao promover plano' }, { status: 500 })
   }
 }

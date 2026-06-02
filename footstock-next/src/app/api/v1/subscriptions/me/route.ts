@@ -52,12 +52,23 @@ export async function GET() {
   if (!auth) return errors.unauthorized()
 
   try {
-    const sub = await prisma.subscription.findFirst({
-      where: { userId: auth.user.id },
+    // Prioriza sub ACTIVE/CANCELLATION_LOCK sobre PENDING.
+    // Sem isso, se o usuário tiver ACTIVE e iniciar upgrade (PENDING criado),
+    // GET retornaria a PENDING mais recente e DELETE poderia cancelá-la indevidamente.
+    // PENDING ainda é retornado quando não há ACTIVE (polling de PlanRevalidateOnSuccess).
+    const activeFirst = await prisma.subscription.findFirst({
+      where: {
+        userId: auth.user.id,
+        status: { in: ['ACTIVE', 'CANCELLATION_LOCK', 'PAST_DUE', 'TRIAL', 'TRIALING'] },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+    const sub = activeFirst ?? await prisma.subscription.findFirst({
+      where: { userId: auth.user.id, status: 'PENDING' },
       orderBy: { createdAt: 'desc' },
     })
 
-    if (!sub || sub.status === 'CANCELLED' || sub.status === 'EXPIRED') {
+    if (!sub) {
       return errors.notFound('Nenhuma assinatura ativa encontrada.')
     }
 
@@ -73,8 +84,12 @@ export async function DELETE() {
   if (!auth) return errors.unauthorized()
 
   try {
+    // DELETE só opera sobre assinatura ativa — nunca sobre PENDING (upgrade em andamento)
     const sub = await prisma.subscription.findFirst({
-      where: { userId: auth.user.id },
+      where: {
+        userId: auth.user.id,
+        status: { in: ['ACTIVE', 'CANCELLATION_LOCK', 'PAST_DUE', 'TRIAL', 'TRIALING'] },
+      },
       orderBy: { createdAt: 'desc' },
     })
 

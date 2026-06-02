@@ -32,7 +32,7 @@ export const ALLOWED_PAYMENT_FIELDS = [
 ] as const
 
 /** Rate limit máximo para endpoint de webhook */
-export const WEBHOOK_RATE_LIMIT = 100 // req/min por IP
+export const WEBHOOK_RATE_LIMIT = 1000 // req/min por IP
 
 /** Janela de replay attack em milissegundos (5 minutos) */
 export const WEBHOOK_REPLAY_WINDOW_MS = 5 * 60 * 1000

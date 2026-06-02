@@ -75,7 +75,9 @@ export async function POST(request: NextRequest) {
         ? 'Timestamp expirado/replay (janela de replay excedida)'
         : validation.reason === 'MISSING_SIGNATURE'
           ? 'Assinatura ausente ou malformada nos headers'
-          : 'Assinatura HMAC inválida'
+          : validation.reason === 'CONFIG_MISSING'
+            ? 'WEBHOOK_SECRET não configurado no servidor (CONFIG_MISSING)'
+            : 'Assinatura HMAC inválida'
     console.error('[webhook][ALERT] Webhook rejeitado: validação de assinatura falhou', {
       gateway: gatewayType,
       reason: validation.reason,
@@ -189,10 +191,41 @@ export async function POST(request: NextRequest) {
       // Buscar subscription para obter userId
       const subscription = await prisma.subscription.findUnique({
         where: { id: event.subscriptionId },
-        select: { userId: true, planType: true, period: true, amount: true },
+        select: { userId: true, planType: true, period: true, amount: true, gateway: true },
       })
 
       if (subscription) {
+        // Hardening: gateway do webhook deve bater com o da subscription
+        if (subscription.gateway !== gatewayEnum) {
+          console.error(
+            `[webhook][ALERT] Gateway divergente — subscriptionId=${event.subscriptionId} ` +
+            `subscription.gateway=${subscription.gateway} webhook.gateway=${gatewayEnum}`
+          )
+          await webhookAuditService.logWebhook({
+            gateway: gatewayEnum, eventType: event.eventType,
+            transactionId: event.transactionId, subscriptionId: event.subscriptionId,
+            status: 'REJECTED', hmacValid: true, ipAddress: originalIp,
+            errorMessage: `Gateway divergente: sub=${subscription.gateway} evt=${gatewayEnum}`,
+          })
+          return NextResponse.json({ received: true }, { status: 200 })
+        }
+
+        // Hardening: valor pago deve bater com o valor da subscription (tolerância ±1 centavo)
+        const amountMatch = Math.abs(Math.round(Number(event.amount)) - Number(subscription.amount)) <= 1
+        if (!amountMatch) {
+          console.error(
+            `[webhook][ALERT] Valor divergente — subscriptionId=${event.subscriptionId} ` +
+            `subscription.amount=${subscription.amount} webhook.amount=${event.amount}`
+          )
+          await webhookAuditService.logWebhook({
+            gateway: gatewayEnum, eventType: event.eventType,
+            transactionId: event.transactionId, subscriptionId: event.subscriptionId,
+            status: 'REJECTED', hmacValid: true, ipAddress: originalIp,
+            errorMessage: `Valor divergente: esperado=${subscription.amount} recebido=${event.amount}`,
+          })
+          return NextResponse.json({ received: true }, { status: 200 })
+        }
+
         // Ativar plano do usuário
         const upgradeResult = await planService.upgradeUser(subscription.userId, event.subscriptionId)
 
