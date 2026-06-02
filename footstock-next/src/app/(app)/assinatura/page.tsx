@@ -6,6 +6,7 @@ import { getAuthUser } from '@/lib/auth'
 import { subscriptionService } from '@/lib/services/SubscriptionService'
 import { ROUTES } from '@/lib/constants/routes'
 import { SubscriptionActions } from '@/components/subscription/SubscriptionActions'
+import { RefundSubscriptionButton } from '@/components/subscription/RefundSubscriptionButton'
 import { PLAN_LABELS, SUBSCRIPTION_STATUS, getGatewayMeta } from '@/lib/constants/admin-ui'
 import { formatDateLong, formatBRLFromCents } from '@/lib/utils/format'
 
@@ -128,8 +129,9 @@ export default async function AssinaturaPage() {
           <div>
             <p className="text-sm font-medium text-[#F0B90B]">Período de arrependimento ativo</p>
             <p className="text-xs text-[#929AA5] mt-0.5">
-              Você tem direito ao cancelamento com reembolso integral até 7 dias após a contratação (CDC Art. 49).
+              Você pode solicitar reembolso integral até 7 dias após a contratação (CDC Art. 49). Cancelar a renovação mantém seu plano até o fim do período pago.
             </p>
+            <RefundSubscriptionButton />
           </div>
         </div>
       )}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button, Modal } from "@/components/ui";
 import { CheckoutButton } from "@/components/payments/CheckoutButton";
@@ -10,6 +11,7 @@ interface SubscriptionManageProps {
 }
 
 export function SubscriptionManage({ planType }: SubscriptionManageProps) {
+  const router = useRouter();
   const [isCancelOpen, setIsCancelOpen] = useState(false);
   const [isChangeOpen, setIsChangeOpen] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -23,15 +25,28 @@ export function SubscriptionManage({ planType }: SubscriptionManageProps) {
     setIsCancelling(true);
     try {
       const res = await fetch("/api/v1/subscriptions/me", { method: "DELETE" });
-      if (!res.ok) throw new Error();
-      toast.success("Cancelamento solicitado. Você mantém acesso até o fim do período.", { duration: 2000 });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error?.message ?? "Não foi possível cancelar. Tente novamente.");
+
+      const effectiveAt = json?.data?.cancellationEffectiveAt ?? json?.data?.expiresAt;
+      const formattedDate = effectiveAt
+        ? new Date(effectiveAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })
+        : null;
+
+      toast.success(
+        formattedDate
+          ? `Cancelamento agendado. Você mantém o plano até ${formattedDate}.`
+          : "Cancelamento agendado. Você mantém o plano até o fim do período.",
+        { duration: 3000 }
+      );
       setIsCancelOpen(false);
-    } catch {
-      toast.error("Não foi possível cancelar. Tente novamente.", { duration: 2000 });
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Não foi possível cancelar. Tente novamente.", { duration: 2000 });
     } finally {
       setIsCancelling(false);
     }
-  }, []);
+  }, [router]);
 
   return (
     <>

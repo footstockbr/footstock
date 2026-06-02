@@ -3,12 +3,12 @@ import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
 import {
   isWithinCoolingOff,
-  getCancellationLockExpiry,
-  getForcedLiquidationAt,
 } from '@/lib/services/plan-logic'
 import type { SubscriptionStatus, PaymentGateway, PaymentPeriod, PlanType } from '@/types'
 import type { Prisma } from '@prisma/client'
 import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
+
+type CancellationMode = 'SCHEDULED' | 'REFUND' | null
 
 function serializeSubscription(s: {
   id: string; userId: string; planType: string; gateway: string
@@ -21,8 +21,34 @@ function serializeSubscription(s: {
   bonusAmount: Prisma.Decimal | null
   bonusScheduledAt: Date | null
   bonusCreditedAt: Date | null
+  refundRequested: boolean
   createdAt: Date; updatedAt: Date
-}) {
+}, now = new Date()) {
+  const isEligibleForRefund = isWithinCoolingOff({
+    planType: s.planType as PlanType,
+    startsAt: s.startsAt,
+    expiresAt: s.expiresAt,
+    status: s.status,
+    cancelledAt: s.cancelledAt,
+    cancellationLockExpiresAt: s.cancellationLockExpiresAt,
+  }, now)
+
+  const cancellationMode: CancellationMode =
+    s.status === 'CANCELLATION_LOCK'
+      ? 'SCHEDULED'
+      : s.status === 'CANCELLED' && s.refundRequested
+        ? 'REFUND'
+        : null
+
+  const cancellationEffectiveAt =
+    s.status === 'CANCELLATION_LOCK'
+      ? s.cancellationLockExpiresAt ?? s.expiresAt
+      : s.cancelledAt
+
+  const lockMsRemaining = s.cancellationLockExpiresAt
+    ? Math.max(0, s.cancellationLockExpiresAt.getTime() - now.getTime())
+    : null
+
   return {
     id: s.id,
     userId: s.userId,
@@ -41,6 +67,17 @@ function serializeSubscription(s: {
     bonusAmount: s.bonusAmount !== null ? Number(s.bonusAmount) : null,
     bonusScheduledAt: s.bonusScheduledAt?.toISOString() ?? null,
     bonusCreditedAt: s.bonusCreditedAt?.toISOString() ?? null,
+    refundRequested: s.refundRequested,
+    isEligibleForRefund,
+    cancellationMode,
+    cancellationEffectiveAt: cancellationEffectiveAt?.toISOString() ?? null,
+    cancellationLock: s.status === 'CANCELLATION_LOCK' && s.cancellationLockExpiresAt
+      ? {
+          expiresAt: s.cancellationLockExpiresAt.toISOString(),
+          hoursRemaining: Math.ceil((lockMsRemaining ?? 0) / 3_600_000),
+          forcedLiquidationAt: s.forcedLiquidationAt?.toISOString() ?? null,
+        }
+      : null,
     createdAt: s.createdAt.toISOString(),
     updatedAt: s.updatedAt.toISOString(),
   }
@@ -108,50 +145,29 @@ export async function DELETE() {
       status: sub.status,
       cancelledAt: sub.cancelledAt,
     }
-    const coolingOff = isWithinCoolingOff(subForLogic, now)
+    const eligibleForRefund = isWithinCoolingOff(subForLogic, now)
 
     // Determina se havia bônus pendente de cancelar
     const hasPendingBonus = sub.bonusScheduledAt !== null && sub.bonusCreditedAt === null
     const pendingBonusAmount = hasPendingBonus && sub.bonusAmount ? Number(sub.bonusAmount) : null
 
-    let updatedSub: typeof sub
+    // Cancelamento simples: agenda encerramento para o fim do período pago.
+    // Reembolso CDC Art. 49 é opt-in explícito em /api/v1/subscriptions/me/refund.
+    const lockStartedAt = now
+    const lockExpiresAt = sub.expiresAt.getTime() > now.getTime() ? sub.expiresAt : now
 
-    if (coolingOff) {
-      // Dentro do período de arrependimento (CDC Art. 49): cancelamento imediato + downgrade
-      updatedSub = await prisma.$transaction(async (tx) => {
-        const s = await tx.subscription.update({
-          where: { id: sub.id },
-          data: {
-            status: 'CANCELLED',
-            cancelledAt: now,
-            bonusScheduledAt: null, // T-021: cancela bônus pendente dentro da carência
-          },
-        })
-        await tx.user.update({
-          where: { id: auth.user.id },
-          data: { planType: 'JOGADOR', fsBalance: 2000 },
-        })
-        return s
-      })
-    } else {
-      // Fora do período de arrependimento: trava de 7d com liquidação forçada em T+48h
-      const lockStartedAt = now
-      const lockExpiresAt = getCancellationLockExpiry(lockStartedAt)
-      const forcedLiqAt = getForcedLiquidationAt(lockStartedAt)
-
-      updatedSub = await prisma.subscription.update({
-        where: { id: sub.id },
-        data: {
-          status: 'CANCELLATION_LOCK',
-          cancelledAt: now,
-          cancellationLockStartedAt: lockStartedAt,
-          cancellationLockExpiresAt: lockExpiresAt,      // T+7d: cancelamento final
-          forcedLiquidationAt: forcedLiqAt,              // T+48h: liquidação de posições restritas
-          forcedLiquidationExecutedAt: null,             // reset explícito para idempotência do cron
-          bonusScheduledAt: null, // T-021: CANCELLATION_LOCK cancela bônus pendente
-        },
-      })
-    }
+    const updatedSub = await prisma.subscription.update({
+      where: { id: sub.id },
+      data: {
+        status: 'CANCELLATION_LOCK',
+        cancelledAt: now,
+        cancellationLockStartedAt: lockStartedAt,
+        cancellationLockExpiresAt: lockExpiresAt,
+        forcedLiquidationAt: null,
+        forcedLiquidationExecutedAt: null,
+        bonusScheduledAt: null, // T-021: CANCELLATION_LOCK cancela bônus pendente
+      },
+    })
 
     // EVT-024: subscription_cancelled — track cancellation
     // Check if user had open short positions at cancellation time
@@ -161,8 +177,8 @@ export async function DELETE() {
 
     mixpanelServer.trackSubscriptionCancelled(auth.user.id, {
       plan: sub.planType as PlanType,
-      cancellation_reason: coolingOff ? 'cooling_off_period' : 'user_request',
-      within_trial: coolingOff,
+      cancellation_reason: 'user_request',
+      within_trial: eligibleForRefund,
       had_open_shorts: openShortCount > 0,
     })
 
@@ -170,25 +186,23 @@ export async function DELETE() {
     await prisma.notification.create({
       data: {
         userId: auth.user.id,
-        type: coolingOff ? 'PLAN_CANCEL_ALERT' : 'CANCELLATION_LOCK_ACTIVE',
-        title: coolingOff ? 'Cancelamento e reembolso confirmados' : 'Cancelamento iniciado — trava ativa',
-        body: coolingOff
-          ? 'Seu plano foi cancelado. O reembolso será processado em até 7 dias úteis.'
-          : 'Cancelamento iniciado. Suas posições restritas serão encerradas em 48h e a conta finalizada em 7 dias. Você pode reverter este processo a qualquer momento até lá.',
+        type: 'CANCELLATION_LOCK_ACTIVE',
+        title: 'Cancelamento agendado',
+        body: `Seu plano permanece ativo até ${lockExpiresAt.toLocaleDateString('pt-BR')}. A renovação foi cancelada e você pode reverter este processo até lá.`,
         isRead: false,
       },
     }).catch((err) => {
       console.error('[subscriptions/me DELETE] Erro ao criar notificação de cancelamento:', err)
     })
 
-    // T-021: notificar perda do bônus pendente quando cancelar dentro da carência
+    // T-021: cancelamento de renovação também remove bônus pendente de ativação.
     if (hasPendingBonus && pendingBonusAmount) {
       await prisma.notification.create({
         data: {
           userId: auth.user.id,
           type: 'BONUS_CANCELLED',
           title: 'Bônus não será creditado',
-          body: `Você cancelou dentro do período de carência. O bônus de FS$ ${pendingBonusAmount.toLocaleString('pt-BR')} não será creditado.`,
+          body: `Você cancelou a renovação do plano. O bônus de FS$ ${pendingBonusAmount.toLocaleString('pt-BR')} não será creditado.`,
           isRead: false,
         },
       }).catch((err) => {

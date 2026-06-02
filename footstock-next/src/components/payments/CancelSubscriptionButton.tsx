@@ -46,7 +46,7 @@ export function CancelSubscriptionButton({ isEligibleForRefund }: CancelSubscrip
         <p className="text-sm text-[#EAECEF] font-medium">Confirmar cancelamento?</p>
         <p className="text-xs text-[#929AA5]">
           {isEligibleForRefund
-            ? 'Você receberá o reembolso integral pois está no período de arrependimento (7 dias).'
+            ? 'Seu acesso permanece ativo até o fim do período atual. Reembolso integral é uma solicitação separada dentro dos 7 dias.'
             : 'Seu acesso permanece ativo até o fim do período atual. Não haverá renovação.'}
         </p>
         {error && (

@@ -117,7 +117,7 @@ async function closeAllOpenPositions(userId: string, subscriptionId: string): Pr
 }
 
 /**
- * Finaliza assinaturas em CANCELLATION_LOCK com prazo expirado (T+7d).
+ * Finaliza assinaturas em CANCELLATION_LOCK com prazo expirado.
  * Idempotente: usa updateMany com predicados estritos (compare-and-swap).
  */
 export async function processCancellationExpiries(): Promise<CancellationExpiryResult> {

@@ -52,10 +52,14 @@ export async function requireActiveSubscription(
       status: 'CANCELLATION_LOCK',
     },
     orderBy: { createdAt: 'desc' },
-    select: { status: true, cancellationLockExpiresAt: true },
+    select: { status: true, cancellationLockExpiresAt: true, forcedLiquidationAt: true },
   })
 
   if (!sub) return null // acesso normal
+
+  // Cancelamento simples agenda o fim do plano, mas mantem os recursos ate o
+  // fim do periodo pago. Locks com forcedLiquidationAt continuam bloqueando risco.
+  if (!sub.forcedLiquidationAt) return null
 
   const expiresAt = sub.cancellationLockExpiresAt
   const hoursRemaining = expiresAt

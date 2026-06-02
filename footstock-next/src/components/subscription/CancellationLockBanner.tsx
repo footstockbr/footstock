@@ -3,15 +3,15 @@
 // ============================================================================
 // CancellationLockBanner — banner persistente no topo quando status = CANCELLATION_LOCK
 // Não pode ser dispensado (sem X de fechar)
-// Mostra countdown até expiração T+7d e botão de reverter
+// Mostra countdown ate o encerramento agendado e botao de reverter
 // ============================================================================
 
 import { CancellationCountdown } from './CancellationCountdown'
 import { RevertCancellationButton } from './RevertCancellationButton'
 
 interface Props {
-  cancellationLockExpiresAt: string   // ISO string UTC — T+7d
-  forcedLiquidationAt: string | null  // ISO string UTC — T+48h (quando posições restritas serão liquidadas)
+  cancellationLockExpiresAt: string
+  forcedLiquidationAt: string | null
 }
 
 export function CancellationLockBanner({ cancellationLockExpiresAt, forcedLiquidationAt }: Props) {
@@ -39,7 +39,12 @@ export function CancellationLockBanner({ cancellationLockExpiresAt, forcedLiquid
               Você pode fechá-las antes disso.
             </p>
           )}
-          {!forcedLiqPending && (
+          {!forcedLiquidationAt && (
+            <p className="text-amber-800 text-xs">
+              Seu plano permanece ativo ate a data acima. Nao havera renovacao automatica.
+            </p>
+          )}
+          {forcedLiquidationAt && !forcedLiqPending && (
             <p className="text-amber-800 text-xs">
               Posições restritas já foram encerradas. Sua conta será finalizada no prazo acima.
             </p>

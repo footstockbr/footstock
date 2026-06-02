@@ -6,9 +6,6 @@ import { prisma } from '@/lib/prisma'
 import { BaseService } from './base'
 import {
   isWithinCoolingOff,
-  shouldEnterCancellationLock,
-  getCancellationLockExpiry,
-  getForcedLiquidationAt,
   getRestrictedPositionTypes,
   calcBonusAmount,
   type SubscriptionForLogic,
@@ -97,10 +94,11 @@ export class SubscriptionService extends BaseService {
       const msRemaining = Math.max(0, subscription.cancellationLockExpiresAt.getTime() - now.getTime())
       const hoursRemaining = Math.ceil(msRemaining / 3_600_000)
       const restrictedTypes = getRestrictedPositionTypes(subscription.planType as PlanType, 'JOGADOR')
+      const requiresLiquidation = subscription.forcedLiquidationAt !== null && restrictedTypes.length > 0
       cancellationLock = {
         expiresAt: subscription.cancellationLockExpiresAt.toISOString(),
         hoursRemaining,
-        requiresLiquidation: restrictedTypes.length > 0,
+        requiresLiquidation,
       }
     }
 
@@ -162,10 +160,10 @@ export class SubscriptionService extends BaseService {
     })
   }
 
-  /** Cancela subscription com lógica de arrependimento CDC Art. 49 e CANCELLATION_LOCK */
+  /** Agenda cancelamento para o fim do periodo pago. Reembolso CDC e opt-in separado. */
   async cancelSubscription(userId: string): Promise<CancelResult> {
     const subscription = await prisma.subscription.findFirst({
-      where: { userId, status: { in: ['ACTIVE', 'TRIAL'] as const } },
+      where: { userId, status: { in: ['ACTIVE', 'TRIAL', 'TRIALING', 'PAST_DUE'] as const } },
       orderBy: { createdAt: 'desc' },
     })
 
@@ -181,78 +179,36 @@ export class SubscriptionService extends BaseService {
     }
 
     const now = new Date()
-    const subForLogic: SubscriptionForLogic = {
-      planType: subscription.planType as PlanType,
-      startsAt: subscription.startsAt,
-      expiresAt: subscription.expiresAt!,
-      status: subscription.status,
-      cancelledAt: subscription.cancelledAt,
-    }
 
-    const eligibleForRefund = isWithinCoolingOff(subForLogic, now)
-    const enterLock = shouldEnterCancellationLock(subForLogic, now)
-    const restrictedTypes = getRestrictedPositionTypes(subscription.planType as PlanType, 'JOGADOR')
+    const lockStartedAt = now
+    const lockExpiresAt = subscription.expiresAt!.getTime() > now.getTime()
+      ? subscription.expiresAt!
+      : now
 
-    if (eligibleForRefund) {
-      // Cancelamento simples com reembolso (arrependimento CDC Art. 49)
-      // T-021: nular bonusScheduledAt para cancelar bônus pendente dentro da carência
-      await prisma.subscription.update({
-        where: { id: subscription.id },
-        data: { cancelledAt: now, refundRequested: true, bonusScheduledAt: null },
-      })
-      return {
-        cancelledAt: now,
-        expiresAt: subscription.expiresAt!,
-        isEligibleForRefund: true,
-        requiresLiquidation: false,
-      }
-    }
-
-    if (enterLock) {
-      // CANCELLATION_LOCK — features bloqueadas imediatamente
-      // T-021: nular bonusScheduledAt — CANCELLATION_LOCK conta como cancelamento de bônus
-      const lockStartedAt = now
-      const lockExpiresAt = getCancellationLockExpiry(lockStartedAt)   // T+7d
-      const forcedLiqAt = getForcedLiquidationAt(lockStartedAt)         // T+48h
-
-      await prisma.subscription.update({
-        where: { id: subscription.id },
-        data: {
-          status: 'CANCELLATION_LOCK',
-          cancelledAt: now,
-          cancellationLockStartedAt: lockStartedAt,
-          cancellationLockExpiresAt: lockExpiresAt,
-          forcedLiquidationAt: forcedLiqAt,
-          forcedLiquidationExecutedAt: null,
-          bonusScheduledAt: null, // T-021: cancelar bônus pendente
-        },
-      })
-
-      const hoursRemaining = Math.ceil((lockExpiresAt.getTime() - now.getTime()) / 3_600_000)
-      return {
-        cancelledAt: now,
-        expiresAt: subscription.expiresAt!,
-        isEligibleForRefund: false,
-        requiresLiquidation: restrictedTypes.length > 0,
-        cancellationLock: {
-          expiresAt: lockExpiresAt.toISOString(),
-          hoursRemaining,
-          requiresLiquidation: restrictedTypes.length > 0,
-        },
-      }
-    }
-
-    // Fallback: cancelamento simples sem reembolso e sem trava
     await prisma.subscription.update({
       where: { id: subscription.id },
-      data: { cancelledAt: now, bonusScheduledAt: null }, // T-021: nular bônus pendente
+      data: {
+        status: 'CANCELLATION_LOCK',
+        cancelledAt: now,
+        cancellationLockStartedAt: lockStartedAt,
+        cancellationLockExpiresAt: lockExpiresAt,
+        forcedLiquidationAt: null,
+        forcedLiquidationExecutedAt: null,
+        bonusScheduledAt: null,
+      },
     })
 
+    const hoursRemaining = Math.ceil((lockExpiresAt.getTime() - now.getTime()) / 3_600_000)
     return {
       cancelledAt: now,
       expiresAt: subscription.expiresAt!,
       isEligibleForRefund: false,
       requiresLiquidation: false,
+      cancellationLock: {
+        expiresAt: lockExpiresAt.toISOString(),
+        hoursRemaining,
+        requiresLiquidation: false,
+      },
     }
   }
 

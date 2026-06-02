@@ -253,10 +253,22 @@ export interface Subscription {
   expiresAt?: string | null
   trialEndsAt?: string | null
   cancelledAt?: string | null
-  cancellationLockStartedAt?: string | null    // T+0: inicio do lock
-  cancellationLockExpiresAt?: string | null    // T+7d: cancelamento final
+  cancellationLockStartedAt?: string | null    // inicio do cancelamento agendado
+  cancellationLockExpiresAt?: string | null    // quando o cancelamento será finalizado
   forcedLiquidationAt?: string | null          // T+48h: liquidacao de posicoes restritas
   forcedLiquidationExecutedAt?: string | null  // marcado pelo cron de T+48h
+  bonusAmount?: number | null
+  bonusScheduledAt?: string | null
+  bonusCreditedAt?: string | null
+  refundRequested?: boolean
+  isEligibleForRefund?: boolean
+  cancellationMode?: 'SCHEDULED' | 'REFUND' | null
+  cancellationEffectiveAt?: string | null
+  cancellationLock?: {
+    expiresAt: string
+    hoursRemaining: number
+    forcedLiquidationAt: string | null
+  } | null
   createdAt: string
   updatedAt: string
 }

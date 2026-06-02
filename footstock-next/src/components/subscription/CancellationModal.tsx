@@ -14,27 +14,28 @@ interface Props {
   isOpen: boolean
   onClose: () => void
   planType: string
+  isEligibleForRefund?: boolean
 }
 
 type Step = 'confirm' | 'acknowledge' | 'done'
 
 const CONSEQUENCES_BY_PLAN: Record<string, string[]> = {
   LENDA: [
-    'Novas ordens, shorts e alavancagem serão bloqueados imediatamente',
-    'Acesso ao AI Assessor será bloqueado imediatamente',
-    'Inscrição em novas ligas será bloqueada imediatamente',
-    'Suas posições short, alavancadas e ordens OCO serão encerradas automaticamente em 48 horas',
-    'Seu saldo FS$ será ajustado para FS$2.000 após 7 dias',
+    'A renovação automática será cancelada',
+    'Você mantém os recursos do plano até o fim do período já pago',
+    'Ao final do período, recursos LENDA serão encerrados',
+    'Seu saldo FS$ será ajustado para FS$2.000 no encerramento',
   ],
   CRAQUE: [
-    'Novas ordens limitadas e agendadas serão bloqueadas imediatamente',
-    'Inscrição em novas ligas será bloqueada imediatamente',
-    'Seu saldo FS$ será ajustado para FS$2.000 após 7 dias',
+    'A renovação automática será cancelada',
+    'Você mantém os recursos do plano até o fim do período já pago',
+    'Ao final do período, recursos CRAQUE serão encerrados',
+    'Seu saldo FS$ será ajustado para FS$2.000 no encerramento',
   ],
   JOGADOR: [],
 }
 
-export function CancellationModal({ isOpen, onClose, planType }: Props) {
+export function CancellationModal({ isOpen, onClose, planType, isEligibleForRefund }: Props) {
   const router = useRouter()
   const [step, setStep] = useState<Step>('confirm')
   const [acknowledged, setAcknowledged] = useState(false)
@@ -42,6 +43,8 @@ export function CancellationModal({ isOpen, onClose, planType }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [lockInfo, setLockInfo] = useState<{
     cancellationLockExpiresAt?: string
+    cancellationEffectiveAt?: string
+    cancellationMode?: 'SCHEDULED' | 'REFUND' | null
     forcedLiquidationAt?: string
     isEligibleForRefund?: boolean
   } | null>(null)
@@ -69,12 +72,14 @@ export function CancellationModal({ isOpen, onClose, planType }: Props) {
       const json = await res.json()
 
       if (!res.ok) {
-        setError(json?.message ?? 'Ocorreu um erro ao processar o cancelamento.')
+        setError(json?.error?.message ?? 'Ocorreu um erro ao processar o cancelamento.')
         return
       }
 
       setLockInfo({
         cancellationLockExpiresAt: json?.data?.cancellationLockExpiresAt,
+        cancellationEffectiveAt: json?.data?.cancellationEffectiveAt,
+        cancellationMode: json?.data?.cancellationMode,
         forcedLiquidationAt: json?.data?.forcedLiquidationAt,
         isEligibleForRefund: json?.data?.isEligibleForRefund,
       })
@@ -103,7 +108,7 @@ export function CancellationModal({ isOpen, onClose, planType }: Props) {
               Cancelar assinatura
             </h2>
             <p className="text-sm text-gray-600 mb-4">
-              Ao cancelar, você perderá os seguintes benefícios:
+              Ao cancelar, a renovação será interrompida:
             </p>
 
             {consequences.length > 0 && (
@@ -118,7 +123,9 @@ export function CancellationModal({ isOpen, onClose, planType }: Props) {
             )}
 
             <p className="text-xs text-gray-500 mb-6">
-              Você terá 7 dias para reverter o cancelamento antes que a conta seja definitivamente encerrada.
+              {isEligibleForRefund
+                ? 'Reembolso integral dentro dos 7 dias é uma ação separada. Este fluxo apenas cancela a renovação.'
+                : 'Este fluxo cancela a renovação e mantém o plano até o fim do período pago.'}
             </p>
 
             <div className="flex gap-3">
@@ -148,9 +155,9 @@ export function CancellationModal({ isOpen, onClose, planType }: Props) {
             <div className="rounded-md bg-amber-50 border border-amber-200 p-4 mb-4">
               <p className="text-sm text-amber-900 font-medium mb-1">O que acontece após o cancelamento:</p>
               <ul className="text-xs text-amber-800 space-y-1 list-disc list-inside">
-                <li>Posições restritas encerradas automaticamente em 48 horas</li>
-                <li>Conta definitivamente encerrada em 7 dias se não reverter</li>
-                <li>Saldo FS$ ajustado para FS$2.000 no encerramento</li>
+                <li>Seu plano continua ativo até o fim do período pago</li>
+                <li>Não haverá renovação automática</li>
+                <li>Você pode reverter o cancelamento antes do encerramento</li>
               </ul>
             </div>
 
@@ -196,23 +203,35 @@ export function CancellationModal({ isOpen, onClose, planType }: Props) {
               <span className="text-2xl">&#x26A0;&#xFE0F;</span>
             </div>
             <h2 id="cancellation-modal-title" className="text-lg font-bold text-gray-900 mb-2">
-              {lockInfo?.isEligibleForRefund
+              {lockInfo?.cancellationMode === 'REFUND'
                 ? 'Assinatura cancelada com reembolso'
-                : 'Cancelamento iniciado'}
+                : 'Cancelamento agendado'}
             </h2>
 
-            {lockInfo?.isEligibleForRefund ? (
+            {lockInfo?.cancellationMode === 'REFUND' ? (
               <p className="text-sm text-gray-600 mb-6">
                 Sua assinatura foi cancelada dentro do período de arrependimento (CDC Art. 49).
                 O reembolso será processado em até 7 dias úteis.
               </p>
             ) : (
               <div className="text-sm text-gray-600 mb-6 space-y-2">
-                <p>Seu cancelamento foi registrado. O que acontece agora:</p>
+                <p>
+                  Seu cancelamento foi registrado. Você mantém o plano até{' '}
+                  {lockInfo?.cancellationEffectiveAt
+                    ? new Date(lockInfo.cancellationEffectiveAt).toLocaleDateString('pt-BR', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                      })
+                    : 'o fim do período'}
+                  .
+                </p>
                 <ul className="text-left space-y-1 text-xs text-gray-700 list-disc list-inside">
-                  <li>Posições restritas serão encerradas automaticamente em 48 horas</li>
-                  <li>Você pode reverter o cancelamento a qualquer momento nos próximos 7 dias</li>
-                  <li>Após 7 dias sem reversão, a conta será definitivamente encerrada</li>
+                  <li>Não haverá renovação automática</li>
+                  <li>Você pode reverter o cancelamento antes do encerramento</li>
+                  {lockInfo?.isEligibleForRefund && (
+                    <li>Reembolso integral deve ser solicitado separadamente</li>
+                  )}
                 </ul>
               </div>
             )}

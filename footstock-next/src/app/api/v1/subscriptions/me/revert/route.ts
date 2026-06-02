@@ -1,6 +1,6 @@
 // ============================================================================
 // FootStock — PUT /api/v1/subscriptions/me/revert
-// Reverte CANCELLATION_LOCK → ACTIVE dentro da janela de 7 dias
+// Reverte CANCELLATION_LOCK → ACTIVE dentro da janela de reversão
 // Idempotente: usa updateMany com predicados estritos para evitar race conditions
 // ============================================================================
 
@@ -42,19 +42,19 @@ export async function PUT() {
       )
     }
 
-    // Janela de 7 dias expirou → cancelamento definitivo
+    // Janela de reversão expirou → cancelamento definitivo
     if (!sub.cancellationLockExpiresAt || sub.cancellationLockExpiresAt.getTime() <= now.getTime()) {
       return NextResponse.json(
         {
           error: 'REVERT_WINDOW_EXPIRED',
-          message: 'A janela de reversão de 7 dias expirou. A assinatura já foi ou será cancelada definitivamente.',
+          message: 'A janela de reversão expirou. A assinatura já foi ou será cancelada definitivamente.',
         },
         { status: 422 }
       )
     }
 
     // Otimistic lock: updateMany com predicados estritos previne race condition com crons
-    // Se o cron de T+7d já cancellou entre o findFirst e o update, count será 0
+    // Se o cron de encerramento já cancelou entre o findFirst e o update, count será 0
     const result = await prisma.subscription.updateMany({
       where: {
         id: sub.id,

@@ -42,6 +42,7 @@ export function SubscriptionActions({ planType, status, canCancel, isEligibleFor
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         planType={planType}
+        isEligibleForRefund={isEligibleForRefund}
       />
     </>
   )
