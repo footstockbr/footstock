@@ -10,14 +10,21 @@ import { CancellationCountdown } from './CancellationCountdown'
 import { RevertCancellationButton } from './RevertCancellationButton'
 
 interface Props {
+  planType: string
   cancellationLockExpiresAt: string
   forcedLiquidationAt: string | null
 }
 
-export function CancellationLockBanner({ cancellationLockExpiresAt, forcedLiquidationAt }: Props) {
+const PLAN_LABELS: Record<string, string> = {
+  CRAQUE: 'Craque',
+  LENDA: 'Lenda',
+}
+
+export function CancellationLockBanner({ planType, cancellationLockExpiresAt, forcedLiquidationAt }: Props) {
   const now = new Date()
   const forcedLiqDate = forcedLiquidationAt ? new Date(forcedLiquidationAt) : null
   const forcedLiqPending = forcedLiqDate && forcedLiqDate > now
+  const planName = PLAN_LABELS[planType] ?? 'pago'
 
   return (
     <div
@@ -29,8 +36,9 @@ export function CancellationLockBanner({ cancellationLockExpiresAt, forcedLiquid
         {/* Informações de status */}
         <div className="flex flex-col gap-1">
           <p className="font-semibold text-amber-900 text-sm leading-tight">
-            Cancelamento em andamento — conta encerra em{' '}
+            Plano {planName} termina em{' '}
             <CancellationCountdown expiresAt={cancellationLockExpiresAt} />
+            {' '}— você volta ao plano gratuito Jogador
           </p>
           {forcedLiqPending && (
             <p className="text-amber-800 text-xs">
@@ -41,12 +49,12 @@ export function CancellationLockBanner({ cancellationLockExpiresAt, forcedLiquid
           )}
           {!forcedLiquidationAt && (
             <p className="text-amber-800 text-xs">
-              Seu plano permanece ativo ate a data acima. Nao havera renovacao automatica.
+              Seu plano permanece ativo até a data acima. Sua conta e histórico continuam, sem renovação automática.
             </p>
           )}
           {forcedLiquidationAt && !forcedLiqPending && (
             <p className="text-amber-800 text-xs">
-              Posições restritas já foram encerradas. Sua conta será finalizada no prazo acima.
+              Posições restritas já foram encerradas. No prazo acima, você volta ao plano gratuito Jogador. Sua conta e histórico continuam.
             </p>
           )}
         </div>

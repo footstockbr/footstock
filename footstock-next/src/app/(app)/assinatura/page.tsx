@@ -55,6 +55,7 @@ export default async function AssinaturaPage() {
   const statusInfo = SUBSCRIPTION_STATUS[subscription.status] ?? { label: subscription.status, color: 'text-[#929AA5]' }
   const canCancel = subscription.status === 'ACTIVE' || subscription.status === 'TRIAL'
   const inCancellationLock = subscription.status === 'CANCELLATION_LOCK'
+  const renewalLabel = inCancellationLock ? 'Plano pago até' : 'Próxima cobrança'
 
   return (
     <div data-testid="assinatura-page" className="px-4 pt-4 pb-8 flex flex-col gap-4 max-w-3xl mx-auto">
@@ -91,7 +92,7 @@ export default async function AssinaturaPage() {
             <span className="text-[#EAECEF]">{formatDateLong(subscription.startsAt)}</span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-[#929AA5]">Próxima cobrança</span>
+            <span className="text-[#929AA5]">{renewalLabel}</span>
             <span className="text-[#EAECEF]">{formatDateLong(subscription.expiresAt)}</span>
           </div>
           {subscription.gateway && (
@@ -100,7 +101,7 @@ export default async function AssinaturaPage() {
               <span className="text-[#EAECEF]">{getGatewayMeta(subscription.gateway).label}</span>
             </div>
           )}
-          {subscription.daysUntilExpiry <= 7 && subscription.daysUntilExpiry > 0 && (
+          {!inCancellationLock && subscription.daysUntilExpiry <= 7 && subscription.daysUntilExpiry > 0 && (
             <div className="flex items-center gap-2 text-xs text-[#F0B90B] mt-1">
               <Clock className="h-3.5 w-3.5" />
               <span>Renova em {subscription.daysUntilExpiry} dia{subscription.daysUntilExpiry !== 1 ? 's' : ''}</span>
@@ -144,8 +145,8 @@ export default async function AssinaturaPage() {
             <div>
               <p className="text-sm font-medium text-[#F6465D]">Cancelamento em andamento</p>
               <p className="text-xs text-[#929AA5] mt-0.5">
-                Conta encerrada em {subscription.cancellationLock.hoursRemaining}h caso não revertida.
-                Você pode reverter o cancelamento abaixo.
+                Seu plano {planName} termina em {subscription.cancellationLock.hoursRemaining}h caso não revertido.
+                Depois disso, você volta ao plano gratuito Jogador. Sua conta e histórico continuam.
               </p>
             </div>
           </div>

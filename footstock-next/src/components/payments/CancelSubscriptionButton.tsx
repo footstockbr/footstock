@@ -46,8 +46,8 @@ export function CancelSubscriptionButton({ isEligibleForRefund }: CancelSubscrip
         <p className="text-sm text-[#EAECEF] font-medium">Confirmar cancelamento?</p>
         <p className="text-xs text-[#929AA5]">
           {isEligibleForRefund
-            ? 'Seu acesso permanece ativo até o fim do período atual. Reembolso integral é uma solicitação separada dentro dos 7 dias.'
-            : 'Seu acesso permanece ativo até o fim do período atual. Não haverá renovação.'}
+            ? 'Seu plano permanece ativo até o fim do período atual. Reembolso integral é uma solicitação separada dentro dos 7 dias.'
+            : 'Seu plano permanece ativo até o fim do período atual. Depois, você volta ao plano gratuito Jogador.'}
         </p>
         {error && (
           <p className="text-xs text-[#F6465D]" role="alert">

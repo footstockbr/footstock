@@ -205,13 +205,13 @@ export async function processCancellationExpiries(): Promise<CancellationExpiryR
         if (claimResult.count === 0) throw new Error('CONCURRENT_PROCESSING_DETECTED')
       })
 
-      // 3. Notificação de cancelamento definitivo
+      // 3. Notificação de retorno ao plano gratuito
       await prisma.notification.create({
         data: {
           userId: sub.userId,
           type: 'PLAN_CANCEL_ALERT',
-          title: 'Assinatura encerrada definitivamente',
-          body: `Sua assinatura foi encerrada. ${closedPositions > 0 ? `${closedPositions} posição(ões) encerrada(s) a preço de mercado. ` : ''}Seu saldo foi ajustado para FS$${RESET_FS_BALANCE}. Seu histórico completo está preservado.`,
+          title: 'Plano pago encerrado',
+          body: `Seu plano pago terminou e você voltou ao plano gratuito Jogador. ${closedPositions > 0 ? `${closedPositions} posição(ões) encerrada(s) a preço de mercado. ` : ''}Seu saldo foi ajustado para FS$${RESET_FS_BALANCE}. Sua conta e seu histórico completo estão preservados.`,
           isRead: false,
         },
       }).catch(() => {})

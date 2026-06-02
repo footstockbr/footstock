@@ -37,7 +37,7 @@ export function RefundSubscriptionButton() {
           Confirmar reembolso integral?
         </p>
         <p className="mt-1 text-xs text-[#929AA5]">
-          Seu plano sera encerrado imediatamente e sua conta voltara para Jogador.
+          Seu plano será encerrado imediatamente e você voltará ao plano gratuito Jogador. Sua conta e histórico continuam.
         </p>
         {error && (
           <p className="mt-2 text-xs text-[#F6465D]" role="alert">

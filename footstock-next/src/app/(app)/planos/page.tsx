@@ -194,7 +194,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
             ctaDisabled = false;
           } else {
             // downgrade
-            ctaLabel = "\u2014";
+            ctaLabel = "Incluído no seu plano";
             ctaVariant = "secondary";
             ctaDisabled = true;
           }
@@ -274,6 +274,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                   size="md"
                   fullWidth
                   disabled={ctaDisabled}
+                  title={isDowngrade ? "Seu plano atual já inclui os recursos deste plano. Downgrade agendado ainda não está disponível." : undefined}
                 >
                   {ctaLabel}
                 </Button>

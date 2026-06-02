@@ -7,7 +7,7 @@
 // Etapa 3: Cancelamento confirmado — próximos passos
 // ============================================================================
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 interface Props {
@@ -23,14 +23,16 @@ const CONSEQUENCES_BY_PLAN: Record<string, string[]> = {
   LENDA: [
     'A renovação automática será cancelada',
     'Você mantém os recursos do plano até o fim do período já pago',
-    'Ao final do período, recursos LENDA serão encerrados',
-    'Seu saldo FS$ será ajustado para FS$2.000 no encerramento',
+    'Ao final do período, recursos LENDA deixam de ficar disponíveis',
+    'Você volta ao plano gratuito Jogador, com saldo FS$ ajustado para FS$2.000',
+    'Sua conta e seu histórico continuam ativos',
   ],
   CRAQUE: [
     'A renovação automática será cancelada',
     'Você mantém os recursos do plano até o fim do período já pago',
-    'Ao final do período, recursos CRAQUE serão encerrados',
-    'Seu saldo FS$ será ajustado para FS$2.000 no encerramento',
+    'Ao final do período, recursos CRAQUE deixam de ficar disponíveis',
+    'Você volta ao plano gratuito Jogador, com saldo FS$ ajustado para FS$2.000',
+    'Sua conta e seu histórico continuam ativos',
   ],
   JOGADOR: [],
 }
@@ -41,6 +43,8 @@ export function CancellationModal({ isOpen, onClose, planType, isEligibleForRefu
   const [acknowledged, setAcknowledged] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLElement | null>(null)
   const [lockInfo, setLockInfo] = useState<{
     cancellationLockExpiresAt?: string
     cancellationEffectiveAt?: string
@@ -50,6 +54,52 @@ export function CancellationModal({ isOpen, onClose, planType, isEligibleForRefu
   } | null>(null)
 
   const consequences = CONSEQUENCES_BY_PLAN[planType] ?? []
+  const planName = planType === 'LENDA' ? 'Lenda' : planType === 'CRAQUE' ? 'Craque' : 'atual'
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    triggerRef.current = document.activeElement as HTMLElement
+    document.body.style.overflow = 'hidden'
+    dialogRef.current?.focus()
+
+    return () => {
+      document.body.style.overflow = ''
+      triggerRef.current?.focus()
+    }
+  }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape' && !loading) {
+        handleClose()
+        return
+      }
+
+      if (e.key !== 'Tab' || !dialogRef.current) return
+
+      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      )
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+
+      if (!first || !last) return
+
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  })
 
   function handleClose() {
     if (step === 'done') router.refresh()
@@ -99,16 +149,24 @@ export function CancellationModal({ isOpen, onClose, planType, isEligibleForRefu
       role="dialog"
       aria-modal="true"
       aria-labelledby="cancellation-modal-title"
+      aria-describedby="cancellation-modal-description"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !loading) handleClose()
+      }}
     >
-      <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        className="w-full max-w-md rounded-xl bg-white shadow-2xl focus:outline-none"
+      >
         {/* Etapa 1: Tem certeza? */}
         {step === 'confirm' && (
           <div className="p-6">
             <h2 id="cancellation-modal-title" className="text-lg font-bold text-gray-900 mb-1">
               Cancelar assinatura
             </h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Ao cancelar, a renovação será interrompida:
+            <p id="cancellation-modal-description" className="text-sm text-gray-600 mb-4">
+              Ao cancelar, a renovação do plano {planName} será interrompida:
             </p>
 
             {consequences.length > 0 && (
@@ -125,7 +183,7 @@ export function CancellationModal({ isOpen, onClose, planType, isEligibleForRefu
             <p className="text-xs text-gray-500 mb-6">
               {isEligibleForRefund
                 ? 'Reembolso integral dentro dos 7 dias é uma ação separada. Este fluxo apenas cancela a renovação.'
-                : 'Este fluxo cancela a renovação e mantém o plano até o fim do período pago.'}
+                : 'Este fluxo cancela a renovação e mantém sua conta ativa. Seu plano continua até o fim do período pago.'}
             </p>
 
             <div className="flex gap-3">
@@ -153,11 +211,13 @@ export function CancellationModal({ isOpen, onClose, planType, isEligibleForRefu
             </h2>
 
             <div className="rounded-md bg-amber-50 border border-amber-200 p-4 mb-4">
-              <p className="text-sm text-amber-900 font-medium mb-1">O que acontece após o cancelamento:</p>
+              <p id="cancellation-modal-description" className="text-sm text-amber-900 font-medium mb-1">O que acontece após o cancelamento:</p>
               <ul className="text-xs text-amber-800 space-y-1 list-disc list-inside">
                 <li>Seu plano continua ativo até o fim do período pago</li>
                 <li>Não haverá renovação automática</li>
-                <li>Você pode reverter o cancelamento antes do encerramento</li>
+                <li>Ao final, você volta ao plano gratuito Jogador</li>
+                <li>Sua conta e seu histórico continuam ativos</li>
+                <li>Você pode reverter o cancelamento antes do fim do plano pago</li>
               </ul>
             </div>
 
@@ -204,19 +264,19 @@ export function CancellationModal({ isOpen, onClose, planType, isEligibleForRefu
             </div>
             <h2 id="cancellation-modal-title" className="text-lg font-bold text-gray-900 mb-2">
               {lockInfo?.cancellationMode === 'REFUND'
-                ? 'Assinatura cancelada com reembolso'
+                ? 'Plano cancelado com reembolso'
                 : 'Cancelamento agendado'}
             </h2>
 
             {lockInfo?.cancellationMode === 'REFUND' ? (
-              <p className="text-sm text-gray-600 mb-6">
-                Sua assinatura foi cancelada dentro do período de arrependimento (CDC Art. 49).
-                O reembolso será processado em até 7 dias úteis.
+              <p id="cancellation-modal-description" className="text-sm text-gray-600 mb-6">
+                Seu plano foi cancelado dentro do período de arrependimento (CDC Art. 49).
+                Você voltou ao plano gratuito Jogador e sua conta continua ativa. O valor retorna em até 7 dias úteis.
               </p>
             ) : (
-              <div className="text-sm text-gray-600 mb-6 space-y-2">
+              <div id="cancellation-modal-description" className="text-sm text-gray-600 mb-6 space-y-2">
                 <p>
-                  Seu cancelamento foi registrado. Você mantém o plano até{' '}
+                  Seu cancelamento foi registrado. Você mantém o plano {planName} até{' '}
                   {lockInfo?.cancellationEffectiveAt
                     ? new Date(lockInfo.cancellationEffectiveAt).toLocaleDateString('pt-BR', {
                         day: '2-digit',
@@ -228,7 +288,9 @@ export function CancellationModal({ isOpen, onClose, planType, isEligibleForRefu
                 </p>
                 <ul className="text-left space-y-1 text-xs text-gray-700 list-disc list-inside">
                   <li>Não haverá renovação automática</li>
-                  <li>Você pode reverter o cancelamento antes do encerramento</li>
+                  <li>Depois disso, você volta ao plano gratuito Jogador</li>
+                  <li>Sua conta e seu histórico continuam ativos</li>
+                  <li>Você pode reverter o cancelamento antes do fim do plano pago</li>
                   {lockInfo?.isEligibleForRefund && (
                     <li>Reembolso integral deve ser solicitado separadamente</li>
                   )}

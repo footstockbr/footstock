@@ -89,12 +89,12 @@ export function SubscriptionManage({ planType }: SubscriptionManageProps) {
         isOpen={isCancelOpen}
         onClose={() => !isCancelling && setIsCancelOpen(false)}
         title="Cancelar assinatura"
-        description="Você perderá acesso aos recursos do plano atual ao final do período."
+        description="Seu plano atual termina ao final do período pago; sua conta e histórico continuam."
         size="sm"
       >
         <div className="flex flex-col gap-3">
           <p className="text-sm text-[#929AA5]">
-            Tem certeza? Você pode reativar a qualquer momento.
+            Depois disso, você volta ao plano gratuito Jogador. Você pode reverter antes do fim do período pago.
           </p>
           <div className="flex gap-2">
             <Button
