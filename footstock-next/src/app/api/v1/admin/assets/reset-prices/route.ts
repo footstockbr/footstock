@@ -19,6 +19,7 @@
 import { NextRequest } from 'next/server'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { redisPublisher } from '@/lib/redis'
 import { ok, errors } from '@/lib/api'
 
 const NUDGE_MIN_PRICE = 1.0
@@ -104,6 +105,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!dryRun && changes.length > 0) {
+      // 1. Atualiza o banco (persistência)
       await prisma.$transaction(
         changes.map((change) =>
           prisma.asset.update({
@@ -112,12 +114,48 @@ export async function POST(request: NextRequest) {
               currentPrice: change.newPrice,
               openPrice:    change.newPrice,
               closePrice:   change.newPrice,
+              isHalted:     false,
+              haltReason:   null,
+              haltedUntil:  null,
               marketCap:    change.newMarketCap,
               // fairValue NAO e alterado — e o anchor canonico do DB
             },
           })
         )
       )
+
+      // 2. Busca assetIds para publicar ADJUST_PRICE no canal do motor.
+      //    O motor tem os preços em memória e sobrescreve o DB a cada 10 ticks;
+      //    sem essa etapa o reset seria revertido em ~20 segundos.
+      const assetRows = await prisma.asset.findMany({
+        where: { ticker: { in: changes.map(c => c.ticker) } },
+        select: { id: true, ticker: true },
+      })
+      const tickerToId = new Map(assetRows.map(a => [a.ticker, a.id]))
+
+      const motorEvents = changes
+        .map(change => {
+          const assetId = tickerToId.get(change.ticker)
+          if (!assetId) return null
+          return JSON.stringify({
+            type:    'ADJUST_PRICE',
+            assetId,
+            adminId: auth.user.id,
+            reason:  `reset-prices bulk: ${change.ticker} → ${change.newPrice.toFixed(2)}`,
+            payload: { newPrice: change.newPrice },
+            timestamp: Date.now(),
+          })
+        })
+        .filter((e): e is string => e !== null)
+
+      // Pipeline Redis: publica todos os eventos de uma vez (fire-and-forget)
+      if (motorEvents.length > 0) {
+        const pipeline = redisPublisher.pipeline()
+        for (const event of motorEvents) {
+          pipeline.publish('motor:control', event)
+        }
+        await pipeline.exec()
+      }
 
       await prisma.adminMarketAction.create({
         data: {
@@ -127,7 +165,8 @@ export async function POST(request: NextRequest) {
             ? `Reset de ${changes.length} ativos floored (<= ${floorThreshold}) para fairValue +/- ${variationPct}%`
             : `Reset de ${changes.length} ativos para fairValue +/- ${variationPct}%`,
           details: {
-            assetsUpdated: changes.length,
+            assetsUpdated:     changes.length,
+            motorEventsSent:   motorEvents.length,
             onlyFloored,
             floorThreshold,
             variationPct,
