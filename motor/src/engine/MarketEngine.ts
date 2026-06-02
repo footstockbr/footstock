@@ -159,18 +159,60 @@ export class MarketEngine {
     this.circuitBreakerTimers.set(assetId, cbTimer)
   }
 
+  // ─── fairValues canônicos do seed ───────────────────────────────────────────
+  // Fonte da verdade: prisma/seeds/admin-demo/assets.seed.ts
+  // Usados como fallback de recuperação quando o DB tem valores corrompidos.
+  private static readonly CANONICAL_FAIR_VALUES: Record<string, number> = {
+    URU3: 120, POR4: 110, TIM3: 105, GAL3: 100, TRI4:  95,
+    FOG3:  70, COL3:  65, IMO3:  60, RAP3:  58, GUE4:  55,
+    TRI3:  52, BAL4:  50, MAL4:  35, TOR3:  32, FUR3:  28,
+    LEM3:  22, VOA4:  20, LEB3:  18, CON3:  15, LEA3:  12,
+    COE3:  12, LEP4: 11.5, DRA3: 11, VOZ3: 10.5, PER3: 10,
+    GAP3: 9.5, LEI3:   9, IND4: 8.5, PAN3:   8, CAV4: 7.5,
+    LEI4:   7, TIG4: 6.5, DOU4:   6, TUB3:   6, NAF3: 5.5,
+    TIV3:   5, FAS3:   5, MAC4: 4.5, ABT4:   4, TIS3:   4,
+  }
+
   private async loadAssets(): Promise<void> {
     const loadTime = Date.now()
     const assets = await this.prisma.asset.findMany({ where: { isActive: true } })
 
+    // Assets que precisam de update no DB (fairValue corrompido ou preço no floor)
+    const recoveryUpdates: Array<{ id: string; ticker: string; price: number; fv: number }> = []
+
     for (const asset of assets) {
       // Warm start: closePrice = currentPrice para evitar circuit breaker imediato
       // no reinício do motor (L9 compara currentPrice vs closePrice).
-      // O closePrice do DB reflete o preço histórico de seed, mas o motor pode
-      // ter rodado por horas/dias e os preços derivaram. Usar currentPrice como
-      // âncora inicial é o comportamento correto — CB só dispara para movimentos
-      // bruscos a partir do momento de (re)inicialização.
-      const currentPriceNum = Number(asset.currentPrice)
+      const rawPrice = Number(asset.currentPrice)
+
+      // ── Auto-recovery ────────────────────────────────────────────────────
+      // Se o DB tem fairValue corrompido (ex: antigo reset-prices setou valor
+      // errado) ou preço no floor (R$1), usa o valor canônico do seed.
+      // Condições de recovery:
+      //   A) fairValue no DB < 50% do canônico (corrompido pelo reset-prices bugado)
+      //   B) currentPrice <= 1.5 (no floor) e canônico existe
+      //   C) currentPrice > canônico * 5 (inflado por CB loop ascendente)
+      const canonicalFV = MarketEngine.CANONICAL_FAIR_VALUES[asset.ticker]
+      const dbFairValue  = Number(asset.fairValue ?? 0)
+      const dbPrice      = rawPrice
+
+      let recoveryPrice: number | null = null
+      if (canonicalFV) {
+        const fvCorrupted  = dbFairValue > 0 && dbFairValue < canonicalFV * 0.5
+        const atFloor      = dbPrice <= NUDGE_MIN_PRICE * 1.5
+        const inflated     = dbPrice > canonicalFV * 4
+        if (fvCorrupted || atFloor || inflated) {
+          recoveryPrice = canonicalFV
+          logger.warn(
+            `[engine] AUTO-RECOVERY ${asset.ticker}: price ${dbPrice.toFixed(2)}→${canonicalFV} ` +
+            `fv ${dbFairValue.toFixed(2)}→${canonicalFV} ` +
+            `(fvCorrupted=${fvCorrupted} atFloor=${atFloor} inflated=${inflated})`
+          )
+          recoveryUpdates.push({ id: asset.id, ticker: asset.ticker, price: canonicalFV, fv: canonicalFV })
+        }
+      }
+
+      const currentPriceNum = recoveryPrice ?? rawPrice
 
       // Reconciliar halt: CB com haltedUntil futuro reatualiza memória e agenda timer;
       // halt admin (sem haltedUntil) persiste como isPaused=true sem retomada automática.
@@ -181,7 +223,8 @@ export class MarketEngine {
         haltedUntilMs !== null &&
         haltedUntilMs > loadTime
       const isAdminHalt = asset.isHalted && asset.haltReason !== 'CIRCUIT_BREAKER'
-      const isPaused = isCbHaltActive || isAdminHalt
+      // Assets em recovery são sempre deshalted — o halt foi causado pelo bug
+      const isPaused = recoveryPrice === null && (isCbHaltActive || isAdminHalt)
 
       const state: AssetState = {
         id: asset.id,
@@ -193,7 +236,7 @@ export class MarketEngine {
         highPrice: currentPriceNum,
         lowPrice: currentPriceNum,
         closePrice: currentPriceNum,   // warm start: âncora do CB = preço atual
-        fairValue: Number(asset.fairValue ?? asset.currentPrice),
+        fairValue: recoveryPrice ?? Number(asset.fairValue ?? asset.currentPrice),
         volume: 0,
         variance: 0.00001,  // Variância GARCH inicial (reduzida 10x: evita ruído GARCH soterrar L2_Anchor)
         pendingBuyVolume: 0,
@@ -229,6 +272,28 @@ export class MarketEngine {
       }
       const cluster = clusterMap[state.cluster] ?? AssetCluster.B_ILLIQ
       agentOrchestrator.initAsset(asset.id, cluster)
+    }
+
+    // Persistir recoveries no DB (fire-and-forget com log de erros)
+    if (recoveryUpdates.length > 0) {
+      logger.warn(`[engine] Persistindo ${recoveryUpdates.length} auto-recoveries no DB...`)
+      Promise.allSettled(
+        recoveryUpdates.map(r =>
+          this.prisma.asset.update({
+            where: { id: r.id },
+            data: {
+              currentPrice: r.price,
+              openPrice:    r.price,
+              closePrice:   r.price,
+              fairValue:    r.fv,
+              isHalted:     false,
+              haltReason:   null,
+              haltedUntil:  null,
+            },
+          }).then(() => logger.info(`[engine] Recovery DB ok: ${r.ticker} → ${r.price}`))
+           .catch((err: unknown) => logger.error(`[engine] Recovery DB fail: ${r.ticker}`, err))
+        )
+      )
     }
 
     // Hydratar estados críticos do Redis (variance GARCH, OFI state, daily vol)
