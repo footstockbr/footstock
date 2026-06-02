@@ -18,8 +18,7 @@ export function SubscriptionManage({ planType }: SubscriptionManageProps) {
 
   const isCraque = planType === "CRAQUE";
   const isLenda  = planType === "LENDA";
-  const changePlanType = isLenda ? "CRAQUE" : "LENDA";
-  const changePlanLabel = isLenda ? "Migrar para Craque" : "Subir para Lenda";
+  const changePlanLabel = "Subir para Lenda";
 
   const handleCancel = useCallback(async () => {
     setIsCancelling(true);
@@ -51,7 +50,7 @@ export function SubscriptionManage({ planType }: SubscriptionManageProps) {
   return (
     <>
       <div className="flex items-center gap-2">
-        {(isCraque || isLenda) && (
+        {isCraque && (
           <Button
             variant="secondary"
             size="sm"
@@ -59,6 +58,18 @@ export function SubscriptionManage({ planType }: SubscriptionManageProps) {
             data-testid="subscription-change-plan-btn"
           >
             {changePlanLabel}
+          </Button>
+        )}
+
+        {isLenda && (
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled
+            title="A migração para Craque ao fim do período pago ainda não está disponível."
+            data-testid="subscription-downgrade-unavailable-btn"
+          >
+            Downgrade em breve
           </Button>
         )}
 
@@ -108,7 +119,7 @@ export function SubscriptionManage({ planType }: SubscriptionManageProps) {
       </Modal>
 
       {/* Modal: trocar plano */}
-      {isChangeOpen && (
+      {isChangeOpen && isCraque && (
         <div
           data-testid="subscription-change-plan-modal"
           style={{
@@ -135,12 +146,10 @@ export function SubscriptionManage({ planType }: SubscriptionManageProps) {
               {changePlanLabel}
             </h2>
             <p style={{ color: "#929AA5", fontSize: "12px", marginBottom: "20px" }}>
-              {isLenda
-                ? "Ao migrar para Craque, seu plano Lenda será cancelado ao final do período atual."
-                : "Faça upgrade para Lenda e desbloqueie todos os recursos premium."}
+              Faça upgrade para Lenda e desbloqueie todos os recursos premium.
             </p>
 
-            <CheckoutButton planType={changePlanType as "CRAQUE" | "LENDA"} label={changePlanLabel} />
+            <CheckoutButton planType="LENDA" label={changePlanLabel} />
 
             <button
               type="button"
