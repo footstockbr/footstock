@@ -258,9 +258,19 @@ export class MarketEngine {
         for (const s of this.assetStates.values()) {
           this.calculator.resetDailyVolTarget(s)
           s.volume = 0  // Reset volume 24h (evita acumulação ilimitada de volume sintético)
+          // BUG FIX: openPrice nunca era resetado, fazendo priceChange24h acumular
+          // negativamente desde o startup do motor. Depois de algumas horas, o
+          // MomentumAgent (vende quando change < -2%) e o PanicSellerAgent (vende
+          // quando change < -10%) disparavam permanentemente, sobrepondo o pull do
+          // L2_FundamentalAnchor (+0.3%/tick) com pressão vendedora de -2%/tick.
+          // Combinado com o ciclo de circuit breaker (re-âncora closePrice para baixo
+          // a cada 5 min), os preços desciam em escada até bater no floor R$1.
+          // Reseta openPrice junto com closePrice a cada sessão PRE_OPENING, tornando
+          // priceChange24h relativo à abertura do dia corrente — não ao startup.
+          s.openPrice = s.currentPrice
         }
         this.calculator.resetDailyVolCap()  // compatibilidade retroativa
-        logger.info('[engine] DailyVolTarget e volume resetados para nova sessão PRE_OPENING')
+        logger.info('[engine] DailyVolTarget, volume e openPrice resetados para nova sessão PRE_OPENING')
       }
     }
     this.previousSessionType = sessionType

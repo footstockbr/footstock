@@ -1,80 +1,33 @@
 // ============================================================================
 // FootStock — POST /api/v1/admin/assets/reset-prices
-// SuperAdmin: reseta precos de todos os ativos para valores da documentacao
-// com pequena variacao aleatoria (+/- 5%).
+// SuperAdmin: reseta precos de todos os ativos (ou apenas os que estao no
+// floor) de volta ao fairValue canonico persistido no DB, com variacao ±5%.
 //
-// Body (opcional): { "dryRun": true }
-// Retorna lista de alteracoes (ticker, oldPrice, newPrice, etc.)
+// Body (opcional):
+//   { "dryRun": true }             — simula sem gravar
+//   { "onlyFloored": true }        — atualiza apenas ativos com preco <= floorThreshold
+//   { "floorThreshold": 1.5 }      — threshold de floor (default: 1.5)
+//   { "variationPct": 0 }          — variacao aleatoria 0-10% (default: 5%)
+//
+// Retorna lista de alteracoes (ticker, oldPrice, newPrice, fairValue, etc.)
+//
+// DESIGN: usa fairValue canonico do DB como ancora — nao recomputa formula.
+// Isso garante que os precos sejam sempre restaurados para o valor correto
+// independente de qual ticker esta no banco.
 // ============================================================================
 
 import { NextRequest } from 'next/server'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
-import type { Division } from '@prisma/client'
 
-// ─── Price calculation (mirrors prisma/seed/assets.ts) ──────────────────────
+const NUDGE_MIN_PRICE = 1.0
 
-interface ClubSeedData {
-  ticker: string
-  division: Division
-  fanbaseMillion: number
-  nationalTitles: number
-  recentPerformance: number
-}
-
-function calcPrice(data: ClubSeedData): number {
-  const raw =
-    data.fanbaseMillion * 0.5 +
-    data.nationalTitles * 2 +
-    data.recentPerformance * 0.3
-  return Math.max(1.0, Math.min(50.0, parseFloat(raw.toFixed(2))))
-}
-
-function toSerieASeed(index: number, ticker: string): ClubSeedData {
-  return {
-    ticker,
-    division: 'SERIE_A',
-    fanbaseMillion: Math.max(2, 18 - index * 0.6),
-    nationalTitles: Math.max(0, 6 - Math.floor(index / 4)),
-    recentPerformance: Math.max(4, 8.5 - (index % 6) * 0.5),
-  }
-}
-
-function toSerieBSeed(index: number, ticker: string): ClubSeedData {
-  return {
-    ticker,
-    division: 'SERIE_B',
-    fanbaseMillion: Math.max(0.8, 6 - index * 0.2),
-    nationalTitles: Math.max(0, 2 - Math.floor(index / 7)),
-    recentPerformance: Math.max(3, 6.5 - (index % 6) * 0.4),
-  }
-}
-
-function applyVariation(price: number): number {
-  const variation = Math.random() * 0.1 - 0.05 // -5% to +5%
+function applyVariation(price: number, variationPct: number): number {
+  const factor = variationPct / 100
+  const variation = Math.random() * factor * 2 - factor // [-variationPct%, +variationPct%]
   const adjusted = price * (1 + variation)
-  return Math.max(1.0, Math.min(50.0, parseFloat(adjusted.toFixed(8))))
-}
-
-// ─── Club tickers in order (must match CLUBS array in clubs.ts) ─────────────
-
-const SERIE_A_TICKERS = [
-  'URU3', 'POR4', 'TIM3', 'TRI4', 'GAL3', 'IMO3', 'COL3', 'GUE4',
-  'BAL4', 'MAL4', 'FOG3', 'FUR3', 'FOR3', 'TRI3', 'RAP3', 'RBB3',
-  'CUI3', 'VIT3', 'JUV3', 'MIR3',
-]
-
-const SERIE_B_TICKERS = [
-  'LEI3', 'NTL3', 'AVA3', 'GOI3', 'CHA3', 'PON3', 'GUA3', 'OPE3',
-  'SAM3', 'TIS3', 'LON3', 'FIG3', 'PAY3', 'CFC3', 'AME3', 'BSA3',
-  'CRB3', 'CSA3', 'ITA3', 'TON3',
-]
-
-function buildAllClubData(): ClubSeedData[] {
-  const serieA = SERIE_A_TICKERS.map((ticker, i) => toSerieASeed(i, ticker))
-  const serieB = SERIE_B_TICKERS.map((ticker, i) => toSerieBSeed(i, ticker))
-  return [...serieA, ...serieB]
+  return Math.max(NUDGE_MIN_PRICE, parseFloat(adjusted.toFixed(8)))
 }
 
 // ─── Route handler ──────────────────────────────────────────────────────────
@@ -83,95 +36,103 @@ export async function POST(request: NextRequest) {
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()
 
-  // Apenas SuperAdmin pode resetar precos
   if (!hasAdminRole(auth.user.adminRole, 'SUPER_ADMIN')) {
     return errors.forbidden('Apenas SuperAdmin pode resetar precos de ativos.')
   }
 
   const body = await request.json().catch(() => ({}))
-  const dryRun = body?.dryRun === true
+  const dryRun        = body?.dryRun        === true
+  const onlyFloored   = body?.onlyFloored   === true
+  const floorThreshold = typeof body?.floorThreshold === 'number'
+    ? body.floorThreshold
+    : 1.5
+  const variationPct = typeof body?.variationPct === 'number'
+    ? Math.max(0, Math.min(20, body.variationPct))
+    : 5
 
   try {
-    const allClubs = buildAllClubData()
-
-    // Fetch current assets
-    const existingAssets = await prisma.asset.findMany({
-      where: { ticker: { in: allClubs.map((c) => c.ticker) } },
+    // Lê todos os ativos ativos com fairValue do DB — fonte canônica
+    const assets = await prisma.asset.findMany({
+      where: {
+        isActive: true,
+        ...(onlyFloored ? { currentPrice: { lte: floorThreshold } } : {}),
+      },
       select: {
+        id: true,
         ticker: true,
         division: true,
         currentPrice: true,
+        fairValue: true,
         marketCap: true,
         currentSupply: true,
       },
     })
 
-    const assetMap = new Map(existingAssets.map((a) => [a.ticker, a]))
-
-    // Prepare changes
     const changes: Array<{
       ticker: string
       division: string
       oldPrice: number
       newPrice: number
-      basePrice: number
+      fairValue: number
       variationPct: number
       oldMarketCap: number
       newMarketCap: number
     }> = []
 
-    for (const club of allClubs) {
-      const existing = assetMap.get(club.ticker)
-      if (!existing) continue
+    for (const asset of assets) {
+      const oldPrice    = asset.currentPrice.toNumber()
+      const fv          = asset.fairValue.toNumber()
 
-      const basePrice = calcPrice(club)
-      const newPrice = applyVariation(basePrice)
-      const oldPrice = existing.currentPrice.toNumber()
-      const currentSupply = Number(existing.currentSupply)
-      const newMarketCap = parseFloat((newPrice * currentSupply).toFixed(2))
-      const variationPct = basePrice > 0
-        ? parseFloat((((newPrice - basePrice) / basePrice) * 100).toFixed(2))
-        : 0
+      // Se fairValue nao esta disponivel ou e invalido, pula
+      if (!fv || fv <= 0) continue
+
+      const newPrice    = applyVariation(fv, variationPct)
+      const supply      = Number(asset.currentSupply)
+      const newMarketCap = parseFloat((newPrice * supply).toFixed(2))
+      const varPct      = parseFloat((((newPrice - fv) / fv) * 100).toFixed(2))
 
       changes.push({
-        ticker: club.ticker,
-        division: club.division,
+        ticker:       asset.ticker,
+        division:     asset.division,
         oldPrice,
         newPrice,
-        basePrice,
-        variationPct,
-        oldMarketCap: existing.marketCap.toNumber(),
+        fairValue:    fv,
+        variationPct: varPct,
+        oldMarketCap: asset.marketCap.toNumber(),
         newMarketCap,
       })
     }
 
-    if (!dryRun) {
-      // Execute in transaction
+    if (!dryRun && changes.length > 0) {
       await prisma.$transaction(
         changes.map((change) =>
           prisma.asset.update({
             where: { ticker: change.ticker },
             data: {
               currentPrice: change.newPrice,
-              openPrice: change.newPrice,
-              closePrice: change.newPrice,
-              fairValue: change.basePrice,
-              marketCap: change.newMarketCap,
+              openPrice:    change.newPrice,
+              closePrice:   change.newPrice,
+              marketCap:    change.newMarketCap,
+              // fairValue NAO e alterado — e o anchor canonico do DB
             },
           })
         )
       )
 
-      // Audit trail
       await prisma.adminMarketAction.create({
         data: {
           adminId: auth.user.id,
-          action: 'RESET_PRICES',
-          reason: 'Reset all asset prices to documentation values with random variation',
+          action:  'RESET_PRICES',
+          reason:  onlyFloored
+            ? `Reset de ${changes.length} ativos floored (<= ${floorThreshold}) para fairValue +/- ${variationPct}%`
+            : `Reset de ${changes.length} ativos para fairValue +/- ${variationPct}%`,
           details: {
             assetsUpdated: changes.length,
-            executedBy: auth.user.email,
-            executedAt: new Date().toISOString(),
+            onlyFloored,
+            floorThreshold,
+            variationPct,
+            executedBy:  auth.user.email,
+            executedAt:  new Date().toISOString(),
           },
         },
       })
@@ -179,13 +140,16 @@ export async function POST(request: NextRequest) {
 
     return ok({
       dryRun,
+      onlyFloored,
+      floorThreshold,
+      variationPct,
       assetsUpdated: changes.length,
       changes: changes.map((c) => ({
-        ticker: c.ticker,
-        division: c.division,
-        oldPrice: c.oldPrice,
-        newPrice: parseFloat(c.newPrice.toFixed(8)),
-        basePrice: c.basePrice,
+        ticker:       c.ticker,
+        division:     c.division,
+        oldPrice:     c.oldPrice,
+        newPrice:     parseFloat(c.newPrice.toFixed(8)),
+        fairValue:    c.fairValue,
         variationPct: c.variationPct,
         oldMarketCap: c.oldMarketCap,
         newMarketCap: c.newMarketCap,
