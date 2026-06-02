@@ -34,6 +34,27 @@ function readableTextColor(hex: string): string {
   return lum > 0.55 ? '#0B0E11' : '#FFFFFF'
 }
 
+/**
+ * Outline multi-direcional para garantir legibilidade da letra sobre o gradiente
+ * bicolor — especialmente quando texto branco aparece sobre a metade secundaria clara.
+ * Usa a cor contraria ao texto como sombra em 8 direcoes + blur central.
+ */
+function letterOutline(textColor: string): string {
+  const shadow = textColor === '#FFFFFF' ? 'rgba(0,0,0,0.95)' : 'rgba(255,255,255,0.9)'
+  const d = 1.5
+  return [
+    `${d}px ${d}px 0 ${shadow}`,
+    `-${d}px -${d}px 0 ${shadow}`,
+    `${d}px -${d}px 0 ${shadow}`,
+    `-${d}px ${d}px 0 ${shadow}`,
+    `${d}px 0 0 ${shadow}`,
+    `-${d}px 0 0 ${shadow}`,
+    `0 ${d}px 0 ${shadow}`,
+    `0 -${d}px 0 ${shadow}`,
+    `0 0 4px ${shadow}`,
+  ].join(', ')
+}
+
 export function ClubCrest({
   ticker,
   colorPrimary,
@@ -65,7 +86,7 @@ export function ClubCrest({
         background,
         color: textColor,
         fontSize,
-        textShadow: '0 1px 2px rgba(0,0,0,.45)',
+        textShadow: letterOutline(textColor),
       }}
       aria-hidden="true"
     >
