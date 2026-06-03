@@ -78,6 +78,7 @@ export function PlanCTAButton({ planType, label, featureBlocked = 'planos_page',
         </div>
       )}
       <Button
+        type="button"
         variant="plan"
         size="md"
         fullWidth

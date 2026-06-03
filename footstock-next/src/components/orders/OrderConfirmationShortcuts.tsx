@@ -1,6 +1,6 @@
 'use client'
 
-import { TrendingDown, TrendingUp, Zap } from 'lucide-react'
+import { Lightbulb, TrendingDown, TrendingUp, Zap } from 'lucide-react'
 import { usePlanGuard } from '@/hooks/usePlanGuard'
 import { PremiumFeatureCard, type PremiumFeatureSpec } from './PremiumFeatureCard'
 
@@ -62,7 +62,7 @@ export function OrderConfirmationShortcuts({ operationType = 'BUY' }: OrderConfi
       </div>
 
       {/* Grid de features */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
         {PREMIUM_FEATURES.map((feature) => (
           <PremiumFeatureCard
             key={feature.id}
@@ -73,8 +73,11 @@ export function OrderConfirmationShortcuts({ operationType = 'BUY' }: OrderConfi
       </div>
 
       {/* Dica contextual */}
-      <div className="text-[11px] text-[#707A8A] italic pt-1">
-        💡 Dica: {operationType === 'BUY' ? 'Use Short para lucrar com quedas.' : 'Combine com Stop Loss para proteger seus ganhos.'}
+      <div className="flex items-start gap-1.5 pt-1 text-[11px] italic leading-snug text-[#707A8A]">
+        <Lightbulb className="mt-0.5 h-3 w-3 shrink-0 text-[#F0B90B]" aria-hidden="true" />
+        <span>
+          Dica: {operationType === 'BUY' ? 'Use Short para lucrar com quedas.' : 'Combine com Stop Loss para proteger seus ganhos.'}
+        </span>
       </div>
     </div>
   )

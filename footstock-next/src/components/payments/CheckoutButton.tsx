@@ -199,6 +199,7 @@ export function CheckoutButton({
         />
 
         <Button
+          type="button"
           data-testid="plan-checkout-modal-checkout-confirm"
           variant="plan"
           size="md"

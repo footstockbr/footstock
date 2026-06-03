@@ -1,6 +1,6 @@
 'use client'
 
-import { Lock } from 'lucide-react'
+import { CheckCircle2, Lock } from 'lucide-react'
 import { useState } from 'react'
 import { PlanCTAButton } from '@/components/payments/PlanCTAButton'
 
@@ -46,87 +46,84 @@ export function PremiumFeatureCard({ feature, hasAccess }: PremiumFeatureCardPro
     return (
       <div
         data-testid={`premium-feature-card-${feature.id}`}
-        className={`relative rounded-lg border p-3 bg-gradient-to-br ${colors.gradient} ${colors.border} transition-all duration-200 hover:border-opacity-60 cursor-pointer group`}
+        className={`relative rounded-lg border p-3 bg-gradient-to-br ${colors.gradient} ${colors.border} transition-all duration-200`}
       >
         <div className="flex flex-col gap-2">
           <div className="flex items-start gap-2">
-            <div className={`mt-0.5 ${colors.text}`}>{feature.icon}</div>
+            <div className={`mt-0.5 shrink-0 ${colors.text}`}>{feature.icon}</div>
             <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-semibold text-[#EAECEF]">{feature.title}</h3>
-              <p className="text-xs text-[#929AA5] mt-0.5 line-clamp-2">{feature.description}</p>
+              <h3 className="text-sm font-semibold leading-snug text-[#EAECEF]">{feature.title}</h3>
+              <p className="mt-1 text-xs leading-snug text-[#929AA5]">{feature.description}</p>
             </div>
           </div>
-          <div className="text-[10px] font-medium text-[#4ade80] flex items-center gap-1 mt-1">
-            ✓ Desbloqueado
+          <div className="mt-auto flex items-center gap-1 text-[10px] font-medium text-[#4ade80]">
+            <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+            Desbloqueado
           </div>
         </div>
       </div>
     )
   }
 
-  // Se não tem acesso, mostra card bloqueado com overlay
+  // Se não tem acesso, mostra card bloqueado sem overlay sobre o conteúdo.
   return (
     <>
-      <div
+      <button
+        type="button"
         data-testid={`premium-feature-card-${feature.id}`}
         onClick={() => setShowUpgradeModal(true)}
-        className={`relative rounded-lg border p-3 bg-gradient-to-br ${colors.gradient} ${colors.border} transition-all duration-200 cursor-pointer overflow-hidden group`}
+        className={`relative flex min-h-[132px] w-full flex-col rounded-lg border p-3 text-left bg-gradient-to-br ${colors.gradient} ${colors.border} transition-all duration-200 hover:bg-[#2B3139]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(240,185,11,.55)]`}
+        aria-label={`Desbloquear ${feature.title}. Requer plano ${feature.requiredPlan}`}
       >
-        {/* Conteúdo semi-transparente */}
-        <div className="opacity-40 group-hover:opacity-50 transition-opacity">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-start gap-2">
-              <div className={`mt-0.5 ${colors.text}`}>{feature.icon}</div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-semibold text-[#EAECEF]">{feature.title}</h3>
-                <p className="text-xs text-[#929AA5] mt-0.5 line-clamp-2">{feature.description}</p>
-              </div>
-            </div>
+        <div className="flex flex-1 flex-col gap-2">
+          <div className="flex items-start justify-between gap-2">
+            <div className={`mt-0.5 shrink-0 ${colors.text}`}>{feature.icon}</div>
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[rgba(240,185,11,.28)] bg-[rgba(240,185,11,.12)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#F0B90B]">
+              <Lock className="h-3 w-3" aria-hidden="true" />
+              {feature.requiredPlan}
+            </span>
+          </div>
+
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold leading-snug text-[#EAECEF]">
+              {feature.title}
+            </h3>
+            <p className="mt-1 text-xs leading-snug text-[#929AA5]">
+              {feature.description}
+            </p>
+          </div>
+
+          <div className="mt-auto pt-1 text-[11px] font-medium leading-snug text-[#F0B90B]">
+            Requer {feature.requiredPlan}
           </div>
         </div>
-
-        {/* Overlay com lock + CTA */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/40 group-hover:bg-black/50 transition-colors">
-          <Lock className="h-4 w-4 text-[#F0B90B]" aria-hidden="true" />
-          <span className="text-[11px] font-semibold text-white text-center px-2">
-            Requer <br /> {feature.requiredPlan}
-          </span>
-        </div>
-      </div>
+      </button>
 
       {/* Modal de upgrade */}
       {showUpgradeModal && (
         <div
           data-testid={`premium-feature-locked-${feature.id}`}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.8)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            padding: '16px',
-          }}
+          className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 p-4"
           onClick={() => setShowUpgradeModal(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={`premium-feature-upgrade-title-${feature.id}`}
         >
           <div
-            style={{
-              background: '#1E2329',
-              border: '1px solid rgba(240,185,11,.2)',
-              borderRadius: '12px',
-              padding: '24px',
-              width: '100%',
-              maxWidth: '360px',
-            }}
+            className="w-full max-w-[360px] rounded-xl border border-[rgba(240,185,11,.2)] bg-[#1E2329] p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 style={{ color: '#EAECEF', fontSize: '16px', fontWeight: 700, marginBottom: '8px' }}>
-              Desbloqueie {feature.title}
-            </h2>
-            <p style={{ color: '#929AA5', fontSize: '13px', marginBottom: '20px', lineHeight: '1.5' }}>
-              {feature.description}
-            </p>
+            <div className="mb-5">
+              <h2
+                id={`premium-feature-upgrade-title-${feature.id}`}
+                className="text-base font-bold leading-snug text-[#EAECEF]"
+              >
+                Desbloqueie {feature.title}
+              </h2>
+              <p className="mt-2 text-sm leading-relaxed text-[#929AA5]">
+                {feature.description}
+              </p>
+            </div>
 
             <PlanCTAButton
               planType={feature.requiredPlan}
@@ -137,17 +134,7 @@ export function PremiumFeatureCard({ feature, hasAccess }: PremiumFeatureCardPro
             <button
               type="button"
               onClick={() => setShowUpgradeModal(false)}
-              style={{
-                marginTop: '12px',
-                width: '100%',
-                padding: '8px',
-                background: 'transparent',
-                border: '1px solid rgba(240,185,11,.15)',
-                borderRadius: '6px',
-                color: '#929AA5',
-                fontSize: '12px',
-                cursor: 'pointer',
-              }}
+              className="mt-3 w-full rounded-md border border-[rgba(240,185,11,.15)] bg-transparent p-2 text-xs text-[#929AA5] transition-colors hover:border-[rgba(240,185,11,.35)] hover:text-[#EAECEF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(240,185,11,.55)]"
             >
               Fechar
             </button>

@@ -251,9 +251,9 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
   const isBuy = side === 'BUY'
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 p-4" data-testid="order-form" data-tour="order-form">
+    <form onSubmit={handleSubmit} className="space-y-4" data-testid="order-form" data-tour="order-form">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-1 min-[380px]:flex-row min-[380px]:items-start min-[380px]:justify-between">
         <h2 className="text-[#EAECEF] font-semibold text-lg">
           {isBuy ? 'Comprar' : 'Vender'}{' '}
           <span className={isBuy ? 'text-[#2EBD85]' : 'text-[#F6465D]'}>{ticker}</span>
@@ -274,7 +274,7 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
 
 
       {/* Daily limit counter + saldo atual */}
-      <div className="flex items-center justify-between text-xs text-[#707A8A]">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-[#707A8A]">
         <span>
           {dailyLimit === Infinity
             ? 'Ordens ilimitadas hoje'
@@ -303,7 +303,7 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
       )}
 
       {/* Order type selector */}
-      <div role="group" aria-label="Tipo de ordem" className="flex gap-2" data-tour="order-type-selector">
+      <div role="group" aria-label="Tipo de ordem" className="flex flex-wrap gap-2" data-tour="order-type-selector">
         {allowedTypes.map((t) => (
           <button
             key={t}
@@ -452,21 +452,21 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
       {/* Estimated cost */}
       {estimatedCost && (
         <div className="bg-[#1E2329] rounded-lg p-3 space-y-1 text-sm">
-          <div className="flex justify-between text-[#929AA5]">
-            <span className="flex items-center gap-1">Valor da operação <InfoTip text="Quantidade x preço unitário (sem taxas)" /></span>
-            <span className="font-mono text-[#EAECEF]">FS$ {estimatedCost.operationValue.toFixed(2)}</span>
+          <div className="flex items-start justify-between gap-3 text-[#929AA5]">
+            <span className="flex min-w-0 items-center gap-1">Valor da operação <InfoTip text="Quantidade x preço unitário (sem taxas)" /></span>
+            <span className="shrink-0 text-right font-mono text-[#EAECEF]">FS$ {estimatedCost.operationValue.toFixed(2)}</span>
           </div>
           {estimatedCost.leverageEnabled && (
-            <div className="flex justify-between text-[#929AA5]">
-              <span className="flex items-center gap-1">
+            <div className="flex items-start justify-between gap-3 text-[#929AA5]">
+              <span className="flex min-w-0 items-center gap-1">
                 Crédito da plataforma (2x)
                 <InfoTip text="A plataforma financia 50% do nocional. Sobre este valor incidem juros diários de 0,2%." />
               </span>
-              <span className="font-mono text-[#F0B90B]">FS$ {(estimatedCost.operationValue / 2).toFixed(2)}</span>
+              <span className="shrink-0 text-right font-mono text-[#F0B90B]">FS$ {(estimatedCost.operationValue / 2).toFixed(2)}</span>
             </div>
           )}
-          <div className="flex justify-between text-[#929AA5]">
-            <span className="flex items-center gap-1">
+          <div className="flex items-start justify-between gap-3 text-[#929AA5]">
+            <span className="flex min-w-0 items-center gap-1">
               Taxa estimada
               <InfoTip text={
                 side === 'SELL'
@@ -474,7 +474,7 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
                   : 'Taxa fixa cobrada pela plataforma sobre o valor da operação'
               } />
             </span>
-            <span className="font-mono text-[#EAECEF]">FS$ {estimatedCost.fee.toFixed(2)}</span>
+            <span className="shrink-0 text-right font-mono text-[#EAECEF]">FS$ {estimatedCost.fee.toFixed(2)}</span>
           </div>
           {side === 'SELL' && (
             <p className="text-[10px] text-[#707A8A] leading-relaxed">
@@ -482,15 +482,15 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
             </p>
           )}
           {side === 'BUY' && (
-            <div className="flex justify-between text-[#EAECEF] font-medium border-t border-[#2B3139] pt-1">
-              <span className="flex items-center gap-1">
+            <div className="flex items-start justify-between gap-3 border-t border-[#2B3139] pt-1 font-medium text-[#EAECEF]">
+              <span className="flex min-w-0 items-center gap-1">
                 {estimatedCost.leverageEnabled ? 'Capital próprio necessário' : 'Total estimado'}
                 <InfoTip text={estimatedCost.leverageEnabled
                   ? 'Seu capital próprio: 50% do nocional + taxa. O restante é crédito virtual da plataforma.'
                   : 'Valor da operação + taxa operacional'
                 } />
               </span>
-              <span className="font-mono">FS$ {estimatedCost.total.toFixed(2)}</span>
+              <span className="shrink-0 text-right font-mono">FS$ {estimatedCost.total.toFixed(2)}</span>
             </div>
           )}
         </div>

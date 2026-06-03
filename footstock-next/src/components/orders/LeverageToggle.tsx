@@ -45,44 +45,42 @@ export function LeverageToggle({
     }
   }, [isLenda, track, plan])
 
-  // T-16: Usuários sem plano Lenda veem o toggle com overlay semi-transparente
+  // T-16: Usuários sem plano Lenda veem um CTA de upgrade sem cobrir o conteúdo.
   const lockedContent = !isLenda
   if (lockedContent) {
     return (
-      <div
-        className="relative rounded-lg border border-[rgba(240,185,11,.18)] bg-[rgba(240,185,11,.04)] p-3"
+      <Link
+        href="/planos"
         data-testid="leverage-toggle-locked"
+        onClick={() => {
+          track('plan_upgrade_clicked', {
+            origin: 'leverage_2x',
+            current_plan: plan as 'JOGADOR' | 'CRAQUE' | 'LENDA',
+          })
+        }}
+        className="block rounded-lg border border-[rgba(240,185,11,.22)] bg-[rgba(240,185,11,.04)] p-3 transition-colors hover:bg-[rgba(240,185,11,.08)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(240,185,11,.55)]"
+        aria-label="Fazer upgrade para o plano Lenda e acessar alavancagem 2x"
       >
-        {/* Conteúdo real, semi-transparente */}
-        <div className="opacity-30 pointer-events-none select-none">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-[#F0B90B]" aria-hidden="true" />
-              <div>
-                <p className="text-sm font-medium text-[#EAECEF]">Alavancagem 2x</p>
-                <p className="text-xs text-[#929AA5]">Opera com o dobro do capital disponível</p>
-              </div>
+        <div className="flex flex-col gap-3 min-[360px]:flex-row min-[360px]:items-center min-[360px]:justify-between">
+          <div className="flex min-w-0 items-start gap-2">
+            <TrendingUp className="mt-0.5 h-4 w-4 shrink-0 text-[#F0B90B]" aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium leading-snug text-[#EAECEF]">Alavancagem 2x</p>
+              <p className="mt-0.5 text-xs leading-snug text-[#929AA5]">
+                Opera com o dobro do capital disponível
+              </p>
             </div>
-            <div className="w-11 h-6 rounded-full bg-[#2B3139]" />
           </div>
+          <span
+            data-testid="leverage-toggle-lenda-required"
+            className="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full border border-[rgba(240,185,11,.32)] bg-[rgba(240,185,11,.12)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#F0B90B]"
+            aria-hidden="true"
+          >
+            <Lock size={12} />
+            LENDA
+          </span>
         </div>
-        {/* Overlay clicável */}
-        <Link
-          href="/planos"
-          data-testid="leverage-upgrade-overlay"
-          onClick={() => {
-            track('plan_upgrade_clicked', {
-              origin: 'leverage_2x',
-              current_plan: plan as 'JOGADOR' | 'CRAQUE' | 'LENDA',
-            })
-          }}
-          className="absolute inset-0 flex items-center justify-center gap-2 rounded-lg bg-transparent hover:bg-[rgba(0,0,0,.2)] transition-colors cursor-pointer"
-          aria-label="Fazer upgrade para acessar alavancagem"
-        >
-          <Lock size={14} className="text-[#F0B90B]" />
-          <span data-testid="leverage-toggle-lenda-required" className="text-xs font-medium text-[#F0B90B]">Requer plano Lenda</span>
-        </Link>
-      </div>
+      </Link>
     )
   }
 
@@ -92,12 +90,12 @@ export function LeverageToggle({
       data-testid="leverage-toggle"
     >
       {/* Linha do toggle */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-[#F0B90B]" aria-hidden="true" />
-          <div>
-            <p className="text-sm font-medium text-[#EAECEF]">Alavancagem 2x</p>
-            <p className="text-xs text-[#929AA5]">
+      <div className="flex items-start justify-between gap-3 min-[360px]:items-center">
+        <div className="flex min-w-0 items-start gap-2">
+          <TrendingUp className="mt-0.5 h-4 w-4 shrink-0 text-[#F0B90B] min-[360px]:mt-0" aria-hidden="true" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium leading-snug text-[#EAECEF]">Alavancagem 2x</p>
+            <p className="text-xs leading-snug text-[#929AA5]">
               Opera com o dobro do capital disponível
             </p>
           </div>
@@ -161,4 +159,3 @@ export function LeverageToggle({
     </div>
   )
 }
-
