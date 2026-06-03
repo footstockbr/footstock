@@ -32,7 +32,10 @@ export const CreateOrderSchema = z
       .number({ message: 'quantity deve ser um número inteiro positivo.' })
       .int('quantity deve ser um número inteiro.')
       .positive('quantity deve ser maior que zero.')
-      .min(1, 'quantity mínimo é 1.'),
+      .min(100, 'quantity mínimo é 100.')
+      .refine((quantity) => quantity % 100 === 0, {
+        message: 'quantity deve ser múltiplo de 100.',
+      }),
 
     price: z.number().positive('price deve ser maior que zero.').optional(),
 

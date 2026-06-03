@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { AlertCircle, Clock, WalletMinimal } from 'lucide-react'
@@ -41,6 +41,41 @@ const ORDER_TYPE_LABELS: Record<string, string> = {
   SCHEDULED: 'Agendada',
 }
 
+const ORDER_ERROR_MESSAGES: Record<string, string> = {
+  INSUFFICIENT_BALANCE: 'Saldo FS$ insuficiente para criar a ordem.',
+  ORDER_002: 'Saldo FS$ insuficiente para criar a ordem.',
+  ORDER_050: 'Posição insuficiente para vender essa quantidade.',
+  ORDER_051: 'Seu plano ou limite diário não permite esta ordem.',
+  ORDER_057: 'Conflito ao criar ordem. Recarregue e tente novamente.',
+  MOTOR_090: 'Motor de mercado temporariamente indisponível. Tente novamente em instantes.',
+  SESS_040: 'Mercado fechado para ordens a mercado.',
+  ASSET_030: 'Ativo temporariamente suspenso.',
+  ASSET_031: 'Ativo não encontrado.',
+  PAYMENT_054: 'Assinatura em cancelamento: novas ordens de risco estão bloqueadas.',
+  'VAL-001': 'Dados inválidos. Verifique os campos e tente novamente.',
+  'RATE-001': 'Muitas tentativas. Aguarde antes de enviar novas ordens.',
+  STAFF_CANNOT_TRADE: 'Contas administrativas/institucionais não podem operar ordens.',
+}
+
+type OrderApiErrorBody = {
+  error?: {
+    code?: string
+    message?: string
+  } | string
+  code?: string
+  message?: string
+}
+
+function getOrderApiErrorMessage(body: OrderApiErrorBody, status: number): string {
+  const nestedError = typeof body.error === 'object' ? body.error : null
+  const code = nestedError?.code ?? body.code ?? (typeof body.error === 'string' ? body.error : undefined)
+  const serverMessage = nestedError?.message ?? body.message
+
+  if (code && ORDER_ERROR_MESSAGES[code]) return ORDER_ERROR_MESSAGES[code]
+  if (serverMessage) return serverMessage
+  return `Erro ${status} ao enviar ordem.`
+}
+
 // ── Props ────────────────────────────────────────────────────────────────────
 
 interface OrderFormProps {
@@ -77,6 +112,7 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
   const [leverageEnabled, setLeverageEnabled] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const submitInFlightRef = useRef(false)
 
   // Contador de ordens restantes — inicializado pelo prop; auto-buscado se prop for 0 (valor default)
   const initialRemaining = dailyLimit === Infinity ? Infinity : Math.max(0, dailyLimit - dailyOrdersUsed)
@@ -172,8 +208,10 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (submitInFlightRef.current) return
     if (!validate()) return
 
+    submitInFlightRef.current = true
     setIsSubmitting(true)
     try {
       const body: Record<string, unknown> = {
@@ -207,8 +245,8 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
       })
 
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.message || `Erro ${res.status}`)
+        const data = (await res.json().catch(() => ({}))) as OrderApiErrorBody
+        throw new Error(getOrderApiErrorMessage(data, res.status))
       }
 
       // EVT-012: rastrear ordem enviada com sucesso
@@ -244,6 +282,7 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erro ao enviar ordem.')
     } finally {
+      submitInFlightRef.current = false
       setIsSubmitting(false)
     }
   }

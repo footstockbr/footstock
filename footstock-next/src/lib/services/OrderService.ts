@@ -6,9 +6,13 @@
 
 import { prisma } from '@/lib/prisma'
 import { redisPublisher as redis } from '@/lib/redis'
-import { ORDER_STATUS, ORDER_TYPE, PLAN_TYPE, type PlanType } from '@/lib/enums'
+import { ORDER_STATUS, ORDER_TYPE, type PlanType } from '@/lib/enums'
 import { calculateFee } from '@/lib/services/plan-order-limits'
-import { incrementDailyCounter, checkDailyOrderLimit } from '@/lib/middleware/checkDailyOrderLimit'
+import {
+  checkDailyOrderLimit,
+  releaseDailyOrderReservation,
+  reserveDailyOrderLimit,
+} from '@/lib/middleware/checkDailyOrderLimit'
 import { validateTransition } from '@/lib/contracts/order-contract'
 import { validateOrderForPlan, type CreateOrderDTO } from '@/lib/validators/order'
 import { leverageService } from '@/lib/services/LeverageService'
@@ -17,7 +21,7 @@ import { leagueEventRecorder } from '@/lib/services/leagues/LeagueEventRecorder'
 import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
 import { AliasService } from '@/services/AliasService'
 import { randomUUID } from 'crypto'
-import type { Order } from '@prisma/client'
+import type { Order, Prisma } from '@prisma/client'
 
 // ---------------------------------------------------------------------------
 // Erros de domínio
@@ -163,9 +167,11 @@ export class OrderService {
     }
 
     // === Camada 5 — Saldo ===
-    const executionPrice = Number(asset.currentPrice)
-    const operationValue = dto.quantity * executionPrice
-    const feeAmount = calculateFee(operationValue)
+    // MARKET usa a cotacao atual; ordens com preco informado reservam pelo preco
+    // aceito pelo usuario, mantendo backend alinhado ao custo estimado no modal.
+    const quotePrice = this._resolveOrderPricingPrice(dto, Number(asset.currentPrice))
+    const operationValue = this._roundFsAmount(dto.quantity * quotePrice)
+    const feeAmount = this._roundFsAmount(calculateFee(operationValue))
     let requiredBalance: number
 
     if (dto.side === 'BUY') {
@@ -179,20 +185,8 @@ export class OrderService {
         })
       }
       const leverageMultiplier = dto.leverage === 2 ? 0.5 : 1
-      requiredBalance = operationValue * leverageMultiplier + feeAmount
+      requiredBalance = this._roundFsAmount(operationValue * leverageMultiplier + feeAmount)
     } else {
-      // SELL: verificar que usuário tem a posição
-      const position = await prisma.position.findFirst({
-        where: { userId, assetId: asset.id, side: 'LONG' },
-      })
-      const ownedQty = Number(position?.quantity ?? 0)
-      if (ownedQty < dto.quantity) {
-        throw new AppError('ORDER_050', 402, {
-          required: dto.quantity,
-          available: ownedQty,
-          message: `Saldo de ativos insuficiente. Você tem ${ownedQty} ${dto.ticker}, mas a ordem requer ${dto.quantity}.`,
-        })
-      }
       requiredBalance = 0 // SELL não requer saldo em FS$
     }
 
@@ -218,6 +212,7 @@ export class OrderService {
     // updateMany com WHERE fsBalance >= requiredBalance garante que saldo negativo
     // é impossível mesmo com requests concorrentes (sem lock separado).
     const leverageMultiplier = dto.leverage === 2 ? 2 : 1
+    const reservedDailySlot = await this._reserveDailyLimit(userId, user.planType as PlanType, dto.type)
 
     // OCO: criar par atomicamente com groupId compartilhado + debit atômico
     if (dto.type === ORDER_TYPE.OCO) {
@@ -230,43 +225,38 @@ export class OrderService {
         status: 'OPEN' as import('@prisma/client').OrderStatus,
         quantity: dto.quantity,
         fee: feeAmount,
+        groupId,
         leverageMultiplier,
         scheduledAt: null as Date | null,
       }
 
-      let debitResult, stopLossLeg, takeProfitLeg
+      let stopLossLeg: Order
+      let takeProfitLeg: Order
       try {
-        [debitResult, stopLossLeg, takeProfitLeg] = await prisma.$transaction([
-          // Debit atômico: apenas se saldo suficiente
-          prisma.user.updateMany({
-            where: {
-              id: userId,
-              ...(requiredBalance > 0 ? { fsBalance: { gte: requiredBalance } } : {}),
-            },
-            data: requiredBalance > 0 ? { fsBalance: { decrement: requiredBalance } } : {},
-          }),
-          prisma.order.create({
+        ;[stopLossLeg, takeProfitLeg] = await prisma.$transaction(async (tx) => {
+          await this._debitRequiredBalance(tx, userId, requiredBalance)
+          if (dto.side === 'SELL') {
+            await this._assertSellAvailable(tx, userId, asset.id, dto.ticker, dto.quantity)
+          }
+
+          const createdStopLoss = await tx.order.create({
             data: { ...baseData, price: dto.stopLossPrice! },
-          }),
-          prisma.order.create({
+          })
+          const createdTakeProfit = await tx.order.create({
             data: { ...baseData, price: dto.takeProfitPrice! },
-          }),
-        ], { isolationLevel: 'Serializable' })
+          })
+
+          return [createdStopLoss, createdTakeProfit]
+        }, { isolationLevel: 'Serializable' })
       } catch (err) {
+        if (reservedDailySlot) await releaseDailyOrderReservation(userId)
         // T-03: Tratamento específico de constraint violation (P2002 = unique constraint)
-        if ((err as { code?: string }).code === 'P2002') {
+        if ((err as { code?: string }).code === 'P2002' || (err as { code?: string }).code === 'P2034') {
           throw new AppError('ORDER_057', 409, {
             message: 'Conflito ao criar ordem. Tente novamente.',
           })
         }
         throw err
-      }
-
-      if (requiredBalance > 0 && debitResult.count === 0) {
-        throw new AppError('ORDER_002', 402, {
-          required: requiredBalance,
-          message: `Saldo insuficiente para criar a ordem.`,
-        })
       }
 
       // Publicar ambas as pernas para o motor
@@ -275,8 +265,6 @@ export class OrderService {
         redis.publish('orders:pending', JSON.stringify({ orderId: takeProfitLeg.id, assetId: asset.id, ticker: dto.ticker, groupId })),
       ])
 
-      await this._incrementDailyCounter(userId)
-
       leagueEventRecorder.recordForAllActiveLeagues(userId, 'OCO_ORDER_USED', { ticker: dto.ticker }).catch(() => {})
 
       // Retornar a primeira perna (stop loss) — ambas compartilham o groupId
@@ -284,17 +272,15 @@ export class OrderService {
     }
 
     // Ordem simples: debit + create em transação atômica
-    let debitResult, order
+    let order: Order
     try {
-      [debitResult, order] = await prisma.$transaction([
-        prisma.user.updateMany({
-          where: {
-            id: userId,
-            ...(requiredBalance > 0 ? { fsBalance: { gte: requiredBalance } } : {}),
-          },
-          data: requiredBalance > 0 ? { fsBalance: { decrement: requiredBalance } } : {},
-        }),
-        prisma.order.create({
+      order = await prisma.$transaction(async (tx) => {
+        await this._debitRequiredBalance(tx, userId, requiredBalance)
+        if (dto.side === 'SELL') {
+          await this._assertSellAvailable(tx, userId, asset.id, dto.ticker, dto.quantity)
+        }
+
+        return tx.order.create({
           data: {
             userId,
             assetId: asset.id,
@@ -302,16 +288,17 @@ export class OrderService {
             side: dto.side as import('@prisma/client').OrderSide,
             status: 'OPEN' as import('@prisma/client').OrderStatus,
             quantity: dto.quantity,
-            price: dto.price ?? null,
+            price: dto.price ?? (dto.side === 'BUY' ? quotePrice : null),
             fee: feeAmount,
             leverageMultiplier,
             scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : null,
           },
-        }),
-      ], { isolationLevel: 'Serializable' })
+        })
+      }, { isolationLevel: 'Serializable' })
     } catch (err) {
+      if (reservedDailySlot) await releaseDailyOrderReservation(userId)
       // T-03: Tratamento específico de constraint violation (P2002 = unique constraint)
-      if ((err as { code?: string }).code === 'P2002') {
+      if ((err as { code?: string }).code === 'P2002' || (err as { code?: string }).code === 'P2034') {
         throw new AppError('ORDER_057', 409, {
           message: 'Conflito ao criar ordem. Tente novamente.',
         })
@@ -319,20 +306,12 @@ export class OrderService {
       throw err
     }
 
-    if (requiredBalance > 0 && debitResult.count === 0) {
-      throw new AppError('ORDER_002', 402, {
-        required: requiredBalance,
-        message: `Saldo insuficiente para criar a ordem.`,
-      })
-    }
-
     // Publicar para o motor (MARKET → processamento imediato)
     if (dto.type === ORDER_TYPE.MARKET) {
-      await redis.publish('orders:pending', JSON.stringify({ orderId: order.id, assetId: asset.id, ticker: dto.ticker }))
+      await Promise.allSettled([
+        redis.publish('orders:pending', JSON.stringify({ orderId: order.id, assetId: asset.id, ticker: dto.ticker })),
+      ])
     }
-
-    // Incrementar contador diário (Redis com TTL até meia-noite)
-    await this._incrementDailyCounter(userId)
 
     if (dto.type === ORDER_TYPE.LIMIT) {
       leagueEventRecorder.recordForAllActiveLeagues(userId, 'LIMIT_ORDER_USED', { ticker: dto.ticker }).catch(() => {})
@@ -390,8 +369,9 @@ export class OrderService {
       // Refund de saldo para ordens BUY
       if (order.side === 'BUY' && order.price) {
         const operationValue = Number(order.quantity) * Number(order.price)
-        const fee = calculateFee(operationValue)
-        const refundAmount = operationValue + fee
+        const fee = Number(order.fee) || calculateFee(operationValue)
+        const ownFraction = Number(order.leverageMultiplier) >= 2 ? 0.5 : 1
+        const refundAmount = this._roundFsAmount(operationValue * ownFraction + fee)
         await tx.user.update({
           where: { id: userId },
           data: { fsBalance: { increment: refundAmount } },
@@ -509,6 +489,82 @@ export class OrderService {
     }
   }
 
+  private async _reserveDailyLimit(userId: string, planType: PlanType, orderType: string): Promise<boolean> {
+    const { block, reserved, info } = await reserveDailyOrderLimit(userId, planType, orderType)
+    if (block) {
+      throw new AppError('ORDER_051', block.status, {
+        planType,
+        orderType,
+        limit: info.limit,
+        used: info.used,
+        remaining: info.remaining,
+        resetAt: info.resetAt,
+        message: 'Limite diário de ordens atingido ou tipo de ordem não permitido para este plano.',
+      })
+    }
+    return reserved
+  }
+
+  private async _debitRequiredBalance(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    requiredBalance: number,
+  ): Promise<void> {
+    if (requiredBalance <= 0) return
+
+    const debitResult = await tx.user.updateMany({
+      where: {
+        id: userId,
+        fsBalance: { gte: requiredBalance },
+      },
+      data: { fsBalance: { decrement: requiredBalance } },
+    })
+
+    if (debitResult.count === 0) {
+      throw new AppError('INSUFFICIENT_BALANCE', 402, {
+        required: requiredBalance,
+        message: 'Saldo FS$ insuficiente para criar a ordem.',
+      })
+    }
+  }
+
+  private async _assertSellAvailable(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    assetId: string,
+    ticker: string,
+    requestedQuantity: number,
+  ): Promise<void> {
+    const [position, reservedSell] = await Promise.all([
+      tx.position.findFirst({
+        where: { userId, assetId, side: 'LONG', status: 'OPEN' },
+        select: { quantity: true },
+      }),
+      tx.order.aggregate({
+        where: {
+          userId,
+          assetId,
+          side: 'SELL',
+          status: { in: ['OPEN', 'PARTIAL'] },
+        },
+        _sum: { quantity: true },
+      }),
+    ])
+
+    const ownedQty = Number(position?.quantity ?? 0)
+    const reservedQty = Number(reservedSell._sum.quantity ?? 0)
+    const availableQty = Math.max(0, ownedQty - reservedQty)
+
+    if (availableQty < requestedQuantity) {
+      throw new AppError('ORDER_050', 402, {
+        required: requestedQuantity,
+        available: availableQty,
+        reserved: reservedQty,
+        message: `Saldo de ativos insuficiente. Disponível para venda: ${availableQty} ${ticker}; ordem requer ${requestedQuantity}.`,
+      })
+    }
+  }
+
   private async _checkMarketSession(): Promise<void> {
     try {
       const session = await redis.get('market:session')
@@ -531,8 +587,19 @@ export class OrderService {
     }
   }
 
-  private async _incrementDailyCounter(userId: string): Promise<void> {
-    await incrementDailyCounter(userId)
+  private _resolveOrderPricingPrice(dto: CreateOrderDTO, currentPrice: number): number {
+    if (
+      dto.type === ORDER_TYPE.LIMIT ||
+      dto.type === ORDER_TYPE.OCO ||
+      (dto.type === ORDER_TYPE.SCHEDULED && dto.price !== undefined)
+    ) {
+      return dto.price ?? currentPrice
+    }
+    return currentPrice
+  }
+
+  private _roundFsAmount(value: number): number {
+    return Math.round((value + Number.EPSILON) * 100) / 100
   }
 }
 
