@@ -193,7 +193,11 @@ export class OrderService {
     // === Motor Health Check (todos os tipos de ordem) ===
     // Verifica: (1) admin global-halt, (2) tick stale/ausente, (3) Redis indisponível.
     // Chaves corretas: motor:global-halt + market:tick:latest (motor:health nunca é publicada).
-    const MOTOR_TICK_STALE_S = 10
+    // Threshold configurável (env): o motor pode tickar mais devagar que 2s
+    // (MOTOR_TICK_INTERVAL_MS) e publicar heartbeat a cada N ticks. O default 30s
+    // tolera ~3 ticks de jitter; o motor publica heartbeat a cada 10s e o TTL da
+    // chave é 60s, então 30s detecta motor morto bem antes da expiração.
+    const MOTOR_TICK_STALE_S = parseInt(process.env.MOTOR_TICK_STALE_S ?? '30', 10)
     const motorGlobalHalt = await redis.exists('motor:global-halt').catch(() => 0)
     if (motorGlobalHalt) {
       throw new AppError('MOTOR_090', 503, { message: 'Motor de mercado pausado pelo administrador. Ordens suspensas temporariamente.' })
