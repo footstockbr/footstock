@@ -48,14 +48,18 @@ jest.mock('@/lib/auth', () => ({
   serializeUser: jest.fn((u: Record<string, unknown>) => u),
 }))
 
-jest.mock('@/lib/ratelimit', () => ({
-  getAuthRateLimit: jest.fn().mockReturnValue({
+jest.mock('@/lib/ratelimit', () => {
+  const allow = () => ({
     limit: jest.fn().mockResolvedValue({ success: true, reset: Date.now() + 60000 }),
-  }),
-  getApiRateLimit: jest.fn().mockReturnValue({
-    limit: jest.fn().mockResolvedValue({ success: true, reset: Date.now() + 60000 }),
-  }),
-}))
+  })
+  return {
+    getAuthRateLimit: jest.fn(allow),
+    getApiRateLimit: jest.fn(allow),
+    // checkout/route.ts usa getCheckoutRateLimit().limit(userId) — sem este mock o
+    // route lança "is not a function" antes de chegar à validação/lógica de plano.
+    getCheckoutRateLimit: jest.fn(allow),
+  }
+})
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -372,19 +376,46 @@ describe('ST004: GET /api/v1/subscriptions/me', () => {
     expect(body.data.status).toBe('ACTIVE')
   })
 
-  test('Retorna 404 quando assinatura está CANCELLED', async () => {
+  test('Retorna 404 quando a única assinatura está CANCELLED (terminal — não conta como ativa)', async () => {
     mockUser({ planType: 'JOGADOR' })
     const { prisma } = require('@/lib/prisma')
-    // Route usa findFirst, não findUnique
-    prisma.subscription.findFirst.mockResolvedValue(
-      makeSubscription({ status: 'CANCELLED', cancelledAt: new Date() })
-    )
+    const cancelled = makeSubscription({ status: 'CANCELLED', cancelledAt: new Date() })
+    // A rota consulta primeiro os status ativos (ACTIVE/CANCELLATION_LOCK/PAST_DUE/
+    // TRIAL/TRIALING) e depois PENDING. CANCELLED não casa com nenhum → o DB real
+    // retornaria null nas duas queries. O mock precisa respeitar o filtro de status,
+    // senão devolve a sub CANCELLED para a query de ativos e mascara o 404.
+    prisma.subscription.findFirst.mockImplementation((args?: { where?: { status?: { in?: string[] } | string } }) => {
+      const f = args?.where?.status
+      const statuses = f && typeof f === 'object' && Array.isArray(f.in) ? f.in : typeof f === 'string' ? [f] : []
+      return Promise.resolve(statuses.includes('CANCELLED') ? cancelled : null)
+    })
 
     const { GET } = await import('@/app/api/v1/subscriptions/me/route')
     const res = await GET()
     const body = await res.json()
 
     expect(res.status).toBe(404)
+    expect(body.error).toBeDefined()
+  })
+
+  test('Retorna 200 com acesso mantido quando assinatura está em CANCELLATION_LOCK (modelo Netflix)', async () => {
+    // Cancelamento NÃO encerra a conta na hora: o plano permanece ativo
+    // (CANCELLATION_LOCK) até o fim do período pago. GET deve retornar 200.
+    mockUser({ planType: 'CRAQUE' })
+    const { prisma } = require('@/lib/prisma')
+    const lockExpiry = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)
+    prisma.subscription.findFirst.mockResolvedValue(
+      makeSubscription({ status: 'CANCELLATION_LOCK', cancelledAt: new Date(), cancellationLockExpiresAt: lockExpiry })
+    )
+
+    const { GET } = await import('@/app/api/v1/subscriptions/me/route')
+    const res = await GET()
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.data.status).toBe('CANCELLATION_LOCK')
+    expect(body.data.cancellationMode).toBe('SCHEDULED')
+    expect(body.data.cancellationLock).not.toBeNull()
   })
 })
 
