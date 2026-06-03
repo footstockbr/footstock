@@ -32,10 +32,10 @@ const ALIAS_SEED: AliasSeedEntry[] = [
   { alias: 'CAM3', assetTicker: 'GAL3' },
   { alias: 'ATL3', assetTicker: 'GAL3' },
   { alias: 'ATL4', assetTicker: 'GAL3' },
-  // Botafogo → FOG3
-  { alias: 'BOT3', assetTicker: 'FOG3' },
-  { alias: 'BOT4', assetTicker: 'FOG3' },
-  { alias: 'BOFA4', assetTicker: 'FOG3' },
+  // Botafogo → REG3
+  { alias: 'BOT3', assetTicker: 'REG3' },
+  { alias: 'BOT4', assetTicker: 'REG3' },
+  { alias: 'BOFA4', assetTicker: 'REG3' },
   // Internacional → COL3
   { alias: 'INT3', assetTicker: 'COL3' },
   { alias: 'INT4', assetTicker: 'COL3' },
@@ -47,12 +47,12 @@ const ALIAS_SEED: AliasSeedEntry[] = [
   // Cruzeiro → RAP3
   { alias: 'CRU3', assetTicker: 'RAP3' },
   { alias: 'CRU4', assetTicker: 'RAP3' },
-  // Vasco → MAL3
-  { alias: 'VAS3', assetTicker: 'MAL3' },
-  { alias: 'VAS4', assetTicker: 'MAL3' },
-  // Bahia → TFN3
-  { alias: 'BAH3', assetTicker: 'TFN3' },
-  { alias: 'BAH4', assetTicker: 'TFN3' },
+  // Vasco → CRZ3
+  { alias: 'VAS3', assetTicker: 'CRZ3' },
+  { alias: 'VAS4', assetTicker: 'CRZ3' },
+  // Bahia → BMP3
+  { alias: 'BAH3', assetTicker: 'BMP3' },
+  { alias: 'BAH4', assetTicker: 'BMP3' },
   // Fluminense → GUE3
   { alias: 'FLU3', assetTicker: 'GUE3' },
   { alias: 'FLU4', assetTicker: 'GUE3' },
@@ -62,9 +62,9 @@ const ALIAS_SEED: AliasSeedEntry[] = [
   // Fortaleza → FOR3
   { alias: 'FOR4', assetTicker: 'FOR3' },
   { alias: 'FORT3', assetTicker: 'FOR3' },
-  // Santos → BAL3
-  { alias: 'SAN3', assetTicker: 'BAL3' },
-  { alias: 'SAN4', assetTicker: 'BAL3' },
+  // Santos → PEI3
+  { alias: 'SAN3', assetTicker: 'PEI3' },
+  { alias: 'SAN4', assetTicker: 'PEI3' },
   // Athletico-PR → FUR3
   { alias: 'CAP3', assetTicker: 'FUR3' },
   { alias: 'CAP4', assetTicker: 'FUR3' },

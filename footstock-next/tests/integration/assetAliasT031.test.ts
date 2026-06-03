@@ -343,7 +343,7 @@ describe('T-031 — Seed cobertura completa (40 clubes)', () => {
   const ALL_TICKERS = [
     // Série A
     'URU3', 'POR3', 'TIM3', 'TRI3', 'GAL3', 'IMO3', 'COL3', 'GUE3',
-    'BAL3', 'MAL3', 'FOG3', 'FUR3', 'FOR3', 'TFN3', 'RAP3', 'RBB3',
+    'PEI3', 'CRZ3', 'REG3', 'FUR3', 'FOR3', 'BMP3', 'RAP3', 'RBB3',
     'CUI3', 'VIT3', 'JUV3', 'MIR3',
     // Série B
     'LEI3', 'NTL3', 'AVA3', 'GOI3', 'CHA3', 'PON3', 'GUA3', 'OPE3',

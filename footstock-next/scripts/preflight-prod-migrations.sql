@@ -33,8 +33,8 @@ SELECT
 \echo '=== 2. Canonical tickers — quantos existem dos 40 ==='
 WITH canonical AS (
   SELECT unnest(ARRAY[
-    'URU3','POR3','TIM3','TRI3','GAL3','IMO3','COL3','GUE3','BAL3','MAL3',
-    'FOG3','FUR3','FOR3','TFN3','RAP3','RBB3','CUI3','VIT3','JUV3','MIR3',
+    'URU3','POR3','TIM3','TRI3','GAL3','IMO3','COL3','GUE3','PEI3','CRZ3',
+    'REG3','FUR3','FOR3','BMP3','RAP3','RBB3','CUI3','VIT3','JUV3','MIR3',
     'LEI3','NTL3','AVA3','GOI3','CHA3','PON3','GUA3','OPE3','SAM3','TIS3',
     'LON3','FIG3','PAY3','CFC3','AME3','BSA3','CRB3','CSA3','ITA3','TON3'
   ]) AS ticker
@@ -53,8 +53,8 @@ SELECT
   string_agg(ticker, ', ') AS tickers_with_null_real_name
 FROM assets
 WHERE ticker IN (
-  'URU3','POR3','TIM3','TRI3','GAL3','IMO3','COL3','GUE3','BAL3','MAL3',
-  'FOG3','FUR3','FOR3','TFN3','RAP3','RBB3','CUI3','VIT3','JUV3','MIR3',
+  'URU3','POR3','TIM3','TRI3','GAL3','IMO3','COL3','GUE3','PEI3','CRZ3',
+  'REG3','FUR3','FOR3','BMP3','RAP3','RBB3','CUI3','VIT3','JUV3','MIR3',
   'LEI3','NTL3','AVA3','GOI3','CHA3','PON3','GUA3','OPE3','SAM3','TIS3',
   'LON3','FIG3','PAY3','CFC3','AME3','BSA3','CRB3','CSA3','ITA3','TON3'
 )
@@ -68,8 +68,8 @@ SELECT
   string_agg(ticker, ', ' ORDER BY ticker) AS legacy_tickers
 FROM assets
 WHERE ticker NOT IN (
-  'URU3','POR3','TIM3','TRI3','GAL3','IMO3','COL3','GUE3','BAL3','MAL3',
-  'FOG3','FUR3','FOR3','TFN3','RAP3','RBB3','CUI3','VIT3','JUV3','MIR3',
+  'URU3','POR3','TIM3','TRI3','GAL3','IMO3','COL3','GUE3','PEI3','CRZ3',
+  'REG3','FUR3','FOR3','BMP3','RAP3','RBB3','CUI3','VIT3','JUV3','MIR3',
   'LEI3','NTL3','AVA3','GOI3','CHA3','PON3','GUA3','OPE3','SAM3','TIS3',
   'LON3','FIG3','PAY3','CFC3','AME3','BSA3','CRB3','CSA3','ITA3','TON3'
 );

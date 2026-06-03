@@ -77,7 +77,7 @@ const newsSeed = async () => {
       },
       {
         id: 'n004',
-        title: 'FOG3 envolto em polêmica financeira',
+        title: 'REG3 envolto em polêmica financeira',
         content:
           'Investigação preliminar aponta possíveis irregularidades contábeis. Clube sob supervisão de órgãos reguladores. Ações em queda de 15% no pré-mercado.',
         impact: 'FINANCEIRA_CRITICA',
@@ -94,9 +94,9 @@ const newsSeed = async () => {
       },
       {
         id: 'n005',
-        title: 'BAL3 promovida à Série A após campanha histórica',
+        title: 'PEI3 promovida à Série A após campanha histórica',
         content:
-          'Após 5 anos na Série B, BAL3 conquistou seu retorno à primeira divisão com campanha impressionante. Torcida celebra retorno histórico.',
+          'Após 5 anos na Série B, PEI3 conquistou seu retorno à primeira divisão com campanha impressionante. Torcida celebra retorno histórico.',
         impact: 'ESPORTIVA_MAJORITARIA',
         sentiment: 'BULLISH',
         assetIds: ['bal4'],

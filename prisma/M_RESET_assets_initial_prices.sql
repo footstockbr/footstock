@@ -34,21 +34,21 @@ SET
     WHEN ticker = 'TIM3' THEN 22.65
     WHEN ticker = 'TRI3' THEN 22.20
     WHEN ticker = 'GAL3' THEN 19.75
-    WHEN ticker = 'FOG3' THEN 19.30
+    WHEN ticker = 'REG3' THEN 19.30
     WHEN ticker = 'COL3' THEN 19.75
     WHEN ticker = 'IMO3' THEN 19.30
     WHEN ticker = 'RAP3' THEN 16.85
-    WHEN ticker = 'MAL3' THEN 16.40
-    WHEN ticker = 'TFN3' THEN 15.95
+    WHEN ticker = 'CRZ3' THEN 16.40
+    WHEN ticker = 'BMP3' THEN 15.95
     WHEN ticker = 'GUE3' THEN 15.50
     WHEN ticker = 'TOR3' THEN 13.95
     WHEN ticker = 'LEM3' THEN 13.50
-    WHEN ticker = 'BAL3' THEN 13.05
+    WHEN ticker = 'PEI3' THEN 13.05
     WHEN ticker = 'FUR3' THEN 12.60
-    WHEN ticker = 'VOA3' THEN 10.15
+    WHEN ticker = 'COX3' THEN 10.15
     WHEN ticker = 'CON3' THEN  9.70
-    WHEN ticker = 'LEA3' THEN 10.15
-    WHEN ticker = 'LEB3' THEN  9.70
+    WHEN ticker = 'RMO3' THEN 10.15
+    WHEN ticker = 'LEA3' THEN  9.70
     WHEN ticker = 'COE3' THEN  8.95
     WHEN ticker = 'CAV3' THEN  8.73
     WHEN ticker = 'DRA3' THEN  8.51
@@ -57,7 +57,7 @@ SET
     WHEN ticker = 'VOZ3' THEN  7.85
     WHEN ticker = 'GAP3' THEN  8.35
     WHEN ticker = 'TIG3' THEN  6.13
-    WHEN ticker = 'DOU3' THEN  5.91
+    WHEN ticker = 'CBA3' THEN  5.91
     WHEN ticker = 'LEP3' THEN  5.69
     WHEN ticker = 'PER3' THEN  5.47
     WHEN ticker = 'IND3' THEN  5.25
@@ -76,21 +76,21 @@ SET
     WHEN ticker = 'TIM3' THEN 22.65
     WHEN ticker = 'TRI3' THEN 22.20
     WHEN ticker = 'GAL3' THEN 19.75
-    WHEN ticker = 'FOG3' THEN 19.30
+    WHEN ticker = 'REG3' THEN 19.30
     WHEN ticker = 'COL3' THEN 19.75
     WHEN ticker = 'IMO3' THEN 19.30
     WHEN ticker = 'RAP3' THEN 16.85
-    WHEN ticker = 'MAL3' THEN 16.40
-    WHEN ticker = 'TFN3' THEN 15.95
+    WHEN ticker = 'CRZ3' THEN 16.40
+    WHEN ticker = 'BMP3' THEN 15.95
     WHEN ticker = 'GUE3' THEN 15.50
     WHEN ticker = 'TOR3' THEN 13.95
     WHEN ticker = 'LEM3' THEN 13.50
-    WHEN ticker = 'BAL3' THEN 13.05
+    WHEN ticker = 'PEI3' THEN 13.05
     WHEN ticker = 'FUR3' THEN 12.60
-    WHEN ticker = 'VOA3' THEN 10.15
+    WHEN ticker = 'COX3' THEN 10.15
     WHEN ticker = 'CON3' THEN  9.70
-    WHEN ticker = 'LEA3' THEN 10.15
-    WHEN ticker = 'LEB3' THEN  9.70
+    WHEN ticker = 'RMO3' THEN 10.15
+    WHEN ticker = 'LEA3' THEN  9.70
     WHEN ticker = 'COE3' THEN  8.95
     WHEN ticker = 'CAV3' THEN  8.73
     WHEN ticker = 'DRA3' THEN  8.51
@@ -99,7 +99,7 @@ SET
     WHEN ticker = 'VOZ3' THEN  7.85
     WHEN ticker = 'GAP3' THEN  8.35
     WHEN ticker = 'TIG3' THEN  6.13
-    WHEN ticker = 'DOU3' THEN  5.91
+    WHEN ticker = 'CBA3' THEN  5.91
     WHEN ticker = 'LEP3' THEN  5.69
     WHEN ticker = 'PER3' THEN  5.47
     WHEN ticker = 'IND3' THEN  5.25
@@ -118,21 +118,21 @@ SET
     WHEN ticker = 'TIM3' THEN 22.65
     WHEN ticker = 'TRI3' THEN 22.20
     WHEN ticker = 'GAL3' THEN 19.75
-    WHEN ticker = 'FOG3' THEN 19.30
+    WHEN ticker = 'REG3' THEN 19.30
     WHEN ticker = 'COL3' THEN 19.75
     WHEN ticker = 'IMO3' THEN 19.30
     WHEN ticker = 'RAP3' THEN 16.85
-    WHEN ticker = 'MAL3' THEN 16.40
-    WHEN ticker = 'TFN3' THEN 15.95
+    WHEN ticker = 'CRZ3' THEN 16.40
+    WHEN ticker = 'BMP3' THEN 15.95
     WHEN ticker = 'GUE3' THEN 15.50
     WHEN ticker = 'TOR3' THEN 13.95
     WHEN ticker = 'LEM3' THEN 13.50
-    WHEN ticker = 'BAL3' THEN 13.05
+    WHEN ticker = 'PEI3' THEN 13.05
     WHEN ticker = 'FUR3' THEN 12.60
-    WHEN ticker = 'VOA3' THEN 10.15
+    WHEN ticker = 'COX3' THEN 10.15
     WHEN ticker = 'CON3' THEN  9.70
-    WHEN ticker = 'LEA3' THEN 10.15
-    WHEN ticker = 'LEB3' THEN  9.70
+    WHEN ticker = 'RMO3' THEN 10.15
+    WHEN ticker = 'LEA3' THEN  9.70
     WHEN ticker = 'COE3' THEN  8.95
     WHEN ticker = 'CAV3' THEN  8.73
     WHEN ticker = 'DRA3' THEN  8.51
@@ -141,7 +141,7 @@ SET
     WHEN ticker = 'VOZ3' THEN  7.85
     WHEN ticker = 'GAP3' THEN  8.35
     WHEN ticker = 'TIG3' THEN  6.13
-    WHEN ticker = 'DOU3' THEN  5.91
+    WHEN ticker = 'CBA3' THEN  5.91
     WHEN ticker = 'LEP3' THEN  5.69
     WHEN ticker = 'PER3' THEN  5.47
     WHEN ticker = 'IND3' THEN  5.25
@@ -160,21 +160,21 @@ SET
     WHEN ticker = 'TIM3' THEN 22.65
     WHEN ticker = 'TRI3' THEN 22.20
     WHEN ticker = 'GAL3' THEN 19.75
-    WHEN ticker = 'FOG3' THEN 19.30
+    WHEN ticker = 'REG3' THEN 19.30
     WHEN ticker = 'COL3' THEN 19.75
     WHEN ticker = 'IMO3' THEN 19.30
     WHEN ticker = 'RAP3' THEN 16.85
-    WHEN ticker = 'MAL3' THEN 16.40
-    WHEN ticker = 'TFN3' THEN 15.95
+    WHEN ticker = 'CRZ3' THEN 16.40
+    WHEN ticker = 'BMP3' THEN 15.95
     WHEN ticker = 'GUE3' THEN 15.50
     WHEN ticker = 'TOR3' THEN 13.95
     WHEN ticker = 'LEM3' THEN 13.50
-    WHEN ticker = 'BAL3' THEN 13.05
+    WHEN ticker = 'PEI3' THEN 13.05
     WHEN ticker = 'FUR3' THEN 12.60
-    WHEN ticker = 'VOA3' THEN 10.15
+    WHEN ticker = 'COX3' THEN 10.15
     WHEN ticker = 'CON3' THEN  9.70
-    WHEN ticker = 'LEA3' THEN 10.15
-    WHEN ticker = 'LEB3' THEN  9.70
+    WHEN ticker = 'RMO3' THEN 10.15
+    WHEN ticker = 'LEA3' THEN  9.70
     WHEN ticker = 'COE3' THEN  8.95
     WHEN ticker = 'CAV3' THEN  8.73
     WHEN ticker = 'DRA3' THEN  8.51
@@ -183,7 +183,7 @@ SET
     WHEN ticker = 'VOZ3' THEN  7.85
     WHEN ticker = 'GAP3' THEN  8.35
     WHEN ticker = 'TIG3' THEN  6.13
-    WHEN ticker = 'DOU3' THEN  5.91
+    WHEN ticker = 'CBA3' THEN  5.91
     WHEN ticker = 'LEP3' THEN  5.69
     WHEN ticker = 'PER3' THEN  5.47
     WHEN ticker = 'IND3' THEN  5.25
@@ -202,21 +202,21 @@ SET
     WHEN ticker = 'TIM3' THEN  22650000.00
     WHEN ticker = 'TRI3' THEN  22200000.00
     WHEN ticker = 'GAL3' THEN  19750000.00
-    WHEN ticker = 'FOG3' THEN  19300000.00
+    WHEN ticker = 'REG3' THEN  19300000.00
     WHEN ticker = 'COL3' THEN  19750000.00
     WHEN ticker = 'IMO3' THEN  19300000.00
     WHEN ticker = 'RAP3' THEN  16850000.00
-    WHEN ticker = 'MAL3' THEN  16400000.00
-    WHEN ticker = 'TFN3' THEN  15950000.00
+    WHEN ticker = 'CRZ3' THEN  16400000.00
+    WHEN ticker = 'BMP3' THEN  15950000.00
     WHEN ticker = 'GUE3' THEN  15500000.00
     WHEN ticker = 'TOR3' THEN  13950000.00
     WHEN ticker = 'LEM3' THEN  13500000.00
-    WHEN ticker = 'BAL3' THEN  13050000.00
+    WHEN ticker = 'PEI3' THEN  13050000.00
     WHEN ticker = 'FUR3' THEN  12600000.00
-    WHEN ticker = 'VOA3' THEN  10150000.00
+    WHEN ticker = 'COX3' THEN  10150000.00
     WHEN ticker = 'CON3' THEN   9700000.00
-    WHEN ticker = 'LEA3' THEN  10150000.00
-    WHEN ticker = 'LEB3' THEN   9700000.00
+    WHEN ticker = 'RMO3' THEN  10150000.00
+    WHEN ticker = 'LEA3' THEN   9700000.00
     WHEN ticker = 'COE3' THEN   8950000.00
     WHEN ticker = 'CAV3' THEN   8730000.00
     WHEN ticker = 'DRA3' THEN   8510000.00
@@ -225,7 +225,7 @@ SET
     WHEN ticker = 'VOZ3' THEN   7850000.00
     WHEN ticker = 'GAP3' THEN   8350000.00
     WHEN ticker = 'TIG3' THEN   6130000.00
-    WHEN ticker = 'DOU3' THEN   5910000.00
+    WHEN ticker = 'CBA3' THEN   5910000.00
     WHEN ticker = 'LEP3' THEN   5690000.00
     WHEN ticker = 'PER3' THEN   5470000.00
     WHEN ticker = 'IND3' THEN   5250000.00
@@ -249,19 +249,19 @@ SET
     to_jsonb(CASE
       WHEN ticker = 'URU3' THEN 23.55 WHEN ticker = 'POR3' THEN 23.10
       WHEN ticker = 'TIM3' THEN 22.65 WHEN ticker = 'TRI3' THEN 22.20
-      WHEN ticker = 'GAL3' THEN 19.75 WHEN ticker = 'FOG3' THEN 19.30
+      WHEN ticker = 'GAL3' THEN 19.75 WHEN ticker = 'REG3' THEN 19.30
       WHEN ticker = 'COL3' THEN 19.75 WHEN ticker = 'IMO3' THEN 19.30
-      WHEN ticker = 'RAP3' THEN 16.85 WHEN ticker = 'MAL3' THEN 16.40
-      WHEN ticker = 'TFN3' THEN 15.95 WHEN ticker = 'GUE3' THEN 15.50
+      WHEN ticker = 'RAP3' THEN 16.85 WHEN ticker = 'CRZ3' THEN 16.40
+      WHEN ticker = 'BMP3' THEN 15.95 WHEN ticker = 'GUE3' THEN 15.50
       WHEN ticker = 'TOR3' THEN 13.95 WHEN ticker = 'LEM3' THEN 13.50
-      WHEN ticker = 'BAL3' THEN 13.05 WHEN ticker = 'FUR3' THEN 12.60
-      WHEN ticker = 'VOA3' THEN 10.15 WHEN ticker = 'CON3' THEN  9.70
-      WHEN ticker = 'LEA3' THEN 10.15 WHEN ticker = 'LEB3' THEN  9.70
+      WHEN ticker = 'PEI3' THEN 13.05 WHEN ticker = 'FUR3' THEN 12.60
+      WHEN ticker = 'COX3' THEN 10.15 WHEN ticker = 'CON3' THEN  9.70
+      WHEN ticker = 'RMO3' THEN 10.15 WHEN ticker = 'LEA3' THEN  9.70
       WHEN ticker = 'COE3' THEN  8.95 WHEN ticker = 'CAV3' THEN  8.73
       WHEN ticker = 'DRA3' THEN  8.51 WHEN ticker = 'LDI3' THEN  8.29
       WHEN ticker = 'PAN3' THEN  8.07 WHEN ticker = 'VOZ3' THEN  7.85
       WHEN ticker = 'GAP3' THEN  8.35 WHEN ticker = 'TIG3' THEN  6.13
-      WHEN ticker = 'DOU3' THEN  5.91 WHEN ticker = 'LEP3' THEN  5.69
+      WHEN ticker = 'CBA3' THEN  5.91 WHEN ticker = 'LEP3' THEN  5.69
       WHEN ticker = 'PER3' THEN  5.47 WHEN ticker = 'IND3' THEN  5.25
       WHEN ticker = 'TUB3' THEN  5.75 WHEN ticker = 'NAF3' THEN  5.53
       WHEN ticker = 'TIV3' THEN  3.31 WHEN ticker = 'FAS3' THEN  3.09
@@ -270,9 +270,9 @@ SET
     END)
   )
 WHERE ticker IN (
-  'URU3','POR3','TIM3','TRI3','GAL3','FOG3','COL3','IMO3','RAP3','MAL3',
-  'TFN3','GUE3','TOR3','LEM3','BAL3','FUR3','VOA3','CON3','LEA3','LEB3',
-  'COE3','CAV3','DRA3','LDI3','PAN3','VOZ3','GAP3','TIG3','DOU3','LEP3',
+  'URU3','POR3','TIM3','TRI3','GAL3','REG3','COL3','IMO3','RAP3','CRZ3',
+  'BMP3','GUE3','TOR3','LEM3','PEI3','FUR3','COX3','CON3','RMO3','LEA3',
+  'COE3','CAV3','DRA3','LDI3','PAN3','VOZ3','GAP3','TIG3','CBA3','LEP3',
   'PER3','IND3','TUB3','NAF3','TIV3','FAS3','MAC3','ABT3','LEI3','TIS3'
 );
 
@@ -282,9 +282,9 @@ DELETE FROM price_history
 WHERE asset_id IN (
   SELECT id FROM assets
   WHERE ticker IN (
-    'URU3','POR3','TIM3','TRI3','GAL3','FOG3','COL3','IMO3','RAP3','MAL3',
-    'TFN3','GUE3','TOR3','LEM3','BAL3','FUR3','VOA3','CON3','LEA3','LEB3',
-    'COE3','CAV3','DRA3','LDI3','PAN3','VOZ3','GAP3','TIG3','DOU3','LEP3',
+    'URU3','POR3','TIM3','TRI3','GAL3','REG3','COL3','IMO3','RAP3','CRZ3',
+    'BMP3','GUE3','TOR3','LEM3','PEI3','FUR3','COX3','CON3','RMO3','LEA3',
+    'COE3','CAV3','DRA3','LDI3','PAN3','VOZ3','GAP3','TIG3','CBA3','LEP3',
     'PER3','IND3','TUB3','NAF3','TIV3','FAS3','MAC3','ABT3','LEI3','TIS3'
   )
 );
@@ -298,9 +298,9 @@ COMMIT;
 --        volume, is_active, is_halted, sentiment
 -- FROM assets
 -- WHERE ticker IN (
---   'URU3','POR3','TIM3','TRI3','GAL3','FOG3','COL3','IMO3','RAP3','MAL3',
---   'TFN3','GUE3','TOR3','LEM3','BAL3','FUR3','VOA3','CON3','LEA3','LEB3',
---   'COE3','CAV3','DRA3','LDI3','PAN3','VOZ3','GAP3','TIG3','DOU3','LEP3',
+--   'URU3','POR3','TIM3','TRI3','GAL3','REG3','COL3','IMO3','RAP3','CRZ3',
+--   'BMP3','GUE3','TOR3','LEM3','PEI3','FUR3','COX3','CON3','RMO3','LEA3',
+--   'COE3','CAV3','DRA3','LDI3','PAN3','VOZ3','GAP3','TIG3','CBA3','LEP3',
 --   'PER3','IND3','TUB3','NAF3','TIV3','FAS3','MAC3','ABT3','LEI3','TIS3'
 -- )
 -- ORDER BY division, current_price DESC;

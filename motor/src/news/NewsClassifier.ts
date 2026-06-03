@@ -96,9 +96,9 @@ export class RateLimitError extends Error {
 // ---------------------------------------------------------------------------
 
 const TICKERS_40 = [
-  'URU3', 'POR3', 'TIM3', 'TRI3', 'GAL3', 'FOG3', 'COL3', 'IMO3', 'RAP3', 'MAL3',
-  'TFN3', 'GUE3', 'TOR3', 'LEM3', 'BAL3', 'FUR3', 'VOA3', 'CON3', 'LEA3', 'LEB3',
-  'COE3', 'CAV3', 'DRA3', 'LDI3', 'PAN3', 'VOZ3', 'GAP3', 'TIG3', 'DOU3', 'LEP3',
+  'URU3', 'POR3', 'TIM3', 'TRI3', 'GAL3', 'REG3', 'COL3', 'IMO3', 'RAP3', 'CRZ3',
+  'BMP3', 'GUE3', 'TOR3', 'LEM3', 'PEI3', 'FUR3', 'COX3', 'CON3', 'RMO3', 'LEA3',
+  'COE3', 'CAV3', 'DRA3', 'LDI3', 'PAN3', 'VOZ3', 'GAP3', 'TIG3', 'CBA3', 'LEP3',
   'PER3', 'IND3', 'TUB3', 'NAF3', 'TIV3', 'FAS3', 'MAC3', 'ABT3', 'LEI3', 'TIS3',
 ]
 

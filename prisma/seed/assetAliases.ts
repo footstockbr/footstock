@@ -60,22 +60,22 @@ const ALIAS_MAP: Array<{ alias: string; assetTicker: string }> = [
   { alias: 'FLU4',  assetTicker: 'GUE3' },
   { alias: 'FLU11', assetTicker: 'GUE3' },
 
-  // BAL3 = Santos
-  { alias: 'SAN3',  assetTicker: 'BAL3' },
-  { alias: 'SAN4',  assetTicker: 'BAL3' },
-  { alias: 'SAN11', assetTicker: 'BAL3' },
+  // PEI3 = Santos
+  { alias: 'SAN3',  assetTicker: 'PEI3' },
+  { alias: 'SAN4',  assetTicker: 'PEI3' },
+  { alias: 'SAN11', assetTicker: 'PEI3' },
 
-  // MAL3 = Vasco da Gama
-  { alias: 'VAS3',  assetTicker: 'MAL3' },
-  { alias: 'VAS4',  assetTicker: 'MAL3' },
-  { alias: 'VAS11', assetTicker: 'MAL3' },
-  { alias: 'CRV3',  assetTicker: 'MAL3' },
+  // CRZ3 = Vasco da Gama
+  { alias: 'VAS3',  assetTicker: 'CRZ3' },
+  { alias: 'VAS4',  assetTicker: 'CRZ3' },
+  { alias: 'VAS11', assetTicker: 'CRZ3' },
+  { alias: 'CRV3',  assetTicker: 'CRZ3' },
 
-  // FOG3 = Botafogo
-  { alias: 'BOT3',  assetTicker: 'FOG3' },
-  { alias: 'BOT4',  assetTicker: 'FOG3' },
-  { alias: 'BOT11', assetTicker: 'FOG3' },
-  { alias: 'BFR3',  assetTicker: 'FOG3' },
+  // REG3 = Botafogo
+  { alias: 'BOT3',  assetTicker: 'REG3' },
+  { alias: 'BOT4',  assetTicker: 'REG3' },
+  { alias: 'BOT11', assetTicker: 'REG3' },
+  { alias: 'BFR3',  assetTicker: 'REG3' },
 
   // FUR3 = Athletico-PR
   { alias: 'CAP3',  assetTicker: 'FUR3' },
@@ -88,11 +88,11 @@ const ALIAS_MAP: Array<{ alias: string; assetTicker: string }> = [
   { alias: 'FEC4',  assetTicker: 'FOR3' },
   { alias: 'FEC11', assetTicker: 'FOR3' },
 
-  // TFN3 = Bahia
-  { alias: 'BAH3',  assetTicker: 'TFN3' },
-  { alias: 'BAH4',  assetTicker: 'TFN3' },
-  { alias: 'BAH11', assetTicker: 'TFN3' },
-  { alias: 'ECB3',  assetTicker: 'TFN3' },
+  // BMP3 = Bahia
+  { alias: 'BAH3',  assetTicker: 'BMP3' },
+  { alias: 'BAH4',  assetTicker: 'BMP3' },
+  { alias: 'BAH11', assetTicker: 'BMP3' },
+  { alias: 'ECB3',  assetTicker: 'BMP3' },
 
   // RAP3 = Cruzeiro
   { alias: 'CRU3',  assetTicker: 'RAP3' },

@@ -5,7 +5,7 @@ const sb = createClient(
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im54dWVraHNmdnZ4ZHdjdHRoYXV4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDU2NjY2NCwiZXhwIjoyMDkwMTQyNjY0fQ.HB1GGnwcQNpD8RBxx_6wedJVw51usLREN4QQtmCPTqo'
 )
 
-const tickers = ['FOG3','GAL3','POR4','TIM3','TRI4','URU3']
+const tickers = ['REG3','GAL3','POR4','TIM3','TRI4','URU3']
 
 async function snap(label) {
   const { data } = await sb.from('assets')

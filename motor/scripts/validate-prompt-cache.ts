@@ -20,9 +20,9 @@ class FakeRedis {
 // cruzar o gate de 1024 tokens, replicando o tamanho de producao sem precisar
 // do Prisma/DB. Sem isso o prefixo fica pequeno e o cache nem engata.
 const REAL_TICKERS = [
-  'URU3', 'POR3', 'FOG3', 'TFN3', 'GUE3', 'TOR3', 'LEM3', 'BAL3', 'FUR3', 'VOA3',
-  'CON3', 'LEA3', 'LEB3', 'COE3', 'CAV3', 'DRA3', 'LDI3', 'PAN3', 'VOZ3', 'GAP3',
-  'TIG3', 'DOU3', 'LEP3', 'PER3', 'IND3', 'TUB3', 'NAF3', 'TIV3', 'FAS3', 'MAC3',
+  'URU3', 'POR3', 'REG3', 'BMP3', 'GUE3', 'TOR3', 'LEM3', 'PEI3', 'FUR3', 'COX3',
+  'CON3', 'RMO3', 'LEA3', 'COE3', 'CAV3', 'DRA3', 'LDI3', 'PAN3', 'VOZ3', 'GAP3',
+  'TIG3', 'CBA3', 'LEP3', 'PER3', 'IND3', 'TUB3', 'NAF3', 'TIV3', 'FAS3', 'MAC3',
   'ABT3', 'LEI3', 'TIS3', 'GAV3', 'ESM4', 'VER3', 'TIM4', 'COL3', 'MEN4', 'RAP3',
 ]
 const ALIASES = ['clube', 'time', 'equipe', 'agremiacao', 'esquadrao', 'tricolor']

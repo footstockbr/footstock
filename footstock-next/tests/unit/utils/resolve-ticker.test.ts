@@ -80,8 +80,8 @@ describe('resolveTickerFromText', () => {
     expect(await resolveTickerFromText('Grêmio enfrenta rival gaúcho')).toBe('IMO3')
   })
 
-  test('[PASSO2] "vitoria" (ticker LEB3, não VIT3 ghost) → LEB3', async () => {
-    expect(await resolveTickerFromText('Vitória vence o Bahia no clássico baiano')).toBe('LEB3')
+  test('[PASSO2] "vitoria" (ticker LEA3, não VIT3 ghost) → LEA3', async () => {
+    expect(await resolveTickerFromText('Vitória vence o Bahia no clássico baiano')).toBe('LEA3')
   })
 
   test('[PASSO2] "fortaleza" (ticker LEP3, não FOR3 ghost) → LEP3', async () => {
@@ -148,7 +148,7 @@ describe('resolveTickerFromText', () => {
   test('[PASSO1] Alias mais longo do DB vence alias mais curto', async () => {
     mockDb([
       { ticker: 'URU3', searchText: 'flamengo,rubro negro carioca' },
-      { ticker: 'TFN3', searchText: 'bahia' },
+      { ticker: 'BMP3', searchText: 'bahia' },
     ])
     // "rubro negro carioca" (18 chars) > "flamengo" (8 chars), ambos mapeiam URU3
     expect(await resolveTickerFromText('O rubro negro carioca domina o campeonato')).toBe('URU3')
@@ -171,7 +171,7 @@ describe('resolveTickerFromText', () => {
     expect(isActiveTicker('URU3')).toBe(true)
     expect(isActiveTicker('uru3')).toBe(true)   // case-insensitive
     expect(isActiveTicker('LEP3')).toBe(true)   // tickers corrigidos (não FOR3)
-    expect(isActiveTicker('LEB3')).toBe(true)   // não VIT3
+    expect(isActiveTicker('LEA3')).toBe(true)   // não VIT3
     expect(isActiveTicker('IND3')).toBe(true)   // não JUV3
   })
 

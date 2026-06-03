@@ -99,9 +99,9 @@ describe('T-024 — Seeds', () => {
     expect(fileContains('prisma/seed/assetAliases.ts', "assetTicker: 'URU3'")).toBe(true)
   })
 
-  it('seed de assetAliases cobre BOT3→FOG3 (Botafogo)', () => {
+  it('seed de assetAliases cobre BOT3→REG3 (Botafogo)', () => {
     expect(fileContains('prisma/seed/assetAliases.ts', "alias: 'BOT3'")).toBe(true)
-    expect(fileContains('prisma/seed/assetAliases.ts', "assetTicker: 'FOG3'")).toBe(true)
+    expect(fileContains('prisma/seed/assetAliases.ts', "assetTicker: 'REG3'")).toBe(true)
   })
 
   it('seed assets.ts usa displayName (não name) para o campo fictício', () => {

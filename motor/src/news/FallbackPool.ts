@@ -38,7 +38,7 @@ const FALLBACK_POOL: RawNewsItem[] = [
   },
   {
     url: 'https://ge.globo.com/futebol/noticia/placeholder-bal3-001',
-    title: '[BAL3] Baleia da Vila sofre goleada e cai na tabela',
+    title: '[PEI3] Baleia da Vila sofre goleada e cai na tabela',
     description: 'Sequência negativa pressiona sentimento e aumenta volatilidade no papel.',
     source: 'Globo Esporte',
     publishedAt: '2026-01-18T20:00:00.000Z',
@@ -80,7 +80,7 @@ const FALLBACK_POOL: RawNewsItem[] = [
   },
   {
     url: 'https://ge.globo.com/futebol/noticia/placeholder-dou3-001',
-    title: '[DOU3] Dourado do Pantanal vende destaque para o exterior',
+    title: '[CBA3] Dourado do Pantanal vende destaque para o exterior',
     description: 'Negócio melhora caixa e gera leitura positiva para fundamentos do clube.',
     source: 'Globo Esporte',
     publishedAt: '2026-01-24T12:00:00.000Z',
@@ -101,7 +101,7 @@ const FALLBACK_POOL: RawNewsItem[] = [
   },
   {
     url: 'https://ge.globo.com/futebol/noticia/placeholder-tri3-001',
-    title: '[TFN3] Tricolor da Fonte Nova fecha reforço para o setor ofensivo',
+    title: '[BMP3] Tricolor da Fonte Nova fecha reforço para o setor ofensivo',
     description: 'Movimento reforça elenco e melhora percepção de competitividade.',
     source: 'Globo Esporte',
     publishedAt: '2026-01-27T10:00:00.000Z',
@@ -115,14 +115,14 @@ const FALLBACK_POOL: RawNewsItem[] = [
   },
   {
     url: 'https://www.lance.com.br/noticia/placeholder-leb3-001',
-    title: '[LEB3] Leao da Barra confirma permanência do artilheiro',
+    title: '[LEA3] Leao da Barra confirma permanência do artilheiro',
     description: 'Renovação fortalece continuidade tática e estabilidade de expectativas.',
     source: 'Lance!',
     publishedAt: '2026-01-29T13:00:00.000Z',
   },
   {
     url: 'https://ge.globo.com/futebol/noticia/placeholder-fog3-001',
-    title: '[FOG3] Estrela do General anuncia patrocínio máster recorde',
+    title: '[REG3] Estrela do General anuncia patrocínio máster recorde',
     description: 'Nova receita recorrente eleva potencial de valuation no médio prazo.',
     source: 'Globo Esporte',
     publishedAt: '2026-01-30T09:00:00.000Z',
@@ -143,7 +143,7 @@ const FALLBACK_POOL: RawNewsItem[] = [
   },
   {
     url: 'https://ge.globo.com/futebol/noticia/placeholder-bal3-002',
-    title: '[BAL3] Baleia da Vila anuncia novo patrocínio e plano financeiro',
+    title: '[PEI3] Baleia da Vila anuncia novo patrocínio e plano financeiro',
     description: 'Reestruturação melhora perspectiva de caixa e reduz percepção de risco.',
     source: 'Globo Esporte',
     publishedAt: '2026-02-02T15:00:00.000Z',

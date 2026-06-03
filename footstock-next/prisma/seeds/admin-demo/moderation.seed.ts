@@ -35,13 +35,13 @@ const SUSPICIOUS_POSTS = [
   },
   {
     content: 'Alguém sabe o CPF do admin desse app? Quero contato direto.',
-    ticker: 'FOG3',
+    ticker: 'REG3',
     flagCount: 3,
     daysAgo: 0.21, // 5h atrás
   },
   {
-    content: 'Invista em MAL3 e ganhe 300% em 1 semana. DM para estratégia exclusiva.',
-    ticker: 'MAL3',
+    content: 'Invista em CRZ3 e ganhe 300% em 1 semana. DM para estratégia exclusiva.',
+    ticker: 'CRZ3',
     flagCount: 4,
     daysAgo: 0.25, // 6h atrás
   },

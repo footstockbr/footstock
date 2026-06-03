@@ -146,8 +146,8 @@ describe('Contrato market:tick', () => {
 
   it('[EDGE] assertTickFrequencySLA deve detectar violação de SLA', () => {
     const timestamps = [1000, 2000, 4200] // intervalo 2200ms > 2100ms
-    expect(() => assertTickFrequencySLA(timestamps, 2100, 'FOG3')).toThrow(
-      /SLA violado para FOG3/,
+    expect(() => assertTickFrequencySLA(timestamps, 2100, 'REG3')).toThrow(
+      /SLA violado para REG3/,
     )
   })
 })

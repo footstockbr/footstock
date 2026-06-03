@@ -77,7 +77,7 @@ function toSerieBSeed(index: number, ticker: string): ClubSeedData {
 
 const SERIE_A_TICKERS = [
   'URU3', 'POR3', 'TIM3', 'TRI3', 'GAL3', 'IMO3', 'COL3', 'GUE3',
-  'BAL3', 'MAL3', 'FOG3', 'FUR3', 'FOR3', 'TFN3', 'RAP3', 'RBB3',
+  'PEI3', 'CRZ3', 'REG3', 'FUR3', 'FOR3', 'BMP3', 'RAP3', 'RBB3',
   'CUI3', 'VIT3', 'JUV3', 'MIR3',
 ]
 

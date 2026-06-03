@@ -134,10 +134,10 @@ describe('NewsClassifier', () => {
     mockCreate
       .mockRejectedValueOnce(rl)
       .mockRejectedValueOnce(rl)
-      .mockResolvedValue(sonnetsResponse({ ticker: 'FOG3', sentiment: 0.2, impactCategory: 'INSTITUCIONAL', relevance: 0.4 }))
+      .mockResolvedValue(sonnetsResponse({ ticker: 'REG3', sentiment: 0.2, impactCategory: 'INSTITUCIONAL', relevance: 0.4 }))
 
     const result = await classifier.classify(makeRawItem())
-    expect(result.ticker).toBe('FOG3')
+    expect(result.ticker).toBe('REG3')
     expect(mockCreate).toHaveBeenCalledTimes(3)
   }, 10_000)
 
@@ -247,7 +247,7 @@ describe('NewsClassifier', () => {
     const item = makeRawItem()
 
     mockCreate.mockResolvedValue(sonnetsResponse({
-      ticker: 'FOG3', sentiment: 0.6, impactCategory: 'RESULTADO_ESPORTIVO', relevance: 0.7,
+      ticker: 'REG3', sentiment: 0.6, impactCategory: 'RESULTADO_ESPORTIVO', relevance: 0.7,
     }))
 
     // Esvaziar a fila, depois enfileirar 1 item
@@ -260,7 +260,7 @@ describe('NewsClassifier', () => {
     await classifier.startClassifying(mockPublisher as any)
 
     expect(mockPublisher.publish).toHaveBeenCalledTimes(1)
-    expect(mockPublisher.publish).toHaveBeenCalledWith(item, expect.objectContaining({ ticker: 'FOG3' }))
+    expect(mockPublisher.publish).toHaveBeenCalledWith(item, expect.objectContaining({ ticker: 'REG3' }))
   }, 5000)
 
   test('[DEGRADED — RateLimitError no worker] re-enfileira item e loga RATE_001', async () => {
