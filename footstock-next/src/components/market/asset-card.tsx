@@ -99,7 +99,7 @@ function AssetCard({ asset, isFavorite }: AssetCardProps) {
         href={ROUTES.MERCADO_DETALHE(asset.ticker)}
         data-testid="asset-card"
         className={cn(
-          "block bg-[#1E2329] rounded-lg border p-3 hover:border-[rgba(240,185,11,.35)] transition-colors",
+          "block min-h-[80px] md:min-w-[350px] md:flex-1 bg-[#1E2329] rounded-lg border p-3 hover:border-[rgba(240,185,11,.35)] transition-colors",
           isFavorite ? FAVORITE_CARD_CLASSES : "border-[rgba(240,185,11,.2)]"
         )}
       >
@@ -166,7 +166,7 @@ function AssetCard({ asset, isFavorite }: AssetCardProps) {
       href={ROUTES.MERCADO_DETALHE(asset.ticker)}
       data-testid="asset-card"
       className={cn(
-        "relative block bg-[#1E2329] rounded-lg border p-3 transition-all duration-150 hover:border-[rgba(240,185,11,.35)] hover:bg-[rgba(240,185,11,.04)] active:scale-[0.99]",
+        "relative block min-h-[80px] md:min-w-[350px] md:flex-1 bg-[#1E2329] rounded-lg border p-3 transition-all duration-150 hover:border-[rgba(240,185,11,.35)] hover:bg-[rgba(240,185,11,.04)] active:scale-[0.99]",
         isFavorite ? FAVORITE_CARD_CLASSES : "border-[rgba(240,185,11,.18)]"
       )}
     >
@@ -262,7 +262,7 @@ function AssetCardSkeleton() {
   return (
     <div
       data-testid="asset-card-skeleton"
-      className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.1)] p-3"
+      className="min-h-[80px] md:min-w-[350px] md:flex-1 bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.1)] p-3"
       aria-hidden="true"
     >
       <div className="flex items-center gap-2.5">

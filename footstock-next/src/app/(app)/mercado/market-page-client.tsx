@@ -272,7 +272,7 @@ export function MarketPageClient() {
 
       {/* Asset list */}
       {isLoading ? (
-        <div className="flex flex-col gap-2 p-4">
+        <div className="flex flex-col gap-2 p-4 md:flex-row md:flex-wrap">
           {Array.from({ length: 8 }).map((_, i) => (
             <AssetCardSkeleton key={i} />
           ))}
@@ -290,7 +290,7 @@ export function MarketPageClient() {
         <div
           data-testid="market-list"
           data-tour="market-list"
-          className="flex flex-col gap-2 p-4 md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+          className="flex flex-col gap-2 p-4 md:flex-row md:flex-wrap"
         >
           {filtered.map((asset) => (
             <AssetCard
