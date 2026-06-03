@@ -62,7 +62,13 @@ export async function settleOrderFill(
     return { settled: false, reason: 'ALREADY_SETTLED' }
   }
 
-  const user = await tx.user.findUniqueOrThrow({ where: { id: order.userId } })
+  // select explícito: o settlement só precisa do saldo. Evita ler colunas que o
+  // client do motor (gerado do root schema) possa ter mas o DB não — defesa contra
+  // drift de schema entre root prisma/schema.prisma e a tabela real.
+  const user = await tx.user.findUniqueOrThrow({
+    where: { id: order.userId },
+    select: { fsBalance: true },
+  })
   const balanceBefore = Number(user.fsBalance)
   const operationValue = order.quantity * executionPrice
   const feeAmount = calculateFee(operationValue)

@@ -213,7 +213,6 @@ model User {
   favoriteClub           String?          @map("favorite_club")
   fsBalance              Decimal          @default(10000) @map("fs_balance") @db.Decimal(18, 2)
   marginBlocked          Decimal          @default(0) @map("margin_blocked") @db.Decimal(18, 2)
-  ageVerificationPending Boolean          @default(false) @map("age_verification_pending")
   referredByCode         String?          @map("referred_by_code")
   favoriteClubDisplayName String?         @map("favorite_club_display_name")
   bio                    String?          @db.VarChar(300)
