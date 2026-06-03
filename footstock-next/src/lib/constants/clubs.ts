@@ -1,21 +1,13 @@
 // ============================================================================
 // CLUBS — Lista completa dos 40 clubes COM realName (server-only).
 //
-// IMPORTANTE: este modulo e server-only via `import 'server-only'`. Importar
-// daqui em qualquer Client Component fara o build do Next.js falhar — exato
-// comportamento desejado para evitar vazar a associacao ticker<->clube real
-// no bundle JS publico.
+// IMPORTANTE: modulo server-only. Importar em Client Component quebra o build.
+// Para Client Components, importar de './clubs-public' (sem realName).
 //
-// Para uso em Client Components, importar de './clubs-public' (sem realName).
-//
-// Em runtime, a fonte da verdade do realName e o banco (tabela `assets`,
-// coluna `real_name`, populada via migration M056). Esta constante existe
-// como bootstrap/seed snapshot e fallback de derivacao no register API.
+// realName conforme a tabela canonica de Precificacao IPO 2026 (clube real por
+// ticker). Em runtime a fonte da verdade do realName e o banco (assets.real_name).
 // ============================================================================
 
-// Guardrail server-only manual. Equivalente a `import 'server-only'` mas
-// compativel com Node puro (Prisma seed via tsx) onde o pacote `server-only`
-// lança incondicionalmente sem o resolver custom do Next.js.
 if (typeof window !== 'undefined') {
   throw new Error(
     "[clubs.ts] modulo server-only — importe de '@/lib/constants/clubs-public' em Client Components."
@@ -35,123 +27,135 @@ const REAL_NAMES: Record<string, string> = {
   POR3: 'Palmeiras',
   TIM3: 'Corinthians',
   TRI3: 'São Paulo',
-  GAL3: 'Atlético-MG',
-  IMO3: 'Grêmio',
-  COL3: 'Internacional',
   GUE3: 'Fluminense',
-  BAL3: 'Santos',
-  MAL3: 'Vasco da Gama',
-  FOG3: 'Botafogo',
+  GAL3: 'Atlético-MG',
+  REG3: 'Botafogo',
+  COL3: 'Internacional',
+  TOR3: 'RB Bragantino',
   FUR3: 'Athletico-PR',
-  FOR3: 'Fortaleza',
-  TFN3: 'Bahia',
+  IMO3: 'Grêmio',
+  PEI3: 'Santos',
+  CRZ3: 'Vasco da Gama',
   RAP3: 'Cruzeiro',
-  RBB3: 'RB Bragantino',
-  CUI3: 'Cuiabá',
-  VIT3: 'Vitória',
-  JUV3: 'Juventude',
-  MIR3: 'Mirassol',
+  BMP3: 'Bahia',
+  LEA3: 'Vitória',
+  COX3: 'Coritiba',
+  LEM3: 'Mirassol',
+  CON3: 'Chapecoense',
+  RMO3: 'Remo',
   // Serie B
+  LEP3: 'Fortaleza',
+  CBA3: 'Cuiabá',
+  VOZ3: 'Ceará',
+  TIG3: 'Criciúma',
   LEI3: 'Sport Recife',
-  NTL3: 'Novorizontino',
-  AVA3: 'Avaí',
-  GOI3: 'Goiás',
-  CHA3: 'Chapecoense',
-  PON3: 'Ponte Preta',
-  GUA3: 'Guarani',
-  OPE3: 'Operário-PR',
-  SAM3: 'Sampaio Corrêa',
+  IND3: 'Juventude',
+  COE3: 'América-MG',
+  DRA3: 'Atlético Goianiense',
+  LDI3: 'Avaí',
+  TIV3: 'Novorizontino',
+  GAP3: 'CRB',
   TIS3: 'Vila Nova',
-  LON3: 'Londrina',
-  FIG3: 'Figueirense',
-  PAY3: 'Paysandu',
-  CFC3: 'Coritiba',
-  AME3: 'América-MG',
-  BSA3: 'Botafogo-SP',
-  CRB3: 'CRB',
-  CSA3: 'CSA',
-  ITA3: 'Ituano',
-  TON3: 'Tombense',
+  PAN3: 'Botafogo-SP',
+  PER3: 'Goiás',
+  FAS3: 'Operário-PR',
+  NAF3: 'Náutico',
+  MAC3: 'Ponte Preta',
+  TUB3: 'Londrina',
+  CAV3: 'Athletic Club',
+  ABT3: 'São Bernardo',
 }
 
 /** 40 clubes do futebol brasileiro (Série A + B), com realName server-only. */
-export const CLUBS: ClubOption[] = CLUBS_PUBLIC.map((c) => ({
-  ...c,
-  realName: REAL_NAMES[c.ticker] ?? c.displayName,
+export const CLUBS: ClubOption[] = CLUBS_PUBLIC.map((club) => ({
+  ...club,
+  realName: REAL_NAMES[club.ticker] ?? club.displayName,
 }))
 
-/**
- * Mapeamento ticker -> cores primaria/secundaria para uso no seed e UI.
- * Cores escolhidas com base na identidade visual aproximada dos clubes reais.
- */
+/** Mapeamento ticker -> cores primaria/secundaria (seed e UI). */
 export const CLUB_COLORS: Record<string, { primary: string; secondary: string }> = {
-  // Série A
-  URU3: { primary: '#C8102E', secondary: '#000000' }, // Flamengo
-  POR3: { primary: '#006F3C', secondary: '#FFFFFF' }, // Palmeiras
-  TIM3: { primary: '#000000', secondary: '#FFFFFF' }, // Corinthians
-  TRI3: { primary: '#CC0000', secondary: '#000000' }, // São Paulo
-  GAL3: { primary: '#000000', secondary: '#FFFFFF' }, // Atletico-MG
-  IMO3: { primary: '#023778', secondary: '#FFFFFF' }, // Grêmio
-  COL3: { primary: '#D00000', secondary: '#FFFFFF' }, // Internacional
-  GUE3: { primary: '#6D2038', secondary: '#339933' }, // Fluminense
-  BAL3: { primary: '#FFFFFF', secondary: '#000000' }, // Santos
-  MAL3: { primary: '#000000', secondary: '#FFFFFF' }, // Vasco
-  FOG3: { primary: '#000000', secondary: '#FFFFFF' }, // Botafogo
-  FUR3: { primary: '#CC0000', secondary: '#000000' }, // Athletico-PR
-  FOR3: { primary: '#002366', secondary: '#CC0000' }, // Fortaleza
-  TFN3: { primary: '#1B368A', secondary: '#CC0000' }, // Bahia
-  RAP3: { primary: '#0033A0', secondary: '#FFFFFF' }, // Cruzeiro
-  RBB3: { primary: '#FFFFFF', secondary: '#CC0000' }, // RB Bragantino
-  CUI3: { primary: '#DAA520', secondary: '#1A237E' }, // Cuiabá
-  VIT3: { primary: '#CC0000', secondary: '#000000' }, // Vitória
-  JUV3: { primary: '#006400', secondary: '#FFFFFF' }, // Juventude
-  MIR3: { primary: '#FFD700', secondary: '#000080' }, // Mirassol
-  // Série B
-  LEI3: { primary: '#CC0000', secondary: '#000000' }, // Sport Recife
-  NTL3: { primary: '#CC6600', secondary: '#FFFFFF' }, // Novorizontino
-  AVA3: { primary: '#003399', secondary: '#000000' }, // Avaí
-  GOI3: { primary: '#006400', secondary: '#FFFFFF' }, // Goiás
-  CHA3: { primary: '#006400', secondary: '#FFFFFF' }, // Chapecoense
-  PON3: { primary: '#000000', secondary: '#FFFFFF' }, // Ponte Preta
-  GUA3: { primary: '#006400', secondary: '#FFFFFF' }, // Guarani
-  OPE3: { primary: '#000000', secondary: '#FFFFFF' }, // Operário-PR
-  SAM3: { primary: '#CC0000', secondary: '#000000' }, // Sampaio Corrêa
-  TIS3: { primary: '#CC6600', secondary: '#FFFFFF' }, // Vila Nova
-  LON3: { primary: '#CC0000', secondary: '#FFFFFF' }, // Londrina
-  FIG3: { primary: '#000000', secondary: '#FFFFFF' }, // Figueirense
-  PAY3: { primary: '#003399', secondary: '#FFFFFF' }, // Paysandu
-  CFC3: { primary: '#006400', secondary: '#FFFFFF' }, // Coritiba
-  AME3: { primary: '#006400', secondary: '#FFFFFF' }, // América-MG
-  BSA3: { primary: '#000000', secondary: '#FFFFFF' }, // Botafogo-SP
-  CRB3: { primary: '#CC0000', secondary: '#000000' }, // CRB
-  CSA3: { primary: '#000099', secondary: '#FFFFFF' }, // CSA
-  ITA3: { primary: '#CC0000', secondary: '#000000' }, // Ituano
-  TON3: { primary: '#1A1A2E', secondary: '#FFFFFF' }, // Tombense
+  URU3: { primary: '#e21d1d', secondary: '#1a1a1a' }, // Flamengo
+  POR3: { primary: '#006432', secondary: '#ffffff' }, // Palmeiras
+  TIM3: { primary: '#1a1a1a', secondary: '#ffffff' }, // Corinthians
+  TRI3: { primary: '#cc0000', secondary: '#1a1a1a' }, // São Paulo
+  GUE3: { primary: '#8b0000', secondary: '#16a34a' }, // Fluminense
+  GAL3: { primary: '#1a1a1a', secondary: '#ffffff' }, // Atlético-MG
+  REG3: { primary: '#1a1a1a', secondary: '#ffffff' }, // Botafogo
+  COL3: { primary: '#cc0000', secondary: '#ffffff' }, // Internacional
+  TOR3: { primary: '#e21d1d', secondary: '#ffffff' }, // RB Bragantino
+  FUR3: { primary: '#cc0000', secondary: '#1a1a1a' }, // Athletico-PR
+  IMO3: { primary: '#0b56a5', secondary: '#f59e0b' }, // Grêmio
+  PEI3: { primary: '#1a1a1a', secondary: '#ffffff' }, // Santos
+  CRZ3: { primary: '#1a1a1a', secondary: '#ffffff' }, // Vasco da Gama
+  RAP3: { primary: '#003fa3', secondary: '#ffffff' }, // Cruzeiro
+  BMP3: { primary: '#003fa3', secondary: '#cc0000' }, // Bahia
+  LEA3: { primary: '#cc0000', secondary: '#1a1a1a' }, // Vitória
+  COX3: { primary: '#006432', secondary: '#ffffff' }, // Coritiba
+  LEM3: { primary: '#f59e0b', secondary: '#003fa3' }, // Mirassol
+  CON3: { primary: '#006432', secondary: '#ffffff' }, // Chapecoense
+  RMO3: { primary: '#003fa3', secondary: '#ffffff' }, // Remo
+  LEP3: { primary: '#cc0000', secondary: '#003fa3' }, // Fortaleza
+  CBA3: { primary: '#f59e0b', secondary: '#006432' }, // Cuiabá
+  VOZ3: { primary: '#1a1a1a', secondary: '#ffffff' }, // Ceará
+  TIG3: { primary: '#003fa3', secondary: '#ffffff' }, // Criciúma
+  LEI3: { primary: '#cc0000', secondary: '#1a1a1a' }, // Sport Recife
+  IND3: { primary: '#16a34a', secondary: '#ffffff' }, // Juventude
+  COE3: { primary: '#006432', secondary: '#ffffff' }, // América-MG
+  DRA3: { primary: '#e65c00', secondary: '#1a1a1a' }, // Atlético Goianiense
+  LDI3: { primary: '#003fa3', secondary: '#ffffff' }, // Avaí
+  TIV3: { primary: '#1a1a1a', secondary: '#f59e0b' }, // Novorizontino
+  GAP3: { primary: '#003fa3', secondary: '#cc0000' }, // CRB
+  TIS3: { primary: '#cc0000', secondary: '#1a1a1a' }, // Vila Nova
+  PAN3: { primary: '#1a1a1a', secondary: '#f59e0b' }, // Botafogo-SP
+  PER3: { primary: '#16a34a', secondary: '#ffffff' }, // Goiás
+  FAS3: { primary: '#1a1a1a', secondary: '#ffffff' }, // Operário-PR
+  NAF3: { primary: '#cc0000', secondary: '#ffffff' }, // Náutico
+  MAC3: { primary: '#1a1a1a', secondary: '#ffffff' }, // Ponte Preta
+  TUB3: { primary: '#16a34a', secondary: '#ffffff' }, // Londrina
+  CAV3: { primary: '#003fa3', secondary: '#ffffff' }, // Athletic Club
+  ABT3: { primary: '#1a1a1a', secondary: '#f59e0b' }, // São Bernardo
 }
 
-/**
- * Mapeamento ticker -> displayName (nome ficticio usado na plataforma após cadastro).
- * O nome real do clube e exibido APENAS na tela de seleção do cadastro.
- */
+/** Mapeamento ticker -> displayName (nome ficticio usado na plataforma). */
 export const CLUB_DISPLAY_NAMES: Record<string, string> = {
   URU3: 'Urubu da Gavea FC',
   POR3: 'Porco do Parque FC',
-  TIM3: 'Timão do São Jorge FC',
+  TIM3: 'Timao do Sao Jorge FC',
   TRI3: 'Tricolor do Morumbi AC',
-  GAL3: 'Galo da Lagoinha FC',
-  IMO3: 'Imortal da Arena FC',
-  COL3: 'Colorado do Beira-Rio SC',
   GUE3: 'Guerreiro das Laranjeiras AC',
-  BAL3: 'Baleia da Vila Belmiro SC',
-  MAL3: 'Cruz de Malta de São Januário SC',
-  FOG3: 'Estrela do General Severiano RC',
-  FUR3: 'Furacão do Capão da Imbuia FC',
-  FOR3: 'Leão do Pici',
-  TFN3: 'Tricolor da Fonte Nova FC',
-  RAP3: 'Raposa do Mineirão FC',
-  RBB3: 'Toro Loco',
-  CUI3: 'Dourado do Cerrado',
-  VIT3: 'Leão da Barra',
-  JUV3: 'Papo da Serra',
-  MIR3: 'Leão do Interior',
+  GAL3: 'Galo da Lagoinha FC',
+  REG3: 'Estrela do General Severiano RC',
+  COL3: 'Colorado do Beira-Rio SC',
+  TOR3: 'Touro do Nabi FC',
+  FUR3: 'Furacao do Capao da Imbuia FC',
+  IMO3: 'Imortal da Arena FC',
+  PEI3: 'Baleia da Vila Belmiro SC',
+  CRZ3: 'Cruz de Malta de Sao Januario SC',
+  RAP3: 'Raposa do Mineirao FC',
+  BMP3: 'Tricolor da Fonte Nova FC',
+  LEA3: 'Leao da Barra FC',
+  COX3: 'Vovo Alemao do Couto FC',
+  LEM3: 'Leaozinho do Maiao FC',
+  CON3: 'Conda da Arena Verde FC',
+  RMO3: 'Leao Azul do Baenao RC',
+  LEP3: 'Leao do Pici FC',
+  CBA3: 'Dourado do Pantanal FC',
+  VOZ3: 'Vovo do Castelao FC',
+  TIG3: 'Tigre do Heriberto FC',
+  LEI3: 'Leao da Ilha do Retiro FC',
+  IND3: 'Indio da Serra Gaucha FC',
+  COE3: 'Coelho do Calafate FC',
+  DRA3: 'Dragao do Cerradao FC',
+  LDI3: 'Leao da Ilha SC',
+  TIV3: 'Tigre do Vale do Peixe FC',
+  GAP3: 'Galo da Pajucara RC',
+  TIS3: 'Tigre da Serra Dourada FC',
+  PAN3: 'Pantera da Mogiana FC',
+  PER3: 'Periquito da Serrinha FC',
+  FAS3: 'Fantasma dos Campos Gerais FC',
+  NAF3: 'Timbu dos Aflitos FC',
+  MAC3: 'Macaca do Majestoso FC',
+  TUB3: 'Tubarao do Cafe FC',
+  CAV3: 'Cavalo de Tiradentes FC',
+  ABT3: 'Tigre do Grande ABC FC',
 }
