@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server'
 import { getAuthUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { ok, errors } from '@/lib/api'
+import { ok, error, errors } from '@/lib/api'
+import { orderService, AppError } from '@/lib/services/OrderService'
 import type { OrderStatus } from '@/types'
 
 function serializeOrder(o: {
@@ -66,24 +67,14 @@ export async function DELETE(
   const { id } = await params
 
   try {
-    const order = await prisma.order.findUnique({ where: { id } })
-
-    if (!order) return errors.notFound('Ordem não encontrada.')
-    if (order.userId !== auth.user.id) return errors.forbidden()
-
-    if (order.status !== 'OPEN') {
-      return errors.conflict('ORDER_006', 'Apenas ordens abertas podem ser canceladas.')
-    }
-
-    // TODO: Implementar via /auto-flow execute
-    // Estornar saldo debitado + atualizar marginBlocked se SHORT
-    const cancelled = await prisma.order.update({
-      where: { id },
-      data: { status: 'CANCELLED', updatedAt: new Date() },
-    })
-
+    // Delega ao service: CAS otimista + cancelamento do grupo OCO + notificações.
+    // debit-on-execute → cancelar ordem OPEN não reembolsa (nada foi debitado).
+    const cancelled = await orderService.cancelOrder(auth.user.id, id)
     return ok(serializeOrder(cancelled))
-  } catch {
+  } catch (err) {
+    if (err instanceof AppError) {
+      return error(err.code, err.message, err.statusCode, err.details)
+    }
     return errors.server()
   }
 }

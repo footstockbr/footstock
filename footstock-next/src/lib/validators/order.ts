@@ -63,8 +63,19 @@ export const CreateOrderSchema = z
       })
     }
 
-    // OCO requer price, stopLossPrice, takeProfitPrice
+    // OCO é uma proteção de posição LONG: SELL-only (take-profit acima + stop-loss
+    // abaixo do preço de referência). BUY OCO não tem posição a proteger e nunca
+    // foi liquidado corretamente pelo motor — rejeitado explicitamente.
     if (data.type === ORDER_TYPE.OCO) {
+      if (data.side !== ORDER_SIDE.SELL) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['side'],
+          message: 'OCO disponível apenas para venda protetiva (side=SELL) de posição existente. (ORDER_054)',
+        })
+        return
+      }
+
       if (data.price === undefined || data.stopLossPrice === undefined || data.takeProfitPrice === undefined) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -74,26 +85,15 @@ export const CreateOrderSchema = z
         return
       }
 
-      // BUY OCO: stopLoss < price < takeProfit
-      if (data.side === ORDER_SIDE.BUY) {
-        if (!(data.stopLossPrice < data.price && data.price < data.takeProfitPrice)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ['stopLossPrice'],
-            message: 'OCO BUY: stopLossPrice deve ser menor que price, que deve ser menor que takeProfitPrice. (ORDER_054)',
-          })
-        }
-      }
-
-      // SELL OCO: takeProfit < price < stopLoss (proteção contra queda)
-      if (data.side === ORDER_SIDE.SELL) {
-        if (!(data.takeProfitPrice < data.price && data.price < data.stopLossPrice)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ['stopLossPrice'],
-            message: 'OCO SELL: takeProfitPrice deve ser menor que price, que deve ser menor que stopLossPrice. (ORDER_054)',
-          })
-        }
+      // SELL OCO protetivo: stopLoss < price < takeProfit
+      //   stopLossPrice  → vende se o preço CAIR até esse piso (limita perda)
+      //   takeProfitPrice → vende se o preço SUBIR até esse alvo (realiza lucro)
+      if (!(data.stopLossPrice < data.price && data.price < data.takeProfitPrice)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['stopLossPrice'],
+          message: 'OCO: stopLossPrice deve ser menor que price, que deve ser menor que takeProfitPrice. (ORDER_054)',
+        })
       }
     }
 

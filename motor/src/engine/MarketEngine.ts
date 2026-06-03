@@ -496,13 +496,12 @@ export class MarketEngine {
       )
     }
 
-    // Cobrar juros diários de posições LONG alavancadas (sessão CLOSED = fim do dia)
-    if (sessionType === 'CLOSED' && this.tickCount % 300 === 1) {
-      // 300 ticks × 2s = 10 min — trigger no início do período FECHADO, não a cada tick
-      this.leverageInterestRunner.chargeDaily().catch(err =>
-        logger.error('[engine] LeverageInterestRunner erro:', err)
-      )
-    }
+    // Juros de alavancagem: DESABILITADO no motor desde o refactor 2026-06-02.
+    // Cobrador único = Next cron /api/cron/leverage-interest (idempotente por
+    // (positionId, dia BRT) via LeverageService.accrueInterest). Manter ambos
+    // cobrando causava double-charge (R8). LeverageInterestRunner permanece no
+    // codebase apenas para referência/rollback; NÃO invocar aqui.
+    void this.leverageInterestRunner
 
     // Sincronizar preços no banco a cada 10 ticks
     if (this.tickCount % 10 === 0) {

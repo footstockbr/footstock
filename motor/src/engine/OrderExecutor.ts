@@ -7,8 +7,7 @@
 import { PrismaClient, Prisma } from '@prisma/client'
 import type Redis from 'ioredis'
 import { logger } from '../utils/logger'
-import { validateTransition } from './order-contract'
-import { calculateFee } from './fee-constants'
+import { settleOrderFill } from './settlement'
 import type { PrismaOrder, PrismaDecimal } from '../types/prisma.types'
 
 const BATCH_SIZE = 50
@@ -63,137 +62,42 @@ export class OrderExecutor {
     price: number,
   ): Promise<void> {
     try {
-      // Executar atomicamente via Prisma transaction inline
-      await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-        const user = await tx.user.findUniqueOrThrow({ where: { id: order.userId } })
+      // Liquidação unificada (debit-on-execute) — settlement é a autoridade financeira.
+      const result = await this.prisma.$transaction(
+        (tx: Prisma.TransactionClient) => settleOrderFill(tx, order, price),
+        { isolationLevel: 'Serializable' },
+      )
 
-        // Cálculos de taxa (INTAKE canônico: taxa fixa por faixa de valor)
-        const operationValue = order.quantity * price
-        const feeAmount = calculateFee(operationValue)
-
-        const leverageDiv = order.leverageMultiplier === 2 ? 2 : 1
-        const totalCost = order.side === 'BUY'
-          ? operationValue / leverageDiv + feeAmount
-          : -(operationValue - feeAmount)
-
-        const newBalance = Number(user.fsBalance) - (order.side === 'BUY' ? totalCost : -totalCost)
-
-        if (order.side === 'BUY' && newBalance < 0) {
-          throw new Error(`Saldo insuficiente para ordem ${order.id}`)
+      if (!result.settled) {
+        if (result.reason === 'INSUFFICIENT_BALANCE') {
+          logger.warn(`[OrderExecutor] INSUFFICIENT_BALANCE: ordem ${order.id} cancelada no fill (${order.asset.ticker})`)
+          await Promise.allSettled([
+            this.redis.publish(
+              `orders:cancelled:${order.userId}`,
+              JSON.stringify({ orderId: order.id, ticker: order.asset.ticker, motivo: 'INSUFFICIENT_BALANCE' })
+            ),
+            this.redis.publish(
+              `notifications:${order.userId}`,
+              JSON.stringify({
+                type: 'ORDER_CANCELLED', orderId: order.id, ticker: order.asset.ticker,
+                motivo: 'Saldo insuficiente no momento da execução. Ordem cancelada.',
+              })
+            ),
+          ])
         }
+        return
+      }
 
-        // Validar transição de estado antes de atualizar
-        validateTransition(order.status as any, 'FILLED' as any, order.id)
-
-        // Atualizar ordem
-        await tx.order.update({
-          where: { id: order.id },
-          data: { status: 'FILLED', executedPrice: price, fee: feeAmount, executedAt: new Date() },
-        })
-
-        // Atualizar saldo
-        await tx.user.update({ where: { id: order.userId }, data: { fsBalance: newBalance } })
-
-        // Upsert position LONG
-        if (order.side === 'BUY') {
-          const existing = await tx.position.findFirst({
-            where: { userId: order.userId, assetId: order.assetId, side: 'LONG', status: 'OPEN' },
-          })
-          if (existing) {
-            const newQty = existing.quantity + order.quantity
-            const newAvg = (existing.quantity * Number(existing.avgPrice) + order.quantity * price) / newQty
-            await tx.position.update({ where: { id: existing.id }, data: { quantity: newQty, avgPrice: newAvg } })
-          } else {
-            // Alavancagem 2x (Lenda): leverageAmount = metade do valor operado (parte emprestada)
-            const leverageAmount = order.leverageMultiplier === 2
-              ? (order.quantity * price) / 2
-              : 0
-            const dailyInterestRate = order.leverageMultiplier === 2 ? 0.003 : 0
-
-            await tx.position.create({
-              data: {
-                userId: order.userId, assetId: order.assetId,
-                quantity: order.quantity, avgPrice: price,
-                totalInvested: order.quantity * price, side: 'LONG', status: 'OPEN',
-                leverageMultiplier: order.leverageMultiplier,
-                leverageAmount,
-                dailyInterestRate,
-                openedAt: new Date(),
-              },
-            })
-          }
-        } else {
-          const existing = await tx.position.findFirst({
-            where: { userId: order.userId, assetId: order.assetId, side: 'LONG', status: 'OPEN' },
-          })
-          if (existing) {
-            const newQty = existing.quantity - order.quantity
-            await tx.position.update({
-              where: { id: existing.id },
-              data: newQty > 0 ? { quantity: newQty } : { quantity: 0, status: 'CLOSED' },
-            })
-          }
-        }
-
-        // Transaction TRADE — registra a operação principal
-        await tx.transaction.create({
-          data: {
-            userId: order.userId, assetId: order.assetId, orderId: order.id,
-            type: order.type, financialType: 'TRADE', side: order.side,
-            quantity: order.quantity, price, fee: feeAmount,
-            totalAmount: Math.abs(totalCost),
-            fsAmount: order.side === 'BUY' ? -totalCost : totalCost,
-            balanceBefore: Number(user.fsBalance),
-            balanceAfter: newBalance,
-          },
-        })
-
-        // Transaction FEE — linha separada no extrato para rastreabilidade da taxa
-        // Idempotência: ignora se já existe FEE para esta ordem (proteção contra retry)
-        const existingFee = await tx.transaction.findFirst({
-          where: { orderId: order.id, financialType: 'FEE' },
-          select: { id: true },
-        })
-        if (!existingFee) {
-          await tx.transaction.create({
-            data: {
-              userId: order.userId, assetId: order.assetId, orderId: order.id,
-              type: order.type, financialType: 'FEE', side: order.side,
-              quantity: order.quantity, price, fee: feeAmount,
-              totalAmount: feeAmount,
-              fsAmount: -feeAmount,
-              balanceBefore: null,
-              balanceAfter: null,
-            },
-          })
-        }
-
-        // Log de auditoria estruturado — rastreabilidade da taxa cobrada
-        logger.info(
-          `[OrderExecutor] FEE orderId=${order.id} userId=${order.userId} ` +
-          `ticker=${order.asset.ticker} executedPrice=${price} ` +
-          `operationValue=${operationValue} feeAmount=${feeAmount} side=${order.side}`
-        )
-      })
-
-      // Notificar via Redis
-      const startMs = Date.now()
       await this.redis.publish(
         `orders:executed:${order.userId}`,
         JSON.stringify({
-          orderId: order.id,
-          ticker: order.asset.ticker,
-          price,
-          quantity: order.quantity,
-          side: order.side,
-          durationMs: Date.now() - startMs,
+          orderId: order.id, ticker: order.asset.ticker, price,
+          quantity: order.quantity, side: order.side,
         })
       )
-
-      // Métrica para admin dashboard
       await this.redis.incr('motor:metrics:orders_executed').catch(() => {})
 
-      logger.info(`[OrderExecutor] OK orderId=${order.id} ticker=${order.asset.ticker} price=${price}`)
+      logger.info(`[OrderExecutor] OK orderId=${order.id} ticker=${order.asset.ticker} price=${price} fee=${result.feeAmount}`)
     } catch (err) {
       logger.error(`[OrderExecutor] FAIL orderId=${order.id}: ${String(err)}`)
       throw err
@@ -201,38 +105,26 @@ export class OrderExecutor {
   }
 
   /**
-   * Cancela uma ordem MARKET para ativo suspenso e reembolsa saldo do usuário.
-   * Usa currentPrice do ativo como aproximação do valor bloqueado na criação.
+   * Cancela uma ordem MARKET para ativo suspenso (halt/circuit breaker).
+   * debit-on-execute: a ordem NÃO reservou saldo na criação → cancela sem reembolso.
    */
   private async _cancelHaltedMarketOrder(
     order: PrismaOrder & { asset: { ticker: string; currentPrice: PrismaDecimal; isHalted: boolean } }
   ): Promise<void> {
     try {
-      await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-        await tx.order.update({
-          where: { id: order.id },
-          data: { status: 'CANCELLED' },
-        })
-
-        // Reembolso para ordens BUY: valor bloqueado ≈ quantity × currentPrice + fee
-        if (order.side === 'BUY') {
-          const approxPrice = Number(order.asset.currentPrice)
-          const operationValue = order.quantity * approxPrice
-          const leverageDiv = order.leverageMultiplier === 2 ? 2 : 1
-          const refundAmount = (operationValue / leverageDiv) + Number(order.fee)
-          await tx.user.update({
-            where: { id: order.userId },
-            data: { fsBalance: { increment: refundAmount } },
-          })
-        }
+      // CAS: só cancela se ainda OPEN/PARTIAL (anti-corrida com fill no mesmo tick)
+      const claim = await this.prisma.order.updateMany({
+        where: { id: order.id, status: { in: ['OPEN', 'PARTIAL'] } },
+        data: { status: 'CANCELLED' },
       })
+      if (claim.count !== 1) return
 
       await this.redis.publish(
         `orders:cancelled:${order.userId}`,
         JSON.stringify({ orderId: order.id, ticker: order.asset.ticker, motivo: 'ASSET_HALTED' })
       )
 
-      logger.info(`[OrderExecutor] MARKET ordem ${order.id} cancelada por ASSET_HALTED (${order.asset.ticker}) + reembolso aplicado`)
+      logger.info(`[OrderExecutor] MARKET ordem ${order.id} cancelada por ASSET_HALTED (${order.asset.ticker})`)
     } catch (err) {
       logger.error(`[OrderExecutor] Falha ao cancelar ordem ${order.id} por halt: ${String(err)}`)
     }

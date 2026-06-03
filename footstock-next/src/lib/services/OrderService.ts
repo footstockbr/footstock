@@ -207,10 +207,10 @@ export class OrderService {
       throw new AppError('MOTOR_090', 503, { message: 'Motor de mercado temporariamente indisponível.' })
     }
 
-    // === Criação da Ordem com Debit Atômico ===
-    // RESOLVED: race condition — debit e criação em prisma.$transaction atômico.
-    // updateMany com WHERE fsBalance >= requiredBalance garante que saldo negativo
-    // é impossível mesmo com requests concorrentes (sem lock separado).
+    // === Criação da Ordem (debit-on-execute) ===
+    // A criação NÃO debita saldo — apenas valida capacidade (_assertBuyCapacity)
+    // em tx Serializable. O débito real acontece só no fill, no motor (settlement),
+    // que é a autoridade única de liquidação e garante saldo nunca-negativo.
     const leverageMultiplier = dto.leverage === 2 ? 2 : 1
     const reservedDailySlot = await this._reserveDailyLimit(userId, user.planType as PlanType, dto.type)
 
@@ -234,7 +234,7 @@ export class OrderService {
       let takeProfitLeg: Order
       try {
         ;[stopLossLeg, takeProfitLeg] = await prisma.$transaction(async (tx) => {
-          await this._debitRequiredBalance(tx, userId, requiredBalance)
+          await this._assertBuyCapacity(tx, userId, requiredBalance)
           if (dto.side === 'SELL') {
             await this._assertSellAvailable(tx, userId, asset.id, dto.ticker, dto.quantity)
           }
@@ -275,7 +275,7 @@ export class OrderService {
     let order: Order
     try {
       order = await prisma.$transaction(async (tx) => {
-        await this._debitRequiredBalance(tx, userId, requiredBalance)
+        await this._assertBuyCapacity(tx, userId, requiredBalance)
         if (dto.side === 'SELL') {
           await this._assertSellAvailable(tx, userId, asset.id, dto.ticker, dto.quantity)
         }
@@ -342,7 +342,10 @@ export class OrderService {
 
     validateTransition(order.status as import('@/lib/enums').OrderStatus, ORDER_STATUS.CANCELLED, orderId)
 
-    // Refund atômico: cancelar ordem + devolver saldo/margin com locking otimista na order
+    // debit-on-execute: cancelar ordem OPEN NÃO reembolsa saldo (nada foi debitado
+    // na criação) e NÃO mexe em marginBlocked (margin de short pertence ao
+    // ShortService, não a SELLs de /orders, que são vendas de posição LONG).
+    // Único efeito colateral: se for OCO, cancela TODAS as pernas do grupo.
     const cancelled = await prisma.$transaction(async (tx) => {
       // CAS na order: garante que nenhum outro processo mudou o status entre o findUnique e agora
       const updateResult = await tx.order.updateMany({
@@ -363,41 +366,16 @@ export class OrderService {
         })
       }
 
-      const updated = await tx.order.findUnique({ where: { id: orderId } })
-      if (!updated) throw new AppError('ORDER_080', 404, { message: 'Ordem não encontrada após cancelamento.' })
-
-      // Refund de saldo para ordens BUY
-      if (order.side === 'BUY' && order.price) {
-        const operationValue = Number(order.quantity) * Number(order.price)
-        const fee = Number(order.fee) || calculateFee(operationValue)
-        const ownFraction = Number(order.leverageMultiplier) >= 2 ? 0.5 : 1
-        const refundAmount = this._roundFsAmount(operationValue * ownFraction + fee)
-        await tx.user.update({
-          where: { id: userId },
-          data: { fsBalance: { increment: refundAmount } },
+      // OCO: cancelar as demais pernas do grupo na mesma transação
+      if (order.type === ORDER_TYPE.OCO && order.groupId) {
+        await tx.order.updateMany({
+          where: { groupId: order.groupId, id: { not: orderId }, status: { in: ['OPEN', 'PARTIAL'] } },
+          data: { status: 'CANCELLED', version: { increment: 1 } },
         })
       }
 
-      // Liberar marginBlocked para ordens SHORT
-      if (order.side === 'SELL') {
-        const asset = await tx.asset.findUnique({ where: { id: order.assetId } })
-        if (asset) {
-          const position = await tx.position.findFirst({
-            where: { userId, assetId: order.assetId, side: 'SHORT' },
-          })
-          if (position && Number(position.marginBlocked) > 0) {
-            const marginToRelease = Number(order.quantity) * Number(asset.currentPrice) * 1.5
-            // CAS na posição: garante consistência em execuções parciais concorrentes
-            await tx.position.updateMany({
-              where: { id: position.id, version: position.version },
-              data: {
-                marginBlocked: { decrement: Math.min(marginToRelease, Number(position.marginBlocked)) },
-                version: { increment: 1 },
-              },
-            })
-          }
-        }
-      }
+      const updated = await tx.order.findUnique({ where: { id: orderId } })
+      if (!updated) throw new AppError('ORDER_080', 404, { message: 'Ordem não encontrada após cancelamento.' })
 
       return updated
     })
@@ -505,25 +483,43 @@ export class OrderService {
     return reserved
   }
 
-  private async _debitRequiredBalance(
+  /**
+   * Modelo debit-on-execute: a criação NÃO debita saldo. Apenas valida CAPACIDADE
+   * (saldo disponível >= custo estimado), onde disponível = fsBalance − custo
+   * estimado das ordens BUY abertas do usuário. Impede over-commit de várias
+   * ordens BUY abertas sem reservar saldo de fato. A liquidação real (débito) é
+   * exclusiva do motor no momento do fill (settlement.ts), que também é a única
+   * camada que garante saldo nunca-negativo (cancela a ordem se não couber).
+   */
+  private async _assertBuyCapacity(
     tx: Prisma.TransactionClient,
     userId: string,
     requiredBalance: number,
   ): Promise<void> {
     if (requiredBalance <= 0) return
 
-    const debitResult = await tx.user.updateMany({
-      where: {
-        id: userId,
-        fsBalance: { gte: requiredBalance },
-      },
-      data: { fsBalance: { decrement: requiredBalance } },
-    })
+    const [user, openBuys] = await Promise.all([
+      tx.user.findUniqueOrThrow({ where: { id: userId }, select: { fsBalance: true } }),
+      tx.order.findMany({
+        where: { userId, side: 'BUY', status: { in: ['OPEN', 'PARTIAL'] } },
+        select: { quantity: true, price: true, fee: true, leverageMultiplier: true },
+      }),
+    ])
 
-    if (debitResult.count === 0) {
+    let committed = 0
+    for (const o of openBuys) {
+      const opVal = Number(o.quantity) * Number(o.price ?? 0)
+      const div = Number(o.leverageMultiplier) >= 2 ? 2 : 1
+      committed += opVal / div + Number(o.fee ?? 0)
+    }
+
+    const available = this._roundFsAmount(Number(user.fsBalance) - committed)
+    if (available < requiredBalance) {
       throw new AppError('INSUFFICIENT_BALANCE', 402, {
         required: requiredBalance,
-        message: 'Saldo FS$ insuficiente para criar a ordem.',
+        available,
+        committed: this._roundFsAmount(committed),
+        message: 'Saldo disponível insuficiente considerando ordens abertas.',
       })
     }
   }
@@ -535,24 +531,34 @@ export class OrderService {
     ticker: string,
     requestedQuantity: number,
   ): Promise<void> {
-    const [position, reservedSell] = await Promise.all([
+    const [position, sellOrders] = await Promise.all([
       tx.position.findFirst({
         where: { userId, assetId, side: 'LONG', status: 'OPEN' },
         select: { quantity: true },
       }),
-      tx.order.aggregate({
+      tx.order.findMany({
         where: {
           userId,
           assetId,
           side: 'SELL',
           status: { in: ['OPEN', 'PARTIAL'] },
         },
-        _sum: { quantity: true },
+        select: { quantity: true, type: true, groupId: true },
       }),
     ])
 
     const ownedQty = Number(position?.quantity ?? 0)
-    const reservedQty = Number(reservedSell._sum.quantity ?? 0)
+    // OCO reserva a quantidade UMA vez por grupo (as 2 pernas vendem a mesma cota;
+    // só uma executa). Sem isso, um OCO de 100 cotas "reservaria" 200.
+    const seenGroups = new Set<string>()
+    let reservedQty = 0
+    for (const o of sellOrders) {
+      if (o.type === 'OCO' && o.groupId) {
+        if (seenGroups.has(o.groupId)) continue
+        seenGroups.add(o.groupId)
+      }
+      reservedQty += Number(o.quantity)
+    }
     const availableQty = Math.max(0, ownedQty - reservedQty)
 
     if (availableQty < requestedQuantity) {

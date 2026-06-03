@@ -71,14 +71,34 @@ export class ShortService {
     }
 
     return await prisma.$transaction(async (tx) => {
-      const balanceBefore = Number(user.fsBalance)
+      // Re-lê o usuário DENTRO da transação (o read externo pode estar stale).
+      const freshUser = await tx.user.findUniqueOrThrow({ where: { id: userId } })
+      const balanceBefore = Number(freshUser.fsBalance)
+      if (balanceBefore < totalRequired) {
+        throw new AppError('ORDER_056', 422, {
+          required: totalRequired,
+          available: balanceBefore,
+          message: `Margem + taxa insuficiente. Necessário FS$ ${totalRequired.toFixed(2)}, disponível FS$ ${balanceBefore.toFixed(2)}.`,
+        })
+      }
       const newBalance = balanceBefore - totalRequired
-      const newMarginBlocked = Number(user.marginBlocked) + marginRequired
 
-      await tx.user.update({
-        where: { id: userId },
-        data: { fsBalance: newBalance, marginBlocked: newMarginBlocked },
+      // Débito por CAS condicional: bloqueia margem + debita em update relativo
+      // (decrement/increment) sob WHERE fsBalance >= totalRequired. Evita saldo
+      // negativo e perda de débito quando dois shorts abrem concorrentemente.
+      const debit = await tx.user.updateMany({
+        where: { id: userId, fsBalance: { gte: totalRequired } },
+        data: {
+          fsBalance: { decrement: totalRequired },
+          marginBlocked: { increment: marginRequired },
+        },
       })
+      if (debit.count !== 1) {
+        throw new AppError('ORDER_056', 422, {
+          required: totalRequired,
+          message: 'Saldo insuficiente para abrir short (atualização concorrente). Tente novamente.',
+        })
+      }
 
       const position = await tx.position.create({
         data: {
@@ -112,7 +132,7 @@ export class ShortService {
       })
 
       return position
-    })
+    }, { isolationLevel: 'Serializable' })
   }
 
   /**

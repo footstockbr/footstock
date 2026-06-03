@@ -349,6 +349,7 @@ model Position {
   leverageAmount     Decimal        @default(0) @map("leverage_amount") @db.Decimal(18, 2)
   dailyInterestRate  Decimal        @default(0) @map("daily_interest_rate") @db.Decimal(10, 6)
   interestAccrued    Decimal        @default(0) @map("interest_accrued") @db.Decimal(18, 2)
+  lastInterestChargedAt DateTime?   @map("last_interest_charged_at")
   openedAt           DateTime?      @map("opened_at")
   createdAt          DateTime       @default(now()) @map("created_at")
   updatedAt          DateTime       @updatedAt @map("updated_at")

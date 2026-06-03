@@ -132,6 +132,27 @@ export class LeverageService {
     }
 
     const result = await prisma.$transaction(async (tx) => {
+      // Idempotência por (posição, dia BRT): CAS em last_interest_charged_at.
+      // Só cobra se nunca cobrado OU se a última cobrança foi antes do início do
+      // dia BRT atual. Garante cobrança única por dia mesmo com retry do cron.
+      const todayStartBRT = LeverageService._brtDayStartUtc()
+      const claim = await tx.position.updateMany({
+        where: {
+          id: positionId,
+          status: 'OPEN',
+          leverageAmount: { gt: 0 },
+          OR: [
+            { lastInterestChargedAt: null },
+            { lastInterestChargedAt: { lt: todayStartBRT } },
+          ],
+        },
+        data: { lastInterestChargedAt: new Date() },
+      })
+      if (claim.count !== 1) {
+        // Já cobrado hoje (ou posição não-elegível) → skip idempotente
+        return { dailyInterest: 0, newBalance: 0, skipped: true }
+      }
+
       // Re-lê posição dentro da transação para evitar race condition com venda/fechamento
       const freshPos = await tx.position.findUnique({ where: { id: positionId } })
       if (!freshPos || freshPos.status !== 'OPEN' || Number(freshPos.leverageAmount) <= 0) {
@@ -377,6 +398,21 @@ export class LeverageService {
 
       return true
     })
+  }
+
+  /**
+   * Início do dia atual em BRT (UTC-3), retornado como Date UTC.
+   * Usado para idempotência diária da cobrança de juros (CAS em
+   * last_interest_charged_at): "hoje BRT" começa às 03:00 UTC.
+   */
+  static _brtDayStartUtc(now: Date = new Date()): Date {
+    // Desloca para BRT, zera hora, devolve o instante UTC correspondente a 00:00 BRT.
+    const brt = new Date(now.getTime() - 3 * 60 * 60 * 1000)
+    const y = brt.getUTCFullYear()
+    const m = brt.getUTCMonth()
+    const d = brt.getUTCDate()
+    // 00:00 BRT == 03:00 UTC do mesmo dia civil BRT
+    return new Date(Date.UTC(y, m, d, 3, 0, 0, 0))
   }
 }
 

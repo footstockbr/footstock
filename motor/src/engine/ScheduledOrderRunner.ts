@@ -8,8 +8,7 @@ import { PrismaClient, Prisma } from '@prisma/client'
 import type Redis from 'ioredis'
 import { SessionManager } from './SessionManager'
 import { logger } from '../utils/logger'
-import { validateTransition } from './order-contract'
-import { calculateFee } from './fee-constants'
+import { settleOrderFill } from './settlement'
 import type { PrismaOrder } from '../types/prisma.types'
 
 export class ScheduledOrderRunner {
@@ -67,39 +66,30 @@ export class ScheduledOrderRunner {
         ? now.getTime() - order.scheduledAt.getTime()
         : 0
 
-      await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-        const user = await tx.user.findUniqueOrThrow({ where: { id: order.userId } })
-        const operationValue = order.quantity * price
-        const feeAmount = calculateFee(operationValue)
+      const result = await this.prisma.$transaction(
+        (tx: Prisma.TransactionClient) => settleOrderFill(tx, order, price),
+        { isolationLevel: 'Serializable' },
+      )
 
-        const totalCost = order.side === 'BUY'
-          ? operationValue + feeAmount
-          : -(operationValue - feeAmount)
-
-        const newBalance = Number(user.fsBalance) + (order.side === 'BUY' ? -totalCost : -totalCost)
-
-        if (order.side === 'BUY' && newBalance < 0) {
-          throw new Error(`Saldo insuficiente para ordem agendada ${order.id}`)
+      if (!result.settled) {
+        if (result.reason === 'INSUFFICIENT_BALANCE') {
+          logger.warn(`[ScheduledOrderRunner] INSUFFICIENT_BALANCE: ordem agendada ${order.id} cancelada no fill`)
+          await Promise.allSettled([
+            this.redis.publish(
+              `orders:cancelled:${order.userId}`,
+              JSON.stringify({ orderId: order.id, ticker: order.asset.ticker, motivo: 'INSUFFICIENT_BALANCE' })
+            ),
+            this.redis.publish(
+              `notifications:${order.userId}`,
+              JSON.stringify({
+                type: 'ORDER_CANCELLED', orderId: order.id, ticker: order.asset.ticker,
+                motivo: 'Saldo insuficiente no momento da execução agendada. Ordem cancelada.',
+              })
+            ),
+          ])
         }
-
-        validateTransition(order.status as any, 'FILLED' as any, order.id)
-
-        await tx.order.update({
-          where: { id: order.id },
-          data: { status: 'FILLED', executedPrice: price, fee: feeAmount, executedAt: now },
-        })
-        await tx.user.update({ where: { id: order.userId }, data: { fsBalance: newBalance } })
-        await tx.transaction.create({
-          data: {
-            userId: order.userId, assetId: order.assetId, orderId: order.id,
-            type: 'SCHEDULED', financialType: 'TRADE', side: order.side,
-            quantity: order.quantity, price, fee: feeAmount,
-            totalAmount: Math.abs(totalCost),
-            fsAmount: order.side === 'BUY' ? -Math.abs(totalCost) : Math.abs(totalCost),
-            balanceBefore: Number(user.fsBalance), balanceAfter: newBalance,
-          },
-        })
-      })
+        return
+      }
 
       await this.redis.publish(
         `orders:executed:${order.userId}`,

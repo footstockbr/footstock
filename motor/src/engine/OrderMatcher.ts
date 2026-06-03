@@ -7,8 +7,7 @@
 import { PrismaClient, Prisma } from '@prisma/client'
 import type Redis from 'ioredis'
 import { logger } from '../utils/logger'
-import { validateTransition } from './order-contract'
-import { calculateFee } from './fee-constants'
+import { settleOrderFill } from './settlement'
 import type { PrismaOrder } from '../types/prisma.types'
 
 const BATCH_SIZE = 100
@@ -113,45 +112,23 @@ export class OrderMatcher {
     executionPrice: number,
   ): Promise<void> {
     try {
-      await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-        const user = await tx.user.findUniqueOrThrow({ where: { id: order.userId } })
+      const result = await this.prisma.$transaction(
+        (tx: Prisma.TransactionClient) => settleOrderFill(tx, order, executionPrice),
+        { isolationLevel: 'Serializable' },
+      )
 
-        const operationValue = order.quantity * executionPrice
-        const feeAmount = calculateFee(operationValue)
-
-        const totalCost = order.side === 'BUY'
-          ? operationValue + feeAmount
-          : -(operationValue - feeAmount)
-
-        const newBalance = Number(user.fsBalance) - totalCost
-
-        if (order.side === 'BUY' && newBalance < 0) {
-          throw new Error(`Saldo insuficiente no momento da execução LIMIT ${order.id}`)
+      if (!result.settled) {
+        if (result.reason === 'INSUFFICIENT_BALANCE') {
+          await this._notifyCancelled(order, 'Saldo insuficiente no momento da execução LIMIT. Ordem cancelada.')
         }
-
-        validateTransition(order.status as any, 'FILLED' as any, order.id)
-
-        await tx.order.update({
-          where: { id: order.id },
-          data: { status: 'FILLED', executedPrice: executionPrice, fee: feeAmount, executedAt: new Date() },
-        })
-        await tx.user.update({ where: { id: order.userId }, data: { fsBalance: newBalance } })
-        await tx.transaction.create({
-          data: {
-            userId: order.userId, assetId: order.assetId, orderId: order.id,
-            type: order.type, financialType: 'TRADE', side: order.side,
-            quantity: order.quantity, price: executionPrice, fee: feeAmount,
-            totalAmount: Math.abs(totalCost),
-            fsAmount: order.side === 'BUY' ? -Math.abs(totalCost) : Math.abs(totalCost),
-            balanceBefore: Number(user.fsBalance), balanceAfter: newBalance,
-          },
-        })
-      })
+        return
+      }
 
       await this.redis.publish(
         `orders:executed:${order.userId}`,
         JSON.stringify({ orderId: order.id, ticker: order.asset.ticker, price: executionPrice })
       )
+      logger.info(`[OrderMatcher] LIMIT OK orderId=${order.id} ticker=${order.asset.ticker} price=${executionPrice}`)
     } catch (err) {
       logger.error(`[OrderMatcher] LIMIT fail orderId=${order.id}: ${String(err)}`)
     }
@@ -164,40 +141,31 @@ export class OrderMatcher {
     reason: string,
   ): Promise<void> {
     try {
-      await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-        // Executar perna disparada
-        const user = await tx.user.findUniqueOrThrow({ where: { id: executedLeg.userId } })
-        const operationValue = executedLeg.quantity * executionPrice
-        const feeAmount = calculateFee(operationValue)
-        const proceeds = executedLeg.quantity * executionPrice - feeAmount
+      // Settlement da perna disparada + cancelamento de TODAS as outras pernas do
+      // grupo na MESMA transação (atômico, anti-corrida entre ticks).
+      const result = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        const r = await settleOrderFill(tx, executedLeg, executionPrice)
+        if (!r.settled) return r
+        if (executedLeg.groupId) {
+          await tx.order.updateMany({
+            where: {
+              groupId: executedLeg.groupId,
+              id: { not: executedLeg.id },
+              status: { in: ['OPEN', 'PARTIAL'] },
+            },
+            data: { status: 'CANCELLED' },
+          })
+        }
+        return r
+      }, { isolationLevel: 'Serializable' })
 
-        validateTransition(executedLeg.status as any, 'FILLED' as any, executedLeg.id)
-        validateTransition(cancelledLeg.status as any, 'CANCELLED' as any, cancelledLeg.id)
+      if (!result.settled) {
+        if (result.reason === 'INSUFFICIENT_BALANCE') {
+          await this._notifyCancelled(executedLeg, 'Saldo insuficiente ao disparar OCO. Ordem cancelada.')
+        }
+        return
+      }
 
-        await tx.order.update({
-          where: { id: executedLeg.id },
-          data: { status: 'FILLED', executedPrice: executionPrice, fee: feeAmount, executedAt: new Date() },
-        })
-        await tx.user.update({
-          where: { id: executedLeg.userId },
-          data: { fsBalance: { increment: proceeds } },
-        })
-
-        // Cancelar perna oposta
-        await tx.order.update({ where: { id: cancelledLeg.id }, data: { status: 'CANCELLED' } })
-
-        await tx.transaction.create({
-          data: {
-            userId: executedLeg.userId, assetId: executedLeg.assetId, orderId: executedLeg.id,
-            type: 'OCO', financialType: 'TRADE', side: executedLeg.side,
-            quantity: executedLeg.quantity, price: executionPrice, fee: feeAmount,
-            totalAmount: proceeds, fsAmount: proceeds,
-            balanceBefore: Number(user.fsBalance), balanceAfter: Number(user.fsBalance) + proceeds,
-          },
-        })
-      })
-
-      // Notificações
       await Promise.allSettled([
         this.redis.publish(
           `orders:executed:${executedLeg.userId}`,
@@ -213,9 +181,25 @@ export class OrderMatcher {
         ),
       ])
 
-      logger.info(`[OrderMatcher] OCO executado: ${executedLeg.id} (${reason}), cancelado: ${cancelledLeg.id}`)
+      logger.info(`[OrderMatcher] OCO executado: ${executedLeg.id} (${reason}), grupo ${executedLeg.groupId} cancelado`)
     } catch (err) {
       logger.error(`[OrderMatcher] OCO fail: ${String(err)}`)
     }
+  }
+
+  private async _notifyCancelled(
+    order: PrismaOrder & { asset: { ticker: string } },
+    motivo: string,
+  ): Promise<void> {
+    await Promise.allSettled([
+      this.redis.publish(
+        `orders:cancelled:${order.userId}`,
+        JSON.stringify({ orderId: order.id, ticker: order.asset.ticker, motivo })
+      ),
+      this.redis.publish(
+        `notifications:${order.userId}`,
+        JSON.stringify({ type: 'ORDER_CANCELLED', orderId: order.id, ticker: order.asset.ticker, motivo })
+      ),
+    ])
   }
 }

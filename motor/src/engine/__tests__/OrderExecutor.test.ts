@@ -10,12 +10,8 @@
 
 import { OrderExecutor } from '../OrderExecutor'
 import { calculateFee } from '../fee-constants'
-import { validateTransition } from '../order-contract'
 
 // ─── Mocks de módulos ────────────────────────────────────────────────────────
-jest.mock('../order-contract', () => ({
-  validateTransition: jest.fn(),
-}))
 
 jest.mock('../../utils/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
@@ -55,6 +51,8 @@ function makePrisma(orders: any[] = [], user: any = makeUser()): any {
       update: jest.fn().mockResolvedValue({}),
     },
     order: {
+      // CAS claim do settlement: reivindica a ordem (status OPEN/PARTIAL → FILLED)
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       update: jest.fn().mockResolvedValue({}),
     },
     position: {
@@ -207,22 +205,24 @@ describe('OrderExecutor', () => {
     })
   })
 
-  describe('_executeOrder — verificação de saldo em BUY', () => {
-    test('lança erro quando saldo é insuficiente para BUY', async () => {
+  describe('_executeOrder — saldo insuficiente no fill (debit-on-execute)', () => {
+    test('cancela a ordem (sem orders:executed) e notifica quando saldo não cobre o fill', async () => {
       const order = makeOrder({ side: 'BUY', quantity: 100 })
-      const poorUser = makeUser({ fsBalance: 1 }) // saldo insuficiente
+      const poorUser = makeUser({ fsBalance: 1 }) // saldo insuficiente p/ qty=100 × 50
       prisma = makePrisma([order], poorUser)
       redis = makeRedis()
 
-      // Para forçar o erro real do $transaction, precisamos deixar a lógica rodar
-      // Recriamos tx para refletir saldo insuficiente
+      const orderUpdate = jest.fn().mockResolvedValue({})
       prisma.$transaction.mockImplementation(async (fn: any) => {
         const tx = {
           user: {
             findUniqueOrThrow: jest.fn().mockResolvedValue(poorUser),
             update: jest.fn().mockResolvedValue({}),
           },
-          order: { update: jest.fn().mockResolvedValue({}) },
+          order: {
+            updateMany: jest.fn().mockResolvedValue({ count: 1 }), // CAS claim OK
+            update: orderUpdate, // reverte para CANCELLED
+          },
           position: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn(), update: jest.fn() },
           transaction: { create: jest.fn().mockResolvedValue({}) },
         }
@@ -231,36 +231,50 @@ describe('OrderExecutor', () => {
 
       executor = new OrderExecutor(prisma, redis)
 
-      // Promise.allSettled absorve o erro — sem throw externo
       await expect(
         executor.processPendingMarketOrders({ CRAQUE10: 50 })
       ).resolves.toBeUndefined()
 
-      // Redis publish NÃO deve ter sido chamado pois a transação falhou
-      expect(redis.publish).not.toHaveBeenCalled()
+      // A ordem é revertida para CANCELLED (debit-on-execute: nada a deixar OPEN)
+      expect(orderUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'CANCELLED' }) })
+      )
+      // Não publica execução; publica cancelamento por saldo insuficiente
+      const channels = redis.publish.mock.calls.map(([c]: [string]) => c)
+      expect(channels).not.toContain(`orders:executed:${order.userId}`)
+      expect(channels).toContain(`orders:cancelled:${order.userId}`)
     })
   })
 
-  describe('_executeOrder — validateTransition', () => {
-    test('chama validateTransition com status OPEN → FILLED', async () => {
+  describe('_executeOrder — CAS de status (anti double-fill)', () => {
+    test('reivindica a ordem via updateMany com guarda status OPEN/PARTIAL', async () => {
       const order = makeOrder({ status: 'OPEN' })
       prisma = makePrisma([order])
       redis = makeRedis()
 
-      prisma.$transaction.mockImplementation(async (fn: any) => {
-        const tx = {
-          user: { findUniqueOrThrow: jest.fn().mockResolvedValue(makeUser()), update: jest.fn() },
-          order: { update: jest.fn() },
-          position: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
-          transaction: { create: jest.fn() },
-        }
-        return fn(tx)
-      })
+      executor = new OrderExecutor(prisma, redis)
+      await executor.processPendingMarketOrders({ CRAQUE10: 50 })
+
+      expect(prisma._tx.order.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: order.id, status: { in: ['OPEN', 'PARTIAL'] } }),
+          data: expect.objectContaining({ status: 'FILLED' }),
+        })
+      )
+    })
+
+    test('não liquida nem publica quando o CAS não reivindica (ordem já liquidada)', async () => {
+      const order = makeOrder({ status: 'OPEN' })
+      prisma = makePrisma([order])
+      // CAS retorna count=0 → já liquidada por outro tick
+      prisma._tx.order.updateMany.mockResolvedValueOnce({ count: 0 })
+      redis = makeRedis()
 
       executor = new OrderExecutor(prisma, redis)
       await executor.processPendingMarketOrders({ CRAQUE10: 50 })
 
-      expect(validateTransition).toHaveBeenCalledWith('OPEN', 'FILLED', order.id)
+      expect(prisma._tx.user.update).not.toHaveBeenCalled()
+      expect(redis.publish).not.toHaveBeenCalled()
     })
   })
 
@@ -277,8 +291,9 @@ describe('OrderExecutor', () => {
         const tx = {
           user: { findUniqueOrThrow: jest.fn().mockResolvedValue(user), update: jest.fn() },
           order: {
+            updateMany: jest.fn().mockResolvedValue({ count: 1 }),
             update: jest.fn().mockImplementation(({ data }: any) => {
-              capturedFee = data.fee
+              if (data && typeof data.fee === 'number') capturedFee = data.fee
               return {}
             }),
           },

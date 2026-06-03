@@ -10,14 +10,8 @@
 // ============================================================================
 
 import { OrderMatcher } from '../OrderMatcher'
-import { calculateFee } from '../fee-constants'
-import { validateTransition } from '../order-contract'
 
 // ─── Mocks de módulos ────────────────────────────────────────────────────────
-jest.mock('../order-contract', () => ({
-  validateTransition: jest.fn(),
-}))
-
 jest.mock('../../utils/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }))
@@ -76,10 +70,18 @@ function makePrisma(orders: any[] = [], user: any = makeUser(), pairOrders: any[
       update: jest.fn().mockResolvedValue({}),
     },
     order: {
+      // CAS claim do settlement + cancelamento de grupo OCO
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      update: jest.fn().mockResolvedValue({}),
+    },
+    position: {
+      findFirst: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockResolvedValue({}),
       update: jest.fn().mockResolvedValue({}),
     },
     transaction: {
       create: jest.fn().mockResolvedValue({}),
+      findFirst: jest.fn().mockResolvedValue(null),
     },
   }
 
@@ -226,11 +228,14 @@ describe('OrderMatcher', () => {
         const tx = {
           user: { findUniqueOrThrow: jest.fn().mockResolvedValue(makeUser()), update: jest.fn() },
           order: {
-            update: jest.fn().mockImplementation(({ data }: any) => {
-              capturedExecutionPrice = data.executedPrice
-              return {}
+            // O preço de execução é gravado no CAS claim (updateMany)
+            updateMany: jest.fn().mockImplementation(({ data }: any) => {
+              if (data && typeof data.executedPrice === 'number') capturedExecutionPrice = data.executedPrice
+              return { count: 1 }
             }),
+            update: jest.fn().mockResolvedValue({}),
           },
+          position: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn(), update: jest.fn() },
           transaction: { create: jest.fn() },
         }
         return fn(tx)
@@ -253,11 +258,13 @@ describe('OrderMatcher', () => {
         const tx = {
           user: { findUniqueOrThrow: jest.fn().mockResolvedValue(makeUser()), update: jest.fn() },
           order: {
-            update: jest.fn().mockImplementation(({ data }: any) => {
-              capturedExecutionPrice = data.executedPrice
-              return {}
+            updateMany: jest.fn().mockImplementation(({ data }: any) => {
+              if (data && typeof data.executedPrice === 'number') capturedExecutionPrice = data.executedPrice
+              return { count: 1 }
             }),
+            update: jest.fn().mockResolvedValue({}),
           },
+          position: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn(), update: jest.fn() },
           transaction: { create: jest.fn() },
         }
         return fn(tx)
@@ -361,8 +368,8 @@ describe('OrderMatcher', () => {
     })
   })
 
-  describe('LIMIT — validateTransition chamado', () => {
-    test('chama validateTransition com OPEN → FILLED ao executar ordem LIMIT', async () => {
+  describe('LIMIT — CAS de status (anti double-fill)', () => {
+    test('reivindica a ordem via updateMany com guarda status OPEN/PARTIAL ao executar LIMIT', async () => {
       const order = makeLimitOrder({ status: 'OPEN' })
       prisma = makePrisma([order])
       redis = makeRedis()
@@ -370,7 +377,12 @@ describe('OrderMatcher', () => {
 
       await matcher.checkLimitOrders({ CRAQUE10: 100 })
 
-      expect(validateTransition).toHaveBeenCalledWith('OPEN', 'FILLED', order.id)
+      expect(prisma._tx.order.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: order.id, status: { in: ['OPEN', 'PARTIAL'] } }),
+          data: expect.objectContaining({ status: 'FILLED' }),
+        })
+      )
     })
   })
 })
