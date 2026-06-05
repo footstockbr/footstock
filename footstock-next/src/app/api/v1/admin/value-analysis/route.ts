@@ -14,6 +14,8 @@ import {
   type CauseType,
   type NewsEvidence,
   type AdminActionEvidence,
+  type OrderFlowEvidence,
+  type MovementContext,
   type MovementMagnitude,
   average,
   buildCause,
@@ -60,6 +62,7 @@ type MovementRecord = {
   confidenceScore: number
   explanation: string
   diagnosticNotes: string[]
+  orderFlow: OrderFlowEvidence
   evidenceWindow: {
     startsAt: string
     endsAt: string
@@ -82,6 +85,17 @@ type PriceHistoryPoint = {
   volume: bigint
   sessionType: string
   source: string
+}
+
+type OrderFlowRecord = {
+  id: string
+  side: 'BUY' | 'SELL'
+  quantity: number
+  price: { toNumber(): number } | null
+  executedPrice: { toNumber(): number } | null
+  executedAt: Date | null
+  updatedAt: Date
+  createdAt: Date
 }
 
 type ColumnExistsRow = {
@@ -127,6 +141,36 @@ function endOfDateParam(value: string | null): Date | null {
   if (!value) return null
   const parsed = new Date(`${value}T23:59:59.999Z`)
   return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function orderEventTime(order: Pick<OrderFlowRecord, 'executedAt' | 'updatedAt' | 'createdAt'>): Date {
+  return order.executedAt ?? order.updatedAt ?? order.createdAt
+}
+
+function buildOrderFlowEvidence(orders: OrderFlowRecord[]): OrderFlowEvidence {
+  let buyQuantity = 0
+  let sellQuantity = 0
+  let weightedPriceSum = 0
+  let pricedQuantity = 0
+
+  for (const order of orders) {
+    if (order.side === 'BUY') buyQuantity += order.quantity
+    else sellQuantity += order.quantity
+
+    const executedPrice = toNumber(order.executedPrice) ?? toNumber(order.price)
+    if (executedPrice !== null && order.quantity > 0) {
+      weightedPriceSum += executedPrice * order.quantity
+      pricedQuantity += order.quantity
+    }
+  }
+
+  return {
+    buyQuantity,
+    sellQuantity,
+    netQuantity: buyQuantity - sellQuantity,
+    orderCount: orders.length,
+    averageExecutedPrice: pricedQuantity > 0 ? round2(weightedPriceSum / pricedQuantity) : null,
+  }
 }
 
 function isMotorLayersConfig(value: unknown): value is MotorLayersConfig {
@@ -331,7 +375,7 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
     const analysisEnd = history[history.length - 1]?.timestamp ?? window.end
 
     const cluster = asset.cluster as ClusterKey
-    const [news, adminActions, motorLayers] = await Promise.all([
+    const [news, adminActions, orders, motorLayers] = await Promise.all([
       prisma.news.findMany({
         where: {
           isArchived: false,
@@ -391,6 +435,43 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
           createdAt: true,
         },
       }),
+      prisma.order.findMany({
+        where: {
+          assetId: asset.id,
+          status: { in: ['FILLED', 'PARTIAL'] },
+          OR: [
+            {
+              executedAt: {
+                gte: analysisStart,
+                lte: analysisEnd,
+              },
+            },
+            {
+              updatedAt: {
+                gte: analysisStart,
+                lte: analysisEnd,
+              },
+            },
+            {
+              createdAt: {
+                gte: analysisStart,
+                lte: analysisEnd,
+              },
+            },
+          ],
+        },
+        orderBy: { updatedAt: 'asc' },
+        select: {
+          id: true,
+          side: true,
+          quantity: true,
+          price: true,
+          executedPrice: true,
+          executedAt: true,
+          updatedAt: true,
+          createdAt: true,
+        },
+      }),
       getMotorLayersConfig(),
     ])
     const motorContext = buildMotorContext(cluster, motorLayers)
@@ -407,6 +488,8 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
       const direction = rawChange > 0 ? 'up' : 'down'
       const windowStart = new Date(previous.timestamp.getTime() - NEWS_LOOKBACK_MS)
       const windowEnd = new Date(point.timestamp.getTime() + EVENT_GRACE_MS)
+      const orderWindowStart = previous.timestamp
+      const orderWindowEnd = point.timestamp
 
       const matchedNews: NewsEvidence[] = news
         .filter((item) => inWindow(eventTime(item), windowStart, windowEnd))
@@ -432,19 +515,40 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
           href: `/admin/lgpd?tab=access-logs&actionId=${action.id}`,
         }))
 
+      const matchedOrders = orders.filter((order) => inWindow(orderEventTime(order), orderWindowStart, orderWindowEnd))
+      const orderFlow = buildOrderFlowEvidence(matchedOrders)
       const volumeDelta = Math.max(0, Number(point.volume - previous.volume))
+      const high = point.high
+      const low = point.low
+      const open = point.open
+      const intraperiodRangePct = low > 0 ? pct(low, high) : 0
+      const movementContext: MovementContext = {
+        previousPrice: previousClose,
+        newPrice: close,
+        absoluteChange,
+        percentageChange,
+        intraperiodRangePct,
+        volume: Number(point.volume),
+        volumeDelta,
+        sessionType: point.sessionType,
+        orderFlow,
+        motor: {
+          cluster: motorContext.cluster,
+          sigma: motorContext.effectiveParameters.sigma,
+          theta: motorContext.effectiveParameters.theta,
+          ofiRho: motorContext.effectiveParameters.ofiRho,
+          velocityCapPct: motorContext.effectiveParameters.velocityCapPct,
+        },
+      }
       const cause = buildCause({
         direction,
         volumeDelta,
         source: point.source,
         news: matchedNews,
         adminActions: matchedAdminActions,
+        context: movementContext,
       })
       const score = confidenceScore(cause.confidence, cause.causeType)
-      const high = point.high
-      const low = point.low
-      const open = point.open
-      const intraperiodRangePct = low > 0 ? pct(low, high) : 0
       const diagnosticNotes = buildDiagnosticNotes({
         movementPct: percentageChange,
         volumeDelta,
@@ -453,6 +557,7 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
         adminActions: matchedAdminActions,
         confidence: cause.confidence,
         causeType: cause.causeType,
+        orderFlow,
       })
       if (
         cause.causeType === 'SIMULATED_ENGINE' ||
@@ -490,6 +595,7 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
         ...cause,
         confidenceScore: score,
         diagnosticNotes,
+        orderFlow,
         evidenceWindow: {
           startsAt: windowStart.toISOString(),
           endsAt: windowEnd.toISOString(),

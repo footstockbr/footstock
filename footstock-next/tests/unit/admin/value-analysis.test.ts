@@ -84,6 +84,39 @@ describe('value-analysis heuristics', () => {
     expect(confidenceScore(result.confidence, result.causeType)).toBe(35)
   })
 
+  it('detalha fluxo de mercado com preço, ordens e saldo quando há contexto', () => {
+    const result = buildCause({
+      direction: 'down',
+      volumeDelta: 22,
+      source: 'REAL',
+      news: [],
+      adminActions: [],
+      context: {
+        previousPrice: 3.01,
+        newPrice: 2.99,
+        absoluteChange: -0.02,
+        percentageChange: -0.67,
+        intraperiodRangePct: 0.81,
+        volume: 1200,
+        volumeDelta: 22,
+        sessionType: 'TRADING',
+        orderFlow: {
+          buyQuantity: 4,
+          sellQuantity: 26,
+          netQuantity: -22,
+          orderCount: 3,
+          averageExecutedPrice: 2.99,
+        },
+      },
+    })
+
+    expect(result.causeType).toBe('MARKET_FLOW')
+    expect(result.confidence).toBe('media')
+    expect(result.explanation).toContain('FS$ 3,01 para FS$ 2,99')
+    expect(result.explanation).toContain('saldo líquido -22')
+    expect(result.explanation).toContain('pressão vendedora acompanha a direção')
+  })
+
   it('usa motor de precificação quando fonte não é REAL e não há evidência direta', () => {
     const result = buildCause({
       direction: 'up',

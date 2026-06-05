@@ -36,6 +36,33 @@ export type AdminActionEvidence = {
   href: string
 }
 
+export type OrderFlowEvidence = {
+  buyQuantity: number
+  sellQuantity: number
+  netQuantity: number
+  orderCount: number
+  averageExecutedPrice: number | null
+}
+
+export type MovementContext = {
+  previousPrice: number
+  newPrice: number
+  absoluteChange: number
+  percentageChange: number
+  intraperiodRangePct: number
+  volume: number
+  volumeDelta: number
+  sessionType: string
+  orderFlow: OrderFlowEvidence
+  motor?: {
+    cluster: string
+    sigma: number
+    theta: number
+    ofiRho: number
+    velocityCapPct: number
+  }
+}
+
 export function pct(previous: number, current: number): number {
   if (previous === 0) return 0
   return Math.round(((current - previous) / previous) * 10000) / 100
@@ -104,14 +131,77 @@ export function sentimentMatchesDirection(sentiment: string, direction: 'up' | '
   )
 }
 
+function money(value: number): string {
+  return `FS$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function signedPct(value: number): string {
+  const sign = value > 0 ? '+' : ''
+  return `${sign}${round2(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`
+}
+
+function directionLabel(direction: 'up' | 'down'): string {
+  return direction === 'up' ? 'alta' : 'queda'
+}
+
+function orderFlowSummary(orderFlow: OrderFlowEvidence): string {
+  if (orderFlow.orderCount === 0) {
+    return 'nenhuma ordem preenchida foi encontrada exatamente na janela desse candle'
+  }
+
+  const dominantSide = orderFlow.netQuantity > 0
+    ? 'compradora'
+    : orderFlow.netQuantity < 0
+      ? 'vendedora'
+      : 'equilibrada'
+  const averagePrice = orderFlow.averageExecutedPrice === null
+    ? ''
+    : `, com preço médio executado de ${money(orderFlow.averageExecutedPrice)}`
+
+  return `${orderFlow.orderCount} ordem(ns) preenchida(s), ${orderFlow.buyQuantity.toLocaleString('pt-BR')} unidade(s) compradas e ${orderFlow.sellQuantity.toLocaleString('pt-BR')} vendida(s), saldo líquido ${orderFlow.netQuantity.toLocaleString('pt-BR')} e pressão ${dominantSide}${averagePrice}`
+}
+
+function buildMarketFlowExplanation(direction: 'up' | 'down', context: MovementContext): string {
+  const expectedPressure = direction === 'up' ? 'compradora' : 'vendedora'
+  const oppositePressure = direction === 'up' ? 'vendedora' : 'compradora'
+  const hasOrderFlow = context.orderFlow.orderCount > 0
+  const netMatchesDirection =
+    (direction === 'up' && context.orderFlow.netQuantity > 0) ||
+    (direction === 'down' && context.orderFlow.netQuantity < 0)
+  const netOpposesDirection =
+    (direction === 'up' && context.orderFlow.netQuantity < 0) ||
+    (direction === 'down' && context.orderFlow.netQuantity > 0)
+
+  const base =
+    `O preço teve ${directionLabel(direction)} de ${money(context.previousPrice)} para ${money(context.newPrice)} ` +
+    `(${signedPct(context.percentageChange)}, ${money(context.absoluteChange)}), com range interno de ` +
+    `${signedPct(context.intraperiodRangePct).replace('+', '')} e acréscimo de volume de ` +
+    `${context.volumeDelta.toLocaleString('pt-BR')} unidade(s).`
+
+  if (!hasOrderFlow) {
+    return `${base} Não houve notícia nem ação administrativa na janela, e também não encontrei ordens preenchidas no intervalo exato do candle. A leitura correta é: o histórico de preço registrou volume agregado, mas a causa direta não está auditável por ordem individual; a explicação fica como fluxo de mercado com baixa confiança, possivelmente vindo de ticks agregados do motor ou liquidez fora da janela de correlação.`
+  }
+
+  if (netMatchesDirection) {
+    return `${base} Não houve notícia nem ação administrativa na janela. O livro de ordens do intervalo mostra ${orderFlowSummary(context.orderFlow)}. Como a pressão ${expectedPressure} acompanha a direção da variação, a causa mais provável é fluxo de negociação dos usuários absorvido pelo motor de preço.`
+  }
+
+  if (netOpposesDirection) {
+    return `${base} Não houve notícia nem ação administrativa na janela. O livro de ordens mostra ${orderFlowSummary(context.orderFlow)}, ou seja, pressão ${oppositePressure} contra a direção final do preço. Isso indica que a variação provavelmente não veio só do saldo líquido de ordens; o candle pode ter sido influenciado por spread, reversão ao valor justo, OFI acumulado ou agregação de múltiplos ticks.`
+  }
+
+  return `${base} Não houve notícia nem ação administrativa na janela. O livro de ordens mostra ${orderFlowSummary(context.orderFlow)}. Como o saldo líquido ficou equilibrado, a variação parece pequena e compatível com microestrutura do mercado: spread, arredondamento, execução em preços diferentes e ajuste incremental do motor.`
+}
+
 export function buildCause(params: {
   direction: 'up' | 'down'
   volumeDelta: number
   source: string
   news: NewsEvidence[]
   adminActions: AdminActionEvidence[]
+  context?: MovementContext
 }): { causeType: CauseType; causeLabel: string; confidence: Confidence; explanation: string } {
-  const { direction, volumeDelta, source, news, adminActions } = params
+  const { direction, volumeDelta, source, news, adminActions, context } = params
 
   const explicitPriceAction = adminActions.find((action) => action.previousPrice !== null || action.newPrice !== null)
   if (explicitPriceAction) {
@@ -167,16 +257,21 @@ export function buildCause(params: {
       causeType: 'SIMULATED_ENGINE',
       causeLabel: 'Motor de preço',
       confidence: 'media',
-      explanation: `O candle foi gerado pela fonte ${source}; sem notícia ou ação administrativa vinculada, a variação parece vir do motor de precificação.`,
+      explanation: context
+        ? `O candle foi gerado pela fonte ${source}. ${buildMarketFlowExplanation(direction, context)} Parâmetros efetivos: cluster ${context.motor?.cluster ?? 'indefinido'}, sigma ${context.motor?.sigma ?? 'n/d'}, theta ${context.motor?.theta ?? 'n/d'}, OFI rho ${context.motor?.ofiRho ?? 'n/d'} e velocity cap ${context.motor?.velocityCapPct ?? 'n/d'}% por tick.`
+        : `O candle foi gerado pela fonte ${source}; sem notícia ou ação administrativa vinculada, a variação parece vir do motor de precificação.`,
     }
   }
 
   if (volumeDelta > 0) {
+    const hasOrderFlow = !!context?.orderFlow.orderCount
     return {
       causeType: 'MARKET_FLOW',
-      causeLabel: 'Fluxo de negociação',
-      confidence: 'baixa',
-      explanation: `Não há notícia ou intervenção administrativa na janela. O volume aumentou em ${volumeDelta.toLocaleString('pt-BR')} unidades, sugerindo pressão de compra/venda dos usuários.`,
+      causeLabel: hasOrderFlow ? 'Fluxo de negociação auditado' : 'Volume agregado sem ordem auditável',
+      confidence: hasOrderFlow ? 'media' : 'baixa',
+      explanation: context
+        ? buildMarketFlowExplanation(direction, context)
+        : `Não há notícia ou intervenção administrativa na janela. O volume aumentou em ${volumeDelta.toLocaleString('pt-BR')} unidades, sugerindo pressão de compra/venda dos usuários.`,
     }
   }
 
@@ -184,7 +279,9 @@ export function buildCause(params: {
     causeType: 'UNEXPLAINED',
     causeLabel: 'Sem causa registrada',
     confidence: 'baixa',
-    explanation: 'Não foram encontrados notícia, ação administrativa ou aumento de volume suficientes para explicar a mudança com os dados disponíveis.',
+    explanation: context
+      ? `O preço variou de ${money(context.previousPrice)} para ${money(context.newPrice)} (${signedPct(context.percentageChange)}), mas não foram encontrados notícia, ação administrativa, ordens preenchidas ou aumento de volume suficientes na janela. A mudança deve ser tratada como não explicada pelos dados auditáveis disponíveis.`
+      : 'Não foram encontrados notícia, ação administrativa ou aumento de volume suficientes para explicar a mudança com os dados disponíveis.',
   }
 }
 
@@ -196,6 +293,7 @@ export function buildDiagnosticNotes(params: {
   adminActions: AdminActionEvidence[]
   confidence: Confidence
   causeType: CauseType
+  orderFlow?: OrderFlowEvidence
 }): string[] {
   const notes: string[] = []
   const absPct = Math.abs(params.movementPct)
@@ -214,6 +312,10 @@ export function buildDiagnosticNotes(params: {
 
   if (params.volumeDelta > 0) {
     notes.push(`Volume incremental de ${params.volumeDelta.toLocaleString('pt-BR')} unidades no período.`)
+  }
+
+  if (params.orderFlow) {
+    notes.push(`Fluxo de ordens: ${orderFlowSummary(params.orderFlow)}.`)
   }
 
   if (params.source !== 'REAL') {

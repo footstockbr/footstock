@@ -65,6 +65,13 @@ type Movement = {
   confidenceScore: number
   explanation: string
   diagnosticNotes: string[]
+  orderFlow: {
+    buyQuantity: number
+    sellQuantity: number
+    netQuantity: number
+    orderCount: number
+    averageExecutedPrice: number | null
+  }
   evidenceWindow: {
     startsAt: string
     endsAt: string
@@ -914,7 +921,7 @@ function TopMovements({ report }: { report: ValueAnalysisReport }) {
         <h2 className="text-sm font-semibold text-[#EAECEF]">Pontos críticos do período</h2>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-5">
+      <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
         {report.summary.topMovements.map((movement) => (
           <div key={movement.id} className="rounded-lg border border-[rgba(240,185,11,.08)] bg-[#0B0E11] p-3">
             <div className="flex items-center justify-between gap-2">
@@ -922,12 +929,18 @@ function TopMovements({ report }: { report: ValueAnalysisReport }) {
                 {formatPct(movement.percentageChange)}
               </Badge>
               <Badge variant={CAUSE_BADGE[movement.causeType]} size="xs">
-                {CAUSE_LABELS[movement.causeType]}
+                {movement.causeLabel}
               </Badge>
             </div>
             <p className="mt-3 text-xs text-[#929AA5]">{formatDateTime(movement.to)}</p>
             <p className="mt-1 text-sm font-semibold text-[#EAECEF]">{formatCurrency(movement.newPrice)}</p>
-            <p className="mt-2 text-xs leading-5 text-[#c5b99a] line-clamp-3">{movement.explanation}</p>
+            <p className="mt-2 text-xs leading-5 text-[#c5b99a]">{movement.explanation}</p>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-[#929AA5]">
+              <span>Ordens: {formatNumber(movement.orderFlow.orderCount)}</span>
+              <span>Saldo: {formatNumber(movement.orderFlow.netQuantity)}</span>
+              <span>Compras: {formatNumber(movement.orderFlow.buyQuantity)}</span>
+              <span>Vendas: {formatNumber(movement.orderFlow.sellQuantity)}</span>
+            </div>
           </div>
         ))}
       </div>
@@ -1030,6 +1043,17 @@ function MovementList({ movements }: { movements: Movement[] }) {
                 <MiniStat label="Range" value={formatPct(movement.intraperiodRangePct)} />
                 <MiniStat label="Volume +" value={formatNumber(movement.volumeDelta)} />
                 <MiniStat label="Fonte" value={movement.source} />
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-5">
+                <MiniStat label="Ordens" value={formatNumber(movement.orderFlow.orderCount)} />
+                <MiniStat label="Compras" value={formatNumber(movement.orderFlow.buyQuantity)} />
+                <MiniStat label="Vendas" value={formatNumber(movement.orderFlow.sellQuantity)} />
+                <MiniStat label="Saldo" value={formatNumber(movement.orderFlow.netQuantity)} />
+                <MiniStat
+                  label="Preço médio"
+                  value={movement.orderFlow.averageExecutedPrice === null ? 'n/d' : formatCurrency(movement.orderFlow.averageExecutedPrice)}
+                />
               </div>
 
               <div className="mt-4 rounded-lg border border-[rgba(240,185,11,.08)] bg-[#0B0E11] p-3">
