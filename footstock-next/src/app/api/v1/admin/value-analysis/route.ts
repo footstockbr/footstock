@@ -84,6 +84,10 @@ type PriceHistoryPoint = {
   source: string
 }
 
+type ColumnExistsRow = {
+  exists: boolean
+}
+
 type MotorContext = {
   cluster: ClusterKey
   configSource: 'redis' | 'defaults'
@@ -160,6 +164,67 @@ async function getMotorLayersConfig(): Promise<{ config: MotorLayersConfig; sour
     },
     source: 'defaults',
   }
+}
+
+async function priceHistoryHasSourceColumn(): Promise<boolean> {
+  const rows = await prisma.$queryRaw<ColumnExistsRow[]>`
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'price_history'
+        AND column_name = 'source'
+    ) AS exists
+  `
+
+  return rows[0]?.exists === true
+}
+
+async function getPriceHistory(params: {
+  assetId: string
+  start: Date
+  end: Date
+  hasSourceColumn: boolean
+}): Promise<PriceHistoryPoint[]> {
+  if (params.hasSourceColumn) {
+    return prisma.$queryRaw<PriceHistoryPoint[]>`
+      SELECT
+        id,
+        timestamp,
+        open::float8 AS open,
+        high::float8 AS high,
+        low::float8 AS low,
+        close::float8 AS close,
+        volume,
+        session_type::text AS "sessionType",
+        source
+      FROM price_history
+      WHERE asset_id = ${params.assetId}
+        AND timestamp >= ${params.start}
+        AND timestamp <= ${params.end}
+      ORDER BY timestamp DESC
+      LIMIT ${MAX_PRICE_POINTS}
+    `
+  }
+
+  return prisma.$queryRaw<PriceHistoryPoint[]>`
+    SELECT
+      id,
+      timestamp,
+      open::float8 AS open,
+      high::float8 AS high,
+      low::float8 AS low,
+      close::float8 AS close,
+      volume,
+      session_type::text AS "sessionType",
+      'REAL'::text AS source
+    FROM price_history
+    WHERE asset_id = ${params.assetId}
+      AND timestamp >= ${params.start}
+      AND timestamp <= ${params.end}
+    ORDER BY timestamp DESC
+    LIMIT ${MAX_PRICE_POINTS}
+  `
 }
 
 function buildMotorContext(cluster: ClusterKey, layers: { config: MotorLayersConfig; source: 'redis' | 'defaults' }): MotorContext {
@@ -252,26 +317,14 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
     }
 
     // Leitura raw intencional: existem dados legados gerados pelo motor com
-    // session_type='TRADING', enquanto o enum Prisma do Next usa 'REGULAR'.
-    // Projetar como texto evita P2023 e preserva a explicação histórica.
-    const newestHistory = await prisma.$queryRaw<PriceHistoryPoint[]>`
-      SELECT
-        id,
-        timestamp,
-        open::float8 AS open,
-        high::float8 AS high,
-        low::float8 AS low,
-        close::float8 AS close,
-        volume,
-        session_type::text AS "sessionType",
-        source
-      FROM price_history
-      WHERE asset_id = ${asset.id}
-        AND timestamp >= ${window.start}
-        AND timestamp <= ${window.end}
-      ORDER BY timestamp DESC
-      LIMIT ${MAX_PRICE_POINTS}
-    `
+    // session_type='TRADING', enquanto o enum Prisma do Next pode divergir.
+    // Projetar session_type como texto evita P2023 e preserva a explicação histórica.
+    const newestHistory = await getPriceHistory({
+      assetId: asset.id,
+      start: window.start,
+      end: window.end,
+      hasSourceColumn: await priceHistoryHasSourceColumn(),
+    })
 
     const history = newestHistory.reverse()
     const analysisStart = history[0]?.timestamp ?? window.start
