@@ -28,7 +28,7 @@ const ofiClusterSchema = z.object({
 })
 
 const sessionSchema = z.object({
-  vol_multiplier: z.number().min(0.01).max(5.0),
+  vol_multiplier: z.number().min(0).max(5.0),
 })
 
 const layersSchema = z.object({
@@ -81,11 +81,11 @@ const layersSchema = z.object({
   }),
   sessionManagement: z.object({
     sessions: z.object({
-      OPEN:      sessionSchema,
-      MID:       sessionSchema,
-      PRE_CLOSE: sessionSchema,
-      CLOSE:     sessionSchema,
-      OVERNIGHT: sessionSchema,
+      PRE_OPENING:  sessionSchema,
+      TRADING:      sessionSchema,
+      CLOSING_CALL: sessionSchema,
+      AFTER_MARKET: sessionSchema,
+      CLOSED:       sessionSchema,
     }),
   }),
 })

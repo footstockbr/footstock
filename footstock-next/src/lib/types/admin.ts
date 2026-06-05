@@ -194,7 +194,7 @@ export interface AdminUserActionItem {
 // ─── Motor Layers Config ──────────────────────────────────────────────────────
 
 export type ClusterKey = 'A_TOP' | 'A_MID' | 'A_SMALL' | 'B_LIQUID' | 'B_ILLIQ'
-export type SessionKey = 'OPEN' | 'MID' | 'PRE_CLOSE' | 'CLOSE' | 'OVERNIGHT'
+export type SessionKey = 'PRE_OPENING' | 'TRADING' | 'CLOSING_CALL' | 'AFTER_MARKET' | 'CLOSED'
 
 export interface OUClusterParams { sigma: number; theta: number; spread_base: number }
 export interface OFIClusterParams { rho: number }

@@ -22,7 +22,7 @@ import type { AssetState, ClusterParams, LayerResult } from '../../types/motor.t
  * Não modela float absoluto (dados reais de posições abertas não disponíveis em tempo real).
  */
 
-const MAX_AMPLIFICATION = 1.0  // amplifica até 2×
+const DEFAULT_AMP_CAP = 2.0  // amplificador total máximo: 2×
 
 /** k por cluster: quantos × baseVolume para consumir o float estimado na sessão */
 const FLOAT_K: Record<string, number> = {
@@ -45,9 +45,12 @@ export class L6_SupplyScaling implements QuantLayer {
       ? Math.max(0, 1 - state.volume / capacity)
       : 0
 
-    // amplifier = 1 + (1 − floatAvailableRatio) × MAX_AMPLIFICATION
+    const ampCap = params.supplyAmpCap ?? DEFAULT_AMP_CAP
+    const maxAmplification = Math.max(0, ampCap - 1)
+
+    // amplifier = 1 + (1 − floatAvailableRatio) × maxAmplification
     // Quando float → 0: amplifier → 2 (dobra o impacto)
-    const amplification = 1 + (1 - floatAvailableRatio) * MAX_AMPLIFICATION
+    const amplification = 1 + (1 - floatAvailableRatio) * maxAmplification
 
     const deltaPrice = params.drift * state.currentPrice * amplification
 
@@ -58,6 +61,7 @@ export class L6_SupplyScaling implements QuantLayer {
         drift: params.drift,
         floatAvailableRatio,
         amplification,
+        ampCap,
         volume: state.volume,
         capacity,
       },

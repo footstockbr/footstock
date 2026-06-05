@@ -49,7 +49,7 @@ const healthServer = http.createServer(async (req, res) => {
     }
     const params  = new URL(url, 'http://localhost').searchParams
     const ticker  = params.get('ticker') ?? undefined
-    const debug   = _engineRef?.getLayersDebug(ticker) ?? {}
+    const debug   = await (_engineRef?.getLayersDebug(ticker) ?? Promise.resolve({}))
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify(debug))
     return

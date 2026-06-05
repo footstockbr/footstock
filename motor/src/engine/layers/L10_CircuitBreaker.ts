@@ -24,7 +24,7 @@ import type { AssetState, ClusterParams, LayerResult } from '../../types/motor.t
  *   MarketEngine gerencia o timer de retomada via PAUSE_RESUME_MS (5min absoluto, independente de TICK_INTERVAL_MS).
  */
 
-const CIRCUIT_BREAKER_THRESHOLD = 0.08   // 8% de variação acumulada no dia
+const DEFAULT_CIRCUIT_BREAKER_THRESHOLD = 0.08   // 8% de variação acumulada no dia
 const HALT_DURATION_TICKS       = 150    // ~5 minutos (150 ticks × 2s)
 
 /**
@@ -54,8 +54,8 @@ export class L10_CircuitBreaker implements QuantLayer {
    * Em modo de pipeline sequencial, use `checkTrigger` para verificar o
    * preço candidato final antes de commitá-lo.
    */
-  applyLayer(state: AssetState, _params: ClusterParams, _noise: number): CircuitBreakerResult {
-    return this.checkTrigger(state.currentPrice, state)
+  applyLayer(state: AssetState, params: ClusterParams, _noise: number): CircuitBreakerResult {
+    return this.checkTrigger(state.currentPrice, state, params)
   }
 
   /**
@@ -65,7 +65,7 @@ export class L10_CircuitBreaker implements QuantLayer {
    * @param candidatePrice Preço final antes de ser commitado ao estado
    * @param state          Estado atual do ativo
    */
-  checkTrigger(candidatePrice: number, state: AssetState): CircuitBreakerResult {
+  checkTrigger(candidatePrice: number, state: AssetState, params?: ClusterParams): CircuitBreakerResult {
     if (state.closePrice === 0) {
       return { layer: this.name, deltaPrice: 0, triggered: false }
     }
@@ -77,7 +77,9 @@ export class L10_CircuitBreaker implements QuantLayer {
     // newsActive exige newsImpact !== 0 também: protege contra ticks "fantasma"
     // (newsImpact=0 sem decrement em L7 manteria o flag preso eternamente).
     const newsActive = state.newsImpact !== 0 && state.newsImpactTicks > 0
-    const threshold = newsActive ? NEWS_CB_THRESHOLD : CIRCUIT_BREAKER_THRESHOLD
+    const threshold = newsActive
+      ? NEWS_CB_THRESHOLD
+      : (params?.circuitBreakerThreshold ?? DEFAULT_CIRCUIT_BREAKER_THRESHOLD)
 
     if (changePercent >= threshold) {
       // Halt: MarketEngine trata o estado isPaused e o timer de retomada

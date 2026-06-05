@@ -19,6 +19,14 @@ export interface ClusterParams {
   maxTickChange: number       // Variação máxima por tick (ex: 0.0035 = 0.35%)
   ofiDecay: number            // OFI: decay por cluster (ex: A_TOP=0.91, B_ILLIQ=0.97)
   alphaOfi: number            // OFI: fator de impacto no preço (delta_OFI = alphaOfi * OFI_t)
+  fundamentalReversionRate?: number // Cap da L2 por tick (default 0.003)
+  garchOmega?: number         // L3: termo omega do GARCH(1,1)
+  garchVolCap?: number        // L3: multiplicador maximo da variancia base
+  supplyAmpCap?: number       // L6: amplificador maximo total (default 2.0)
+  pressureSpreadTicks?: number // L7: fase inicial da noticia
+  pressureAbsorptionTicks?: number // L7: fase de absorcao da noticia
+  pressureSpotCap?: number    // L7: cap instantaneo por noticia
+  circuitBreakerThreshold?: number // L10: threshold de halt normal
 }
 
 // ─── Motor Tick ───────────────────────────────────────────────────────────

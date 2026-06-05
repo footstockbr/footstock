@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Lock } from 'lucide-react'
 import { IMPACT_CATEGORY_LABELS, IMPACT_CATEGORY_OPTIONS, SENTIMENT_HEX_COLORS, SENTIMENT_LABELS, SENTIMENT_OPTIONS } from '@/lib/constants/admin-ui'
 import { CLUBS_PUBLIC as CLUBS } from '@/lib/constants/clubs-public'
@@ -51,6 +52,8 @@ const EMPTY_CREATE = {
 }
 
 export default function NoticiasPage() {
+  const searchParams = useSearchParams()
+  const highlightedNewsId = searchParams.get('newsId')
   const [news, setNews] = useState<NewsItem[]>([])
   const [filter, setFilter] = useState<FilterType>('todas')
   const [loading, setLoading] = useState(true)
@@ -70,6 +73,21 @@ export default function NoticiasPage() {
   useEffect(() => {
     fetchNews()
   }, [])
+
+  useEffect(() => {
+    if (!highlightedNewsId || news.length === 0 || editingItem) return
+    const item = news.find((candidate) => candidate.id === highlightedNewsId)
+    if (!item) return
+    setEditingItem(item)
+    setEditForm({
+      title: item.title,
+      content: item.content,
+      impact: item.impact,
+      sentiment: item.sentiment,
+      ticker: item.ticker ?? '',
+    })
+    setEditError(null)
+  }, [highlightedNewsId, news, editingItem])
 
   const fetchNews = async () => {
     try {

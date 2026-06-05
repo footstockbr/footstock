@@ -22,7 +22,7 @@ const FULL_DEFAULTS: MotorLayersConfig = {
 }
 
 const CLUSTERS: ClusterKey[] = ['A_TOP', 'A_MID', 'A_SMALL', 'B_LIQUID', 'B_ILLIQ']
-const SESSIONS: SessionKey[] = ['OPEN', 'MID', 'PRE_CLOSE', 'CLOSE', 'OVERNIGHT']
+const SESSIONS: SessionKey[] = ['PRE_OPENING', 'TRADING', 'CLOSING_CALL', 'AFTER_MARKET', 'CLOSED']
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
 
@@ -322,11 +322,19 @@ export function MotorCamadas() {
   const garchInvalid = garchSum >= 1.0   // server will reject — block save
 
   const sessionLabels: Record<SessionKey, string> = {
-    OPEN: 'Abertura', MID: 'Mercado Aberto', PRE_CLOSE: 'Pré-Fechamento', CLOSE: 'Fechamento', OVERNIGHT: 'Overnight',
+    PRE_OPENING: 'Pré-abertura',
+    TRADING: 'Negociação',
+    CLOSING_CALL: 'Call',
+    AFTER_MARKET: 'After-market',
+    CLOSED: 'Fechado',
   }
 
   const sessionColors: Record<SessionKey, string> = {
-    OPEN: '#2EBD85', MID: '#4E9AF1', PRE_CLOSE: '#F0B90B', CLOSE: '#F77B4E', OVERNIGHT: '#929AA5',
+    PRE_OPENING: '#F97316',
+    TRADING: '#EAB308',
+    CLOSING_CALL: '#06B6D4',
+    AFTER_MARKET: '#7C3AED',
+    CLOSED: '#EF4444',
   }
 
   if (isLoading) {
@@ -662,7 +670,7 @@ export function MotorCamadas() {
       <LayerCard
         badge="L10"
         name="Session Management"
-        description="Multiplicadores de volatilidade por sessão de mercado (OPEN, MID, PRE_CLOSE, CLOSE, OVERNIGHT)"
+        description="Multiplicadores de volatilidade por sessão de mercado canônica do motor"
         color="#929AA5"
         expanded={!!expanded.sessionManagement}
         onToggle={() => toggle('sessionManagement')}
@@ -681,7 +689,7 @@ export function MotorCamadas() {
                 <SliderField
                   label={sessionLabels[session]}
                   value={config.sessionManagement.sessions[session].vol_multiplier}
-                  min={0.01} max={5.0} step={0.05}
+                  min={0} max={5.0} step={0.05}
                   format={(v) => `${v.toFixed(2)}×`}
                   onChange={(v) => setSessionParam(session, 'vol_multiplier', v)}
                   defaultValue={MOTOR_LAYERS_DEFAULTS.sessionManagement.sessions[session].vol_multiplier}

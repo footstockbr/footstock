@@ -17,7 +17,7 @@ import type { AssetState, ClusterParams, LayerResult } from '../../types/motor.t
  * Separação de L1: L1 cuida do ruído estocástico, L2 cuida do pull determinístico.
  * Sem double-counting: cada componente do OU tem sua camada.
  */
-const MAX_ANCHOR_PERCENT = 0.003  // 0.3% por tick (cap absoluto)
+const DEFAULT_MAX_ANCHOR_PERCENT = 0.003  // 0.3% por tick (cap absoluto)
 const DT = parseFloat(process.env.MOTOR_TICK_DT_SECONDS ?? '1')
 
 export class L2_FundamentalAnchor implements QuantLayer {
@@ -38,7 +38,8 @@ export class L2_FundamentalAnchor implements QuantLayer {
     const raw = theta * (fv - state.currentPrice) * DT * sessionMul
 
     // Cap: máximo 0.3% do preço atual por tick em direção ao FV
-    const maxDelta = state.currentPrice * MAX_ANCHOR_PERCENT
+    const anchorCap = params.fundamentalReversionRate ?? DEFAULT_MAX_ANCHOR_PERCENT
+    const maxDelta = state.currentPrice * anchorCap
     const deltaPrice = Math.max(-maxDelta, Math.min(maxDelta, raw))
 
     const capped = Math.abs(raw) > maxDelta ? 1 : 0
@@ -51,7 +52,7 @@ export class L2_FundamentalAnchor implements QuantLayer {
         fairValue: fv,
         deviation: (state.currentPrice - fv) / fv,
         rawDelta: raw,
-        cappedAt: MAX_ANCHOR_PERCENT,
+        cappedAt: anchorCap,
         capped,
         volatilityMultiplier: sessionMul,
       },

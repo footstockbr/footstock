@@ -33,6 +33,7 @@ export const ROUTES = {
   ADMIN_ENGAJAMENTO: "/admin/engajamento",
   ADMIN_CLUBES: "/admin/clubes",
   ADMIN_PATROCINADORES: "/admin/patrocinadores",
+  ADMIN_ANALISE_VALOR: "/admin/analise-de-valor",
   ADMIN_AFILIADOS: "/admin/afiliados",
   ADMIN_LGPD: "/admin/lgpd",
   ADMIN_CONFIGURACOES: "/admin/configuracoes",

@@ -7,6 +7,7 @@ import type Redis from 'ioredis'
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { PriceCalculator } from './PriceCalculator'
+import { MotorLayerRuntimeConfigService } from './MotorLayerRuntimeConfig'
 import { OrderBook } from './OrderBook'
 import { sessionManager } from './SessionManager'
 import { agentOrchestrator, AssetCluster } from '../agents/AgentOrchestrator'
@@ -41,6 +42,7 @@ export class MarketEngine {
   private redis: Redis
   private prisma: PrismaClient
   private calculator: PriceCalculator
+  private layerRuntimeConfig: MotorLayerRuntimeConfigService
   /** Últimos resultados de camadas por ativo — exposto via endpoint /layers-debug. */
   private lastLayerResults: Map<string, import('./PriceCalculator').PriceCalculationResult> = new Map()
   private orderBooks: Map<string, OrderBook> = new Map()
@@ -65,6 +67,7 @@ export class MarketEngine {
     const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! })
     this.prisma = new PrismaClient({ adapter })
     this.calculator = new PriceCalculator(redis)  // Passa Redis para persistência dos estados de camada
+    this.layerRuntimeConfig = new MotorLayerRuntimeConfigService(redis)
     this.healthService = MotorHealthService.getInstance(redis)
     this.orderExecutor = new OrderExecutor(this.prisma, redis)
     this.orderMatcher = new OrderMatcher(this.prisma, redis)
@@ -313,7 +316,9 @@ export class MarketEngine {
   private async runTick(): Promise<void> {
     this.tickCount++
     const sessionType = sessionManager.getCurrentSession()
-    const volatilityMultiplier = sessionManager.getVolatilityMultiplier(sessionType)
+    const runtimeConfig = await this.layerRuntimeConfig.getConfig()
+    const volatilityMultiplier =
+      runtimeConfig.sessionMultipliers[sessionType] ?? sessionManager.getVolatilityMultiplier(sessionType)
     const ticks: MotorTick[] = []
 
     // Transição de sessão: resetar closePrice para evitar CB acumulado entre sessões
@@ -355,7 +360,7 @@ export class MarketEngine {
       if (state.isPaused) continue
 
       try {
-        const params = getClusterParams(state.cluster)
+        const params = runtimeConfig.clusterParams[state.cluster] ?? getClusterParams(state.cluster)
         const orderBook = this.orderBooks.get(assetId)!
 
         // Atualizar volumes pendentes no estado
@@ -380,12 +385,20 @@ export class MarketEngine {
           const variationPct = state.closePrice > 0
             ? Math.abs((state.currentPrice - state.closePrice) / state.closePrice) * 100
             : 0
-          const resumeAt = Date.now() + PAUSE_RESUME_MS
+          const haltDurationMs = runtimeConfig.haltDurationMs || PAUSE_RESUME_MS
+          const resumeAt = Date.now() + haltDurationMs
           state.isPaused = true
           state.haltReason = 'CIRCUIT_BREAKER'
           state.haltResumeAt = resumeAt
-          this.notifyCircuitBreaker(assetId, state.ticker, variationPct, resumeAt, sessionType).catch(console.error)
-          this.scheduleCircuitBreakerResume(assetId, state, PAUSE_RESUME_MS)
+          this.notifyCircuitBreaker(
+            assetId,
+            state.ticker,
+            variationPct,
+            resumeAt,
+            sessionType,
+            Math.round(haltDurationMs / 1000),
+          ).catch(console.error)
+          this.scheduleCircuitBreakerResume(assetId, state, haltDurationMs)
           continue
         }
 
@@ -591,6 +604,7 @@ export class MarketEngine {
     variationPct: number,
     resumeAt: number,
     sessionType: SessionType,
+    haltDurationSeconds: number,
   ): Promise<void> {
     const haltReason = 'CIRCUIT_BREAKER'
 
@@ -604,7 +618,7 @@ export class MarketEngine {
       assetId,
       ticker,
       timestamp: Date.now(),
-      haltDurationSeconds: 300,  // 150 ticks × 2s
+      haltDurationSeconds,
       resumeAt,
       variationPct: parseFloat(variationPct.toFixed(2)),
       haltReason,
@@ -777,14 +791,23 @@ export class MarketEngine {
    *
    * @param ticker Opcional: filtrar por ativo. Se omitido, retorna todos.
    */
-  getLayersDebug(ticker?: string): Record<string, unknown> {
+  async getLayersDebug(ticker?: string): Promise<Record<string, unknown>> {
+    const runtimeConfig = await this.layerRuntimeConfig.getConfig()
     if (ticker) {
       const result = this.lastLayerResults.get(ticker)
       const state  = [...this.assetStates.values()].find(s => s.ticker === ticker)
       if (!result || !state) return {}
+      const params = runtimeConfig.clusterParams[state.cluster] ?? getClusterParams(state.cluster)
       return {
         ticker,
         currentPrice:     state.currentPrice,
+        cluster:          state.cluster,
+        runtimeConfig: {
+          source: runtimeConfig.source,
+          updatedAt: runtimeConfig.updatedAt,
+          updatedBy: runtimeConfig.updatedBy,
+          params,
+        },
         isPaused:         state.isPaused,
         dailyVolAccum:    state.dailyVolAccum ?? 0,
         sigmaMultiplier:  state.dailySigmaMultiplier ?? 1.0,
@@ -798,9 +821,19 @@ export class MarketEngine {
     const out: Record<string, unknown> = {}
     for (const [t, result] of this.lastLayerResults) {
       const state = [...this.assetStates.values()].find(s => s.ticker === t)
+      const params = state
+        ? (runtimeConfig.clusterParams[state.cluster] ?? getClusterParams(state.cluster))
+        : null
       out[t] = {
         ticker:          t,
         currentPrice:    state?.currentPrice,
+        cluster:         state?.cluster,
+        runtimeConfig: {
+          source: runtimeConfig.source,
+          updatedAt: runtimeConfig.updatedAt,
+          updatedBy: runtimeConfig.updatedBy,
+          params,
+        },
         isPaused:        state?.isPaused ?? false,
         dailyVolAccum:   state?.dailyVolAccum ?? 0,
         sigmaMultiplier: state?.dailySigmaMultiplier ?? 1.0,

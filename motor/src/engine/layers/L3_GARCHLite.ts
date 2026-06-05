@@ -18,10 +18,9 @@ import type { AssetState, ClusterParams, LayerResult } from '../../types/motor.t
  * σ_eff = √Var_t × dailySigmaMultiplier (de L9_DailyVolTarget).
  * Quando dailySigmaMultiplier = 0.0: freeze total, GARCH não emite ruído.
  */
-const OMEGA = 0.000002          // INTAKE canônico
+const DEFAULT_OMEGA = 0.000002  // INTAKE canônico
 const BASE_VARIANCE = 0.0001    // Variância base para cap
-const VOLATILITY_CAP = 1.8      // Max 1.8× variância base
-const MAX_VARIANCE = BASE_VARIANCE * VOLATILITY_CAP
+const DEFAULT_VOLATILITY_CAP = 1.8      // Max 1.8× variância base
 
 export class L3_GARCHLite implements QuantLayer {
   name = 'L3_GARCHLite'
@@ -39,9 +38,13 @@ export class L3_GARCHLite implements QuantLayer {
       ? (state.currentPrice - state.closePrice) / state.closePrice
       : 0
 
+    const omega = params.garchOmega ?? DEFAULT_OMEGA
+    const volatilityCap = params.garchVolCap ?? DEFAULT_VOLATILITY_CAP
+    const maxVariance = BASE_VARIANCE * volatilityCap
+
     // GARCH(1,1): Var_t = ω + α×r²_{t-1} + β×Var_{t-1}
-    let newVariance = OMEGA + garchAlpha * lastReturn ** 2 + garchBeta * prevVariance
-    newVariance = Math.min(newVariance, MAX_VARIANCE)
+    let newVariance = omega + garchAlpha * lastReturn ** 2 + garchBeta * prevVariance
+    newVariance = Math.min(newVariance, maxVariance)
 
     // Persistir variância no estado (hydratado do Redis pelo MarketEngine no startup)
     state.variance = newVariance
@@ -65,7 +68,9 @@ export class L3_GARCHLite implements QuantLayer {
         volatilityMultiplier: sessionMul,
         variance: newVariance,
         lastReturn,
-        capped: newVariance >= MAX_VARIANCE ? 1 : 0,
+        omega,
+        volatilityCap,
+        capped: newVariance >= maxVariance ? 1 : 0,
       },
     }
   }

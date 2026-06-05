@@ -166,7 +166,7 @@ export class PriceCalculator {
     const candidatePrice = Math.max(NUDGE_MIN_PRICE, state.currentPrice + brakedDelta)
 
     // L10: Circuit Breaker trigger — verifica candidatePrice vs closePrice
-    const cbResult = this.l10.checkTrigger(candidatePrice, state)
+    const cbResult = this.l10.checkTrigger(candidatePrice, state, params)
     layerResults.push(cbResult)
 
     if (cbResult.triggered) {
