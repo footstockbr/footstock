@@ -19,7 +19,8 @@ export interface MotorControlEvent {
   assetId?: string
   payload?: Record<string, unknown>
   adminId: string
-  reason: string
+  reason?: string
+  correlationId?: string
 }
 
 // ─── news:inject ─────────────────────────────────────────────────────────
@@ -35,9 +36,17 @@ export type ImpactCategoryType =
 export interface NewsInjectEvent {
   type: 'NEWS'
   assetId: string
+  newsId?: string
+  title?: string
+  source?: string
   impact: ImpactCategoryType
+  impactCategory?: ImpactCategoryType
+  sentiment?: number | string
+  publishedAt?: string
+  correlationId?: string
   magnitude: number        // derivado de IMPACT_MAGNITUDE
   durationTicks: number
+  curveType?: 'canonical' | 'parameterized'
 }
 
 // ─── Union types para serialização Redis ─────────────────────────────────

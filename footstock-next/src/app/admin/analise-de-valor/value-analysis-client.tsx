@@ -41,6 +41,65 @@ type CauseType =
   | 'SIMULATED_ENGINE'
   | 'UNEXPLAINED'
 
+type EvidenceGrade = 'DIRECT' | 'CORRELATED' | 'DEGRADED'
+type QualityFlag =
+  | 'ATTRIBUTION_COLUMN_MISSING'
+  | 'ATTRIBUTION_PERSIST_FAILED'
+  | 'ATTRIBUTION_PARSE_FAILED'
+  | 'ATTRIBUTION_TRUNCATED'
+  | 'NEWS_WITHOUT_ID'
+  | 'NEWS_QUEUE_AGGREGATED'
+  | 'ORDER_FLOW_SNAPSHOT_UNAVAILABLE'
+  | 'ORDER_FLOW_INELIGIBLE_ONLY'
+  | 'LEGACY_BACKFILL'
+  | 'SYNTHETIC_HISTORY'
+  | 'UNKNOWN_DEGRADED_REASON'
+
+type EngineAttribution = {
+  version: 1 | 2
+  primaryCause: string
+  primaryLayer: string | null
+  confidence: 'alta' | 'media' | 'baixa'
+  explanation: string
+  previousPrice: number
+  enginePrice: number
+  finalPrice: number
+  engineDelta: number
+  agentImpactPct: number
+  agentDelta: number
+  syntheticVolume: number
+  pendingBuyVolume: number
+  pendingSellVolume: number
+  orderImbalance: number
+  sessionType: string
+  layerContributions: {
+    layer: string
+    deltaPrice: number
+    contributionPct: number
+    direction: 'up' | 'down' | 'neutral'
+    metadata?: Record<string, number>
+  }[]
+  appliedControls: string[]
+  generatedAt: string
+  tickId?: string
+  tickCount?: number
+  causalEvents?: {
+    id: string
+    type: string
+    source: string
+    occurredAt: string
+    direction: 'up' | 'down' | 'neutral'
+    magnitude: number
+    newsId?: string
+    title?: string
+    layer?: string
+  }[]
+  qualityFlags?: QualityFlag[]
+  primaryExplanation?: string
+  evidenceSentence?: string
+  caveatSentence?: string
+}
+
 type Movement = {
   id: string
   from: string
@@ -72,6 +131,28 @@ type Movement = {
     orderCount: number
     averageExecutedPrice: number | null
   }
+  engineAttribution: EngineAttribution | null
+  evidenceGrade: EvidenceGrade
+  qualityFlags: QualityFlag[]
+  directEvidence: {
+    type: string
+    label: string
+    eventId: string
+    source: string
+    occurredAt: string
+  }[]
+  correlatedEvidence: {
+    type: string
+    label: string
+    eventId?: string
+    occurredAt?: string
+    confidenceScore: number
+  }[]
+  degradedReason: string | null
+  degradedOwner: string | null
+  primaryExplanation: string
+  evidenceSentence: string
+  caveatSentence: string
   evidenceWindow: {
     startsAt: string
     endsAt: string
@@ -147,6 +228,16 @@ type ValueAnalysisReport = {
     adminActionBreakdown: Record<string, number>
     topMovements: Movement[]
     reportNarrative: string
+    attributionCoveragePct: number
+    denominator: {
+      type: string
+      count: number
+      period: { start: string; end: string }
+    }
+    directCount: number
+    correlatedCount: number
+    degradedCount: number
+    period: { start: string; end: string }
   }
   movements: Movement[]
   evidenceTotals: {
@@ -208,6 +299,25 @@ const CONFIDENCE_BADGE: Record<Movement['confidence'], 'success' | 'warning' | '
   media: 'warning',
   baixa: 'error',
 }
+
+const EVIDENCE_GRADE_LABEL: Record<EvidenceGrade, string> = {
+  DIRECT: 'Direta',
+  CORRELATED: 'Correlacionada',
+  DEGRADED: 'Degradada',
+}
+
+const EVIDENCE_GRADE_BADGE: Record<EvidenceGrade, 'success' | 'warning' | 'error'> = {
+  DIRECT: 'success',
+  CORRELATED: 'warning',
+  DEGRADED: 'error',
+}
+
+const EVIDENCE_FILTERS: Array<{ value: 'ALL' | EvidenceGrade; label: string }> = [
+  { value: 'ALL', label: 'Todas' },
+  { value: 'DIRECT', label: 'Diretas' },
+  { value: 'CORRELATED', label: 'Correlacionadas' },
+  { value: 'DEGRADED', label: 'Degradadas' },
+]
 
 const PERIOD_OPTIONS = [
   { value: '1', label: '1 dia' },
@@ -284,7 +394,7 @@ function reportToMarkdown(report: ValueAnalysisReport): string {
     `Variação acumulada: ${formatPct(report.summary.percentageChange)}`,
     `Causa dominante: ${report.summary.dominantCause.label}`,
     `Confiabilidade média: ${report.summary.averageConfidenceScore}% (${report.summary.reliabilityLabel})`,
-    `Cobertura de evidência: ${report.summary.explainedPct}%`,
+    `Cobertura causal direta: ${report.summary.attributionCoveragePct}% de ${report.summary.denominator.count} movimento(s) com rawChange != 0`,
     `Configuração do motor: ${report.motorContext.configSource === 'redis' ? 'admin/Redis' : 'defaults do motor'}`,
     `Cluster: ${report.motorContext.cluster}`,
     `Parâmetros efetivos: sigma=${report.motorContext.effectiveParameters.sigma}, theta=${report.motorContext.effectiveParameters.theta}, OFI rho=${report.motorContext.effectiveParameters.ofiRho}, velocity cap=${report.motorContext.effectiveParameters.velocityCapPct}%/tick, circuit breaker=${report.motorContext.effectiveParameters.circuitBreakerPct}%`,
@@ -298,8 +408,12 @@ function reportToMarkdown(report: ValueAnalysisReport): string {
       `### ${formatDateTime(movement.to)} - ${formatPct(movement.percentageChange)}`,
       `Preço: ${formatCurrency(movement.previousPrice)} -> ${formatCurrency(movement.newPrice)}`,
       `Causa provável: ${movement.causeLabel}`,
+      `Grade de evidência: ${movement.evidenceGrade}`,
+      `Flags: ${movement.qualityFlags.join(', ') || 'nenhuma'}`,
       `Confiança: ${movement.confidenceScore}%`,
-      `Explicação: ${movement.explanation}`,
+      `Explicação: ${movement.primaryExplanation}`,
+      `Evidência: ${movement.evidenceSentence}`,
+      `Ressalva: ${movement.caveatSentence}`,
       `Notas: ${movement.diagnosticNotes.join(' | ')}`,
     ].join('\n')),
   ]
@@ -712,7 +826,11 @@ function ReportSummary({
         <MetricCard label="Preço inicial" value={formatCurrency(report.summary.startPrice)} />
         <MetricCard label="Preço final" value={formatCurrency(report.summary.endPrice)} />
         <MetricCard label="Mudança total" value={formatSignedCurrency(report.summary.absoluteChange)} trend={trend} />
-        <MetricCard label="Confiabilidade média" value={`${report.summary.averageConfidenceScore}%`} detail={`evidência ${report.summary.reliabilityLabel}`} />
+        <MetricCard
+          label="Cobertura causal"
+          value={`${report.summary.attributionCoveragePct}%`}
+          detail={`${report.summary.directCount}/${report.summary.denominator.count} diretos no período`}
+        />
       </div>
     </section>
   )
@@ -747,9 +865,9 @@ function ExecutiveDiagnosis({ report }: { report: ValueAnalysisReport }) {
           />
           <InsightTile
             icon={<CheckCircle2 className="h-4 w-4" />}
-            label="Cobertura de evidência"
-            value={`${report.summary.explainedPct}%`}
-            detail={`${report.summary.movementsAnalyzed} variações analisadas`}
+            label="Cobertura causal"
+            value={`${report.summary.attributionCoveragePct}%`}
+            detail={`${report.summary.directCount} diretos · ${report.summary.correlatedCount} correlacionados · ${report.summary.degradedCount} degradados`}
           />
         </div>
 
@@ -874,6 +992,15 @@ function CauseBreakdown({ report }: { report: ValueAnalysisReport }) {
         </div>
 
         <div className="space-y-3">
+          <BreakdownBox
+            title="Grade de evidência"
+            entries={[
+              ['DIRECT', report.summary.directCount],
+              ['CORRELATED', report.summary.correlatedCount],
+              ['DEGRADED', report.summary.degradedCount],
+            ]}
+            empty="Sem movimentos."
+          />
           <BreakdownBox title="Fontes dos candles" entries={objectEntries(report.summary.sourceBreakdown)} empty="Sem movimentos." />
           <BreakdownBox title="Sentimento das notícias" entries={objectEntries(report.summary.newsSentimentBreakdown)} empty="Sem notícias no recorte." />
           <BreakdownBox title="Ações administrativas" entries={objectEntries(report.summary.adminActionBreakdown)} empty="Sem ações no recorte." />
@@ -931,10 +1058,18 @@ function TopMovements({ report }: { report: ValueAnalysisReport }) {
               <Badge variant={CAUSE_BADGE[movement.causeType]} size="xs">
                 {movement.causeLabel}
               </Badge>
+              <Badge variant={EVIDENCE_GRADE_BADGE[movement.evidenceGrade]} size="xs">
+                {EVIDENCE_GRADE_LABEL[movement.evidenceGrade]}
+              </Badge>
+              {movement.engineAttribution && (
+                <Badge variant="success" size="xs">
+                  registrado pelo motor
+                </Badge>
+              )}
             </div>
             <p className="mt-3 text-xs text-[#929AA5]">{formatDateTime(movement.to)}</p>
             <p className="mt-1 text-sm font-semibold text-[#EAECEF]">{formatCurrency(movement.newPrice)}</p>
-            <p className="mt-2 text-xs leading-5 text-[#c5b99a]">{movement.explanation}</p>
+            <p className="mt-2 text-xs leading-5 text-[#c5b99a]">{movement.primaryExplanation}</p>
             <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-[#929AA5]">
               <span>Ordens: {formatNumber(movement.orderFlow.orderCount)}</span>
               <span>Saldo: {formatNumber(movement.orderFlow.netQuantity)}</span>
@@ -951,22 +1086,30 @@ function TopMovements({ report }: { report: ValueAnalysisReport }) {
 function MovementList({ movements }: { movements: Movement[] }) {
   const [visibleCount, setVisibleCount] = useState(MOVEMENTS_PAGE_SIZE)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
+  const [gradeFilter, setGradeFilter] = useState<'ALL' | EvidenceGrade>('ALL')
 
   useEffect(() => {
     setVisibleCount(MOVEMENTS_PAGE_SIZE)
     setExpandedIds(new Set())
-  }, [movements])
+  }, [movements, gradeFilter])
 
-  if (movements.length === 0) {
+  const filteredMovements = gradeFilter === 'ALL'
+    ? movements
+    : movements.filter((movement) => movement.evidenceGrade === gradeFilter)
+
+  if (filteredMovements.length === 0) {
     return (
-      <section className="rounded-xl border border-[rgba(240,185,11,.1)] bg-[#1E2329] p-6 text-sm text-[#929AA5]">
-        Nenhuma mudança de preço foi encontrada no período selecionado.
+      <section className="space-y-3">
+        <EvidenceFilter value={gradeFilter} onChange={setGradeFilter} movements={movements} />
+        <div className="rounded-xl border border-[rgba(240,185,11,.1)] bg-[#1E2329] p-6 text-sm text-[#929AA5]">
+          Nenhuma mudança de preço foi encontrada para este filtro.
+        </div>
       </section>
     )
   }
 
-  const visibleMovements = movements.slice(0, visibleCount)
-  const remainingCount = Math.max(0, movements.length - visibleMovements.length)
+  const visibleMovements = filteredMovements.slice(0, visibleCount)
+  const remainingCount = Math.max(0, filteredMovements.length - visibleMovements.length)
 
   function toggleMovement(id: string) {
     setExpandedIds((current) => {
@@ -983,10 +1126,11 @@ function MovementList({ movements }: { movements: Movement[] }) {
         <div>
           <h2 className="text-sm font-semibold text-[#EAECEF]">Linha do tempo das mudanças</h2>
           <p className="text-xs text-[#929AA5]">
-            Exibindo {visibleMovements.length} de {movements.length} variações. Abra um item para ver evidências e notas.
+            Exibindo {visibleMovements.length} de {filteredMovements.length} variações filtradas. Abra um item para ver evidências e notas.
           </p>
         </div>
       </div>
+      <EvidenceFilter value={gradeFilter} onChange={setGradeFilter} movements={movements} />
 
       {visibleMovements.map((movement) => {
         const expanded = expandedIds.has(movement.id)
@@ -1019,6 +1163,14 @@ function MovementList({ movements }: { movements: Movement[] }) {
                 <Badge variant={CAUSE_BADGE[movement.causeType]} size="xs">
                   {movement.causeLabel}
                 </Badge>
+                <Badge variant={EVIDENCE_GRADE_BADGE[movement.evidenceGrade]} size="xs" data-testid={`value-analysis-grade-${movement.evidenceGrade}`}>
+                  {EVIDENCE_GRADE_LABEL[movement.evidenceGrade]}
+                </Badge>
+                {movement.engineAttribution && (
+                  <Badge variant="success" size="xs">
+                    registrado pelo motor
+                  </Badge>
+                )}
                 <Badge variant={CONFIDENCE_BADGE[movement.confidence]} size="xs">
                   {movement.confidenceScore}% confiança
                 </Badge>
@@ -1026,7 +1178,7 @@ function MovementList({ movements }: { movements: Movement[] }) {
                   {expanded ? 'Ocultar detalhes' : 'Ver detalhes'}
                 </span>
               </button>
-              <p className="mt-2 text-sm leading-6 text-[#c5b99a] line-clamp-2">{movement.explanation}</p>
+              <p className="mt-2 text-sm leading-6 text-[#c5b99a] line-clamp-2">{movement.primaryExplanation}</p>
             </div>
             <div className="text-left text-xs text-[#929AA5] lg:text-right">
               <p>{formatDateTime(movement.from)} → {formatDateTime(movement.to)}</p>
@@ -1045,6 +1197,27 @@ function MovementList({ movements }: { movements: Movement[] }) {
                 <MiniStat label="Fonte" value={movement.source} />
               </div>
 
+              <div className="mt-3 rounded-lg border border-[rgba(240,185,11,.08)] bg-[#0B0E11] p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={EVIDENCE_GRADE_BADGE[movement.evidenceGrade]} size="xs">
+                    {EVIDENCE_GRADE_LABEL[movement.evidenceGrade]}
+                  </Badge>
+                  {movement.qualityFlags.map((flag) => (
+                    <Badge key={flag} variant="warning" size="xs">{flag}</Badge>
+                  ))}
+                </div>
+                <div className="mt-3 grid grid-cols-1 gap-2 text-xs leading-5 text-[#c5b99a] md:grid-cols-3">
+                  <p>{movement.primaryExplanation}</p>
+                  <p>{movement.evidenceSentence}</p>
+                  <p>{movement.caveatSentence}</p>
+                </div>
+                {movement.degradedReason && (
+                  <p className="mt-2 text-xs text-[#F6465D]">
+                    Degradação: {movement.degradedReason}{movement.degradedOwner ? ` · dono ${movement.degradedOwner}` : ''}
+                  </p>
+                )}
+              </div>
+
               <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-5">
                 <MiniStat label="Ordens" value={formatNumber(movement.orderFlow.orderCount)} />
                 <MiniStat label="Compras" value={formatNumber(movement.orderFlow.buyQuantity)} />
@@ -1055,6 +1228,54 @@ function MovementList({ movements }: { movements: Movement[] }) {
                   value={movement.orderFlow.averageExecutedPrice === null ? 'n/d' : formatCurrency(movement.orderFlow.averageExecutedPrice)}
                 />
               </div>
+
+              {movement.engineAttribution && (
+                <div className="mt-4 rounded-lg border border-[rgba(46,189,133,.22)] bg-[#0B0E11] p-3">
+                  <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <h3 className="text-[11px] font-semibold uppercase text-[#2EBD85]">Rastro causal do motor</h3>
+                      <p className="mt-1 text-xs leading-5 text-[#c5b99a]">
+                        Causa primária: {movement.engineAttribution.primaryCause}
+                        {movement.engineAttribution.primaryLayer ? ` · ${movement.engineAttribution.primaryLayer}` : ''}
+                      </p>
+                    </div>
+                    <span className="text-xs text-[#929AA5]">
+                      gerado em {formatDateTime(movement.engineAttribution.generatedAt)}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-5">
+                    <MiniStat label="Preço inicial" value={formatCurrency(movement.engineAttribution.previousPrice)} />
+                    <MiniStat label="Após camadas" value={formatCurrency(movement.engineAttribution.enginePrice)} />
+                    <MiniStat label="Preço final" value={formatCurrency(movement.engineAttribution.finalPrice)} />
+                    <MiniStat label="Agentes" value={formatPct(movement.engineAttribution.agentImpactPct)} />
+                    <MiniStat label="Vol. sintético" value={formatNumber(movement.engineAttribution.syntheticVolume)} />
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-2">
+                    {(movement.engineAttribution.causalEvents ?? []).slice(0, 6).map((event) => (
+                      <div
+                        key={`${movement.id}-${event.id}`}
+                        className="rounded-md border border-[rgba(46,189,133,.18)] bg-[#161A1F] px-3 py-2 text-xs"
+                      >
+                        <p className="font-medium text-[#EAECEF]">{event.type} · {event.title ?? event.layer ?? event.source}</p>
+                        <p className="mt-1 text-[#929AA5]">{event.newsId ? `newsId ${event.newsId} · ` : ''}{formatDateTime(event.occurredAt)}</p>
+                      </div>
+                    ))}
+                    {movement.engineAttribution.layerContributions.slice(0, 6).map((layer) => (
+                      <div
+                        key={`${movement.id}-${layer.layer}`}
+                        className="flex items-center justify-between gap-3 rounded-md border border-[rgba(240,185,11,.08)] bg-[#161A1F] px-3 py-2 text-xs"
+                      >
+                        <span className="min-w-0 truncate font-medium text-[#EAECEF]">{layer.layer}</span>
+                        <span className="flex-shrink-0 font-mono text-[#c5b99a]">
+                          {formatSignedCurrency(layer.deltaPrice)} · {formatPct(layer.contributionPct).replace('+', '')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="mt-4 rounded-lg border border-[rgba(240,185,11,.08)] bg-[#0B0E11] p-3">
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -1119,6 +1340,33 @@ function MovementList({ movements }: { movements: Movement[] }) {
                   )}
                 </div>
               )}
+
+              {(movement.directEvidence.length > 0 || movement.correlatedEvidence.length > 0) && (
+                <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                  {movement.directEvidence.length > 0 && (
+                    <EvidenceBox title="Evidência direta">
+                      {movement.directEvidence.map((item) => (
+                        <li key={item.eventId} className="space-y-1">
+                          <p className="text-sm text-[#EAECEF]">{item.type} · {item.label}</p>
+                          <p className="text-xs text-[#929AA5]">{item.source} · {formatDateTime(item.occurredAt)}</p>
+                        </li>
+                      ))}
+                    </EvidenceBox>
+                  )}
+                  {movement.correlatedEvidence.length > 0 && (
+                    <EvidenceBox title="Correlação temporal">
+                      {movement.correlatedEvidence.map((item) => (
+                        <li key={`${item.type}-${item.eventId ?? item.label}`} className="space-y-1">
+                          <p className="text-sm text-[#EAECEF]">{item.type} · {item.label}</p>
+                          <p className="text-xs text-[#929AA5]">
+                            confiança máxima {item.confidenceScore}%{item.occurredAt ? ` · ${formatDateTime(item.occurredAt)}` : ''}
+                          </p>
+                        </li>
+                      ))}
+                    </EvidenceBox>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </article>
@@ -1138,6 +1386,42 @@ function MovementList({ movements }: { movements: Movement[] }) {
         </div>
       )}
     </section>
+  )
+}
+
+function EvidenceFilter({
+  value,
+  onChange,
+  movements,
+}: {
+  value: 'ALL' | EvidenceGrade
+  onChange: (value: 'ALL' | EvidenceGrade) => void
+  movements: Movement[]
+}) {
+  const counts = movements.reduce<Record<EvidenceGrade, number>>((acc, movement) => {
+    acc[movement.evidenceGrade] += 1
+    return acc
+  }, { DIRECT: 0, CORRELATED: 0, DEGRADED: 0 })
+
+  return (
+    <div className="flex flex-wrap gap-2" data-testid="value-analysis-evidence-filters">
+      {EVIDENCE_FILTERS.map((item) => {
+        const count = item.value === 'ALL' ? movements.length : counts[item.value]
+        const selected = value === item.value
+        return (
+          <Button
+            key={item.value}
+            type="button"
+            variant={selected ? 'primary' : 'secondary'}
+            size="sm"
+            onClick={() => onChange(item.value)}
+            data-testid={`value-analysis-filter-${item.value}`}
+          >
+            {item.label} ({count})
+          </Button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -1169,20 +1453,20 @@ function MethodologyPanel({ report }: { report: ValueAnalysisReport }) {
 
       <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-5">
         <MethodCard
-          title="1. Ação administrativa"
-          text="Quando há ajuste de preço, pausa, retomada ou intervenção registrada no período, a ação administrativa ganha prioridade na atribuição."
+          title="1. Direta"
+          text="Só recebe grade direta quando há rastro gravado em price_history.attribution pelo motor antes da persistência do candle."
         />
         <MethodCard
-          title="2. Notícia vinculada"
-          text="Notícias do ticker ou do ativo são correlacionadas com a janela do candle. O sentimento precisa combinar com a direção para elevar a confiança."
+          title="2. Correlacionada"
+          text="Notícias, ações administrativas e ordens próximas entram como correlação temporal quando não há rastro causal direto."
         />
         <MethodCard
-          title="3. Fluxo de mercado"
-          text="Sem notícia ou intervenção, aumento de volume sugere pressão de compra ou venda, mas a confiança é baixa porque o dado não identifica intenção."
+          title="3. Degradada"
+          text="Histórico GBM, legado, coluna ausente ou parser inválido são marcados como degradados com flags de qualidade."
         />
         <MethodCard
-          title="4. Sem causa registrada"
-          text="Quando nenhum sinal explica o movimento, a tela explicita a lacuna para evitar atribuir causa sem evidência."
+          title="4. Confiança"
+          text="Movimentos correlacionados e degradados nunca usam confiança alta nem linguagem de causa confirmada."
         />
         <MethodCard
           title="5. Parâmetros do motor"

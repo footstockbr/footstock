@@ -47,6 +47,7 @@ export interface MotorTick {
   isHalted?: boolean          // Circuit breaker ativo
   haltReason?: string | null  // Motivo do halt (CIRCUIT_BREAKER ou reason admin)
   estimatedResume?: number | null  // Unix ms estimado para retomada
+  attribution?: AnyPriceAttribution
 }
 
 // ─── Session ──────────────────────────────────────────────────────────────
@@ -84,6 +85,7 @@ export interface AssetState {
   haltResumeAt: number | null // Unix ms estimado para retomada automática
   newsImpact: number         // Magnitude de notícia ativa (0.0 a 1.0)
   newsImpactTicks: number    // Ticks restantes do efeito da notícia
+  activeNewsImpacts?: ActiveNewsImpact[]
   // L4 — OFI: estado do decaimento exponencial (OFI_t = rho*OFI_{t-1} + (1-rho)*ofi_raw_t)
   ofiState: number
   // L9 — DailyVolTarget: acumulador de variação percentual do dia (0–1)
@@ -111,8 +113,207 @@ export interface PreviousTickDelta {
 export interface LayerResult {
   layer: string
   deltaPrice: number         // Contribuição desta camada no movimento de preço
-  metadata?: Record<string, number>
+  metadata?: Record<string, number | string | boolean>
 }
+
+// ─── Atribuicao causal do preco ───────────────────────────────────────────
+
+export type PriceAttributionConfidence = 'alta' | 'media' | 'baixa'
+export type EvidenceGrade = 'DIRECT' | 'CORRELATED' | 'DEGRADED'
+export type DegradedReasonOwner =
+  | 'MIGRATION'
+  | 'ENGINE'
+  | 'ORDER_FLOW'
+  | 'NEWS_PIPELINE'
+  | 'API_PARSER'
+  | 'BACKFILL'
+  | 'UNKNOWN'
+
+export type QualityFlag =
+  | 'ATTRIBUTION_COLUMN_MISSING'
+  | 'ATTRIBUTION_PERSIST_FAILED'
+  | 'ATTRIBUTION_PARSE_FAILED'
+  | 'ATTRIBUTION_TRUNCATED'
+  | 'NEWS_WITHOUT_ID'
+  | 'NEWS_QUEUE_AGGREGATED'
+  | 'ORDER_FLOW_SNAPSHOT_UNAVAILABLE'
+  | 'ORDER_FLOW_INELIGIBLE_ONLY'
+  | 'LEGACY_BACKFILL'
+  | 'SYNTHETIC_HISTORY'
+  | 'UNKNOWN_DEGRADED_REASON'
+
+export type CausalEventType =
+  | 'NEWS'
+  | 'ADMIN_ACTION'
+  | 'ORDER_FLOW'
+  | 'LAYER'
+  | 'CONTROL'
+  | 'SYNTHETIC_AGENT'
+  | 'CORRELATION'
+  | 'NUDGE'
+
+export interface CausalEvent {
+  id: string
+  type: CausalEventType
+  source: string
+  occurredAt: string
+  direction: 'up' | 'down' | 'neutral'
+  magnitude: number
+  layer?: string
+  newsId?: string
+  adminActionId?: string
+  orderIds?: string[]
+  orderIdsTruncated?: boolean
+  title?: string
+  impactCategory?: string
+  sentiment?: number | string
+  reasonCode?: string
+  metadata?: Record<string, string | number | boolean>
+}
+
+export interface ActiveNewsImpact {
+  newsId?: string
+  title?: string
+  source?: string
+  impactCategory?: string
+  sentiment?: number | string
+  publishedAt?: string
+  correlationId?: string
+  magnitude: number
+  durationTicks: number
+  ticksRemaining: number
+  qualityFlags: QualityFlag[]
+}
+
+export interface OrderFlowSnapshot {
+  openBuyQty: number
+  openSellQty: number
+  marketBuyQty: number
+  marketSellQty: number
+  orderCount: number
+  snapshotTakenAt: string
+  orderSnapshotSource: 'DB' | 'MEMORY' | 'DISABLED' | 'UNAVAILABLE'
+  topOrderIds: string[]
+  orderIdsTruncated: boolean
+  qualityFlags: QualityFlag[]
+}
+
+export interface TickInputSnapshot {
+  tickId: string
+  assetId: string
+  ticker: string
+  startedAt: string
+  previousPrice: number
+  pendingBuyVolume: number
+  pendingSellVolume: number
+  orderFlowSnapshot?: OrderFlowSnapshot
+  activeNewsImpacts: ActiveNewsImpact[]
+  sessionType: SessionType
+}
+
+export interface DirectEvidence {
+  type: CausalEventType
+  label: string
+  eventId: string
+  source: string
+  occurredAt: string
+}
+
+export interface CorrelatedEvidence {
+  type: 'NEWS' | 'ADMIN_ACTION' | 'ORDER_FLOW'
+  label: string
+  eventId?: string
+  occurredAt?: string
+  confidenceScore: number
+}
+
+export interface ValueAnalysisMovementEvidence {
+  evidenceGrade: EvidenceGrade
+  qualityFlags: QualityFlag[]
+  directEvidence: DirectEvidence[]
+  correlatedEvidence: CorrelatedEvidence[]
+  degradedReason: string | null
+  degradedOwner: DegradedReasonOwner | null
+  primaryExplanation: string
+  evidenceSentence: string
+  caveatSentence: string
+}
+
+export interface LayerContribution {
+  layer: string
+  deltaPrice: number
+  contributionPct: number
+  direction: 'up' | 'down' | 'neutral'
+  metadata?: Record<string, number | string | boolean>
+}
+
+export interface PriceAttribution {
+  version: 1
+  primaryCause: string
+  primaryLayer: string | null
+  confidence: PriceAttributionConfidence
+  explanation: string
+  previousPrice: number
+  enginePrice: number
+  finalPrice: number
+  engineDelta: number
+  agentImpactPct: number
+  agentDelta: number
+  syntheticVolume: number
+  pendingBuyVolume: number
+  pendingSellVolume: number
+  orderImbalance: number
+  sessionType: SessionType
+  layerContributions: LayerContribution[]
+  appliedControls: string[]
+  generatedAt: string
+}
+
+export interface PriceAttributionV2 {
+  version: 2
+  tickId: string
+  tickCount: number
+  tickStartedAt: string
+  tickEndedAt: string
+  primaryEventId: string | null
+  primaryCause: string
+  primaryLayer: string | null
+  confidence: PriceAttributionConfidence
+  explanation: string
+  primaryExplanation: string
+  evidenceSentence: string
+  caveatSentence: string
+  previousPrice: number
+  enginePrice: number
+  finalPrice: number
+  engineDelta: number
+  agentImpactPct: number
+  agentDelta: number
+  syntheticVolume: number
+  pendingBuyVolume: number
+  pendingSellVolume: number
+  orderImbalance: number
+  sessionType: SessionType
+  layerContributions: LayerContribution[]
+  causalEvents: CausalEvent[]
+  inputSnapshot?: TickInputSnapshot
+  executedOrderSummary?: {
+    orderCount: number
+    buyQuantity: number
+    sellQuantity: number
+    note: string
+  }
+  appliedControls: string[]
+  qualityFlags: QualityFlag[]
+  payloadBytes: number
+  generatedAt: string
+}
+
+export type AnyPriceAttribution = PriceAttribution | PriceAttributionV2
+
+export type AttributionParseResult =
+  | { ok: true; value: AnyPriceAttribution; evidenceGrade: EvidenceGrade; qualityFlags: QualityFlag[] }
+  | { ok: false; reason: string; qualityFlag: QualityFlag; evidenceGrade: 'DEGRADED'; qualityFlags: QualityFlag[] }
 
 // ─── Order Book ──────────────────────────────────────────────────────────
 

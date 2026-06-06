@@ -449,6 +449,7 @@ model Order {
   @@index([status])
   @@index([userId, status])
   @@index([groupId])
+  @@index([assetId, status, side, type, createdAt])
   @@map("orders")
 }
 
@@ -520,6 +521,7 @@ model PriceHistory {
   volume      BigInt      @default(0)
   sessionType SessionType @map("session_type")
   source      String      @default("REAL") @map("source") // 'GBM' | 'REAL'
+  attribution Json?       @map("attribution") @db.JsonB
 
   asset Asset @relation(fields: [assetId], references: [id])
 

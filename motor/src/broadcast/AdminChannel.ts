@@ -61,7 +61,15 @@ export class AdminChannel {
         const magnitude = impact === 'NEGATIVE' ? -rawMagnitude : rawMagnitude
         const durationTicks = (payload.durationTicks as number) ?? NEWS_IMPACT_DURATION_TICKS
         if (event.assetId) {
-          this.engine.injectNewsImpact(event.assetId, magnitude, durationTicks)
+          this.engine.injectNewsImpact(event.assetId, magnitude, durationTicks, {
+            newsId: typeof payload.newsId === 'string' ? payload.newsId : undefined,
+            title: typeof payload.title === 'string' ? payload.title : undefined,
+            source: typeof payload.source === 'string' ? payload.source : undefined,
+            impactCategory: typeof payload.impactCategory === 'string' ? payload.impactCategory : undefined,
+            sentiment: typeof payload.sentiment === 'number' || typeof payload.sentiment === 'string' ? payload.sentiment : undefined,
+            publishedAt: typeof payload.publishedAt === 'string' ? payload.publishedAt : undefined,
+            correlationId: event.correlationId ?? (typeof payload.correlationId === 'string' ? payload.correlationId : undefined),
+          })
         }
         break
       }
@@ -117,9 +125,17 @@ export class AdminChannel {
         return
       }
 
-      this.engine.injectNewsImpact(assetId, event.magnitude, event.durationTicks)
+      this.engine.injectNewsImpact(assetId, event.magnitude, event.durationTicks, {
+        newsId: event.newsId,
+        title: event.title,
+        source: event.source,
+        impactCategory: event.impactCategory ?? event.impact,
+        sentiment: event.sentiment,
+        publishedAt: event.publishedAt,
+        correlationId: event.correlationId ?? event.newsId,
+      })
       logger.info(
-        `[news-channel] Notícia injetada: ${event.assetId} | magnitude=${event.magnitude} | ticks=${event.durationTicks}`
+        `[news-channel] Notícia injetada: ${event.assetId} | newsId=${event.newsId ?? 'legacy'} | magnitude=${event.magnitude} | ticks=${event.durationTicks}`
       )
     } catch (err) {
       logger.error(`[news-channel] Erro ao processar news:inject: ${(err as Error).message}`)

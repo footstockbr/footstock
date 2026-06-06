@@ -41,6 +41,9 @@ export const env = {
   // Default OFF em prod ate validacao A/B em staging por 48h.
   // Habilitar em staging: MOTOR_AGENT_COUNTS_V2=true.
   MOTOR_AGENT_COUNTS_V2: optional('MOTOR_AGENT_COUNTS_V2', 'false') === 'true',
+  ATTRIBUTION_STRICT_MODE: optional('ATTRIBUTION_STRICT_MODE', 'false') === 'true',
+  ORDER_FLOW_SNAPSHOT_ENABLED: optional('ORDER_FLOW_SNAPSHOT_ENABLED', 'true') === 'true',
+  ORDER_FLOW_SNAPSHOT_P95_BUDGET_MS: parseInt(optional('ORDER_FLOW_SNAPSHOT_P95_BUDGET_MS', '50'), 10),
 } as const
 
 // Aviso de segurança: TLS em produção

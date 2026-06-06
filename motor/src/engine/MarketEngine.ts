@@ -7,7 +7,10 @@ import type Redis from 'ioredis'
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { PriceCalculator } from './PriceCalculator'
+import { buildPriceAttributionV2, mergePriceAttributions, parsePriceAttribution } from './PriceAttribution'
 import { MotorLayerRuntimeConfigService } from './MotorLayerRuntimeConfig'
+import { OrderFlowSnapshotService } from './OrderFlowSnapshotService'
+import { AttributionPreflightService } from './AttributionPreflightService'
 import { OrderBook } from './OrderBook'
 import { sessionManager } from './SessionManager'
 import { agentOrchestrator, AssetCluster } from '../agents/AgentOrchestrator'
@@ -15,8 +18,8 @@ import type { MarketContext } from '../agents/BaseAgent'
 import { getClusterParams } from '../microstructure/clusters'
 import { buildMotorTick, buildHaltTick, serializeTick } from '../microstructure/MotorTick'
 import { REDIS_CHANNELS } from '../types/events.types'
-import type { AssetState, MotorTick, SessionType } from '../types/motor.types'
-import { logger } from '../utils/logger'
+import type { ActiveNewsImpact, AnyPriceAttribution, AssetState, MotorTick, OrderFlowSnapshot, SessionType, TickInputSnapshot } from '../types/motor.types'
+import { logger, motorMetrics } from '../utils/logger'
 import { MotorHealthService } from '../services/MotorHealthService'
 import { OrderExecutor } from './OrderExecutor'
 import { OrderMatcher } from './OrderMatcher'
@@ -26,6 +29,7 @@ import { LeverageInterestRunner } from './LeverageInterestRunner'
 import { CLUB_STATE_BY_TICKER } from '../microstructure/clubStates'
 import type { PreviousTickDelta } from '../types/motor.types'
 import { NUDGE_MIN_PRICE } from './nudge-constants'
+import { NEWS_IMPACT_DURATION_TICKS } from '../contracts/news-inject-contract'
 
 const TICK_INTERVAL_MS = parseInt(process.env.MOTOR_TICK_INTERVAL_MS ?? '2000', 10)
 const PERSIST_HISTORY_EVERY = 6  // Persistir PriceHistory a cada N ticks ≈ 1min com tick=10s (reduzido de 30 para evitar gráficos degrau-degrau em B_LIQUID/B_ILLIQ; A_TOP persiste sempre — ver item 004)
@@ -52,6 +56,7 @@ export class MarketEngine {
   private healthService: MotorHealthService
   private orderExecutor: OrderExecutor
   private orderMatcher: OrderMatcher
+  private orderFlowSnapshotService: OrderFlowSnapshotService
   private scheduledOrderRunner: ScheduledOrderRunner
   private marginCallChecker: MarginCallChecker
   private leverageInterestRunner: LeverageInterestRunner
@@ -59,6 +64,8 @@ export class MarketEngine {
   private previousTickDeltas = new Map<string, PreviousTickDelta>()
   /** Sessão do tick anterior — detecta transições para resetar âncora do CB. */
   private previousSessionType: SessionType | null = null
+  /** Atribuições acumuladas entre candles persistidos por ativo. */
+  private pendingAttributions = new Map<string, AnyPriceAttribution[]>()
   /** Timers de retomada do circuit breaker por assetId — cancelados no stop(). */
   private circuitBreakerTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
@@ -71,12 +78,20 @@ export class MarketEngine {
     this.healthService = MotorHealthService.getInstance(redis)
     this.orderExecutor = new OrderExecutor(this.prisma, redis)
     this.orderMatcher = new OrderMatcher(this.prisma, redis)
+    this.orderFlowSnapshotService = new OrderFlowSnapshotService(this.prisma)
     this.scheduledOrderRunner = new ScheduledOrderRunner(this.prisma, redis, sessionManager)
     this.marginCallChecker = new MarginCallChecker(this.prisma, redis)
     this.leverageInterestRunner = new LeverageInterestRunner(this.prisma, redis)
   }
 
   async start(): Promise<void> {
+    const preflight = await this.runAttributionPreflight()
+    if (!preflight.ok && process.env.ATTRIBUTION_STRICT_MODE === 'true') {
+      throw new Error(`[engine] ATTRIBUTION_STRICT_MODE bloqueado: ${preflight.failures.join('; ')}`)
+    }
+    if (!preflight.ok) {
+      logger.warn(`[engine] Preflight de atribuicao degradado: ${preflight.failures.join('; ')}`)
+    }
     // Limpa apenas halts de CB expirados (ou sem haltedUntil = dados legados).
     // Halts administrativos (FORCE_CIRCUIT_BREAKER, etc.) são preservados: o operador
     // os criou explicitamente e a intenção é que sobrevivam ao restart.
@@ -253,6 +268,7 @@ export class MarketEngine {
         haltResumeAt: isCbHaltActive ? haltedUntilMs : null,
         newsImpact: 0,
         newsImpactTicks: 0,
+        activeNewsImpacts: [],
         ofiState: 0,               // L4_OFI: OFI_t inicial (sem acumulação)
         dailyVolAccum: 0,          // L9_DailyVolTarget: acumulador diário de variação
         dailySigmaMultiplier: 1.0, // L9_DailyVolTarget: multiplicador sigma (1.0 = normal)
@@ -313,13 +329,26 @@ export class MarketEngine {
     logger.info(`[engine] AgentOrchestrator inicializado para ${this.assetStates.size} ativos`)
   }
 
+  private async runAttributionPreflight(): Promise<{ ok: boolean; failures: string[] }> {
+    const preflight = await new AttributionPreflightService(this.prisma).run()
+    for (const detail of preflight.details) {
+      if (detail.code === 'ATTRIBUTION_SCHEMA_DRIFT') {
+        logger.warn(`[engine] hipotese: drift de schema Prisma detectado antes do modo estrito: ${detail.message}`)
+      }
+    }
+    return { ok: preflight.ok, failures: preflight.failures }
+  }
+
   private async runTick(): Promise<void> {
+    const tickStartedAt = new Date()
+    const tickStartedMs = Date.now()
     this.tickCount++
     const sessionType = sessionManager.getCurrentSession()
     const runtimeConfig = await this.layerRuntimeConfig.getConfig()
     const volatilityMultiplier =
       runtimeConfig.sessionMultipliers[sessionType] ?? sessionManager.getVolatilityMultiplier(sessionType)
     const ticks: MotorTick[] = []
+    const orderFlowSnapshots = await this.orderFlowSnapshotService.capture([...this.assetStates.keys()], tickStartedAt)
 
     // Transição de sessão: resetar closePrice para evitar CB acumulado entre sessões
     if (this.previousSessionType !== null && this.previousSessionType !== sessionType) {
@@ -362,10 +391,17 @@ export class MarketEngine {
       try {
         const params = runtimeConfig.clusterParams[state.cluster] ?? getClusterParams(state.cluster)
         const orderBook = this.orderBooks.get(assetId)!
+        const previousPrice = state.currentPrice
+        const tickId = `${assetId}:${this.tickCount}:${tickStartedAt.getTime()}`
+        const orderFlowSnapshot = orderFlowSnapshots.get(assetId)
 
         // Atualizar volumes pendentes no estado
-        state.pendingBuyVolume = orderBook.getBuyVolume()
-        state.pendingSellVolume = orderBook.getSellVolume()
+        state.pendingBuyVolume = orderFlowSnapshot
+          ? orderFlowSnapshot.openBuyQty + orderFlowSnapshot.marketBuyQty
+          : orderBook.getBuyVolume()
+        state.pendingSellVolume = orderFlowSnapshot
+          ? orderFlowSnapshot.openSellQty + orderFlowSnapshot.marketSellQty
+          : orderBook.getSellVolume()
 
         // Gerar ruído gaussiano (Box-Muller)
         const noise = this.gaussianNoise()
@@ -419,6 +455,42 @@ export class MarketEngine {
         // Fix A: re-aplicar floor depois do impacto dos agentes — sem isso,
         // o agente puxa o preço abaixo de NUDGE_MIN_PRICE e equilibra em ~0.98.
         const finalPrice = Math.max(NUDGE_MIN_PRICE, newPrice * (1 + agentImpact))
+        const tickEndedAt = new Date()
+        const inputSnapshot: TickInputSnapshot = Object.freeze({
+          tickId,
+          assetId,
+          ticker: state.ticker,
+          startedAt: tickStartedAt.toISOString(),
+          previousPrice,
+          pendingBuyVolume: state.pendingBuyVolume,
+          pendingSellVolume: state.pendingSellVolume,
+          orderFlowSnapshot,
+          activeNewsImpacts: (state.activeNewsImpacts ?? []).map((news) => ({ ...news })),
+          sessionType,
+        })
+        const attribution = buildPriceAttributionV2({
+          previousPrice,
+          enginePrice: newPrice,
+          finalPrice,
+          agentImpact,
+          syntheticVolume,
+          pendingBuyVolume: state.pendingBuyVolume,
+          pendingSellVolume: state.pendingSellVolume,
+          sessionType,
+          layerResults: calcResult.layerResults,
+          generatedAt: tickEndedAt,
+          tickId,
+          tickStartedAt,
+          tickEndedAt,
+          tickCount: 1,
+          inputSnapshot,
+          orderFlowSnapshot,
+          activeNewsImpacts: inputSnapshot.activeNewsImpacts,
+        })
+        motorMetrics.observe('price_attribution_payload_bytes', attribution.payloadBytes)
+        const pendingAttributions = this.pendingAttributions.get(assetId) ?? []
+        pendingAttributions.push(attribution)
+        this.pendingAttributions.set(assetId, pendingAttributions)
 
         // Acumular volume sintético dos agentes (sem isso, volume 24h fica zero).
         // Clamp em MAX_DAILY_VOLUME garante que mesmo se um agente novo escapar
@@ -449,7 +521,14 @@ export class MarketEngine {
           this.tickCount % PERSIST_HISTORY_EVERY === 0
 
         if (shouldPersist) {
-          this.persistPriceHistory(tick).catch(console.error)
+          const persistedAttribution = mergePriceAttributions(
+            this.pendingAttributions.get(assetId) ?? [attribution],
+            new Date(tick.timestamp),
+          )
+          this.pendingAttributions.delete(assetId)
+          this.persistPriceHistory(tick, persistedAttribution).catch((err) =>
+            logger.error(`[engine] persistPriceHistory fail tickId=${tickId} assetId=${assetId}:`, err)
+          )
         }
       } catch (err) {
         logger.error(`[engine] Erro no tick do ativo ${state.ticker} (${assetId}):`, err)
@@ -520,6 +599,7 @@ export class MarketEngine {
     if (this.tickCount % 10 === 0) {
       this.updateAssetPrices().catch(console.error)
     }
+    motorMetrics.observe('motor_tick_duration_ms', Date.now() - tickStartedMs)
   }
 
   /** Box-Muller transform para gerar N(0,1) */
@@ -529,7 +609,65 @@ export class MarketEngine {
     return Math.sqrt(-2 * Math.log(Math.max(u1, 1e-10))) * Math.cos(2 * Math.PI * u2)
   }
 
-  private async persistPriceHistory(tick: MotorTick): Promise<void> {
+  private async persistPriceHistory(tick: MotorTick, attribution: AnyPriceAttribution | null): Promise<void> {
+    try {
+      if (attribution) {
+        const parsed = parsePriceAttribution(attribution)
+        if (!parsed.ok) {
+          if (process.env.ATTRIBUTION_STRICT_MODE === 'true') {
+            throw new Error(`ATTRIBUTION_SERIALIZATION_INVALID:${parsed.reason}`)
+          }
+          motorMetrics.inc('motor_price_attribution_missing_total')
+          attribution = {
+            version: 2,
+            tickId: `degraded:${tick.assetId}:${tick.timestamp}`,
+            tickCount: 1,
+            tickStartedAt: new Date(tick.timestamp).toISOString(),
+            tickEndedAt: new Date(tick.timestamp).toISOString(),
+            primaryEventId: null,
+            primaryCause: 'rastro causal degradado',
+            primaryLayer: null,
+            confidence: 'baixa',
+            explanation: 'O candle foi persistido, mas a atribuicao calculada nao passou no parser runtime.',
+            primaryExplanation: 'Atribuicao degradada por falha de serializacao.',
+            evidenceSentence: 'Nenhuma evidencia direta foi aceita pelo parser.',
+            caveatSentence: 'Movimento deve ser tratado como degradado ate investigacao tecnica.',
+            previousPrice: tick.close,
+            enginePrice: tick.price,
+            finalPrice: tick.price,
+            engineDelta: 0,
+            agentImpactPct: 0,
+            agentDelta: 0,
+            syntheticVolume: 0,
+            pendingBuyVolume: 0,
+            pendingSellVolume: 0,
+            orderImbalance: 0,
+            sessionType: tick.sessionType,
+            layerContributions: [],
+            causalEvents: [],
+            appliedControls: [],
+            qualityFlags: [parsed.qualityFlag],
+            payloadBytes: 0,
+            generatedAt: new Date(tick.timestamp).toISOString(),
+          }
+        }
+      }
+      await this.createPriceHistory(tick, attribution)
+    } catch (err) {
+      if (attribution && String(err).includes('attribution')) {
+        motorMetrics.inc('motor_price_attribution_missing_total')
+        if (process.env.ATTRIBUTION_STRICT_MODE === 'true') {
+          throw new Error('[engine] price_history.attribution indisponivel com ATTRIBUTION_STRICT_MODE=true')
+        }
+        logger.warn('[engine] price_history.attribution indisponivel; candle sera persistido sem coluna e a API marcara ATTRIBUTION_COLUMN_MISSING.')
+        await this.createPriceHistory(tick, null)
+        return
+      }
+      throw err
+    }
+  }
+
+  private async createPriceHistory(tick: MotorTick, attribution: AnyPriceAttribution | null): Promise<void> {
     await this.prisma.priceHistory.create({
       data: {
         assetId: tick.assetId,
@@ -540,6 +678,8 @@ export class MarketEngine {
         close: tick.price,
         volume: BigInt(tick.volume),
         sessionType: tick.sessionType as any,
+        source: 'MOTOR',
+        ...(attribution ? { attribution: attribution as any } : {}),
       },
     })
   }
@@ -711,7 +851,7 @@ export class MarketEngine {
 
   // ─── Métodos de controle admin ───────────────────────────────────────────
 
-  injectNewsImpact(assetId: string, magnitude: number, durationTicks: number): void {
+  injectNewsImpact(assetId: string, magnitude: number, durationTicks: number, context: Partial<ActiveNewsImpact> = {}): void {
     const state = this.assetStates.get(assetId)
     if (!state) return
 
@@ -720,10 +860,40 @@ export class MarketEngine {
     // para relaxar o circuit breaker — valores absurdos não podem entrar.
     if (!Number.isFinite(magnitude) || !Number.isFinite(durationTicks)) return
     const clampedMagnitude = Math.max(-1, Math.min(1, magnitude))
-    const clampedTicks = Math.max(0, Math.min(200, Math.floor(durationTicks)))
+    const clampedTicks = Math.max(0, Math.min(200, Math.floor(durationTicks || NEWS_IMPACT_DURATION_TICKS)))
+    const newsId = context.newsId
+    const qualityFlags = [...new Set([...(context.qualityFlags ?? []), ...(newsId ? [] : ['NEWS_WITHOUT_ID' as const])])]
+
+    const currentNewsImpacts = state.activeNewsImpacts ?? []
+    if (newsId && currentNewsImpacts.some((news) => news.newsId === newsId)) {
+      motorMetrics.inc('news_injection_duplicate_total')
+      logger.info(`[engine] INJECT_NEWS duplicado ignorado assetId=${assetId} newsId=${newsId}`)
+      return
+    }
 
     state.newsImpact = clampedMagnitude
     state.newsImpactTicks = clampedTicks
+    state.activeNewsImpacts = [
+      {
+        newsId,
+        title: context.title?.slice(0, 160),
+        source: context.source?.slice(0, 80),
+        impactCategory: context.impactCategory,
+        sentiment: context.sentiment,
+        publishedAt: context.publishedAt,
+        correlationId: context.correlationId ?? newsId,
+        magnitude: clampedMagnitude,
+        durationTicks: clampedTicks,
+        ticksRemaining: clampedTicks,
+        qualityFlags,
+      },
+      ...currentNewsImpacts,
+    ].slice(0, 5)
+
+    if (state.activeNewsImpacts.length >= 5) {
+      const last = state.activeNewsImpacts[state.activeNewsImpacts.length - 1]
+      last.qualityFlags = [...new Set([...last.qualityFlags, 'NEWS_QUEUE_AGGREGATED' as const])]
+    }
   }
 
   /** Resolve ticker (ex: 'REG3') para o assetId (UUID) interno do engine. */

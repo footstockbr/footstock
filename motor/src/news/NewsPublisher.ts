@@ -112,9 +112,17 @@ export class NewsPublisher {
         const event: NewsInjectEvent = {
           type: 'NEWS',
           assetId: classified.ticker,
+          newsId,
+          title: raw.title.slice(0, 160),
+          source: raw.source.slice(0, 80),
           impact: resolvedCategory as NewsInjectEvent['impact'],
+          impactCategory: resolvedCategory as NewsInjectEvent['impact'],
+          sentiment: classified.sentiment,
+          publishedAt: new Date(raw.publishedAt).toISOString(),
+          correlationId: newsId,
           magnitude: signedMagnitude,
           durationTicks: sentimentToDurationTicks(classified.sentiment),
+          curveType: 'canonical',
         }
         await this.redis.publish(NEWS_INJECT_CHANNEL, JSON.stringify(event))
       } catch (err) {

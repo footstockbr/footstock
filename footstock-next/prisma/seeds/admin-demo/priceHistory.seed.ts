@@ -36,6 +36,42 @@ interface AssetForSeed {
   cluster: string
 }
 
+function buildSyntheticAttribution(asset: AssetForSeed, candle: GBMCandle) {
+  const generatedAt = candle.timestamp.toISOString()
+  return {
+    version: 2,
+    tickId: `gbm:${asset.ticker}:${candle.timestamp.getTime()}`,
+    tickCount: 1,
+    tickStartedAt: generatedAt,
+    tickEndedAt: generatedAt,
+    primaryEventId: null,
+    primaryCause: 'historico sintetico GBM',
+    primaryLayer: null,
+    confidence: 'baixa',
+    explanation: 'Candle sintetico gerado por GBM para pre-popular graficos; nao representa causa real de mercado.',
+    primaryExplanation: 'Historico sintetico GBM sem rastro causal operacional real.',
+    evidenceSentence: 'A evidencia e a fonte GBM do seed, nao um evento de mercado.',
+    caveatSentence: 'Nao apresentar como causa confirmada de movimento real.',
+    previousPrice: candle.open,
+    enginePrice: candle.close,
+    finalPrice: candle.close,
+    engineDelta: candle.close - candle.open,
+    agentImpactPct: 0,
+    agentDelta: 0,
+    syntheticVolume: candle.volume,
+    pendingBuyVolume: 0,
+    pendingSellVolume: 0,
+    orderImbalance: 0,
+    sessionType: 'REGULAR',
+    layerContributions: [],
+    causalEvents: [],
+    appliedControls: [],
+    qualityFlags: ['SYNTHETIC_HISTORY'],
+    payloadBytes: 0,
+    generatedAt,
+  }
+}
+
 export async function seedAdminDemoPriceHistory(prisma: PrismaClient): Promise<void> {
   if (process.env.NODE_ENV === 'production') {
     throw new Error('[seed] Nao executar seed GBM em producao!')
@@ -105,6 +141,7 @@ export async function seedAdminDemoPriceHistory(prisma: PrismaClient): Promise<v
           volume: BigInt(candle.volume),
           sessionType: 'REGULAR' as const,
           source: 'GBM',
+          attribution: buildSyntheticAttribution(asset, candle),
         })),
         skipDuplicates: true,
       })

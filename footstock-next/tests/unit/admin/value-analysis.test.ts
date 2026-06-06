@@ -1,12 +1,17 @@
 import {
   buildCause,
+  buildEngineAttributionDiagnosticNotes,
+  classifyEvidence,
   confidenceScore,
   eventTime,
   extractActionReason,
   inWindow,
+  isEngineAttribution,
+  parseEngineAttribution,
   magnitudeFromPct,
   pct,
   type AdminActionEvidence,
+  type EngineAttribution,
   type NewsEvidence,
 } from '@/lib/admin/value-analysis'
 
@@ -161,5 +166,140 @@ describe('value-analysis heuristics', () => {
 
   it('extrai razão de details quando reason direto está ausente', () => {
     expect(extractActionReason({ reason: null, details: { payload: { reason: 'Motivo no payload' } } })).toBe('Motivo no payload')
+  })
+
+  it('reconhece atribuição do motor e gera notas autoritativas', () => {
+    const attribution: EngineAttribution = {
+      version: 1,
+      primaryCause: 'reversão ao valor justo',
+      primaryLayer: 'L2_FundamentalAnchor',
+      confidence: 'alta',
+      explanation: 'O preço mudou porque L2 foi dominante.',
+      previousPrice: 3,
+      enginePrice: 3.02,
+      finalPrice: 3.01,
+      engineDelta: 0.02,
+      agentImpactPct: -0.1,
+      agentDelta: -0.01,
+      syntheticVolume: 12,
+      pendingBuyVolume: 20,
+      pendingSellVolume: 5,
+      orderImbalance: 15,
+      sessionType: 'TRADING',
+      layerContributions: [
+        {
+          layer: 'L2_FundamentalAnchor',
+          deltaPrice: 0.02,
+          contributionPct: 80,
+          direction: 'up',
+        },
+      ],
+      appliedControls: ['L8_VelocityCap'],
+      generatedAt: '2026-06-05T12:00:00.000Z',
+    }
+
+    expect(isEngineAttribution(attribution)).toBe(true)
+    const notes = buildEngineAttributionDiagnosticNotes(attribution)
+    expect(notes.join(' ')).toContain('reversão ao valor justo')
+    expect(notes.join(' ')).toContain('L2_FundamentalAnchor')
+  })
+
+  it('classifica v2 valida como DIRECT com evidencia direta', () => {
+    const parsed = parseEngineAttribution({
+      version: 2,
+      tickId: 'tick-1',
+      tickCount: 1,
+      tickStartedAt: '2026-06-06T12:00:00.000Z',
+      tickEndedAt: '2026-06-06T12:00:01.000Z',
+      primaryEventId: 'event-1',
+      primaryCause: 'absorção de notícia',
+      primaryLayer: 'L7_PressureQueue',
+      confidence: 'alta',
+      explanation: 'Notícia aplicada pelo motor.',
+      primaryExplanation: 'Notícia direta.',
+      evidenceSentence: 'newsId news-1 gravado no tick.',
+      caveatSentence: 'Causalidade operacional.',
+      previousPrice: 10,
+      enginePrice: 10.2,
+      finalPrice: 10.2,
+      engineDelta: 0.2,
+      agentImpactPct: 0,
+      agentDelta: 0,
+      syntheticVolume: 0,
+      pendingBuyVolume: 0,
+      pendingSellVolume: 0,
+      orderImbalance: 0,
+      sessionType: 'TRADING',
+      layerContributions: [],
+      causalEvents: [{
+        id: 'event-1',
+        type: 'NEWS',
+        source: 'L7_PressureQueue',
+        occurredAt: '2026-06-06T12:00:00.000Z',
+        direction: 'up',
+        magnitude: 0.2,
+        newsId: 'news-1',
+        title: 'Título da notícia',
+      }],
+      appliedControls: [],
+      qualityFlags: [],
+      payloadBytes: 1024,
+      generatedAt: '2026-06-06T12:00:01.000Z',
+    })
+
+    const classified = classifyEvidence({
+      attributionParse: parsed,
+      source: 'MOTOR',
+      hasAttributionColumn: true,
+      news: [],
+      adminActions: [],
+      orderFlow: { buyQuantity: 0, sellQuantity: 0, netQuantity: 0, orderCount: 0, averageExecutedPrice: null },
+      fallbackCause: { confidence: 'baixa', causeType: 'UNEXPLAINED', explanation: 'fallback' },
+    })
+
+    expect(classified.evidenceGrade).toBe('DIRECT')
+    expect(classified.directEvidence[0].eventId).toBe('news-1')
+    expect(classified.confidence).toBe('alta')
+  })
+
+  it('degrada attribution JSON invalida sem HTTP 500 conceitual', () => {
+    const parsed = parseEngineAttribution('{broken')
+    expect(parsed).toMatchObject({
+      ok: false,
+      evidenceGrade: 'DEGRADED',
+      qualityFlag: 'ATTRIBUTION_PARSE_FAILED',
+    })
+  })
+
+  it('limita correlacao temporal a confidenceScore <= 65', () => {
+    const classified = classifyEvidence({
+      attributionParse: parseEngineAttribution(null),
+      source: 'MOTOR',
+      hasAttributionColumn: true,
+      news: [baseNews],
+      adminActions: [],
+      orderFlow: { buyQuantity: 0, sellQuantity: 0, netQuantity: 0, orderCount: 0, averageExecutedPrice: null },
+      fallbackCause: { confidence: 'alta', causeType: 'NEWS', explanation: 'fallback correlacional' },
+    })
+
+    expect(classified.evidenceGrade).toBe('CORRELATED')
+    expect(classified.confidence).toBe('media')
+    expect(classified.confidenceScore).toBeLessThanOrEqual(65)
+  })
+
+  it('rotula GBM sem attribution como sintetico degradado', () => {
+    const classified = classifyEvidence({
+      attributionParse: parseEngineAttribution(null),
+      source: 'GBM',
+      hasAttributionColumn: true,
+      news: [],
+      adminActions: [],
+      orderFlow: { buyQuantity: 0, sellQuantity: 0, netQuantity: 0, orderCount: 0, averageExecutedPrice: null },
+      fallbackCause: { confidence: 'media', causeType: 'SIMULATED_ENGINE', explanation: 'gbm' },
+    })
+
+    expect(classified.evidenceGrade).toBe('DEGRADED')
+    expect(classified.qualityFlags).toContain('SYNTHETIC_HISTORY')
+    expect(classified.degradedReason).toContain('GBM')
   })
 })

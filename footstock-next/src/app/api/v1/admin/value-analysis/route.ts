@@ -12,19 +12,27 @@ import type { ClusterKey, MotorLayersConfig } from '@/lib/types/admin'
 import {
   CAUSE_LABELS_FOR_API,
   type CauseType,
+  type DirectEvidence,
+  type CorrelatedEvidence,
+  type EvidenceGrade,
+  type QualityFlag,
   type NewsEvidence,
   type AdminActionEvidence,
   type OrderFlowEvidence,
   type MovementContext,
+  type AnyEngineAttribution,
   type MovementMagnitude,
   average,
   buildCause,
   buildDiagnosticNotes,
+  buildEngineAttributionDiagnosticNotes,
+  classifyEvidence,
   causePriority,
   confidenceScore,
   eventTime,
   extractActionReason,
   inWindow,
+  parseEngineAttribution,
   magnitudeFromPct,
   pct,
   round2,
@@ -63,6 +71,16 @@ type MovementRecord = {
   explanation: string
   diagnosticNotes: string[]
   orderFlow: OrderFlowEvidence
+  engineAttribution: AnyEngineAttribution | null
+  evidenceGrade: EvidenceGrade
+  qualityFlags: QualityFlag[]
+  directEvidence: DirectEvidence[]
+  correlatedEvidence: CorrelatedEvidence[]
+  degradedReason: string | null
+  degradedOwner: string | null
+  primaryExplanation: string
+  evidenceSentence: string
+  caveatSentence: string
   evidenceWindow: {
     startsAt: string
     endsAt: string
@@ -85,6 +103,7 @@ type PriceHistoryPoint = {
   volume: bigint
   sessionType: string
   source: string
+  attribution: unknown | null
 }
 
 type OrderFlowRecord = {
@@ -210,14 +229,14 @@ async function getMotorLayersConfig(): Promise<{ config: MotorLayersConfig; sour
   }
 }
 
-async function priceHistoryHasSourceColumn(): Promise<boolean> {
+async function priceHistoryColumnExists(columnName: 'source' | 'attribution'): Promise<boolean> {
   const rows = await prisma.$queryRaw<ColumnExistsRow[]>`
     SELECT EXISTS (
       SELECT 1
       FROM information_schema.columns
       WHERE table_schema = current_schema()
         AND table_name = 'price_history'
-        AND column_name = 'source'
+        AND column_name = ${columnName}
     ) AS exists
   `
 
@@ -229,7 +248,30 @@ async function getPriceHistory(params: {
   start: Date
   end: Date
   hasSourceColumn: boolean
+  hasAttributionColumn: boolean
 }): Promise<PriceHistoryPoint[]> {
+  if (params.hasSourceColumn && params.hasAttributionColumn) {
+    return prisma.$queryRaw<PriceHistoryPoint[]>`
+      SELECT
+        id,
+        timestamp,
+        open::float8 AS open,
+        high::float8 AS high,
+        low::float8 AS low,
+        close::float8 AS close,
+        volume,
+        session_type::text AS "sessionType",
+        source,
+        attribution
+      FROM price_history
+      WHERE asset_id = ${params.assetId}
+        AND timestamp >= ${params.start}
+        AND timestamp <= ${params.end}
+      ORDER BY timestamp DESC
+      LIMIT ${MAX_PRICE_POINTS}
+    `
+  }
+
   if (params.hasSourceColumn) {
     return prisma.$queryRaw<PriceHistoryPoint[]>`
       SELECT
@@ -241,7 +283,30 @@ async function getPriceHistory(params: {
         close::float8 AS close,
         volume,
         session_type::text AS "sessionType",
-        source
+        source,
+        NULL::jsonb AS attribution
+      FROM price_history
+      WHERE asset_id = ${params.assetId}
+        AND timestamp >= ${params.start}
+        AND timestamp <= ${params.end}
+      ORDER BY timestamp DESC
+      LIMIT ${MAX_PRICE_POINTS}
+    `
+  }
+
+  if (params.hasAttributionColumn) {
+    return prisma.$queryRaw<PriceHistoryPoint[]>`
+      SELECT
+        id,
+        timestamp,
+        open::float8 AS open,
+        high::float8 AS high,
+        low::float8 AS low,
+        close::float8 AS close,
+        volume,
+        session_type::text AS "sessionType",
+        'REAL'::text AS source,
+        attribution
       FROM price_history
       WHERE asset_id = ${params.assetId}
         AND timestamp >= ${params.start}
@@ -261,7 +326,8 @@ async function getPriceHistory(params: {
       close::float8 AS close,
       volume,
       session_type::text AS "sessionType",
-      'REAL'::text AS source
+      'REAL'::text AS source,
+      NULL::jsonb AS attribution
     FROM price_history
     WHERE asset_id = ${params.assetId}
       AND timestamp >= ${params.start}
@@ -363,11 +429,17 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
     // Leitura raw intencional: existem dados legados gerados pelo motor com
     // session_type='TRADING', enquanto o enum Prisma do Next pode divergir.
     // Projetar session_type como texto evita P2023 e preserva a explicação histórica.
+    const [hasSourceColumn, hasAttributionColumn] = await Promise.all([
+      priceHistoryColumnExists('source'),
+      priceHistoryColumnExists('attribution'),
+    ])
+
     const newestHistory = await getPriceHistory({
       assetId: asset.id,
       start: window.start,
       end: window.end,
-      hasSourceColumn: await priceHistoryHasSourceColumn(),
+      hasSourceColumn,
+      hasAttributionColumn,
     })
 
     const history = newestHistory.reverse()
@@ -540,7 +612,9 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
           velocityCapPct: motorContext.effectiveParameters.velocityCapPct,
         },
       }
-      const cause = buildCause({
+      const attributionParse = parseEngineAttribution(point.attribution)
+      const engineAttribution = attributionParse.ok ? attributionParse.value : null
+      const fallbackCause = buildCause({
         direction,
         volumeDelta,
         source: point.source,
@@ -548,21 +622,52 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
         adminActions: matchedAdminActions,
         context: movementContext,
       })
-      const score = confidenceScore(cause.confidence, cause.causeType)
-      const diagnosticNotes = buildDiagnosticNotes({
-        movementPct: percentageChange,
-        volumeDelta,
+      const evidenceClassification = classifyEvidence({
+        attributionParse,
         source: point.source,
+        hasAttributionColumn,
         news: matchedNews,
         adminActions: matchedAdminActions,
-        confidence: cause.confidence,
-        causeType: cause.causeType,
         orderFlow,
+        fallbackCause,
       })
+      const cause = engineAttribution
+        ? {
+            causeType: 'SIMULATED_ENGINE' as CauseType,
+            causeLabel: engineAttribution.primaryCause,
+            confidence: evidenceClassification.confidence,
+            explanation: evidenceClassification.primaryExplanation,
+          }
+        : {
+            ...fallbackCause,
+            confidence: evidenceClassification.confidence,
+            explanation: evidenceClassification.primaryExplanation,
+          }
+      const score = evidenceClassification.confidenceScore
+      const diagnosticNotes = engineAttribution
+        ? buildEngineAttributionDiagnosticNotes(engineAttribution)
+        : buildDiagnosticNotes({
+            movementPct: percentageChange,
+            volumeDelta,
+            source: point.source,
+            news: matchedNews,
+            adminActions: matchedAdminActions,
+            confidence: cause.confidence,
+            causeType: cause.causeType,
+            orderFlow,
+          })
+      if (engineAttribution && (matchedNews.length > 0 || matchedAdminActions.length > 0)) {
+        diagnosticNotes.push(
+          `Evidências externas na janela: ${matchedNews.length} notícia(s) e ${matchedAdminActions.length} ação(ões) administrativa(s). Elas são complementares ao rastro causal gravado pelo motor.`,
+        )
+      }
       if (
-        cause.causeType === 'SIMULATED_ENGINE' ||
-        cause.causeType === 'MARKET_FLOW' ||
-        cause.causeType === 'UNEXPLAINED'
+        !engineAttribution &&
+        (
+          cause.causeType === 'SIMULATED_ENGINE' ||
+          cause.causeType === 'MARKET_FLOW' ||
+          cause.causeType === 'UNEXPLAINED'
+        )
       ) {
         diagnosticNotes.push(
           `Parâmetros efetivos do motor no cluster ${motorContext.cluster}: sigma ${motorContext.effectiveParameters.sigma}, theta ${motorContext.effectiveParameters.theta}, OFI rho ${motorContext.effectiveParameters.ofiRho}, velocity cap ${motorContext.effectiveParameters.velocityCapPct}% por tick.`,
@@ -572,6 +677,12 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
         diagnosticNotes.push(
           `A variação do ponto supera ou iguala o cap unitário de ${motorContext.effectiveParameters.velocityCapPct}% por tick; o candle pode agregar múltiplos ticks persistidos.`,
         )
+      }
+      if (!attributionParse.ok) {
+        diagnosticNotes.push(`Attribution parser: ${attributionParse.reason}; EvidenceGrade=${evidenceClassification.evidenceGrade}.`)
+      }
+      if (evidenceClassification.degradedReason) {
+        diagnosticNotes.push(`Degradacao: ${evidenceClassification.degradedReason}`)
       }
 
       return [{
@@ -596,6 +707,16 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
         confidenceScore: score,
         diagnosticNotes,
         orderFlow,
+        engineAttribution,
+        evidenceGrade: evidenceClassification.evidenceGrade,
+        qualityFlags: evidenceClassification.qualityFlags,
+        directEvidence: evidenceClassification.directEvidence,
+        correlatedEvidence: evidenceClassification.correlatedEvidence,
+        degradedReason: evidenceClassification.degradedReason,
+        degradedOwner: evidenceClassification.degradedOwner,
+        primaryExplanation: evidenceClassification.primaryExplanation,
+        evidenceSentence: evidenceClassification.evidenceSentence,
+        caveatSentence: evidenceClassification.caveatSentence,
         evidenceWindow: {
           startsAt: windowStart.toISOString(),
           endsAt: windowEnd.toISOString(),
@@ -636,6 +757,11 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
     ).length
     const explainedMovements = movements.filter((movement) => movement.causeType !== 'UNEXPLAINED').length
     const explainedPct = movements.length > 0 ? round2((explainedMovements / movements.length) * 100) : 0
+    const directCount = movements.filter((movement) => movement.evidenceGrade === 'DIRECT').length
+    const correlatedCount = movements.filter((movement) => movement.evidenceGrade === 'CORRELATED').length
+    const degradedCount = movements.filter((movement) => movement.evidenceGrade === 'DEGRADED').length
+    const attributionDenominator = movements.length
+    const attributionCoveragePct = attributionDenominator > 0 ? round2((directCount / attributionDenominator) * 100) : 0
     const averageConfidenceScore = Math.round(average(movements.map((movement) => movement.confidenceScore)))
     const dominantCause = (Object.entries(countsByCause) as [CauseType, number][])
       .sort(([causeA, countA], [causeB, countB]) => {
@@ -725,6 +851,22 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
           adminActionBreakdown,
           topMovements,
           reportNarrative,
+          attributionCoveragePct,
+          denominator: {
+            type: 'movements_with_rawChange_non_zero',
+            count: attributionDenominator,
+            period: {
+              start: analysisStart.toISOString(),
+              end: analysisEnd.toISOString(),
+            },
+          },
+          directCount,
+          correlatedCount,
+          degradedCount,
+          period: {
+            start: analysisStart.toISOString(),
+            end: analysisEnd.toISOString(),
+          },
         },
         movements,
         evidenceTotals: {

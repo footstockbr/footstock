@@ -9,6 +9,8 @@ const mockNewsCreate = jest.fn()
 const mockAssetFindUnique = jest.fn()
 const mockSourceWhitelistFindFirst = jest.fn()
 const mockAdminMarketActionCreate = jest.fn()
+const mockAdminMarketActionUpdate = jest.fn()
+const mockAdminMarketActionFindMany = jest.fn()
 const mockRedisPublish = jest.fn()
 
 jest.mock('@/lib/prisma', () => ({
@@ -16,7 +18,11 @@ jest.mock('@/lib/prisma', () => ({
     asset: { findUnique: (...args: unknown[]) => mockAssetFindUnique(...args) },
     news: { create: (...args: unknown[]) => mockNewsCreate(...args) },
     newsSourceWhitelist: { findFirst: (...args: unknown[]) => mockSourceWhitelistFindFirst(...args) },
-    adminMarketAction: { create: (...args: unknown[]) => mockAdminMarketActionCreate(...args) },
+    adminMarketAction: {
+      create: (...args: unknown[]) => mockAdminMarketActionCreate(...args),
+      update: (...args: unknown[]) => mockAdminMarketActionUpdate(...args),
+      findMany: (...args: unknown[]) => mockAdminMarketActionFindMany(...args),
+    },
   },
 }))
 
@@ -59,7 +65,9 @@ describe('NewsInjectionService', () => {
     mockAssetFindUnique.mockResolvedValue(ASSET_URU3)
     mockSourceWhitelistFindFirst.mockResolvedValue(null)
     mockNewsCreate.mockResolvedValue({ id: 'news-uuid-001' })
-    mockAdminMarketActionCreate.mockResolvedValue({})
+    mockAdminMarketActionCreate.mockResolvedValue({ id: 'admin-action-001' })
+    mockAdminMarketActionUpdate.mockResolvedValue({})
+    mockAdminMarketActionFindMany.mockResolvedValue([])
     mockRedisPublish.mockResolvedValue(1)
   })
 
@@ -116,6 +124,24 @@ describe('NewsInjectionService', () => {
           adminId: ADMIN_ID,
           ticker: 'URU3',
           action: 'NEWS_INJECT',
+        }),
+      })
+    )
+  })
+
+  test('[SUCCESS] marca auditoria como impacto aplicado apos publish no motor', async () => {
+    await service.inject(BASE_DTO, ADMIN_ID)
+
+    expect(mockAdminMarketActionUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'admin-action-001' },
+        data: expect.objectContaining({
+          details: expect.objectContaining({
+            newsId: 'news-uuid-001',
+            correlationId: 'news-uuid-001',
+            publishedImpactApplied: true,
+            adminActionId: 'admin-action-001',
+          }),
         }),
       })
     )
@@ -192,5 +218,50 @@ describe('NewsInjectionService', () => {
 
     expect(result).toEqual({ newsId: 'news-uuid-001' })
     expect(mockAdminMarketActionCreate).toHaveBeenCalledTimes(1)
+  })
+
+  test('[RECONCILE] republica noticias salvas sem impacto aplicado e atualiza auditoria', async () => {
+    mockAdminMarketActionFindMany.mockResolvedValue([
+      {
+        id: 'admin-action-002',
+        assetId: 'asset-uuid-fla',
+        ticker: 'URU3',
+        details: {
+          newsId: 'news-uuid-002',
+          correlationId: 'news-uuid-002',
+          publishedImpactApplied: false,
+          title: 'Noticia perdida no Redis',
+          source: 'Admin',
+          impactCategory: ImpactCategory.ESPORTIVA_MAJORITARIA,
+          sentiment: -0.7,
+          publishedAt: '2026-06-06T12:00:00.000Z',
+        },
+      },
+    ])
+
+    const result = await service.reconcileUnappliedNews()
+
+    expect(result).toMatchObject({ checked: 1, reapplied: 1, failed: 0, unapplied: 0 })
+    const motorCalls = mockRedisPublish.mock.calls.filter((c: unknown[]) => c[0] === 'motor:control')
+    expect(motorCalls).toHaveLength(1)
+    const payload = JSON.parse(motorCalls[0][1] as string)
+    expect(payload).toMatchObject({
+      type: 'INJECT_NEWS',
+      assetId: 'asset-uuid-fla',
+      correlationId: 'news-uuid-002',
+      payload: expect.objectContaining({
+        impact: 'NEGATIVE',
+        newsId: 'news-uuid-002',
+        adminActionId: 'admin-action-002',
+      }),
+    })
+    expect(mockAdminMarketActionUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'admin-action-002' },
+        data: expect.objectContaining({
+          details: expect.objectContaining({ publishedImpactApplied: true }),
+        }),
+      })
+    )
   })
 })

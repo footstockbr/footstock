@@ -7,6 +7,35 @@ export type CauseType =
 
 export type Confidence = 'alta' | 'media' | 'baixa'
 export type MovementMagnitude = 'neutra' | 'baixa' | 'moderada' | 'alta' | 'critica'
+export type EvidenceGrade = 'DIRECT' | 'CORRELATED' | 'DEGRADED'
+export type QualityFlag =
+  | 'ATTRIBUTION_COLUMN_MISSING'
+  | 'ATTRIBUTION_PERSIST_FAILED'
+  | 'ATTRIBUTION_PARSE_FAILED'
+  | 'ATTRIBUTION_TRUNCATED'
+  | 'NEWS_WITHOUT_ID'
+  | 'NEWS_QUEUE_AGGREGATED'
+  | 'ORDER_FLOW_SNAPSHOT_UNAVAILABLE'
+  | 'ORDER_FLOW_INELIGIBLE_ONLY'
+  | 'LEGACY_BACKFILL'
+  | 'SYNTHETIC_HISTORY'
+  | 'UNKNOWN_DEGRADED_REASON'
+
+export const QUALITY_FLAGS: readonly QualityFlag[] = [
+  'ATTRIBUTION_COLUMN_MISSING',
+  'ATTRIBUTION_PERSIST_FAILED',
+  'ATTRIBUTION_PARSE_FAILED',
+  'ATTRIBUTION_TRUNCATED',
+  'NEWS_WITHOUT_ID',
+  'NEWS_QUEUE_AGGREGATED',
+  'ORDER_FLOW_SNAPSHOT_UNAVAILABLE',
+  'ORDER_FLOW_INELIGIBLE_ONLY',
+  'LEGACY_BACKFILL',
+  'SYNTHETIC_HISTORY',
+  'UNKNOWN_DEGRADED_REASON',
+] as const
+
+const QUALITY_FLAG_SET = new Set<string>(QUALITY_FLAGS)
 
 export const CAUSE_LABELS_FOR_API: Record<CauseType, string> = {
   ADMIN_ACTION: 'ação administrativa',
@@ -44,6 +73,105 @@ export type OrderFlowEvidence = {
   averageExecutedPrice: number | null
 }
 
+export type EngineLayerContribution = {
+  layer: string
+  deltaPrice: number
+  contributionPct: number
+  direction: 'up' | 'down' | 'neutral'
+  metadata?: Record<string, number | string | boolean>
+}
+
+export type EngineAttribution = {
+  version: 1
+  primaryCause: string
+  primaryLayer: string | null
+  confidence: Confidence
+  explanation: string
+  previousPrice: number
+  enginePrice: number
+  finalPrice: number
+  engineDelta: number
+  agentImpactPct: number
+  agentDelta: number
+  syntheticVolume: number
+  pendingBuyVolume: number
+  pendingSellVolume: number
+  orderImbalance: number
+  sessionType: string
+  layerContributions: EngineLayerContribution[]
+  appliedControls: string[]
+  generatedAt: string
+}
+
+export type CausalEvent = {
+  id: string
+  type: 'NEWS' | 'ADMIN_ACTION' | 'ORDER_FLOW' | 'LAYER' | 'CONTROL' | 'SYNTHETIC_AGENT' | 'CORRELATION' | 'NUDGE'
+  source: string
+  occurredAt: string
+  direction: 'up' | 'down' | 'neutral'
+  magnitude: number
+  layer?: string
+  newsId?: string
+  title?: string
+  impactCategory?: string
+  sentiment?: number | string
+  orderIds?: string[]
+  orderIdsTruncated?: boolean
+  reasonCode?: string
+  metadata?: Record<string, number | string | boolean>
+}
+
+export type EngineAttributionV2 = Omit<EngineAttribution, 'version'> & {
+  version: 2
+  tickId: string
+  tickCount: number
+  tickStartedAt: string
+  tickEndedAt: string
+  primaryEventId: string | null
+  primaryExplanation: string
+  evidenceSentence: string
+  caveatSentence: string
+  causalEvents: CausalEvent[]
+  qualityFlags: QualityFlag[]
+  payloadBytes: number
+}
+
+export type AnyEngineAttribution = EngineAttribution | EngineAttributionV2
+
+export type AttributionParseResult =
+  | { ok: true; value: AnyEngineAttribution; evidenceGrade: 'DIRECT'; qualityFlags: QualityFlag[] }
+  | { ok: false; reason: string; qualityFlag: QualityFlag; evidenceGrade: 'DEGRADED'; qualityFlags: QualityFlag[] }
+
+export type DirectEvidence = {
+  type: CausalEvent['type']
+  label: string
+  eventId: string
+  source: string
+  occurredAt: string
+}
+
+export type CorrelatedEvidence = {
+  type: 'NEWS' | 'ADMIN_ACTION' | 'ORDER_FLOW'
+  label: string
+  eventId?: string
+  occurredAt?: string
+  confidenceScore: number
+}
+
+export type EvidenceClassification = {
+  evidenceGrade: EvidenceGrade
+  qualityFlags: QualityFlag[]
+  directEvidence: DirectEvidence[]
+  correlatedEvidence: CorrelatedEvidence[]
+  degradedReason: string | null
+  degradedOwner: 'MIGRATION' | 'ENGINE' | 'ORDER_FLOW' | 'NEWS_PIPELINE' | 'API_PARSER' | 'BACKFILL' | 'UNKNOWN' | null
+  primaryExplanation: string
+  evidenceSentence: string
+  caveatSentence: string
+  confidence: Confidence
+  confidenceScore: number
+}
+
 export type MovementContext = {
   previousPrice: number
   newPrice: number
@@ -60,6 +188,234 @@ export type MovementContext = {
     theta: number
     ofiRho: number
     velocityCapPct: number
+  }
+}
+
+function validQualityFlags(flags: unknown): QualityFlag[] | null {
+  if (!Array.isArray(flags)) return null
+  const out: QualityFlag[] = []
+  for (const flag of flags) {
+    if (typeof flag !== 'string' || !QUALITY_FLAG_SET.has(flag)) return null
+    out.push(flag as QualityFlag)
+  }
+  return [...new Set(out)]
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+export function isEngineAttribution(value: unknown): value is AnyEngineAttribution {
+  if (!value || typeof value !== 'object') return false
+  const record = value as Record<string, unknown>
+  if (
+    record.version === 1 &&
+    typeof record.primaryCause === 'string' &&
+    typeof record.explanation === 'string' &&
+    Array.isArray(record.layerContributions)
+  ) return true
+  return (
+    record.version === 2 &&
+    typeof record.tickId === 'string' &&
+    typeof record.tickCount === 'number' &&
+    typeof record.tickStartedAt === 'string' &&
+    typeof record.tickEndedAt === 'string' &&
+    typeof record.primaryCause === 'string' &&
+    Array.isArray(record.causalEvents) &&
+    validQualityFlags(record.qualityFlags) !== null
+  )
+}
+
+export function parseEngineAttribution(value: unknown): AttributionParseResult {
+  if (value === null || value === undefined) {
+    return {
+      ok: false,
+      reason: 'ATTRIBUTION_NULL',
+      qualityFlag: 'UNKNOWN_DEGRADED_REASON',
+      evidenceGrade: 'DEGRADED',
+      qualityFlags: ['UNKNOWN_DEGRADED_REASON'],
+    }
+  }
+  let candidate = value
+  if (typeof value === 'string') {
+    try {
+      candidate = JSON.parse(value)
+    } catch {
+      return {
+        ok: false,
+        reason: 'ATTRIBUTION_PARSE_FAILED',
+        qualityFlag: 'ATTRIBUTION_PARSE_FAILED',
+        evidenceGrade: 'DEGRADED',
+        qualityFlags: ['ATTRIBUTION_PARSE_FAILED'],
+      }
+    }
+  }
+  if (isEngineAttribution(candidate)) {
+    return {
+      ok: true,
+      value: candidate,
+      evidenceGrade: 'DIRECT',
+      qualityFlags: candidate.version === 2 ? candidate.qualityFlags : [],
+    }
+  }
+  if (isRecord(candidate) && typeof candidate.version === 'number' && candidate.version !== 1 && candidate.version !== 2) {
+    return {
+      ok: false,
+      reason: `UNSUPPORTED_ATTRIBUTION_VERSION_${candidate.version}`,
+      qualityFlag: 'ATTRIBUTION_PARSE_FAILED',
+      evidenceGrade: 'DEGRADED',
+      qualityFlags: ['ATTRIBUTION_PARSE_FAILED'],
+    }
+  }
+  return {
+    ok: false,
+    reason: 'ATTRIBUTION_SCHEMA_INVALID',
+    qualityFlag: 'ATTRIBUTION_PARSE_FAILED',
+    evidenceGrade: 'DEGRADED',
+    qualityFlags: ['ATTRIBUTION_PARSE_FAILED'],
+  }
+}
+
+export function buildEngineAttributionDiagnosticNotes(attribution: AnyEngineAttribution): string[] {
+  const notes: string[] = []
+  const primaryLayer = attribution.primaryLayer ?? 'nenhuma camada dominante'
+  notes.push(`Atribuição gravada no tick pelo motor: causa principal "${attribution.primaryCause}" via ${primaryLayer}.`)
+  notes.push(`Preço base ${money(attribution.previousPrice)}, preço após camadas ${money(attribution.enginePrice)}, preço final ${money(attribution.finalPrice)}.`)
+  notes.push(`Impacto dos agentes: ${signedPct(attribution.agentImpactPct)} e volume sintético de ${attribution.syntheticVolume.toLocaleString('pt-BR')} unidade(s).`)
+  notes.push(`Book no tick: ${attribution.pendingBuyVolume.toLocaleString('pt-BR')} compra(s), ${attribution.pendingSellVolume.toLocaleString('pt-BR')} venda(s), saldo ${attribution.orderImbalance.toLocaleString('pt-BR')}.`)
+
+  const topLayers = attribution.layerContributions
+    .filter((layer) => Math.abs(layer.deltaPrice) > 0)
+    .slice(0, 4)
+    .map((layer) => `${layer.layer} ${layer.deltaPrice > 0 ? '+' : ''}${money(layer.deltaPrice)} (${round2(layer.contributionPct)}%)`)
+
+  if (topLayers.length > 0) {
+    notes.push(`Principais contribuições: ${topLayers.join('; ')}.`)
+  }
+
+  if (attribution.appliedControls.length > 0) {
+    notes.push(`Controles aplicados no tick: ${attribution.appliedControls.join(', ')}.`)
+  }
+  if (attribution.version === 2) {
+    notes.push(`EvidenceGrade DIRECT: ${attribution.causalEvents.length} evento(s) causal(is), tickId ${attribution.tickId}, payload ${attribution.payloadBytes} bytes.`)
+    if (attribution.qualityFlags.length > 0) notes.push(`Flags de qualidade: ${attribution.qualityFlags.join(', ')}.`)
+  }
+
+  return notes
+}
+
+function directEvidenceFromAttribution(attribution: AnyEngineAttribution): DirectEvidence[] {
+  if (attribution.version === 1) {
+    return [{
+      type: 'LAYER',
+      label: attribution.primaryCause,
+      eventId: attribution.primaryLayer ?? attribution.generatedAt,
+      source: attribution.primaryLayer ?? 'PriceAttributionV1',
+      occurredAt: attribution.generatedAt,
+    }]
+  }
+  return attribution.causalEvents
+    .filter((event) => event.magnitude > 0)
+    .slice(0, 8)
+    .map((event) => ({
+      type: event.type,
+      label: event.title ?? event.layer ?? event.source,
+      eventId: event.newsId ?? event.id,
+      source: event.source,
+      occurredAt: event.occurredAt,
+    }))
+}
+
+function sourceQualityFlag(source: string, hasAttributionColumn: boolean): QualityFlag {
+  if (!hasAttributionColumn) return 'ATTRIBUTION_COLUMN_MISSING'
+  if (source === 'GBM') return 'SYNTHETIC_HISTORY'
+  return 'UNKNOWN_DEGRADED_REASON'
+}
+
+export function classifyEvidence(params: {
+  attributionParse: AttributionParseResult
+  source: string
+  hasAttributionColumn: boolean
+  news: NewsEvidence[]
+  adminActions: AdminActionEvidence[]
+  orderFlow: OrderFlowEvidence
+  fallbackCause: { confidence: Confidence; causeType: CauseType; explanation: string }
+}): EvidenceClassification {
+  if (params.attributionParse.ok) {
+    const attribution = params.attributionParse.value
+    const directEvidence = directEvidenceFromAttribution(attribution)
+    return {
+      evidenceGrade: directEvidence.length > 0 ? 'DIRECT' : 'DEGRADED',
+      qualityFlags: params.attributionParse.qualityFlags,
+      directEvidence,
+      correlatedEvidence: [],
+      degradedReason: directEvidence.length > 0 ? null : 'Attribution valida sem evento causal material.',
+      degradedOwner: directEvidence.length > 0 ? null : 'ENGINE',
+      primaryExplanation: attribution.version === 2 ? attribution.primaryExplanation : attribution.explanation,
+      evidenceSentence: attribution.version === 2 ? attribution.evidenceSentence : `Rastro direto gravado pelo motor em ${attribution.generatedAt}.`,
+      caveatSentence: attribution.version === 2 ? attribution.caveatSentence : 'Atribuicao v1 explica camada dominante, mas nao carrega eventos causais detalhados.',
+      confidence: 'alta',
+      confidenceScore: 90,
+    }
+  }
+
+  const correlatedEvidence: CorrelatedEvidence[] = [
+    ...params.news.slice(0, 3).map((item) => ({
+      type: 'NEWS' as const,
+      label: item.title,
+      eventId: item.id,
+      occurredAt: item.occurredAt,
+      confidenceScore: 60,
+    })),
+    ...params.adminActions.slice(0, 3).map((item) => ({
+      type: 'ADMIN_ACTION' as const,
+      label: item.action,
+      eventId: item.id,
+      occurredAt: item.occurredAt,
+      confidenceScore: 60,
+    })),
+  ]
+  if (params.orderFlow.orderCount > 0) {
+    correlatedEvidence.push({
+      type: 'ORDER_FLOW',
+      label: `${params.orderFlow.orderCount} ordem(ns) executada(s) na janela`,
+      confidenceScore: 55,
+    })
+  }
+
+  if (correlatedEvidence.length > 0 && params.source !== 'GBM') {
+    return {
+      evidenceGrade: 'CORRELATED',
+      qualityFlags: [params.attributionParse.qualityFlag],
+      directEvidence: [],
+      correlatedEvidence,
+      degradedReason: null,
+      degradedOwner: null,
+      primaryExplanation: params.fallbackCause.explanation,
+      evidenceSentence: 'Ha correlacao temporal com eventos proximos, mas nenhum rastro causal direto foi aceito.',
+      caveatSentence: 'Nao apresentar como causa confirmada; limite operacional de confianca media/baixa.',
+      confidence: params.fallbackCause.confidence === 'alta' ? 'media' : params.fallbackCause.confidence,
+      confidenceScore: Math.min(65, confidenceScore(params.fallbackCause.confidence, params.fallbackCause.causeType)),
+    }
+  }
+
+  const flag = sourceQualityFlag(params.source, params.hasAttributionColumn)
+  return {
+    evidenceGrade: 'DEGRADED',
+    qualityFlags: [...new Set([params.attributionParse.qualityFlag, flag])],
+    directEvidence: [],
+    correlatedEvidence: [],
+    degradedReason: params.source === 'GBM'
+      ? 'Historico sintetico GBM sem rastro causal real de mercado.'
+      : 'Nao ha rastro causal auditavel para este movimento.',
+    degradedOwner: flag === 'ATTRIBUTION_COLUMN_MISSING' ? 'MIGRATION' : flag === 'SYNTHETIC_HISTORY' ? 'BACKFILL' : 'UNKNOWN',
+    primaryExplanation: params.source === 'GBM'
+      ? 'Candle sintetico gerado por simulacao; nao ha causa operacional direta de mercado.'
+      : params.fallbackCause.explanation,
+    evidenceSentence: 'Nenhuma evidencia direta foi gravada no candle.',
+    caveatSentence: 'Movimento degradado: use apenas para diagnostico operacional, nao como causa confirmada.',
+    confidence: 'baixa',
+    confidenceScore: 25,
   }
 }
 
