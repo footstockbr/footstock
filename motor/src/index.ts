@@ -30,9 +30,12 @@ let _engineRef: import('./engine/MarketEngine').MarketEngine | null = null
 
 const healthServer = http.createServer(async (req, res) => {
   const url = req.url ?? ''
+  // Rotear por pathname: req.url inclui querystring (ex: /stream/market?token=...),
+  // que quebrava o exact-match dos endpoints SSE e fazia cair no 404 final.
+  const pathname = url.split('?')[0]
 
   // GET /health — health check padrão Railway/Docker
-  if (url === '/health') {
+  if (pathname === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ status: 'ok', id: MOTOR_ID }))
     return
@@ -40,7 +43,7 @@ const healthServer = http.createServer(async (req, res) => {
 
   // GET /api/v1/market/engine/layers-debug — contribuição de cada camada por ticker (admin only)
   // Requer header: Authorization: Bearer {ADMIN_DEBUG_TOKEN}
-  if (url === '/api/v1/market/engine/layers-debug' || url.startsWith('/api/v1/market/engine/layers-debug?')) {
+  if (pathname === '/api/v1/market/engine/layers-debug') {
     const adminToken = process.env.ADMIN_DEBUG_TOKEN
     if (adminToken && req.headers.authorization !== `Bearer ${adminToken}`) {
       res.writeHead(401, { 'Content-Type': 'application/json' })
@@ -56,7 +59,7 @@ const healthServer = http.createServer(async (req, res) => {
   }
 
   // GET /api/v1/assets/:ticker/ofi-history — histórico OFI para sub-chart
-  const ofiMatch = url.match(/^\/api\/v1\/assets\/([A-Z0-9]+)\/ofi-history$/)
+  const ofiMatch = pathname.match(/^\/api\/v1\/assets\/([A-Z0-9]+)\/ofi-history$/)
   if (ofiMatch) {
     const ticker  = ofiMatch[1]
     const history = await _engineRef?.getOfiHistory(ticker) ?? []
@@ -66,13 +69,13 @@ const healthServer = http.createServer(async (req, res) => {
   }
 
   // GET /stream/market — SSE streaming de ticks (migrado do Vercel em 2026-05-06)
-  if (url === '/stream/market') {
+  if (pathname === '/stream/market') {
     handleMarketStream(req, res)
     return
   }
 
   // GET /stream/news — SSE streaming de notícias (migrado do Vercel em 2026-05-06)
-  if (url === '/stream/news') {
+  if (pathname === '/stream/news') {
     handleNewsStream(req, res)
     return
   }
