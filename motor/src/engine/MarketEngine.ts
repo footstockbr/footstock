@@ -618,6 +618,7 @@ export class MarketEngine {
             throw new Error(`ATTRIBUTION_SERIALIZATION_INVALID:${parsed.reason}`)
           }
           motorMetrics.inc('motor_price_attribution_missing_total')
+          motorMetrics.inc('motor_price_attribution_missing_parse_total')
           attribution = {
             version: 2,
             tickId: `degraded:${tick.assetId}:${tick.timestamp}`,
@@ -656,6 +657,7 @@ export class MarketEngine {
     } catch (err) {
       if (attribution && String(err).includes('attribution')) {
         motorMetrics.inc('motor_price_attribution_missing_total')
+        motorMetrics.inc('motor_price_attribution_missing_column_total')
         if (process.env.ATTRIBUTION_STRICT_MODE === 'true') {
           throw new Error('[engine] price_history.attribution indisponivel com ATTRIBUTION_STRICT_MODE=true')
         }

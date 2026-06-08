@@ -7,7 +7,8 @@ Data: 2026-06-06
 - Confirmar colunas `price_history.source` e `price_history.attribution`.
 - Confirmar schemas Prisma sincronizados para `PriceHistory` e indice de `orders`.
 - Validar canario `attribution.version=2` pelo parser runtime.
-- Confirmar metricas: `motor_price_attribution_missing_total`, `motor_tick_duration_ms`, `order_flow_snapshot_duration_ms`, `price_attribution_payload_bytes`, `value_analysis_movements_total`, `value_analysis_attribution_coverage_pct`, `news_injection_duplicate_total`.
+- Confirmar metricas: `motor_price_attribution_missing_total`, `motor_price_attribution_missing_parse_total`, `motor_price_attribution_missing_column_total`, `motor_tick_duration_ms`, `order_flow_snapshot_duration_ms`, `price_attribution_payload_bytes`, `value_analysis_movements_total`, `value_analysis_attribution_coverage_pct`, `news_injection_duplicate_total`.
+- Alerta: `motor_price_attribution_missing_total > 0` em janela de teste deve abrir investigacao; usar `_parse_total` vs `_column_total` para separar falha de serializacao de coluna indisponivel.
 
 ## Performance
 

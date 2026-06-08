@@ -520,7 +520,7 @@ model PriceHistory {
   close       Decimal     @db.Decimal(18, 8)
   volume      BigInt      @default(0)
   sessionType SessionType @map("session_type")
-  source      String      @default("REAL") @map("source") // 'GBM' | 'REAL'
+  source      String      @default("REAL") @map("source") // 'GBM' | 'REAL' | 'MOTOR'
   attribution Json?       @map("attribution") @db.JsonB
 
   asset Asset @relation(fields: [assetId], references: [id])

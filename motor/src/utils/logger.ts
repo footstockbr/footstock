@@ -2,6 +2,8 @@ import winston from 'winston'
 
 export const REQUIRED_METRICS = [
   'motor_price_attribution_missing_total',
+  'motor_price_attribution_missing_parse_total',
+  'motor_price_attribution_missing_column_total',
   'motor_tick_duration_ms',
   'order_flow_snapshot_duration_ms',
   'price_attribution_payload_bytes',

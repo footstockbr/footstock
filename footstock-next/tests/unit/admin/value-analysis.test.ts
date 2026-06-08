@@ -302,4 +302,37 @@ describe('value-analysis heuristics', () => {
     expect(classified.qualityFlags).toContain('SYNTHETIC_HISTORY')
     expect(classified.degradedReason).toContain('GBM')
   })
+
+  it('candle MOTOR sem attribution e sem evidencia vira falha operacional (owner ENGINE, nao frase generica)', () => {
+    const classified = classifyEvidence({
+      attributionParse: parseEngineAttribution(null),
+      source: 'MOTOR',
+      hasAttributionColumn: true,
+      news: [],
+      adminActions: [],
+      orderFlow: { buyQuantity: 0, sellQuantity: 0, netQuantity: 0, orderCount: 0, averageExecutedPrice: null },
+      fallbackCause: { confidence: 'baixa', causeType: 'MARKET_FLOW', explanation: 'fluxo de mercado com baixa confiança' },
+    })
+
+    expect(classified.evidenceGrade).toBe('DEGRADED')
+    expect(classified.degradedOwner).toBe('ENGINE')
+    expect(classified.primaryExplanation).toContain('Falha de rastro causal do motor')
+    expect(classified.primaryExplanation).not.toContain('fluxo de mercado')
+  })
+
+  it('candle MOTOR sem coluna attribution atribui owner MIGRATION', () => {
+    const classified = classifyEvidence({
+      attributionParse: parseEngineAttribution(null),
+      source: 'MOTOR',
+      hasAttributionColumn: false,
+      news: [],
+      adminActions: [],
+      orderFlow: { buyQuantity: 0, sellQuantity: 0, netQuantity: 0, orderCount: 0, averageExecutedPrice: null },
+      fallbackCause: { confidence: 'baixa', causeType: 'UNEXPLAINED', explanation: 'fallback' },
+    })
+
+    expect(classified.evidenceGrade).toBe('DEGRADED')
+    expect(classified.degradedOwner).toBe('MIGRATION')
+    expect(classified.qualityFlags).toContain('ATTRIBUTION_COLUMN_MISSING')
+  })
 })

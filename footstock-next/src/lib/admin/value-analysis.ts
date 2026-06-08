@@ -326,10 +326,40 @@ function directEvidenceFromAttribution(attribution: AnyEngineAttribution): Direc
     }))
 }
 
+// Sources gerados pelo motor de precificacao. Um candle desses DEVERIA carregar
+// uma atribuicao causal direta; a ausencia e defeito operacional (motor/persistencia),
+// nao "causa desconhecida de mercado".
+const ENGINE_SOURCES = new Set<string>(['MOTOR'])
+
+export function isEngineSource(source: string): boolean {
+  return ENGINE_SOURCES.has(source)
+}
+
 function sourceQualityFlag(source: string, hasAttributionColumn: boolean): QualityFlag {
   if (!hasAttributionColumn) return 'ATTRIBUTION_COLUMN_MISSING'
   if (source === 'GBM') return 'SYNTHETIC_HISTORY'
   return 'UNKNOWN_DEGRADED_REASON'
+}
+
+// Mensagem honesta para candle do motor sem rastro causal aceito: descreve o
+// defeito operacional (parser/coluna/flags) em vez de inferir uma causa de mercado.
+function buildEngineTraceFailureExplanation(opts: {
+  source: string
+  parseReason: string
+  hasAttributionColumn: boolean
+  qualityFlags: QualityFlag[]
+}): string {
+  const columnState = opts.hasAttributionColumn
+    ? 'coluna attribution presente'
+    : 'coluna attribution ausente'
+  const flags = opts.qualityFlags.length > 0 ? opts.qualityFlags.join(', ') : 'nenhuma'
+  return (
+    `Falha de rastro causal do motor: o candle source=${opts.source} nao carrega atribuicao aceita pelo parser ` +
+    `(motivo: ${opts.parseReason}; ${columnState}; flags: ${flags}). ` +
+    `Este candle foi gerado pelo motor e deveria registrar a causa direta da variacao; ` +
+    `trate como defeito operacional de captura/persistencia, nao como causa de mercado. ` +
+    `Nenhuma causa real e inferida para este candle.`
+  )
 }
 
 export function classifyEvidence(params: {
@@ -384,18 +414,51 @@ export function classifyEvidence(params: {
   }
 
   if (correlatedEvidence.length > 0 && params.source !== 'GBM') {
+    const engineSource = isEngineSource(params.source)
     return {
       evidenceGrade: 'CORRELATED',
-      qualityFlags: [params.attributionParse.qualityFlag],
+      qualityFlags: engineSource
+        ? [...new Set([params.attributionParse.qualityFlag, sourceQualityFlag(params.source, params.hasAttributionColumn)])]
+        : [params.attributionParse.qualityFlag],
       directEvidence: [],
       correlatedEvidence,
       degradedReason: null,
-      degradedOwner: null,
+      degradedOwner: engineSource ? (params.hasAttributionColumn ? 'ENGINE' : 'MIGRATION') : null,
       primaryExplanation: params.fallbackCause.explanation,
       evidenceSentence: 'Ha correlacao temporal com eventos proximos, mas nenhum rastro causal direto foi aceito.',
-      caveatSentence: 'Nao apresentar como causa confirmada; limite operacional de confianca media/baixa.',
+      caveatSentence: engineSource
+        ? 'Candle do motor sem rastro causal direto: evidencia apenas correlacional/pos-preco. Investigar captura/persistencia de attribution.'
+        : 'Nao apresentar como causa confirmada; limite operacional de confianca media/baixa.',
       confidence: params.fallbackCause.confidence === 'alta' ? 'media' : params.fallbackCause.confidence,
       confidenceScore: Math.min(65, confidenceScore(params.fallbackCause.confidence, params.fallbackCause.causeType)),
+    }
+  }
+
+  // Candle do motor sem atribuicao aceita e sem evidencia correlacionada: caso que
+  // antes caia na frase generica de "fluxo de mercado com baixa confianca". Agora
+  // reportamos o defeito operacional com owner especifico, nunca UNKNOWN.
+  if (isEngineSource(params.source) && !params.attributionParse.ok) {
+    const qualityFlags = [...new Set<QualityFlag>([
+      params.attributionParse.qualityFlag,
+      sourceQualityFlag(params.source, params.hasAttributionColumn),
+    ])]
+    return {
+      evidenceGrade: 'DEGRADED',
+      qualityFlags,
+      directEvidence: [],
+      correlatedEvidence: [],
+      degradedReason: `Candle source=${params.source} sem atribuicao aceita (${params.attributionParse.reason}).`,
+      degradedOwner: params.hasAttributionColumn ? 'ENGINE' : 'MIGRATION',
+      primaryExplanation: buildEngineTraceFailureExplanation({
+        source: params.source,
+        parseReason: params.attributionParse.reason,
+        hasAttributionColumn: params.hasAttributionColumn,
+        qualityFlags,
+      }),
+      evidenceSentence: 'Nenhum rastro causal direto do motor foi aceito para este candle.',
+      caveatSentence: 'Defeito operacional: nao usar como causa confirmada; abrir investigacao de captura/persistencia de attribution.',
+      confidence: 'baixa',
+      confidenceScore: 20,
     }
   }
 
@@ -535,7 +598,7 @@ function buildMarketFlowExplanation(direction: 'up' | 'down', context: MovementC
     `${context.volumeDelta.toLocaleString('pt-BR')} unidade(s).`
 
   if (!hasOrderFlow) {
-    return `${base} Não houve notícia nem ação administrativa na janela, e também não encontrei ordens preenchidas no intervalo exato do candle. A leitura correta é: o histórico de preço registrou volume agregado, mas a causa direta não está auditável por ordem individual; a explicação fica como fluxo de mercado com baixa confiança, possivelmente vindo de ticks agregados do motor ou liquidez fora da janela de correlação.`
+    return `${base} Não houve notícia nem ação administrativa na janela. Não há atribuição causal do motor para este candle e nenhuma ordem preenchida foi registrada no intervalo (lembrando que ordens preenchem ao preço já calculado, ou seja, são evidência pós-preço e não causa direta). Sem o rastro do motor, a causa direta não é auditável; o movimento fica como não confirmado e deve ser tratado com baixa confiança.`
   }
 
   if (netMatchesDirection) {
