@@ -35,6 +35,14 @@ const AnalyticsContext = createContext<AnalyticsContextValue>({
 
 async function checkConsentAndInit() {
   try {
+    // Gate de sessao: este provider vive no root layout e monta tambem em paginas
+    // publicas/login, onde nao ha sessao. Chamar /api/v1/me direto gera um 401 no
+    // console (a rota e auth-gated). /api/auth/session retorna 200 + null quando
+    // deslogado, entao usamos ele como gate sem ruido.
+    const sessionRes = await fetch('/api/auth/session', { cache: 'no-store', credentials: 'include' })
+    const session = sessionRes.ok ? await sessionRes.json() : null
+    if (!session?.user?.id) return // Sem sessao — nao inicializa nem chama /api/v1/me
+
     const res = await fetch('/api/v1/me', { cache: 'no-store', credentials: 'include' })
     if (!res.ok) return // Usuario nao logado — nao inicializa
 
