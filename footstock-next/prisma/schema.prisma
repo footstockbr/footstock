@@ -211,6 +211,11 @@ enum SessionType {
   CLOSING_CALL
   AFTER_MARKET
   CLOSED
+  // Valores do pregao virtual escritos pelo motor (drift fix 2026-06-08): o pg enum
+  // SessionType ja contem PRE_OPENING/TRADING (M049) e price_history os usa em ~224k
+  // linhas; sem eles o Prisma client quebra findMany com "Value 'TRADING' not found".
+  PRE_OPENING
+  TRADING
 }
 
 enum ConsentPurpose {
