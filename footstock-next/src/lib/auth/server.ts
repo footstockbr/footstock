@@ -1,7 +1,7 @@
 import { headers, cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 import { hasPlanAccess } from '@/lib/auth/planAccess'
-import { readAuthjsSession, decodeAuthjsToken } from '@/lib/auth/authjs-session'
+import { readAuthjsSession, decodeAuthjsToken, isSessionInvalidated } from '@/lib/auth/authjs-session'
 import type { PlanType } from '@/lib/enums'
 import type { User } from '@/types/models'
 
@@ -18,7 +18,10 @@ export async function getAuthUser(): Promise<{ user: User } | null> {
     const payload = await decodeAuthjsToken(bearer)
     if (payload?.id) {
       const dbUser = await prisma.user.findUnique({ where: { id: payload.id } })
-      if (dbUser) return { user: dbUser as unknown as User }
+      // Invalida token emitido antes da ultima troca de senha (outras sessoes).
+      if (dbUser && !isSessionInvalidated(dbUser.passwordChangedAt, payload.iat)) {
+        return { user: dbUser as unknown as User }
+      }
     }
     return null
   }
@@ -27,7 +30,9 @@ export async function getAuthUser(): Promise<{ user: User } | null> {
   const authjs = await readAuthjsSession()
   if (authjs?.id) {
     const dbUser = await prisma.user.findUnique({ where: { id: authjs.id } })
-    if (dbUser) return { user: dbUser as unknown as User }
+    if (dbUser && !isSessionInvalidated(dbUser.passwordChangedAt, authjs.iat)) {
+      return { user: dbUser as unknown as User }
+    }
   }
 
   // DEV local fallback: cookie HttpOnly fs_dev_auth.

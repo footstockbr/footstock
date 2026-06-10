@@ -3,7 +3,7 @@ import 'server-only'
 import * as Sentry from '@sentry/nextjs'
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
-import { readAuthjsSession } from '@/lib/auth/authjs-session'
+import { readAuthjsSession, isSessionInvalidated } from '@/lib/auth/authjs-session'
 import type { User } from '@/types'
 
 // Motivo pelo qual getAuthUser nao resolveu a sessao. Emitido como breadcrumb
@@ -13,6 +13,7 @@ type AuthFailReason =
   | 'user-not-found'
   | 'serialize-threw'
   | 'unexpected-throw'
+  | 'session-invalidated'
 
 async function reportAuthFail(reason: AuthFailReason, err?: unknown): Promise<void> {
   // stdout SEMPRE (inclusive no-cookie-session) — canal de diagnostico que
@@ -27,7 +28,9 @@ async function reportAuthFail(reason: AuthFailReason, err?: unknown): Promise<vo
   // entupiria o Sentry. O sinal fino de "cookie presente mas nao resolveu"
   // ja e emitido como EVENTO dentro de readAuthjsSession (cookie-absent com
   // outros cookies / cookie-undecodable). Aqui fica so breadcrumb.
-  if (reason === 'no-cookie-session') {
+  // 'session-invalidated' e ESPERADO apos troca de senha (logout de outras
+  // sessoes) — tratar como 'no-cookie-session': breadcrumb, sem evento Sentry.
+  if (reason === 'no-cookie-session' || reason === 'session-invalidated') {
     Sentry.addBreadcrumb({
       category: 'auth',
       message: 'getAuthUser_unresolved',
@@ -126,6 +129,12 @@ export async function getAuthUser(): Promise<{ user: User; userId: string } | nu
     if (authjs?.id) {
       const dbUser = await prisma.user.findUnique({ where: { id: authjs.id } })
       if (dbUser) {
+        // Invalidacao de sessao: token emitido antes da ultima troca de senha
+        // (logout de outras sessoes). dbUser ja foi buscado -> custo zero.
+        if (isSessionInvalidated(dbUser.passwordChangedAt, authjs.iat)) {
+          await reportAuthFail('session-invalidated')
+          return null
+        }
         try {
           return { userId: dbUser.id, user: serializeUser(dbUser) }
         } catch (err) {

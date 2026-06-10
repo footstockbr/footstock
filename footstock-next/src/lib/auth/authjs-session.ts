@@ -21,6 +21,29 @@ const AUTHJS_COOKIE_DEV = 'authjs.session-token'
 export type AuthjsSessionPayload = {
   id: string
   email?: string | null
+  // `iat` (issued-at, segundos) do JWT — usado para invalidar sessões cujo token
+  // foi emitido antes da última troca de senha (ver isSessionInvalidated).
+  iat?: number
+}
+
+// Folga de 5s: o token recém-reemitido na própria troca de senha tem iat ≈ agora
+// (mesmo instante de passwordChangedAt). Sem a folga, arredondamento de segundos
+// poderia invalidar a própria sessão atual. Tokens de OUTROS dispositivos foram
+// emitidos muito antes, então a folga não enfraquece o objetivo de segurança.
+const SESSION_INVALIDATION_GRACE_MS = 5000
+
+/**
+ * True quando o token (iat) foi emitido ANTES da última troca de senha do user.
+ * Fail-open: se passwordChangedAt for null (nunca trocou) ou o token não tiver
+ * iat (ex.: fallback dev fs_dev_auth), NÃO invalida.
+ */
+export function isSessionInvalidated(
+  passwordChangedAt: Date | null | undefined,
+  iatSeconds: number | undefined,
+): boolean {
+  if (!passwordChangedAt) return false
+  if (typeof iatSeconds !== 'number') return false
+  return iatSeconds * 1000 < passwordChangedAt.getTime() - SESSION_INVALIDATION_GRACE_MS
 }
 
 export async function readAuthjsSession(): Promise<AuthjsSessionPayload | null> {
@@ -92,16 +115,19 @@ export async function readAuthjsSession(): Promise<AuthjsSessionPayload | null> 
   for (const { name, value } of presentCookies) {
     try {
       const decoded = await decode({ token: value, secret, salt: name })
+      const iat = typeof decoded?.iat === 'number' ? decoded.iat : undefined
       if (decoded?.id) {
         return {
           id: String(decoded.id),
           email: (decoded.email as string | null | undefined) ?? null,
+          iat,
         }
       }
       if (decoded?.sub) {
         return {
           id: String(decoded.sub),
           email: (decoded.email as string | null | undefined) ?? null,
+          iat,
         }
       }
     } catch {
@@ -147,6 +173,7 @@ export async function decodeAuthjsToken(
         return {
           id: String(id),
           email: (decoded?.email as string | null | undefined) ?? null,
+          iat: typeof decoded?.iat === 'number' ? decoded.iat : undefined,
         }
       }
     } catch {
