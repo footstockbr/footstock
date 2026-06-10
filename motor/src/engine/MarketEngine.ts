@@ -18,7 +18,7 @@ import type { MarketContext } from '../agents/BaseAgent'
 import { getClusterParams } from '../microstructure/clusters'
 import { buildMotorTick, buildHaltTick, serializeTick } from '../microstructure/MotorTick'
 import { REDIS_CHANNELS } from '../types/events.types'
-import type { ActiveNewsImpact, AnyPriceAttribution, AssetState, MotorTick, OrderFlowSnapshot, SessionType, TickInputSnapshot } from '../types/motor.types'
+import type { ActiveNewsImpact, AdminPriceAdjustment, AnyPriceAttribution, AssetState, MotorTick, OrderFlowSnapshot, SessionType, TickInputSnapshot } from '../types/motor.types'
 import { logger, motorMetrics } from '../utils/logger'
 import { MotorHealthService } from '../services/MotorHealthService'
 import { OrderExecutor } from './OrderExecutor'
@@ -66,6 +66,8 @@ export class MarketEngine {
   private previousSessionType: SessionType | null = null
   /** Atribuições acumuladas entre candles persistidos por ativo. */
   private pendingAttributions = new Map<string, AnyPriceAttribution[]>()
+  /** Ajustes manuais de preço (ADJUST_PRICE) aguardando a próxima atribuição do ativo. */
+  private pendingAdminAdjustments = new Map<string, AdminPriceAdjustment[]>()
   /** Timers de retomada do circuit breaker por assetId — cancelados no stop(). */
   private circuitBreakerTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
@@ -456,6 +458,12 @@ export class MarketEngine {
         // o agente puxa o preço abaixo de NUDGE_MIN_PRICE e equilibra em ~0.98.
         const finalPrice = Math.max(NUDGE_MIN_PRICE, newPrice * (1 + agentImpact))
         const tickEndedAt = new Date()
+        // Ajustes admin aplicados desde a última atribuição deste ativo: o salto
+        // old→new ocorreu entre ticks, então a atribuição parte do preço
+        // PRÉ-ajuste para que o delta explicado bata com o candle observado.
+        const adminAdjustments = this.pendingAdminAdjustments.get(assetId)
+        if (adminAdjustments) this.pendingAdminAdjustments.delete(assetId)
+        const attributionPreviousPrice = adminAdjustments?.[0]?.previousPrice ?? previousPrice
         const inputSnapshot: TickInputSnapshot = Object.freeze({
           tickId,
           assetId,
@@ -469,7 +477,7 @@ export class MarketEngine {
           sessionType,
         })
         const attribution = buildPriceAttributionV2({
-          previousPrice,
+          previousPrice: attributionPreviousPrice,
           enginePrice: newPrice,
           finalPrice,
           agentImpact,
@@ -486,6 +494,7 @@ export class MarketEngine {
           inputSnapshot,
           orderFlowSnapshot,
           activeNewsImpacts: inputSnapshot.activeNewsImpacts,
+          adminAdjustments,
         })
         motorMetrics.observe('price_attribution_payload_bytes', attribution.payloadBytes)
         const pendingAttributions = this.pendingAttributions.get(assetId) ?? []
@@ -924,9 +933,22 @@ export class MarketEngine {
     }
   }
 
-  adjustPrice(assetId: string, newPrice: number): void {
+  adjustPrice(assetId: string, newPrice: number, context?: { adminId?: string; reason?: string }): void {
     const state = this.assetStates.get(assetId)
     if (!state) return
+    // O salto old→new acontece entre ticks e sumiria da atribuição (o próximo
+    // tick já parte de newPrice). Registrar como ajuste pendente garante que a
+    // análise de valor veja ADMIN_ACTION como causa direta, com o motivo real.
+    const pending = this.pendingAdminAdjustments.get(assetId) ?? []
+    pending.push({
+      previousPrice: state.currentPrice,
+      newPrice,
+      occurredAt: new Date().toISOString(),
+      adminId: context?.adminId,
+      reason: context?.reason,
+      actionType: 'ADJUST_PRICE',
+    })
+    this.pendingAdminAdjustments.set(assetId, pending)
     state.currentPrice = newPrice
     state.closePrice = newPrice  // Reset âncora para evitar circuit breaker imediato
   }
@@ -936,6 +958,8 @@ export class MarketEngine {
     for (const state of this.assetStates.values()) {
       if (!state.isPaused) {
         state.isPaused = true
+        state.haltReason = 'HALT_ALL'
+        state.haltResumeAt = null
         count++
       }
     }
@@ -948,6 +972,8 @@ export class MarketEngine {
     for (const state of this.assetStates.values()) {
       if (state.isPaused) {
         state.isPaused = false
+        state.haltReason = null
+        state.haltResumeAt = null
         count++
       }
     }

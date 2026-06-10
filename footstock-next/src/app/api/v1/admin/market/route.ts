@@ -31,6 +31,10 @@ const adminActionSchema = z.discriminatedUnion('type', [
       impact: z.enum(['FINANCEIRA_CRITICA', 'ESPORTIVA_MAJORITARIA', 'MERCADO_ATIVOS', 'INTEGRIDADE_SAUDE', 'INSTITUCIONAL', 'ESPORTIVA_MENOR']),
       magnitude: z.number().min(0.1).max(1.0),
       durationTicks: z.number().int().min(1).max(150),
+      // Opcionais: quando presentes, o motor grava o rastro causal com a
+      // noticia real (newsId/title) em vez de NEWS_WITHOUT_ID.
+      newsId: z.string().optional(),
+      title: z.string().max(160).optional(),
     }),
   }),
   z.object({
@@ -79,14 +83,19 @@ async function postHandler(req: NextRequest, { user }: AuthContext): Promise<Nex
     const action = validation.data
 
     // Verificar que o ativo existe (se assetId fornecido)
+    let assetCurrentPrice: number | null = null
     if ('assetId' in action && action.assetId) {
-      const asset = await prisma.asset.findUnique({ where: { id: action.assetId } })
+      const asset = await prisma.asset.findUnique({
+        where: { id: action.assetId },
+        select: { id: true, currentPrice: true },
+      })
       if (!asset) {
         return NextResponse.json(
           { success: false, error: { code: 'MARKET_001', message: 'Ativo não encontrado' } },
           { status: 404 }
         )
       }
+      assetCurrentPrice = asset.currentPrice.toNumber()
     }
 
     // Publicar no canal motor:control para o motor processar
@@ -100,11 +109,30 @@ async function postHandler(req: NextRequest, { user }: AuthContext): Promise<Nex
 
     // Registrar audit log para ações com ativo específico
     // Ações globais (HALT_ALL, RESUME_ALL) são auditadas pelo motor via AuditLogger
+    // previousPrice/newPrice em ADJUST_PRICE são o que permite à análise de valor
+    // tratar a ação como causa DIRETA do salto de preço (não apenas correlação).
     if ('assetId' in action && action.assetId) {
       await prisma.adminMarketAction.create({
         data: {
           adminId: user.id,
           assetId: action.assetId,
+          action: action.type,
+          details: {
+            reason: action.reason,
+            ...('payload' in action ? { payload: action.payload } : {}),
+          },
+          ...(action.type === 'ADJUST_PRICE'
+            ? { previousPrice: assetCurrentPrice, newPrice: action.payload.newPrice }
+            : {}),
+        },
+      })
+    } else {
+      // Acoes globais (HALT_ALL, RESUME_ALL): o AuditLogger do motor descarta
+      // acoes sem assetId, entao a auditoria precisa acontecer aqui.
+      await prisma.adminMarketAction.create({
+        data: {
+          adminId: user.id,
+          assetId: null,
           action: action.type,
           details: { reason: action.reason },
         },

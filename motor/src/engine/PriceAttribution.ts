@@ -1,5 +1,6 @@
 import type {
   ActiveNewsImpact,
+  AdminPriceAdjustment,
   AnyPriceAttribution,
   AttributionParseResult,
   CausalEvent,
@@ -31,6 +32,7 @@ type BuildPriceAttributionParams = {
   inputSnapshot?: TickInputSnapshot
   orderFlowSnapshot?: OrderFlowSnapshot
   activeNewsImpacts?: ActiveNewsImpact[]
+  adminAdjustments?: AdminPriceAdjustment[]
   qualityFlags?: QualityFlag[]
 }
 
@@ -56,21 +58,25 @@ export const QUALITY_FLAGS: readonly QualityFlag[] = [
 const QUALITY_FLAG_SET = new Set<string>(QUALITY_FLAGS)
 const PII_KEY_PATTERN = /(email|nome|name|saldo|balance|ip|session|payload|user|cpf|phone|telefone)/i
 
+// Manter em sincronia EXATA com ENGINE_LAYER_LABELS no Next
+// (footstock-next/src/lib/admin/value-analysis.ts): a UI deduplica a linha
+// "Causa primária" comparando os dois wordings; drift gera frase duplicada.
 const LAYER_CAUSES: Record<string, string> = {
   L9_DailyVolTarget: 'controle de volatilidade diária',
-  L1_OrnsteinUhlenbeck: 'ruído estocástico do motor',
+  L1_OrnsteinUhlenbeck: 'oscilação natural do mercado simulado',
   L2_FundamentalAnchor: 'reversão ao valor justo',
-  L3_GARCHLite: 'volatilidade condicional',
+  L3_GARCHLite: 'volatilidade condicional do mercado',
   L4_OrderFlowImbalance: 'pressão acumulada do livro de ordens',
-  L5_KyleLambda: 'impacto assimétrico de liquidez',
+  L5_KyleLambda: 'impacto de liquidez das ordens',
   L6_SupplyScaling: 'escassez de float e liquidez',
   L7_PressureQueue: 'absorção de notícia',
   L7_5_Nudge: 'destravamento de baixa atividade',
   L8_VelocityCap: 'limite de velocidade do motor',
   L9_5_ApproachBrake: 'freio de aproximação do circuit breaker',
-  L10_Correlation: 'correlação com pares do mercado',
+  L10_Correlation: 'correlação com outros clubes do mercado',
   L10_CircuitBreaker: 'circuit breaker',
-  AgentOrchestrator: 'agentes sintéticos de mercado',
+  AgentOrchestrator: 'agentes simulados de mercado',
+  AdminAdjustment: 'ajuste administrativo de preço',
 }
 
 const CONTROL_LAYERS = new Set([
@@ -158,7 +164,12 @@ function buildContribution(layer: string, deltaPrice: number, totalAbsDelta: num
 }
 
 export function buildPriceAttribution(params: BuildPriceAttributionParams): PriceAttribution {
-  const engineDelta = params.enginePrice - params.previousPrice
+  const adminAdjustments = params.adminAdjustments ?? []
+  const adminDelta = adminAdjustments.reduce((sum, adj) => sum + (adj.newPrice - adj.previousPrice), 0)
+  // previousPrice e o preco PRE-ajuste admin; o salto admin tem contribuicao
+  // propria (AdminAdjustment) e NAO pode inflar engineDelta, senao os campos
+  // derivados atribuiriam o ajuste manual as camadas do motor.
+  const engineDelta = params.enginePrice - params.previousPrice - adminDelta
   const agentDelta = params.finalPrice - params.enginePrice
   const rawContributions = params.layerResults
     .filter((result) => Math.abs(result.deltaPrice) > EPSILON || CONTROL_LAYERS.has(result.layer))
@@ -175,6 +186,19 @@ export function buildPriceAttribution(params: BuildPriceAttributionParams): Pric
       metadata: {
         impactPct: params.agentImpact * 100,
         syntheticVolume: params.syntheticVolume,
+      },
+    })
+  }
+
+  if (adminAdjustments.length > 0) {
+    rawContributions.push({
+      layer: 'AdminAdjustment',
+      deltaPrice: adminDelta,
+      metadata: {
+        adjustmentCount: adminAdjustments.length,
+        ...(adminAdjustments[0]?.reason ? { reason: adminAdjustments[0].reason.slice(0, 160) } : {}),
+        occurredAt: adminAdjustments[0]?.occurredAt ?? params.generatedAt.toISOString(),
+        targetPrice: adminAdjustments[adminAdjustments.length - 1]?.newPrice ?? params.finalPrice,
       },
     })
   }
@@ -242,6 +266,7 @@ function eventTypeForLayer(layer: string): CausalEvent['type'] {
   if (layer === 'AgentOrchestrator') return 'SYNTHETIC_AGENT'
   if (layer === 'L10_Correlation') return 'CORRELATION'
   if (layer === 'L7_5_Nudge') return 'NUDGE'
+  if (layer === 'AdminAdjustment') return 'ADMIN_ACTION'
   if (CONTROL_LAYERS.has(layer)) return 'CONTROL'
   return 'LAYER'
 }
@@ -276,6 +301,12 @@ function layerEvidenceSentence(contribution: LayerContribution | null, snapshot?
       ? `A evidencia direta e o AgentOrchestrator com reasonCode ${reasonCode}.`
       : 'hipotese: AgentOrchestrator foi dominante, mas nao forneceu submotivo operacional.'
   }
+  if (contribution.layer === 'AdminAdjustment') {
+    const targetPrice = contribution.metadata?.targetPrice
+    return targetPrice === undefined
+      ? 'A evidencia direta e o ajuste manual de preco registrado pelo admin neste intervalo.'
+      : `A evidencia direta e o ajuste manual de preco registrado pelo admin neste intervalo (preco alvo ${formatMoney(Number(targetPrice))}).`
+  }
   return `A evidencia direta e a contribuicao ${contribution.layer} gravada pelo motor.`
 }
 
@@ -284,23 +315,49 @@ function buildCausalEvents(params: BuildPriceAttributionParams, base: PriceAttri
   const now = params.generatedAt.toISOString()
   const activeNews = params.activeNewsImpacts ?? params.inputSnapshot?.activeNewsImpacts ?? []
   const snapshot = params.orderFlowSnapshot ?? params.inputSnapshot?.orderFlowSnapshot
+  const adminAdjustments = params.adminAdjustments ?? []
 
   for (const contribution of base.layerContributions) {
     if (events.length >= MAX_CAUSAL_EVENTS) break
     if (Math.abs(contribution.deltaPrice) <= EPSILON && !CONTROL_LAYERS.has(contribution.layer)) continue
     const type = eventTypeForLayer(contribution.layer)
-    const news = type === 'NEWS' ? activeNews[0] : undefined
+    // Para o evento NEWS da L7, a fonte da verdade e o metadata da contribuicao,
+    // capturado DENTRO do applyLayer (antes da expiracao/handoff da fila).
+    // activeNews[0] e snapshot POS-calculo: no ultimo tick de vida da noticia
+    // ja aponta para a proxima da fila (noticia errada) ou esta vazio.
+    const metaNewsId = typeof contribution.metadata?.newsId === 'string' && contribution.metadata.newsId !== ''
+      ? contribution.metadata.newsId
+      : undefined
+    const news = type === 'NEWS'
+      ? (metaNewsId
+          ? activeNews.find((item) => item.newsId === metaNewsId) ?? {
+              newsId: metaNewsId,
+              title: typeof contribution.metadata?.title === 'string' && contribution.metadata.title !== ''
+                ? contribution.metadata.title
+                : undefined,
+              impactCategory: typeof contribution.metadata?.impactCategory === 'string' && contribution.metadata.impactCategory !== ''
+                ? contribution.metadata.impactCategory
+                : undefined,
+              sentiment: typeof contribution.metadata?.sentiment === 'number' ? contribution.metadata.sentiment : undefined,
+            }
+          : activeNews[0])
+      : undefined
+    const adminAdjustment = type === 'ADMIN_ACTION' ? adminAdjustments[0] : undefined
     const orderIds = type === 'ORDER_FLOW' ? (snapshot?.topOrderIds ?? []).slice(0, MAX_ORDER_IDS) : undefined
     events.push({
       id: `${params.tickId ?? 'tick'}:${contribution.layer}:${events.length}`,
       type,
       source: contribution.layer,
-      occurredAt: now,
+      occurredAt: adminAdjustment?.occurredAt ?? now,
       direction: contribution.direction,
       magnitude: Math.abs(contribution.deltaPrice),
       layer: contribution.layer,
       newsId: news?.newsId,
-      title: type === 'NEWS' ? sanitizeText(news?.title, 160) : undefined,
+      title: type === 'NEWS'
+        ? sanitizeText(news?.title, 160)
+        : type === 'ADMIN_ACTION'
+          ? sanitizeText(adminAdjustment?.reason, 160)
+          : undefined,
       impactCategory: news?.impactCategory,
       sentiment: news?.sentiment,
       orderIds,
@@ -328,6 +385,75 @@ function buildCausalEvents(params: BuildPriceAttributionParams, base: PriceAttri
   }
 
   return events.slice(0, MAX_CAUSAL_EVENTS)
+}
+
+type PrimaryExplanationOpts = {
+  previousPrice: number
+  finalPrice: number
+  primaryContribution: LayerContribution | null
+  tickCount: number
+  newsTitle?: string
+  adminReason?: string
+  pendingBuyVolume?: number
+  pendingSellVolume?: number
+}
+
+// Frase principal voltada ao usuario final da aba de analise: descreve o
+// movimento real (precos e %) e a causa dominante em linguagem humana.
+// Codigos de camada (L1..L10) NUNCA aparecem aqui — apenas em explanation
+// (rastro tecnico) e layerContributions.
+function humanPrimaryExplanation(opts: PrimaryExplanationOpts): string {
+  if (!opts.primaryContribution) {
+    return `O motor não registrou alteração material de preço neste candle (${formatMoney(opts.previousPrice)} para ${formatMoney(opts.finalPrice)}).`
+  }
+  const changePct = opts.previousPrice > 0
+    ? ((opts.finalPrice - opts.previousPrice) / opts.previousPrice) * 100
+    : 0
+  const movimento = changePct > EPSILON
+    ? `O preço subiu de ${formatMoney(opts.previousPrice)} para ${formatMoney(opts.finalPrice)} (${formatSignedPct(changePct)})`
+    : changePct < -EPSILON
+      ? `O preço caiu de ${formatMoney(opts.previousPrice)} para ${formatMoney(opts.finalPrice)} (${formatSignedPct(changePct)})`
+      : `O preço terminou praticamente estável em ${formatMoney(opts.finalPrice)}`
+  const layer = opts.primaryContribution.layer
+  const delta = formatSignedMoney(opts.primaryContribution.deltaPrice)
+  const consolidacao = opts.tickCount > 1
+    ? ` O candle consolida ${opts.tickCount} ticks do motor.`
+    : ''
+
+  // A camada primaria (maior |delta| liquido) pode ter empurrado CONTRA o
+  // movimento final do candle (cabo-de-guerra entre camadas). Afirmar que ela
+  // "impulsionou" a variacao seria mentir sobre a direcao da forca.
+  const opposes =
+    (changePct > EPSILON && opts.primaryContribution.deltaPrice < -EPSILON) ||
+    (changePct < -EPSILON && opts.primaryContribution.deltaPrice > EPSILON)
+  if (opposes) {
+    const forca = layer === 'L7_PressureQueue' && opts.newsTitle
+      ? `a notícia "${opts.newsTitle}"`
+      : layer === 'AdminAdjustment'
+        ? 'o ajuste administrativo de preço'
+        : layer === 'L4_OrderFlowImbalance' || layer === 'L5_KyleLambda'
+          ? 'a pressão do livro de ordens'
+          : layerCause(layer)
+    return `${movimento}, mesmo com ${forca} (${delta}) pressionando na direção contrária; o movimento veio do saldo das demais influências do período.${consolidacao}`
+  }
+
+  let causa: string
+  if (layer === 'L7_PressureQueue' && opts.newsTitle) {
+    causa = `pela notícia "${opts.newsTitle}" sendo absorvida pelo mercado (${delta})`
+  } else if (layer === 'AdminAdjustment') {
+    causa = opts.adminReason
+      ? `por ajuste administrativo de preço (motivo registrado: ${opts.adminReason}; ${delta})`
+      : `por ajuste administrativo de preço (${delta})`
+  } else if (layer === 'L4_OrderFlowImbalance' || layer === 'L5_KyleLambda') {
+    const buy = opts.pendingBuyVolume ?? 0
+    const sell = opts.pendingSellVolume ?? 0
+    const lado = buy > sell ? 'compradora' : sell > buy ? 'vendedora' : 'equilibrada'
+    const escala = opts.tickCount > 1 ? ' em média por tick' : ''
+    causa = `pela pressão ${lado} do livro de ordens registrada antes do cálculo do preço (${buy.toLocaleString('pt-BR')} compra(s) contra ${sell.toLocaleString('pt-BR')} venda(s)${escala}; ${delta})`
+  } else {
+    causa = `por ${layerCause(layer)} (${delta})`
+  }
+  return `${movimento}, principalmente ${causa}.${consolidacao}`
 }
 
 export function buildPriceAttributionV2(params: BuildPriceAttributionParams): PriceAttributionV2 {
@@ -358,9 +484,18 @@ export function buildPriceAttributionV2(params: BuildPriceAttributionParams): Pr
     primaryLayer: base.primaryLayer,
     confidence: base.confidence,
     explanation: base.explanation,
-    primaryExplanation: primaryContribution
-      ? `${base.primaryCause}: ${primaryContribution.layer} aplicou ${formatSignedMoney(primaryContribution.deltaPrice)}.`
-      : 'Sem alteracao material registrada pelo motor.',
+    primaryExplanation: humanPrimaryExplanation({
+      previousPrice: base.previousPrice,
+      finalPrice: base.finalPrice,
+      primaryContribution,
+      tickCount: params.tickCount ?? 1,
+      // O titulo vem do evento causal NEWS (que ja prefere o metadata da L7,
+      // imune ao handoff de fila pos-calculo), nao do snapshot activeNews[0].
+      newsTitle: causalEvents.find((event) => event.type === 'NEWS' && event.title)?.title,
+      adminReason: params.adminAdjustments?.[0]?.reason,
+      pendingBuyVolume: base.pendingBuyVolume,
+      pendingSellVolume: base.pendingSellVolume,
+    }),
     evidenceSentence: layerEvidenceSentence(primaryContribution, params.orderFlowSnapshot ?? params.inputSnapshot?.orderFlowSnapshot),
     caveatSentence: 'Esta e causalidade operacional do motor, nao prova econometrica externa de mercado.',
     previousPrice: base.previousPrice,
@@ -506,20 +641,27 @@ export function mergePriceAttributions(attributions: AnyPriceAttribution[], gene
 
   const first = attributions[0]
   const last = attributions[attributions.length - 1]
-  const layerTotals = new Map<string, { deltaPrice: number; metadata?: Record<string, number | string | boolean> }>()
+  const layerTotals = new Map<string, { deltaPrice: number; grossAbsDelta: number; metadata?: Record<string, number | string | boolean> }>()
 
   for (const attribution of attributions) {
     for (const contribution of attribution.layerContributions) {
-      const current = layerTotals.get(contribution.layer) ?? { deltaPrice: 0, metadata: contribution.metadata }
+      const current = layerTotals.get(contribution.layer) ?? { deltaPrice: 0, grossAbsDelta: 0, metadata: contribution.metadata }
       current.deltaPrice += contribution.deltaPrice
+      current.grossAbsDelta += Math.abs(contribution.deltaPrice)
       current.metadata = contribution.metadata ?? current.metadata
       layerTotals.set(contribution.layer, current)
     }
   }
 
   const totalAbsDelta = [...layerTotals.values()].reduce((sum, item) => sum + Math.abs(item.deltaPrice), 0)
+  // grossAbsDelta preserva o caminho percorrido pela camada dentro do candle:
+  // ticks que oscilaram em direcoes opostas somam gross alto com net baixo, e a
+  // API usa essa razao para nao apresentar o saldo liquido como historia completa.
   const layerContributions = [...layerTotals.entries()]
-    .map(([layer, item]) => buildContribution(layer, item.deltaPrice, totalAbsDelta, item.metadata))
+    .map(([layer, item]) => buildContribution(layer, item.deltaPrice, totalAbsDelta, {
+      ...(item.metadata ?? {}),
+      grossAbsDelta: round(item.grossAbsDelta),
+    }))
     .filter((item) => Math.abs(item.deltaPrice) > EPSILON || CONTROL_LAYERS.has(item.layer))
     .sort((a, b) => Math.abs(b.deltaPrice) - Math.abs(a.deltaPrice))
 
@@ -531,8 +673,10 @@ export function mergePriceAttributions(attributions: AnyPriceAttribution[], gene
   const engineDelta = attributions.reduce((sum, item) => sum + item.engineDelta, 0)
   const agentDelta = attributions.reduce((sum, item) => sum + item.agentDelta, 0)
   const syntheticVolume = attributions.reduce((sum, item) => sum + item.syntheticVolume, 0)
-  const pendingBuyVolume = attributions.reduce((sum, item) => sum + item.pendingBuyVolume, 0)
-  const pendingSellVolume = attributions.reduce((sum, item) => sum + item.pendingSellVolume, 0)
+  // Media por tick, nao soma: pendingBuy/Sell sao snapshots point-in-time do
+  // book; somar contaria a mesma ordem aberta N vezes ao longo do candle.
+  const pendingBuyVolume = Math.round(attributions.reduce((sum, item) => sum + item.pendingBuyVolume, 0) / attributions.length)
+  const pendingSellVolume = Math.round(attributions.reduce((sum, item) => sum + item.pendingSellVolume, 0) / attributions.length)
   const orderImbalance = pendingBuyVolume - pendingSellVolume
   const runnerUp = layerContributions
     .filter((item) => item.layer !== primaryContribution?.layer && Math.abs(item.deltaPrice) > EPSILON)
@@ -544,7 +688,7 @@ export function mergePriceAttributions(attributions: AnyPriceAttribution[], gene
     : ''
 
   const explanation = primaryContribution
-    ? `O candle agregado consolidou ${attributions.length} ticks do motor. O preço mudou de ${formatMoney(previousPrice)} para ${formatMoney(finalPrice)} (${formatSignedPct(totalChangePct)}) porque a maior contribuição acumulada foi ${primaryCause}: camada ${primaryContribution.layer} somou ${formatSignedMoney(primaryContribution.deltaPrice)} (${primaryContribution.contributionPct.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% do deslocamento absoluto medido).${secondaryContext} Pressão acumulada do book: ${pendingBuyVolume.toLocaleString('pt-BR')} compra(s), ${pendingSellVolume.toLocaleString('pt-BR')} venda(s), saldo ${orderImbalance.toLocaleString('pt-BR')}. Agentes sintéticos adicionaram ${syntheticVolume.toLocaleString('pt-BR')} unidade(s) e deslocamento acumulado de ${formatSignedMoney(agentDelta)}.`
+    ? `O candle agregado consolidou ${attributions.length} ticks do motor. O preço mudou de ${formatMoney(previousPrice)} para ${formatMoney(finalPrice)} (${formatSignedPct(totalChangePct)}) porque a maior contribuição acumulada foi ${primaryCause}: camada ${primaryContribution.layer} somou ${formatSignedMoney(primaryContribution.deltaPrice)} (${primaryContribution.contributionPct.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% do deslocamento absoluto medido).${secondaryContext} Pressão média do book por tick: ${pendingBuyVolume.toLocaleString('pt-BR')} compra(s), ${pendingSellVolume.toLocaleString('pt-BR')} venda(s), saldo ${orderImbalance.toLocaleString('pt-BR')}. Agentes sintéticos adicionaram ${syntheticVolume.toLocaleString('pt-BR')} unidade(s) e deslocamento acumulado de ${formatSignedMoney(agentDelta)}.`
     : `O candle agregado consolidou ${attributions.length} ticks sem deslocamento material entre ${formatMoney(previousPrice)} e ${formatMoney(finalPrice)}.`
 
   const mergedV1: PriceAttribution = {
@@ -572,24 +716,57 @@ export function mergePriceAttributions(attributions: AnyPriceAttribution[], gene
   if (attributions.every((item): item is PriceAttributionV2 => item.version === 2)) {
     const firstV2 = attributions[0]
     const lastV2 = attributions[attributions.length - 1]
-    const causalEvents = attributions.flatMap((item) => item.causalEvents).slice(0, MAX_CAUSAL_EVENTS)
+    // Prioridade no cap de 20 eventos: ADMIN_ACTION e NEWS primeiro (sort
+    // estavel preserva ordem de tick dentro de cada grupo). Com ~7 eventos por
+    // tick e 6 ticks por candle persistido, um slice cego em ordem de tick
+    // derrubava o evento admin/noticia dos ticks finais e a explicacao perdia
+    // o motivo real silenciosamente.
+    const EVENT_PRIORITY: Record<string, number> = { ADMIN_ACTION: 0, NEWS: 1 }
+    const causalEvents = attributions
+      .flatMap((item) => item.causalEvents)
+      .sort((a, b) => (EVENT_PRIORITY[a.type] ?? 2) - (EVENT_PRIORITY[b.type] ?? 2))
+      .slice(0, MAX_CAUSAL_EVENTS)
     const qualityFlags = [...new Set<QualityFlag>(attributions.flatMap((item) => item.qualityFlags))]
-    const primaryEvent = causalEvents.find((event) => event.layer === mergedV1.primaryLayer) ?? causalEvents[0] ?? null
+    // Sem fallback para causalEvents[0]: apontar primaryEventId para um evento
+    // de outra camada faria o Next derivar causa errada. null e honesto.
+    const primaryEvent = causalEvents.find((event) => event.layer === mergedV1.primaryLayer) ?? null
+    const mergedTickCount = attributions.reduce((sum, item) => sum + item.tickCount, 0)
+    const newsEvents = causalEvents
+      .filter((event) => event.type === 'NEWS' && event.title)
+      .sort((a, b) => b.magnitude - a.magnitude)
+    // Noticia dominante: a de maior magnitude aplicada pela L7, nao a primeira
+    // do array (candle pode ter absorvido mais de uma noticia).
+    const newsTitle = (newsEvents.find((event) => event.layer === mergedV1.primaryLayer) ?? newsEvents[0])?.title
+    const adminReason = causalEvents.find((event) => event.type === 'ADMIN_ACTION' && event.title)?.title
+    // Razao net/gross da camada primaria: < 0.3 indica que os ticks oscilaram
+    // em direcoes opostas e o saldo liquido nao conta a historia completa.
+    const primaryGross = primaryContribution ? (layerTotals.get(primaryContribution.layer)?.grossAbsDelta ?? 0) : 0
+    const primaryIsChoppy = primaryContribution !== null && primaryGross > EPSILON &&
+      Math.abs(primaryContribution.deltaPrice) / primaryGross < 0.3
     const mergedV2: PriceAttributionV2 = {
       ...mergedV1,
       version: 2,
       tickId: `${firstV2.tickId}..${lastV2.tickId}`,
-      tickCount: attributions.reduce((sum, item) => sum + item.tickCount, 0),
+      tickCount: mergedTickCount,
       tickStartedAt: firstV2.tickStartedAt,
       tickEndedAt: lastV2.tickEndedAt,
       primaryEventId: primaryEvent?.id ?? null,
-      primaryExplanation: primaryContribution
-        ? `${mergedV1.primaryCause}: ${primaryContribution.layer} somou ${formatSignedMoney(primaryContribution.deltaPrice)} no candle agregado.`
-        : 'Sem alteracao material registrada pelo motor.',
+      primaryExplanation: humanPrimaryExplanation({
+        previousPrice: mergedV1.previousPrice,
+        finalPrice: mergedV1.finalPrice,
+        primaryContribution,
+        tickCount: mergedTickCount,
+        newsTitle,
+        adminReason,
+        pendingBuyVolume: mergedV1.pendingBuyVolume,
+        pendingSellVolume: mergedV1.pendingSellVolume,
+      }),
       evidenceSentence: primaryContribution
-        ? `A evidencia direta e a agregacao de ${attributions.length} tick(s) com ${primaryContribution.layer} dominante.`
-        : 'O candle agregado nao teve camada dominante material.',
-      caveatSentence: 'O candle agrega multiplos ticks; sinais opostos podem ter sido simplificados pela causa primaria.',
+        ? `A evidencia direta e a agregacao de ${attributions.length} tick(s) do motor com ${layerCause(primaryContribution.layer)} como influencia dominante.`
+        : 'O candle agregado nao teve influencia dominante material.',
+      caveatSentence: primaryIsChoppy
+        ? 'Os ticks deste candle oscilaram em direcoes opostas; a causa primaria reflete o saldo liquido do periodo, nao o caminho completo do preco.'
+        : 'O candle agrega multiplos ticks; sinais opostos podem ter sido simplificados pela causa primaria.',
       causalEvents,
       appliedControls: mergedV1.appliedControls,
       qualityFlags,

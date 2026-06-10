@@ -1,10 +1,13 @@
 import {
   buildCause,
   buildEngineAttributionDiagnosticNotes,
+  causeTypeFromAttribution,
   classifyEvidence,
+  composeEngineExplanation,
   confidenceScore,
   eventTime,
   extractActionReason,
+  humanizeEngineText,
   inWindow,
   isEngineAttribution,
   parseEngineAttribution,
@@ -12,6 +15,7 @@ import {
   pct,
   type AdminActionEvidence,
   type EngineAttribution,
+  type EngineAttributionV2,
   type NewsEvidence,
 } from '@/lib/admin/value-analysis'
 
@@ -318,6 +322,282 @@ describe('value-analysis heuristics', () => {
     expect(classified.degradedOwner).toBe('ENGINE')
     expect(classified.primaryExplanation).toContain('Falha de rastro causal do motor')
     expect(classified.primaryExplanation).not.toContain('fluxo de mercado')
+  })
+
+  it('causeTypeFromAttribution deriva o tipo real da camada dominante', () => {
+    const baseV2: EngineAttributionV2 = {
+      version: 2,
+      tickId: 'tick-1',
+      tickCount: 1,
+      tickStartedAt: '2026-06-09T12:00:00.000Z',
+      tickEndedAt: '2026-06-09T12:00:01.000Z',
+      primaryEventId: null,
+      primaryCause: 'absorção de notícia',
+      primaryLayer: 'L7_PressureQueue',
+      confidence: 'alta',
+      explanation: 'tecnico',
+      primaryExplanation: 'humano',
+      evidenceSentence: 'evidencia',
+      caveatSentence: 'ressalva',
+      previousPrice: 10,
+      enginePrice: 10.2,
+      finalPrice: 10.2,
+      engineDelta: 0.2,
+      agentImpactPct: 0,
+      agentDelta: 0,
+      syntheticVolume: 0,
+      pendingBuyVolume: 0,
+      pendingSellVolume: 0,
+      orderImbalance: 0,
+      sessionType: 'TRADING',
+      layerContributions: [],
+      causalEvents: [],
+      appliedControls: [],
+      qualityFlags: [],
+      payloadBytes: 100,
+      generatedAt: '2026-06-09T12:00:01.000Z',
+    }
+
+    expect(causeTypeFromAttribution(baseV2)).toBe('NEWS')
+    expect(causeTypeFromAttribution({ ...baseV2, primaryLayer: 'AdminAdjustment' })).toBe('ADMIN_ACTION')
+    expect(causeTypeFromAttribution({ ...baseV2, primaryLayer: 'L4_OrderFlowImbalance' })).toBe('MARKET_FLOW')
+    expect(causeTypeFromAttribution({ ...baseV2, primaryLayer: 'L2_FundamentalAnchor' })).toBe('SIMULATED_ENGINE')
+  })
+
+  it('causeTypeFromAttribution ignora primaryEvent de camada diferente da primaria (fallback historico)', () => {
+    const attribution: EngineAttributionV2 = {
+      version: 2,
+      tickId: 'tick-mismatch',
+      tickCount: 6,
+      tickStartedAt: '2026-06-09T12:00:00.000Z',
+      tickEndedAt: '2026-06-09T12:00:06.000Z',
+      // Payload merged historico: primaryEventId gravado com fallback
+      // causalEvents[0], que e um evento NEWS de OUTRA camada.
+      primaryEventId: 'event-news',
+      primaryCause: 'oscilação natural do mercado simulado',
+      primaryLayer: 'L1_OrnsteinUhlenbeck',
+      confidence: 'alta',
+      explanation: 'tecnico',
+      primaryExplanation: 'humano',
+      evidenceSentence: 'evidencia',
+      caveatSentence: 'ressalva',
+      previousPrice: 10,
+      enginePrice: 10.1,
+      finalPrice: 10.1,
+      engineDelta: 0.1,
+      agentImpactPct: 0,
+      agentDelta: 0,
+      syntheticVolume: 0,
+      pendingBuyVolume: 0,
+      pendingSellVolume: 0,
+      orderImbalance: 0,
+      sessionType: 'TRADING',
+      layerContributions: [
+        { layer: 'L1_OrnsteinUhlenbeck', deltaPrice: 0.1, contributionPct: 90, direction: 'up' },
+      ],
+      causalEvents: [{
+        id: 'event-news',
+        type: 'NEWS',
+        source: 'L7_PressureQueue',
+        occurredAt: '2026-06-09T12:00:00.000Z',
+        direction: 'up',
+        magnitude: 0.01,
+        layer: 'L7_PressureQueue',
+        newsId: 'news-x',
+        title: 'Noticia irrelevante para o movimento',
+      }],
+      appliedControls: [],
+      qualityFlags: [],
+      payloadBytes: 512,
+      generatedAt: '2026-06-09T12:00:06.000Z',
+    }
+
+    expect(causeTypeFromAttribution(attribution)).toBe('SIMULATED_ENGINE')
+  })
+
+  it('acao com precos incongruentes ao candle vira contexto, nao causa confirmada', () => {
+    const incongruentContext = {
+      previousPrice: 12.01,
+      newPrice: 12.05,
+      absoluteChange: 0.04,
+      percentageChange: 0.33,
+      intraperiodRangePct: 0.4,
+      volume: 100,
+      volumeDelta: 5,
+      sessionType: 'TRADING',
+      orderFlow: { buyQuantity: 0, sellQuantity: 0, netQuantity: 0, orderCount: 0, averageExecutedPrice: null },
+    }
+    const drift = buildCause({
+      direction: 'up',
+      volumeDelta: 5,
+      source: 'REAL',
+      news: [],
+      adminActions: [baseAction],
+      context: incongruentContext,
+    })
+    expect(drift.causeType).toBe('ADMIN_ACTION')
+    expect(drift.confidence).toBe('media')
+    expect(drift.explanation).toContain('não casam com este candle')
+    expect(drift.explanation).not.toContain('Variação compatível')
+
+    const jumpContext = {
+      ...incongruentContext,
+      previousPrice: 10,
+      newPrice: 11.02,
+      absoluteChange: 1.02,
+      percentageChange: 10.2,
+    }
+    const jump = buildCause({
+      direction: 'up',
+      volumeDelta: 5,
+      source: 'REAL',
+      news: [],
+      adminActions: [baseAction],
+      context: jumpContext,
+    })
+    expect(jump.confidence).toBe('alta')
+    expect(jump.explanation).toContain('Variação compatível')
+    expect(jump.explanation).toContain('FS$ 10,00')
+    expect(jump.explanation).toContain('FS$ 11,00')
+  })
+
+  it('composeEngineExplanation nomeia a noticia real e nao emite codigos de camada', () => {
+    const attribution: EngineAttributionV2 = {
+      version: 2,
+      tickId: 'tick-news',
+      tickCount: 3,
+      tickStartedAt: '2026-06-09T12:00:00.000Z',
+      tickEndedAt: '2026-06-09T12:00:06.000Z',
+      primaryEventId: 'event-news',
+      primaryCause: 'absorção de notícia',
+      primaryLayer: 'L7_PressureQueue',
+      confidence: 'alta',
+      explanation: 'tecnico com L7_PressureQueue',
+      primaryExplanation: 'absorção de notícia: L7_PressureQueue aplicou +FS$ 0,30.',
+      evidenceSentence: 'A evidencia direta e a noticia aplicada pela L7.',
+      caveatSentence: 'Causalidade operacional.',
+      previousPrice: 10,
+      enginePrice: 10.3,
+      finalPrice: 10.3,
+      engineDelta: 0.3,
+      agentImpactPct: 0,
+      agentDelta: 0,
+      syntheticVolume: 0,
+      pendingBuyVolume: 0,
+      pendingSellVolume: 0,
+      orderImbalance: 0,
+      sessionType: 'TRADING',
+      layerContributions: [
+        { layer: 'L7_PressureQueue', deltaPrice: 0.3, contributionPct: 90, direction: 'up' },
+        { layer: 'L1_OrnsteinUhlenbeck', deltaPrice: 0.02, contributionPct: 10, direction: 'up' },
+      ],
+      causalEvents: [{
+        id: 'event-news',
+        type: 'NEWS',
+        source: 'L7_PressureQueue',
+        occurredAt: '2026-06-09T12:00:00.000Z',
+        direction: 'up',
+        magnitude: 0.3,
+        layer: 'L7_PressureQueue',
+        newsId: 'news-9',
+        title: 'Clube vence clássico e dispara no ranking',
+        sentiment: 'BULLISH',
+      }],
+      appliedControls: [],
+      qualityFlags: [],
+      payloadBytes: 2048,
+      generatedAt: '2026-06-09T12:00:06.000Z',
+    }
+
+    const text = composeEngineExplanation(attribution)
+    expect(text).toContain('Clube vence clássico e dispara no ranking')
+    expect(text).toContain('FS$ 10,00')
+    expect(text).toContain('FS$ 10,30')
+    expect(text).toContain('consolida 3 ticks')
+    expect(text).not.toMatch(/L\d+_/)
+    expect(text).not.toContain('AdminAdjustment')
+  })
+
+  it('classifyEvidence DIRECT recompoe explicacao rica e humaniza frases do motor', () => {
+    const parsed = parseEngineAttribution({
+      version: 2,
+      tickId: 'tick-h',
+      tickCount: 1,
+      tickStartedAt: '2026-06-09T12:00:00.000Z',
+      tickEndedAt: '2026-06-09T12:00:01.000Z',
+      primaryEventId: 'event-1',
+      primaryCause: 'oscilação natural do mercado simulado',
+      primaryLayer: 'L1_OrnsteinUhlenbeck',
+      confidence: 'alta',
+      explanation: 'tecnico',
+      primaryExplanation: 'oscilação: L1_OrnsteinUhlenbeck aplicou +FS$ 0,05.',
+      evidenceSentence: 'A evidencia direta e a contribuicao L1_OrnsteinUhlenbeck gravada pelo motor.',
+      caveatSentence: 'Causalidade operacional.',
+      previousPrice: 5,
+      enginePrice: 5.05,
+      finalPrice: 5.05,
+      engineDelta: 0.05,
+      agentImpactPct: 0,
+      agentDelta: 0,
+      syntheticVolume: 0,
+      pendingBuyVolume: 0,
+      pendingSellVolume: 0,
+      orderImbalance: 0,
+      sessionType: 'TRADING',
+      layerContributions: [
+        { layer: 'L1_OrnsteinUhlenbeck', deltaPrice: 0.05, contributionPct: 100, direction: 'up' },
+      ],
+      causalEvents: [{
+        id: 'event-1',
+        type: 'LAYER',
+        source: 'L1_OrnsteinUhlenbeck',
+        occurredAt: '2026-06-09T12:00:00.000Z',
+        direction: 'up',
+        magnitude: 0.05,
+        layer: 'L1_OrnsteinUhlenbeck',
+      }],
+      appliedControls: [],
+      qualityFlags: [],
+      payloadBytes: 1024,
+      generatedAt: '2026-06-09T12:00:01.000Z',
+    })
+
+    const classified = classifyEvidence({
+      attributionParse: parsed,
+      source: 'MOTOR',
+      hasAttributionColumn: true,
+      news: [],
+      adminActions: [],
+      orderFlow: { buyQuantity: 0, sellQuantity: 0, netQuantity: 0, orderCount: 0, averageExecutedPrice: null },
+      fallbackCause: { confidence: 'baixa', causeType: 'UNEXPLAINED', explanation: 'fallback' },
+    })
+
+    expect(classified.evidenceGrade).toBe('DIRECT')
+    expect(classified.primaryExplanation).toContain('FS$ 5,00')
+    expect(classified.primaryExplanation).not.toMatch(/L\d+_/)
+    expect(classified.evidenceSentence).not.toContain('L1_OrnsteinUhlenbeck')
+    expect(classified.evidenceSentence).toContain('oscilação natural do mercado simulado')
+  })
+
+  it('noticia divergente e nomeada na explicacao em vez da frase generica', () => {
+    const result = buildCause({
+      direction: 'down',
+      volumeDelta: 0,
+      source: 'REAL',
+      news: [baseNews],
+      adminActions: [],
+    })
+
+    expect(result.causeType).toBe('NEWS')
+    expect(result.confidence).toBe('baixa')
+    expect(result.explanation).toContain('Clube anuncia patrocínio relevante')
+    expect(result.explanation).toContain('queda')
+    expect(result.explanation).not.toContain('não explica diretamente a direção da variação')
+  })
+
+  it('humanizeEngineText troca codigos de camada por nomes humanos', () => {
+    expect(humanizeEngineText('agregacao de 6 tick(s) com L4_OrderFlowImbalance dominante'))
+      .toBe('agregacao de 6 tick(s) com pressão acumulada do livro de ordens dominante')
   })
 
   it('candle MOTOR sem coluna attribution atribui owner MIGRATION', () => {

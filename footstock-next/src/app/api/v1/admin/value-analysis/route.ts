@@ -26,11 +26,12 @@ import {
   buildCause,
   buildDiagnosticNotes,
   buildEngineAttributionDiagnosticNotes,
+  causeTypeFromAttribution,
   classifyEvidence,
   causePriority,
-  confidenceScore,
   eventTime,
   extractActionReason,
+  humanizeEngineText,
   inWindow,
   parseEngineAttribution,
   magnitudeFromPct,
@@ -42,8 +43,14 @@ import {
 const DEFAULT_DAYS = 7
 const MAX_DAYS = 30
 const MAX_PRICE_POINTS = 240
+// Noticia pode preceder o movimento em ate 2h (absorcao gradual via L7), mas
+// noticia publicada bem DEPOIS do candle nao pode te-lo causado: grace curto.
 const NEWS_LOOKBACK_MS = 2 * 60 * 60 * 1000
-const EVENT_GRACE_MS = 30 * 60 * 1000
+const NEWS_GRACE_MS = 2 * 60 * 1000
+// Acao admin so e correlacionada se realmente proxima do candle. Os antigos
+// 30min para cada lado espalhavam uma unica acao por dezenas de movimentos.
+const ADMIN_LOOKBACK_MS = 10 * 60 * 1000
+const ADMIN_GRACE_MS = 2 * 60 * 1000
 const MOTOR_LAYERS_CONFIG_REDIS_KEY = 'motor:layers:config:v1'
 
 type MovementRecord = {
@@ -85,6 +92,8 @@ type MovementRecord = {
     startsAt: string
     endsAt: string
     newsLookbackMinutes: number
+    newsGraceMinutes: number
+    adminLookbackMinutes: number
     adminGraceMinutes: number
   }
   evidence: {
@@ -461,13 +470,13 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
                 {
                   createdAt: {
                     gte: new Date(analysisStart.getTime() - NEWS_LOOKBACK_MS),
-                    lte: new Date(analysisEnd.getTime() + EVENT_GRACE_MS),
+                    lte: new Date(analysisEnd.getTime() + NEWS_GRACE_MS),
                   },
                 },
                 {
                   publishedAt: {
                     gte: new Date(analysisStart.getTime() - NEWS_LOOKBACK_MS),
-                    lte: new Date(analysisEnd.getTime() + EVENT_GRACE_MS),
+                    lte: new Date(analysisEnd.getTime() + NEWS_GRACE_MS),
                   },
                 },
               ],
@@ -490,10 +499,13 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
           OR: [
             { assetId: asset.id },
             { ticker: asset.ticker },
+            // Acoes globais de mercado afetam todos os ativos; sem esta clausula
+            // um HALT_ALL/RESUME_ALL (assetId null) ficava invisivel a analise.
+            { assetId: null, action: { in: ['HALT_ALL', 'RESUME_ALL'] } },
           ],
           createdAt: {
-            gte: new Date(analysisStart.getTime() - EVENT_GRACE_MS),
-            lte: new Date(analysisEnd.getTime() + EVENT_GRACE_MS),
+            gte: new Date(analysisStart.getTime() - ADMIN_LOOKBACK_MS),
+            lte: new Date(analysisEnd.getTime() + ADMIN_GRACE_MS),
           },
         },
         orderBy: { createdAt: 'asc' },
@@ -559,7 +571,7 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
       const percentageChange = pct(previousClose, close)
       const direction = rawChange > 0 ? 'up' : 'down'
       const windowStart = new Date(previous.timestamp.getTime() - NEWS_LOOKBACK_MS)
-      const windowEnd = new Date(point.timestamp.getTime() + EVENT_GRACE_MS)
+      const windowEnd = new Date(point.timestamp.getTime() + NEWS_GRACE_MS)
       const orderWindowStart = previous.timestamp
       const orderWindowEnd = point.timestamp
 
@@ -576,7 +588,11 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
         }))
 
       const matchedAdminActions: AdminActionEvidence[] = adminActions
-        .filter((action) => inWindow(action.createdAt, new Date(previous.timestamp.getTime() - EVENT_GRACE_MS), windowEnd))
+        .filter((action) => inWindow(
+          action.createdAt,
+          new Date(previous.timestamp.getTime() - ADMIN_LOOKBACK_MS),
+          new Date(point.timestamp.getTime() + ADMIN_GRACE_MS),
+        ))
         .map((action) => ({
           id: action.id,
           action: action.action,
@@ -631,10 +647,13 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
         orderFlow,
         fallbackCause,
       })
+      // causeType vem da camada/evento dominante REAL da atribuicao: noticia
+      // vira NEWS, ajuste admin vira ADMIN_ACTION, book vira MARKET_FLOW.
+      // Hardcodar SIMULATED_ENGINE aqui falsificava countsByCause e o resumo.
       const cause = engineAttribution
         ? {
-            causeType: 'SIMULATED_ENGINE' as CauseType,
-            causeLabel: engineAttribution.primaryCause,
+            causeType: causeTypeFromAttribution(engineAttribution),
+            causeLabel: humanizeEngineText(engineAttribution.primaryCause),
             confidence: evidenceClassification.confidence,
             explanation: evidenceClassification.primaryExplanation,
           }
@@ -721,7 +740,9 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
           startsAt: windowStart.toISOString(),
           endsAt: windowEnd.toISOString(),
           newsLookbackMinutes: NEWS_LOOKBACK_MS / 60000,
-          adminGraceMinutes: EVENT_GRACE_MS / 60000,
+          newsGraceMinutes: NEWS_GRACE_MS / 60000,
+          adminLookbackMinutes: ADMIN_LOOKBACK_MS / 60000,
+          adminGraceMinutes: ADMIN_GRACE_MS / 60000,
         },
         evidence: {
           news: matchedNews.slice(0, 5),

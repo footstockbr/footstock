@@ -171,6 +171,21 @@ export interface CausalEvent {
   metadata?: Record<string, string | number | boolean>
 }
 
+/**
+ * Ajuste manual de preço aplicado por admin entre ticks.
+ * adjustPrice() muda state.currentPrice imediatamente, então o salto
+ * old→new nunca apareceria no delta do tick seguinte; este registro pendente
+ * vira CausalEvent ADMIN_ACTION na próxima atribuição persistida do ativo.
+ */
+export interface AdminPriceAdjustment {
+  previousPrice: number
+  newPrice: number
+  occurredAt: string
+  adminId?: string
+  reason?: string
+  actionType: 'ADJUST_PRICE'
+}
+
 export interface ActiveNewsImpact {
   newsId?: string
   title?: string

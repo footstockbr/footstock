@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button'
 import { NativeSelect } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
+import { humanizeLayer, newsImpactLabel, newsSentimentLabel } from '@/lib/admin/value-analysis'
 
 type AssetOption = {
   id: string
@@ -157,6 +158,8 @@ type Movement = {
     startsAt: string
     endsAt: string
     newsLookbackMinutes: number
+    newsGraceMinutes: number
+    adminLookbackMinutes: number
     adminGraceMinutes: number
   }
   evidence: {
@@ -319,6 +322,67 @@ const EVIDENCE_FILTERS: Array<{ value: 'ALL' | EvidenceGrade; label: string }> =
   { value: 'DEGRADED', label: 'Degradadas' },
 ]
 
+// Flags de qualidade em linguagem humana; o codigo tecnico fica no title/export.
+const QUALITY_FLAG_LABELS: Record<QualityFlag, string> = {
+  ATTRIBUTION_COLUMN_MISSING: 'Coluna de atribuição ausente no banco',
+  ATTRIBUTION_PERSIST_FAILED: 'Falha ao gravar a atribuição',
+  ATTRIBUTION_TRUNCATED: 'Atribuição truncada (payload grande)',
+  ATTRIBUTION_PARSE_FAILED: 'Atribuição ilegível pelo parser',
+  NEWS_WITHOUT_ID: 'Notícia sem identificador',
+  NEWS_QUEUE_AGGREGATED: 'Várias notícias agregadas na fila',
+  ORDER_FLOW_SNAPSHOT_UNAVAILABLE: 'Snapshot do book indisponível',
+  ORDER_FLOW_INELIGIBLE_ONLY: 'Apenas ordens inelegíveis no book',
+  LEGACY_BACKFILL: 'Histórico legado reprocessado',
+  SYNTHETIC_HISTORY: 'Histórico sintético (simulação)',
+  UNKNOWN_DEGRADED_REASON: 'Degradação sem motivo registrado',
+}
+
+function qualityFlagLabel(flag: QualityFlag): string {
+  return QUALITY_FLAG_LABELS[flag] ?? flag
+}
+
+const CAUSAL_EVENT_TYPE_LABELS: Record<string, string> = {
+  NEWS: 'Notícia',
+  ADMIN_ACTION: 'Ação administrativa',
+  ORDER_FLOW: 'Fluxo de ordens',
+  LAYER: 'Influência do motor',
+  CONTROL: 'Controle do motor',
+  SYNTHETIC_AGENT: 'Agentes simulados',
+  CORRELATION: 'Correlação de mercado',
+  NUDGE: 'Destravamento de atividade',
+}
+
+function causalEventTypeLabel(type: string): string {
+  return CAUSAL_EVENT_TYPE_LABELS[type] ?? type
+}
+
+const SOURCE_LABELS: Record<string, string> = {
+  MOTOR: 'Motor de preços',
+  GBM: 'Sintético (GBM)',
+  REAL: 'Mercado real',
+}
+
+function sourceLabel(source: string): string {
+  return SOURCE_LABELS[source] ?? source
+}
+
+const ADMIN_ACTION_SHORT_LABELS: Record<string, string> = {
+  ADJUST_PRICE: 'Ajuste de preço',
+  INJECT_NEWS: 'Injeção de notícia',
+  NEWS_INJECT: 'Injeção de notícia',
+  PAUSE_ASSET: 'Pausa do ativo',
+  RESUME_ASSET: 'Retomada do ativo',
+  HALT_ASSET: 'Suspensão do ativo',
+  RELEASE_HALT: 'Liberação de suspensão',
+  FORCE_CIRCUIT_BREAKER: 'Circuit breaker manual',
+  HALT_ALL: 'Suspensão geral',
+  RESUME_ALL: 'Retomada geral',
+}
+
+function adminActionShortLabel(action: string): string {
+  return ADMIN_ACTION_SHORT_LABELS[action] ?? action
+}
+
 const PERIOD_OPTIONS = [
   { value: '1', label: '1 dia' },
   { value: '7', label: '7 dias' },
@@ -409,7 +473,7 @@ function reportToMarkdown(report: ValueAnalysisReport): string {
       `Preço: ${formatCurrency(movement.previousPrice)} -> ${formatCurrency(movement.newPrice)}`,
       `Causa provável: ${movement.causeLabel}`,
       `Grade de evidência: ${movement.evidenceGrade}`,
-      `Flags: ${movement.qualityFlags.join(', ') || 'nenhuma'}`,
+      `Flags: ${movement.qualityFlags.map((flag) => `${qualityFlagLabel(flag)} (${flag})`).join(', ') || 'nenhuma'}`,
       `Confiança: ${movement.confidenceScore}%`,
       `Explicação: ${movement.primaryExplanation}`,
       `Evidência: ${movement.evidenceSentence}`,
@@ -763,7 +827,7 @@ function ReportSummary({
               {formatPct(trend)}
             </Badge>
             <Badge variant="default" size="xs">
-              {report.asset.sentiment}
+              sentimento {newsSentimentLabel(report.asset.sentiment)}
             </Badge>
           </div>
           <p className="mt-1 text-xs text-[#929AA5]">
@@ -1001,9 +1065,21 @@ function CauseBreakdown({ report }: { report: ValueAnalysisReport }) {
             ]}
             empty="Sem movimentos."
           />
-          <BreakdownBox title="Fontes dos candles" entries={objectEntries(report.summary.sourceBreakdown)} empty="Sem movimentos." />
-          <BreakdownBox title="Sentimento das notícias" entries={objectEntries(report.summary.newsSentimentBreakdown)} empty="Sem notícias no recorte." />
-          <BreakdownBox title="Ações administrativas" entries={objectEntries(report.summary.adminActionBreakdown)} empty="Sem ações no recorte." />
+          <BreakdownBox
+            title="Fontes dos candles"
+            entries={objectEntries(report.summary.sourceBreakdown).map(([key, count]) => [sourceLabel(key), count] as [string, number])}
+            empty="Sem movimentos."
+          />
+          <BreakdownBox
+            title="Sentimento das notícias"
+            entries={objectEntries(report.summary.newsSentimentBreakdown).map(([key, count]) => [`Sentimento ${newsSentimentLabel(key)}`, count] as [string, number])}
+            empty="Sem notícias no recorte."
+          />
+          <BreakdownBox
+            title="Ações administrativas"
+            entries={objectEntries(report.summary.adminActionBreakdown).map(([key, count]) => [adminActionShortLabel(key), count] as [string, number])}
+            empty="Sem ações no recorte."
+          />
         </div>
       </div>
     </section>
@@ -1194,7 +1270,7 @@ function MovementList({ movements }: { movements: Movement[] }) {
                 <MiniStat label="Mínima" value={formatCurrency(movement.low)} />
                 <MiniStat label="Range" value={formatPct(movement.intraperiodRangePct)} />
                 <MiniStat label="Volume +" value={formatNumber(movement.volumeDelta)} />
-                <MiniStat label="Fonte" value={movement.source} />
+                <MiniStat label="Fonte" value={sourceLabel(movement.source)} />
               </div>
 
               <div className="mt-3 rounded-lg border border-[rgba(240,185,11,.08)] bg-[#0B0E11] p-3">
@@ -1203,7 +1279,7 @@ function MovementList({ movements }: { movements: Movement[] }) {
                     {EVIDENCE_GRADE_LABEL[movement.evidenceGrade]}
                   </Badge>
                   {movement.qualityFlags.map((flag) => (
-                    <Badge key={flag} variant="warning" size="xs">{flag}</Badge>
+                    <Badge key={flag} variant="warning" size="xs" title={flag}>{qualityFlagLabel(flag)}</Badge>
                   ))}
                 </div>
                 <div className="mt-3 grid grid-cols-1 gap-2 text-xs leading-5 text-[#c5b99a] md:grid-cols-3">
@@ -1218,15 +1294,20 @@ function MovementList({ movements }: { movements: Movement[] }) {
                 )}
               </div>
 
-              <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-5">
-                <MiniStat label="Ordens" value={formatNumber(movement.orderFlow.orderCount)} />
-                <MiniStat label="Compras" value={formatNumber(movement.orderFlow.buyQuantity)} />
-                <MiniStat label="Vendas" value={formatNumber(movement.orderFlow.sellQuantity)} />
-                <MiniStat label="Saldo" value={formatNumber(movement.orderFlow.netQuantity)} />
-                <MiniStat
-                  label="Preço médio"
-                  value={movement.orderFlow.averageExecutedPrice === null ? 'n/d' : formatCurrency(movement.orderFlow.averageExecutedPrice)}
-                />
+              <div className="mt-3">
+                <p className="text-[11px] font-semibold uppercase text-[#929AA5]">
+                  Ordens executadas na janela (preenchem ao preço já calculado: consequência, não causa)
+                </p>
+                <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-5">
+                  <MiniStat label="Ordens" value={formatNumber(movement.orderFlow.orderCount)} />
+                  <MiniStat label="Compras" value={formatNumber(movement.orderFlow.buyQuantity)} />
+                  <MiniStat label="Vendas" value={formatNumber(movement.orderFlow.sellQuantity)} />
+                  <MiniStat label="Saldo" value={formatNumber(movement.orderFlow.netQuantity)} />
+                  <MiniStat
+                    label="Preço médio"
+                    value={movement.orderFlow.averageExecutedPrice === null ? 'n/d' : formatCurrency(movement.orderFlow.averageExecutedPrice)}
+                  />
+                </div>
               </div>
 
               {movement.engineAttribution && (
@@ -1235,8 +1316,12 @@ function MovementList({ movements }: { movements: Movement[] }) {
                     <div>
                       <h3 className="text-[11px] font-semibold uppercase text-[#2EBD85]">Rastro causal do motor</h3>
                       <p className="mt-1 text-xs leading-5 text-[#c5b99a]">
-                        Causa primária: {movement.engineAttribution.primaryCause}
-                        {movement.engineAttribution.primaryLayer ? ` · ${movement.engineAttribution.primaryLayer}` : ''}
+                        Causa primária: {movement.engineAttribution.primaryLayer
+                          ? humanizeLayer(movement.engineAttribution.primaryLayer)
+                          : movement.engineAttribution.primaryCause}
+                        {movement.engineAttribution.primaryLayer ? (
+                          <span className="text-[#5a6470]"> (camada técnica {movement.engineAttribution.primaryLayer})</span>
+                        ) : null}
                       </p>
                     </div>
                     <span className="text-xs text-[#929AA5]">
@@ -1252,22 +1337,36 @@ function MovementList({ movements }: { movements: Movement[] }) {
                     <MiniStat label="Vol. sintético" value={formatNumber(movement.engineAttribution.syntheticVolume)} />
                   </div>
 
+                  <div className="mt-2">
+                    <p className="text-[11px] font-semibold uppercase text-[#929AA5]">
+                      Book antes do cálculo do preço (pressão elegível como causa)
+                    </p>
+                    <div className="mt-2 grid grid-cols-3 gap-2">
+                      <MiniStat label="Compras pendentes" value={formatNumber(movement.engineAttribution.pendingBuyVolume)} />
+                      <MiniStat label="Vendas pendentes" value={formatNumber(movement.engineAttribution.pendingSellVolume)} />
+                      <MiniStat label="Saldo do book" value={formatNumber(movement.engineAttribution.orderImbalance)} />
+                    </div>
+                  </div>
+
                   <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-2">
                     {(movement.engineAttribution.causalEvents ?? []).slice(0, 6).map((event) => (
                       <div
                         key={`${movement.id}-${event.id}`}
                         className="rounded-md border border-[rgba(46,189,133,.18)] bg-[#161A1F] px-3 py-2 text-xs"
                       >
-                        <p className="font-medium text-[#EAECEF]">{event.type} · {event.title ?? event.layer ?? event.source}</p>
-                        <p className="mt-1 text-[#929AA5]">{event.newsId ? `newsId ${event.newsId} · ` : ''}{formatDateTime(event.occurredAt)}</p>
+                        <p className="font-medium text-[#EAECEF]">
+                          {causalEventTypeLabel(event.type)} · {event.title ?? humanizeLayer(event.layer ?? event.source)}
+                        </p>
+                        <p className="mt-1 text-[#929AA5]">{event.newsId ? `notícia ${event.newsId} · ` : ''}{formatDateTime(event.occurredAt)}</p>
                       </div>
                     ))}
                     {movement.engineAttribution.layerContributions.slice(0, 6).map((layer) => (
                       <div
                         key={`${movement.id}-${layer.layer}`}
                         className="flex items-center justify-between gap-3 rounded-md border border-[rgba(240,185,11,.08)] bg-[#161A1F] px-3 py-2 text-xs"
+                        title={layer.layer}
                       >
-                        <span className="min-w-0 truncate font-medium text-[#EAECEF]">{layer.layer}</span>
+                        <span className="min-w-0 truncate font-medium text-[#EAECEF]">{humanizeLayer(layer.layer)}</span>
                         <span className="flex-shrink-0 font-mono text-[#c5b99a]">
                           {formatSignedCurrency(layer.deltaPrice)} · {formatPct(layer.contributionPct).replace('+', '')}
                         </span>
@@ -1308,7 +1407,7 @@ function MovementList({ movements }: { movements: Movement[] }) {
                             <ExternalLink className="mt-0.5 h-3 w-3 flex-shrink-0" />
                           </a>
                           <p className="text-xs text-[#929AA5]">
-                            {formatDateTime(item.occurredAt)} · {item.sentiment} · {item.impact}
+                            {formatDateTime(item.occurredAt)} · sentimento {newsSentimentLabel(item.sentiment)} · impacto {newsImpactLabel(item.impact)}
                             {item.source ? ` · ${item.source}` : ''}
                           </p>
                         </li>
@@ -1324,7 +1423,7 @@ function MovementList({ movements }: { movements: Movement[] }) {
                             href={item.href}
                             className="inline-flex items-center gap-1 text-sm text-[#EAECEF] hover:text-[#F0B90B]"
                           >
-                            <span>{item.action}</span>
+                            <span>{adminActionShortLabel(item.action)}</span>
                             <ExternalLink className="h-3 w-3 flex-shrink-0" />
                           </a>
                           <p className="text-xs text-[#929AA5]">
@@ -1347,8 +1446,8 @@ function MovementList({ movements }: { movements: Movement[] }) {
                     <EvidenceBox title="Evidência direta">
                       {movement.directEvidence.map((item) => (
                         <li key={item.eventId} className="space-y-1">
-                          <p className="text-sm text-[#EAECEF]">{item.type} · {item.label}</p>
-                          <p className="text-xs text-[#929AA5]">{item.source} · {formatDateTime(item.occurredAt)}</p>
+                          <p className="text-sm text-[#EAECEF]">{causalEventTypeLabel(item.type)} · {humanizeLayer(item.label)}</p>
+                          <p className="text-xs text-[#929AA5]">{humanizeLayer(item.source)} · {formatDateTime(item.occurredAt)}</p>
                         </li>
                       ))}
                     </EvidenceBox>
@@ -1357,7 +1456,9 @@ function MovementList({ movements }: { movements: Movement[] }) {
                     <EvidenceBox title="Correlação temporal">
                       {movement.correlatedEvidence.map((item) => (
                         <li key={`${item.type}-${item.eventId ?? item.label}`} className="space-y-1">
-                          <p className="text-sm text-[#EAECEF]">{item.type} · {item.label}</p>
+                          <p className="text-sm text-[#EAECEF]">
+                            {causalEventTypeLabel(item.type)} · {item.type === 'ADMIN_ACTION' ? adminActionShortLabel(item.label) : item.label}
+                          </p>
                           <p className="text-xs text-[#929AA5]">
                             confiança máxima {item.confidenceScore}%{item.occurredAt ? ` · ${formatDateTime(item.occurredAt)}` : ''}
                           </p>
@@ -1444,6 +1545,13 @@ function EvidenceBox({ title, children }: { title: string; children: React.React
 }
 
 function MethodologyPanel({ report }: { report: ValueAnalysisReport }) {
+  // Janelas reais vindas do payload (toda movement carrega as mesmas constantes
+  // da rota); fallback apenas quando o relatorio nao tem movimentos.
+  const windows = report.movements[0]?.evidenceWindow
+  const newsLookbackMinutes = windows?.newsLookbackMinutes ?? 120
+  const newsGraceMinutes = windows?.newsGraceMinutes ?? 2
+  const adminLookbackMinutes = windows?.adminLookbackMinutes ?? 10
+  const adminGraceMinutes = windows?.adminGraceMinutes ?? 2
   return (
     <section className="rounded-xl border border-[rgba(240,185,11,.1)] bg-[#1E2329] p-4">
       <div className="flex items-center gap-2">
@@ -1475,7 +1583,7 @@ function MethodologyPanel({ report }: { report: ValueAnalysisReport }) {
       </div>
 
       <div className="mt-4 rounded-lg border border-[rgba(240,185,11,.08)] bg-[#0B0E11] p-3 text-xs leading-5 text-[#929AA5]">
-        Recorte atual: {report.period.requestedDays} dia(s), limite de {report.period.maxPricePoints} pontos de preço, notícias buscadas até 120 minutos antes de cada variação e ações administrativas aceitas em janela próxima ao movimento. A tela deve ser lida como análise operacional de evidências internas, não como laudo financeiro definitivo.
+        Recorte atual: {report.period.requestedDays} dia(s), limite de {report.period.maxPricePoints} pontos de preço. Notícias entram na correlação se publicadas até {newsLookbackMinutes} minutos antes da variação (absorção gradual) e no máximo {newsGraceMinutes} minutos depois; ações administrativas só são correlacionadas se registradas até {adminLookbackMinutes} minutos antes ou {adminGraceMinutes} minutos depois do candle. A tela deve ser lida como análise operacional de evidências internas, não como laudo financeiro definitivo.
       </div>
     </section>
   )

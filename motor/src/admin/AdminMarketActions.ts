@@ -108,7 +108,7 @@ export class AdminMarketActions {
       data: { currentPrice: newPrice, closePrice: newPrice },
     })
 
-    this.engine.adjustPrice(action.assetId, newPrice)
+    this.engine.adjustPrice(action.assetId, newPrice, { adminId: action.adminId, reason: action.reason })
     await this.auditLogger.log(action, previousPrice, newPrice)
 
     return {

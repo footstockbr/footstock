@@ -45,6 +45,84 @@ export const CAUSE_LABELS_FOR_API: Record<CauseType, string> = {
   UNEXPLAINED: 'sem causa registrada',
 }
 
+// Espelho de LAYER_CAUSES do motor (motor/src/engine/PriceAttribution.ts).
+// Traduz codigos internos de camada para linguagem humana em TODO texto
+// user-facing da aba de analise. Manter em sincronia ao criar camadas novas.
+export const ENGINE_LAYER_LABELS: Record<string, string> = {
+  L1_OrnsteinUhlenbeck: 'oscilação natural do mercado simulado',
+  L2_FundamentalAnchor: 'reversão ao valor justo',
+  L3_GARCHLite: 'volatilidade condicional do mercado',
+  L4_OrderFlowImbalance: 'pressão acumulada do livro de ordens',
+  L5_KyleLambda: 'impacto de liquidez das ordens',
+  L6_SupplyScaling: 'escassez de float e liquidez',
+  L7_PressureQueue: 'absorção de notícia',
+  L7_5_Nudge: 'destravamento de baixa atividade',
+  L8_VelocityCap: 'limite de velocidade do motor',
+  L9_DailyVolTarget: 'controle de volatilidade diária',
+  L9_5_ApproachBrake: 'freio de aproximação do circuit breaker',
+  L10_Correlation: 'correlação com outros clubes do mercado',
+  L10_CircuitBreaker: 'circuit breaker',
+  AgentOrchestrator: 'agentes simulados de mercado',
+  AdminAdjustment: 'ajuste administrativo de preço',
+}
+
+export function humanizeLayer(layer: string | null | undefined): string {
+  if (!layer) return 'motor de precificação'
+  return ENGINE_LAYER_LABELS[layer] ?? layer
+}
+
+// Substitui codigos de camada por nomes humanos em frases vindas do motor
+// (evidenceSentence/caveatSentence de payloads historicos ainda os contem).
+export function humanizeEngineText(text: string): string {
+  let out = text
+  for (const [code, label] of Object.entries(ENGINE_LAYER_LABELS)) {
+    out = out.split(code).join(label)
+  }
+  return out
+}
+
+const NEWS_SENTIMENT_LABELS: Record<string, string> = {
+  BULLISH: 'positivo, de alta',
+  BEARISH: 'negativo, de queda',
+  NEUTRAL: 'neutro',
+  POSITIVE: 'positivo, de alta',
+  NEGATIVE: 'negativo, de queda',
+}
+
+export function newsSentimentLabel(sentiment: string): string {
+  return NEWS_SENTIMENT_LABELS[sentiment.toUpperCase()] ?? sentiment.toLowerCase()
+}
+
+const NEWS_IMPACT_LABELS: Record<string, string> = {
+  FINANCEIRA_CRITICA: 'financeiro crítico',
+  ESPORTIVA_MAJORITARIA: 'esportivo majoritário',
+  MERCADO_ATIVOS: 'de mercado de ativos',
+  INTEGRIDADE_SAUDE: 'de integridade/saúde',
+  INSTITUCIONAL: 'institucional',
+  ESPORTIVA_MENOR: 'esportivo menor',
+}
+
+export function newsImpactLabel(impact: string): string {
+  return NEWS_IMPACT_LABELS[impact.toUpperCase()] ?? impact.toLowerCase()
+}
+
+const ADMIN_ACTION_LABELS: Record<string, string> = {
+  ADJUST_PRICE: 'de ajuste manual de preço',
+  INJECT_NEWS: 'de injeção de notícia',
+  NEWS_INJECT: 'de injeção de notícia',
+  PAUSE_ASSET: 'de pausa do ativo',
+  RESUME_ASSET: 'de retomada do ativo',
+  HALT_ASSET: 'de suspensão do ativo',
+  RELEASE_HALT: 'de liberação de suspensão',
+  FORCE_CIRCUIT_BREAKER: 'de circuit breaker manual',
+  HALT_ALL: 'de suspensão geral do mercado',
+  RESUME_ALL: 'de retomada geral do mercado',
+}
+
+export function adminActionLabel(action: string): string {
+  return ADMIN_ACTION_LABELS[action.toUpperCase()] ?? action
+}
+
 export type NewsEvidence = {
   id: string
   title: string
@@ -278,23 +356,29 @@ export function parseEngineAttribution(value: unknown): AttributionParseResult {
 
 export function buildEngineAttributionDiagnosticNotes(attribution: AnyEngineAttribution): string[] {
   const notes: string[] = []
-  const primaryLayer = attribution.primaryLayer ?? 'nenhuma camada dominante'
-  notes.push(`Atribuição gravada no tick pelo motor: causa principal "${attribution.primaryCause}" via ${primaryLayer}.`)
+  const primaryLayerLabel = attribution.primaryLayer
+    ? `${humanizeLayer(attribution.primaryLayer)} (camada técnica ${attribution.primaryLayer})`
+    : 'nenhuma influência dominante'
+  notes.push(`Atribuição gravada no tick pelo motor: causa principal "${attribution.primaryCause}" via ${primaryLayerLabel}.`)
   notes.push(`Preço base ${money(attribution.previousPrice)}, preço após camadas ${money(attribution.enginePrice)}, preço final ${money(attribution.finalPrice)}.`)
+  const adminContribution = attribution.layerContributions.find((layer) => layer.layer === 'AdminAdjustment')
+  if (adminContribution) {
+    notes.push(`O preço base é anterior ao ajuste administrativo de ${signedMoney(adminContribution.deltaPrice)} aplicado entre os ticks; o salto manual não veio das camadas do motor.`)
+  }
   notes.push(`Impacto dos agentes: ${signedPct(attribution.agentImpactPct)} e volume sintético de ${attribution.syntheticVolume.toLocaleString('pt-BR')} unidade(s).`)
   notes.push(`Book no tick: ${attribution.pendingBuyVolume.toLocaleString('pt-BR')} compra(s), ${attribution.pendingSellVolume.toLocaleString('pt-BR')} venda(s), saldo ${attribution.orderImbalance.toLocaleString('pt-BR')}.`)
 
   const topLayers = attribution.layerContributions
     .filter((layer) => Math.abs(layer.deltaPrice) > 0)
     .slice(0, 4)
-    .map((layer) => `${layer.layer} ${layer.deltaPrice > 0 ? '+' : ''}${money(layer.deltaPrice)} (${round2(layer.contributionPct)}%)`)
+    .map((layer) => `${humanizeLayer(layer.layer)} ${layer.deltaPrice > 0 ? '+' : ''}${money(layer.deltaPrice)} (${round2(layer.contributionPct)}%)`)
 
   if (topLayers.length > 0) {
     notes.push(`Principais contribuições: ${topLayers.join('; ')}.`)
   }
 
   if (attribution.appliedControls.length > 0) {
-    notes.push(`Controles aplicados no tick: ${attribution.appliedControls.join(', ')}.`)
+    notes.push(`Controles aplicados no tick: ${attribution.appliedControls.map((control) => humanizeLayer(control)).join(', ')}.`)
   }
   if (attribution.version === 2) {
     notes.push(`EvidenceGrade DIRECT: ${attribution.causalEvents.length} evento(s) causal(is), tickId ${attribution.tickId}, payload ${attribution.payloadBytes} bytes.`)
@@ -324,6 +408,223 @@ function directEvidenceFromAttribution(attribution: AnyEngineAttribution): Direc
       source: event.source,
       occurredAt: event.occurredAt,
     }))
+}
+
+// Camada primaria -> tipo de causa real do movimento. Sem este mapa a rota
+// hardcodava SIMULATED_ENGINE para qualquer candle com attribution, fazendo
+// noticia, admin e fluxo de ordens sumirem do countsByCause e do resumo.
+const PRIMARY_LAYER_CAUSE_TYPE: Record<string, CauseType> = {
+  L7_PressureQueue: 'NEWS',
+  L4_OrderFlowImbalance: 'MARKET_FLOW',
+  L5_KyleLambda: 'MARKET_FLOW',
+  AdminAdjustment: 'ADMIN_ACTION',
+}
+
+export function causeTypeFromAttribution(attribution: AnyEngineAttribution): CauseType {
+  if (attribution.primaryLayer && PRIMARY_LAYER_CAUSE_TYPE[attribution.primaryLayer]) {
+    return PRIMARY_LAYER_CAUSE_TYPE[attribution.primaryLayer]
+  }
+  if (attribution.version === 2 && attribution.primaryEventId) {
+    const primaryEvent = attribution.causalEvents.find((event) => event.id === attribution.primaryEventId)
+    // So confiar no evento se ele pertence a camada primaria: payloads merged
+    // historicos gravaram primaryEventId com fallback causalEvents[0], que
+    // pode ser um evento NEWS/ADMIN de OUTRA camada — derivar causa dele
+    // colocaria badge "Noticia" num candle dominado por outra forca.
+    const eventMatchesPrimary = primaryEvent &&
+      (attribution.primaryLayer === null || primaryEvent.layer === attribution.primaryLayer)
+    if (eventMatchesPrimary) {
+      if (primaryEvent.type === 'NEWS') return 'NEWS'
+      if (primaryEvent.type === 'ADMIN_ACTION') return 'ADMIN_ACTION'
+      if (primaryEvent.type === 'ORDER_FLOW') return 'MARKET_FLOW'
+    }
+  }
+  return 'SIMULATED_ENGINE'
+}
+
+function signedMoney(value: number): string {
+  const prefix = value > 0 ? '+' : ''
+  return `${prefix}${money(value)}`
+}
+
+function numericMetadata(value: number | string | boolean | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function attributionSentimentClause(sentiment: number | string | undefined): string {
+  if (sentiment === undefined || sentiment === null) return ''
+  if (typeof sentiment === 'number') {
+    if (sentiment > 0) return ' (sentimento positivo)'
+    if (sentiment < 0) return ' (sentimento negativo)'
+    return ' (sentimento neutro)'
+  }
+  const normalized = sentiment.toUpperCase()
+  if (normalized === 'BULLISH' || normalized === 'POSITIVE') return ' (sentimento positivo)'
+  if (normalized === 'BEARISH' || normalized === 'NEGATIVE') return ' (sentimento negativo)'
+  if (normalized === 'NEUTRAL') return ' (sentimento neutro)'
+  return ''
+}
+
+// Noticia dominante do candle: a de maior magnitude aplicada pela camada de
+// absorcao, nao a primeira do array (candles merged podem ter mais de uma).
+function dominantNewsEvent(attribution: AnyEngineAttribution, primaryLayer: string): CausalEvent | undefined {
+  if (attribution.version !== 2) return undefined
+  const newsEvents = attribution.causalEvents
+    .filter((event) => event.type === 'NEWS' && event.title)
+    .sort((a, b) => b.magnitude - a.magnitude)
+  return newsEvents.find((event) => event.layer === primaryLayer) ?? newsEvents[0]
+}
+
+function composePrimaryCauseClause(attribution: AnyEngineAttribution, primary: EngineLayerContribution): string {
+  const delta = signedMoney(primary.deltaPrice)
+  const primaryEvent = attribution.version === 2
+    ? attribution.causalEvents.find((event) => event.layer === primary.layer && event.magnitude > 0)
+      ?? attribution.causalEvents.find((event) => event.id === attribution.primaryEventId && event.layer === primary.layer)
+    : undefined
+  switch (primary.layer) {
+    case 'L7_PressureQueue': {
+      const newsEvent = dominantNewsEvent(attribution, primary.layer) ?? primaryEvent
+      const title = newsEvent?.title
+      const sentimento = attributionSentimentClause(newsEvent?.sentiment)
+      return title
+        ? `impulsionado principalmente pela notícia "${title}"${sentimento}, cujo impacto foi absorvido gradualmente pelo mercado (${delta})`
+        : `impulsionado principalmente pela absorção de uma notícia ativa no mercado (${delta})`
+    }
+    case 'AdminAdjustment': {
+      const reason = primaryEvent?.title
+      return reason
+        ? `movido principalmente por ajuste administrativo de preço (motivo registrado: ${reason}; ${delta})`
+        : `movido principalmente por ajuste administrativo de preço (${delta})`
+    }
+    case 'L4_OrderFlowImbalance':
+    case 'L5_KyleLambda': {
+      const buy = attribution.pendingBuyVolume
+      const sell = attribution.pendingSellVolume
+      const lado = buy > sell ? 'compradora' : sell > buy ? 'vendedora' : 'equilibrada'
+      const escala = attribution.version === 2 && attribution.tickCount > 1 ? ' em média por tick' : ''
+      return `pressionado principalmente pelo livro de ordens dos usuários, com pressão ${lado} registrada antes do cálculo do preço (${buy.toLocaleString('pt-BR')} compra(s) contra ${sell.toLocaleString('pt-BR')} venda(s) pendentes${escala}; ${delta})`
+    }
+    case 'L2_FundamentalAnchor': {
+      const fairValue = numericMetadata(primary.metadata?.fairValue)
+      if (fairValue !== null) {
+        const posicao = attribution.previousPrice > fairValue ? 'acima' : 'abaixo'
+        return `puxado principalmente de volta na direção do valor justo de ${money(fairValue)}, pois o preço estava ${posicao} dele (${delta})`
+      }
+      return `puxado principalmente de volta na direção do valor justo do ativo (${delta})`
+    }
+    case 'AgentOrchestrator':
+      return `movido principalmente pelos agentes simulados que dão liquidez ao mercado do jogo (${delta})`
+    case 'L10_Correlation':
+      return `puxado principalmente pela correlação com a variação de outros clubes do mercado (${delta})`
+    default:
+      return `movido principalmente por ${humanizeLayer(primary.layer)} (${delta})`
+  }
+}
+
+// Forma nominal da causa primaria, usada na frase de direcao contraria.
+function nominalCauseLabel(attribution: AnyEngineAttribution, primary: EngineLayerContribution): string {
+  if (primary.layer === 'L7_PressureQueue') {
+    const title = dominantNewsEvent(attribution, primary.layer)?.title
+    return title ? `a notícia "${title}"` : 'a notícia em absorção'
+  }
+  if (primary.layer === 'AdminAdjustment') return 'o ajuste administrativo de preço'
+  if (primary.layer === 'L4_OrderFlowImbalance' || primary.layer === 'L5_KyleLambda') {
+    return 'a pressão do livro de ordens'
+  }
+  return humanizeLayer(primary.layer)
+}
+
+function composeSecondaryClause(attribution: AnyEngineAttribution, primary: EngineLayerContribution): string {
+  const secundarias = attribution.layerContributions
+    .filter((item) => item.layer !== primary.layer && Math.abs(item.deltaPrice) > 0)
+    .slice(0, 2)
+    .map((item) => `${humanizeLayer(item.layer)} (${signedMoney(item.deltaPrice)})`)
+  return secundarias.length > 0 ? ` Influências secundárias no período: ${secundarias.join('; ')}.` : ''
+}
+
+// Monta a explicacao user-facing a partir dos dados ESTRUTURADOS da atribuicao
+// (precos, eventos causais, contribuicoes por camada), em vez de repassar o
+// texto curto do motor. Nunca emite codigos de camada e nunca cai em frase
+// generica: a especificidade vem dos numeros e titulos gravados no tick.
+export function composeEngineExplanation(attribution: AnyEngineAttribution): string {
+  const previous = attribution.previousPrice
+  const final = attribution.finalPrice
+  const changePct = previous > 0 ? round2(((final - previous) / previous) * 100) : 0
+  const movimento = changePct > 0
+    ? `O preço subiu de ${money(previous)} para ${money(final)} (${signedPct(changePct)})`
+    : changePct < 0
+      ? `O preço caiu de ${money(previous)} para ${money(final)} (${signedPct(changePct)})`
+      : `O preço terminou praticamente estável em ${money(final)}`
+
+  const primary = attribution.primaryLayer
+    ? attribution.layerContributions.find((item) => item.layer === attribution.primaryLayer) ?? null
+    : null
+
+  if (!primary) {
+    return `${movimento}. O motor não registrou contribuição material de nenhuma influência neste candle; a variação residual vem de arredondamento e consolidação do período.`
+  }
+
+  const consolidacao = attribution.version === 2 && attribution.tickCount > 1
+    ? ` O candle consolida ${attribution.tickCount} ticks do motor no período.`
+    : ''
+
+  // A camada primaria (maior |delta| liquido) pode ter empurrado CONTRA o
+  // movimento final (cabo-de-guerra entre influencias). Afirmar que ela
+  // "impulsionou" a variacao mentiria sobre a direcao da forca: nesse caso a
+  // frase nomeia a forca contraria e credita o saldo das demais influencias.
+  const opposes =
+    (changePct > 0 && primary.deltaPrice < 0) ||
+    (changePct < 0 && primary.deltaPrice > 0)
+  if (opposes) {
+    const topAligned = attribution.layerContributions
+      .filter((item) => item.layer !== primary.layer && (changePct > 0 ? item.deltaPrice > 0 : item.deltaPrice < 0))
+      .sort((a, b) => Math.abs(b.deltaPrice) - Math.abs(a.deltaPrice))[0]
+    const saldo = topAligned
+      ? ` o movimento veio do saldo das demais influências, lideradas por ${humanizeLayer(topAligned.layer)} (${signedMoney(topAligned.deltaPrice)}).`
+      : ' o movimento veio do saldo das demais influências do período.'
+    return `${movimento}, mesmo com ${nominalCauseLabel(attribution, primary)} (${signedMoney(primary.deltaPrice)}) pressionando na direção contrária;${saldo}${consolidacao}`
+  }
+
+  const causa = composePrimaryCauseClause(attribution, primary)
+  const secundarias = composeSecondaryClause(attribution, primary)
+  return `${movimento}, ${causa}.${secundarias}${consolidacao}`
+}
+
+// Recompoe a frase de evidencia a partir dos dados estruturados: o
+// evidenceSentence gravado pelo motor carrega tokens curtos ('camada L2',
+// 'pela L7', newsId cru) que o humanizeEngineText nao cobre.
+export function composeEvidenceSentence(attribution: AnyEngineAttribution): string {
+  const primary = attribution.primaryLayer
+    ? attribution.layerContributions.find((item) => item.layer === attribution.primaryLayer) ?? null
+    : null
+  const agregacao = attribution.version === 2 && attribution.tickCount > 1
+    ? ` O candle agrega ${attribution.tickCount} ticks.`
+    : ''
+  if (!primary) {
+    return `O motor não registrou evidência material neste candle.${agregacao}`
+  }
+  switch (primary.layer) {
+    case 'L7_PressureQueue': {
+      const title = dominantNewsEvent(attribution, primary.layer)?.title
+      return title
+        ? `A evidência direta é a notícia "${title}" aplicada pelo motor no momento do cálculo.${agregacao}`
+        : `A evidência direta é a notícia ativa aplicada pelo motor no momento do cálculo.${agregacao}`
+    }
+    case 'AdminAdjustment':
+      return `A evidência direta é o ajuste manual de preço registrado pelo admin neste intervalo.${agregacao}`
+    case 'L4_OrderFlowImbalance':
+    case 'L5_KyleLambda':
+      return `A evidência direta é o snapshot do livro de ordens capturado antes do cálculo do preço.${agregacao}`
+    case 'L2_FundamentalAnchor': {
+      const fairValue = numericMetadata(primary.metadata?.fairValue)
+      return fairValue !== null
+        ? `A evidência direta é a âncora de valor justo (${money(fairValue)}) gravada pelo motor no tick.${agregacao}`
+        : `A evidência direta é a âncora de valor justo gravada pelo motor no tick.${agregacao}`
+    }
+    case 'AgentOrchestrator':
+      return `A evidência direta é a atividade dos agentes simulados registrada pelo motor no tick.${agregacao}`
+    default:
+      return `A evidência direta é a contribuição de ${humanizeLayer(primary.layer)} gravada pelo motor antes da persistência.${agregacao}`
+  }
 }
 
 // Sources gerados pelo motor de precificacao. Um candle desses DEVERIA carregar
@@ -381,9 +682,18 @@ export function classifyEvidence(params: {
       correlatedEvidence: [],
       degradedReason: directEvidence.length > 0 ? null : 'Attribution valida sem evento causal material.',
       degradedOwner: directEvidence.length > 0 ? null : 'ENGINE',
-      primaryExplanation: attribution.version === 2 ? attribution.primaryExplanation : attribution.explanation,
-      evidenceSentence: attribution.version === 2 ? attribution.evidenceSentence : `Rastro direto gravado pelo motor em ${attribution.generatedAt}.`,
-      caveatSentence: attribution.version === 2 ? attribution.caveatSentence : 'Atribuicao v1 explica camada dominante, mas nao carrega eventos causais detalhados.',
+      // Recompoe explicacao E evidencia a partir dos dados estruturados em vez
+      // de repassar o texto curto do motor (payloads historicos carregam
+      // codigos de camada crus, tokens curtos 'pela L7' e frases telegraficas).
+      primaryExplanation: composeEngineExplanation(attribution),
+      evidenceSentence: attribution.version === 2
+        ? composeEvidenceSentence(attribution)
+        : `Rastro direto gravado pelo motor em ${attribution.generatedAt}.`,
+      caveatSentence: humanizeEngineText(
+        attribution.version === 2
+          ? attribution.caveatSentence
+          : 'Atribuicao v1 explica a influencia dominante, mas nao carrega eventos causais detalhados.',
+      ),
       confidence: 'alta',
       confidenceScore: 90,
     }
@@ -622,24 +932,34 @@ export function buildCause(params: {
 }): { causeType: CauseType; causeLabel: string; confidence: Confidence; explanation: string } {
   const { direction, volumeDelta, source, news, adminActions, context } = params
 
-  const explicitPriceAction = adminActions.find((action) => action.previousPrice !== null || action.newPrice !== null)
+  // Gate de congruencia: a janela de correlacao casa UMA acao com varios
+  // candles vizinhos. So afirmar a acao como causa quando o candle e
+  // compativel com o salto registrado (direcao + preco-alvo + magnitude);
+  // sem isso, uma unica ADJUST_PRICE "explicava" ~12 minutos de candles.
+  const explicitPriceActions = adminActions.filter((action) => action.previousPrice !== null || action.newPrice !== null)
+  const matchesCandle = (action: AdminActionEvidence): boolean => {
+    if (!context || action.newPrice === null) return true
+    const candleDelta = context.newPrice - context.previousPrice
+    const span = action.previousPrice !== null ? action.newPrice - action.previousPrice : null
+    const sameDirection = span === null
+      ? (direction === 'up') === (action.newPrice >= context.previousPrice)
+      : (span >= 0) === (direction === 'up')
+    const landsOnTarget = action.newPrice > 0 && Math.abs(context.newPrice - action.newPrice) / action.newPrice <= 0.02
+    const magnitudeComparable = span === null || Math.abs(candleDelta) >= Math.abs(span) * 0.3
+    return sameDirection && landsOnTarget && magnitudeComparable
+  }
+  const explicitPriceAction = explicitPriceActions.find(matchesCandle)
   if (explicitPriceAction) {
+    const priceSpan = explicitPriceAction.previousPrice !== null && explicitPriceAction.newPrice !== null
+      ? ` O preço foi movido manualmente de ${money(explicitPriceAction.previousPrice)} para ${money(explicitPriceAction.newPrice)}.`
+      : ''
     return {
       causeType: 'ADMIN_ACTION',
       causeLabel: 'Ajuste administrativo',
       confidence: 'alta',
       explanation: explicitPriceAction.reason
-        ? `Variação associada a ação administrativa ${explicitPriceAction.action}: ${explicitPriceAction.reason}`
-        : `Variação associada a ação administrativa ${explicitPriceAction.action}.`,
-    }
-  }
-
-  if (adminActions.length > 0 && news.length > 0) {
-    return {
-      causeType: 'ADMIN_ACTION',
-      causeLabel: 'Ação administrativa com notícia no período',
-      confidence: 'media',
-      explanation: `Houve ${adminActions.length} ação administrativa e ${news.length} notícia vinculada na janela da mudança. Atribuição principal: intervenção operacional registrada pelo admin.`,
+        ? `Variação compatível com a ação administrativa ${adminActionLabel(explicitPriceAction.action)}. Motivo registrado: ${explicitPriceAction.reason}.${priceSpan}`
+        : `Variação compatível com a ação administrativa ${adminActionLabel(explicitPriceAction.action)}.${priceSpan}`,
     }
   }
 
@@ -649,25 +969,42 @@ export function buildCause(params: {
       causeType: 'NEWS',
       causeLabel: 'Notícia vinculada',
       confidence: 'media',
-      explanation: `A mudança coincide com a notícia "${directionalNews.title}", com sentimento ${directionalNews.sentiment} e impacto ${directionalNews.impact}.`,
+      explanation: `A mudança coincide com a notícia "${directionalNews.title}" (sentimento ${newsSentimentLabel(directionalNews.sentiment)}, impacto ${newsImpactLabel(directionalNews.impact)}), publicada dentro da janela de correlação do movimento.`,
+    }
+  }
+
+  if (adminActions.length > 0 && news.length > 0) {
+    const closestAction = adminActions[adminActions.length - 1]
+    const closestNews = news[news.length - 1]
+    return {
+      causeType: 'ADMIN_ACTION',
+      causeLabel: 'Ação administrativa com notícia no período',
+      confidence: 'media',
+      explanation: `A janela da mudança contém a ação administrativa ${adminActionLabel(closestAction.action)}${closestAction.reason ? ` (motivo: ${closestAction.reason})` : ''} e a notícia "${closestNews.title}" (sentimento ${newsSentimentLabel(closestNews.sentiment)}, que não explica a direção observada). A atribuição principal é a intervenção do admin, por ser o evento operacional registrado mais direto.`,
     }
   }
 
   if (news.length > 0) {
+    // Nunca emitir frase generica: nomear a noticia real e explicar a divergencia.
+    const closestNews = news[news.length - 1]
     return {
       causeType: 'NEWS',
       causeLabel: 'Notícia vinculada, direção divergente',
       confidence: 'baixa',
-      explanation: 'Existe notícia vinculada no período, mas o sentimento registrado não explica diretamente a direção da variação.',
+      explanation: `A notícia "${closestNews.title}" (sentimento ${newsSentimentLabel(closestNews.sentiment)}, impacto ${newsImpactLabel(closestNews.impact)}) está na janela desta variação, mas aponta na direção oposta ao movimento de ${directionLabel(direction)} observado. O efeito dela pode já ter sido absorvido em candles anteriores ou superado por outras forças do mercado; trate a relação como possível, não confirmada.`,
     }
   }
 
   if (adminActions.length > 0) {
+    const closestAction = adminActions[adminActions.length - 1]
+    const hasPrices = closestAction.previousPrice !== null && closestAction.newPrice !== null
     return {
       causeType: 'ADMIN_ACTION',
       causeLabel: 'Ação administrativa',
       confidence: 'media',
-      explanation: `A mudança ocorreu próxima de ${adminActions.length} ação administrativa, sem preço anterior/novo registrado para confirmar ajuste direto.`,
+      explanation: hasPrices
+        ? `A ação administrativa ${adminActionLabel(closestAction.action)}${closestAction.reason ? ` (motivo: ${closestAction.reason})` : ''} moveu o preço de ${money(closestAction.previousPrice as number)} para ${money(closestAction.newPrice as number)} dentro da janela de correlação, mas esses preços não casam com este candle específico; trate-a como contexto próximo, não como causa confirmada deste movimento.`
+        : `A mudança ocorreu próxima da ação administrativa ${adminActionLabel(closestAction.action)}${closestAction.reason ? ` (motivo: ${closestAction.reason})` : ''}, sem preço anterior/novo registrado para confirmar ajuste direto.`,
     }
   }
 

@@ -172,3 +172,41 @@ Interpretação: a frase enquadra movimento dirigido pelo motor como lacuna "nã
 - `motor/src/engine/AttributionPreflightService.ts` — preflight, schema sync, parser canary e canary transacional.
 - `blacksmith/value-analysis-causal-baseline.md` / `blacksmith/value-analysis-causal-rollout.md` — contrato de medição, segurança e gate.
 - Evidência adicional lida por necessidade: schemas Prisma, migrations M053/M056, seed/backfill GBM, `AdminMarketActions` e `AuditLogger`.
+
+---
+
+## 8. Implementação 2026-06-09/10 — explicações nunca genéricas, sempre verdadeiras
+
+Trabalho executado sobre este diagnóstico, com verificação adversarial multi-agente (28 agentes; achados confirmados foram corrigidos no mesmo ciclo). Todos os arquivos abaixo estão editados em working tree (uncommitted). Testes: motor 229 passing (25 suítes, +6 novos), Next value-analysis 24 passing (+7 novos), tsc limpo nos dois lados.
+
+### Motor (`motor/src`)
+
+- `types/motor.types.ts`: novo tipo `AdminPriceAdjustment`.
+- `engine/MarketEngine.ts`: `adjustPrice(assetId, newPrice, {adminId, reason})` registra o salto old→new em `pendingAdminAdjustments` (o salto acontecia entre ticks e sumia da atribuição); `runTick` drena os ajustes e usa o preço PRÉ-ajuste como `previousPrice` da atribuição; `haltAll`/`resumeAll` setam/limpam `haltReason`.
+- `engine/PriceAttribution.ts`:
+  - Ajuste admin vira contribuição `AdminAdjustment` + CausalEvent `ADMIN_ACTION` com motivo/horário reais; `engineDelta` NÃO absorve o salto admin (era dupla representação).
+  - `primaryExplanation` humana via `humanPrimaryExplanation` (preços reais, % e causa nomeada; zero códigos de camada); quando a camada primária se opõe ao movimento, frase de "direção contrária" em vez de afirmação falsa.
+  - Evento NEWS da L7 usa o metadata da contribuição (capturado dentro do `applyLayer`), imune ao handoff/expiração da fila pós-cálculo.
+  - `mergePriceAttributions`: prioriza `ADMIN_ACTION`/`NEWS` no cap de 20 eventos (slice cego derrubava o evento dos ticks finais); `primaryEventId` sem fallback para evento de outra camada; `grossAbsDelta` por camada + caveat de saldo líquido quando net/gross < 0.3; `pendingBuy/Sell` em média por tick (soma contava ordem aberta N vezes); título da notícia dominante por magnitude.
+  - `LAYER_CAUSES` sincronizado com `ENGINE_LAYER_LABELS` do Next (mesmo wording).
+- `broadcast/AdminChannel.ts`: `PAUSE_ASSET`/`HALT_ASSET` propagam `event.reason` (halt admin não exibe mais "CIRCUIT_BREAKER" falso); `ADJUST_PRICE` propaga adminId/reason; `INJECT_NEWS` usa o motivo do admin como título quando não há title.
+
+### Next (`footstock-next/src`)
+
+- `lib/admin/value-analysis.ts`:
+  - `causeTypeFromAttribution`: causa dominante REAL (L7→NEWS, L4/L5→MARKET_FLOW, AdminAdjustment→ADMIN_ACTION), com guard contra `primaryEventId` de camada divergente (payloads merged históricos).
+  - `composeEngineExplanation` + `composeEvidenceSentence`: explicação e evidência recompostas dos dados estruturados (título da notícia, preços, %, book pré-preço, fair value), nunca passthrough do texto curto do motor; tratamento de direção contrária.
+  - `buildCause`: gate de congruência de preço para ação admin (direção + preço-alvo ±2% + magnitude ≥30% do span) — uma ADJUST_PRICE não "explica" mais ~12 min de candles; notícia divergente NOMEIA a notícia real (fim da frase genérica); notícia direcional vence ação admin sem preço; labels PT para sentimento/impacto/ação (incl. `NEWS_INJECT`).
+  - `ENGINE_LAYER_LABELS`/`humanizeLayer`/`humanizeEngineText`: tradução de jargão em todo texto user-facing; nota diagnóstica explicita o salto admin no par preço-base/após-camadas.
+- `app/api/v1/admin/value-analysis/route.ts`: usa `causeTypeFromAttribution` (antes hardcode `SIMULATED_ENGINE` falsificava countsByCause/resumo); janelas estreitas (news grace 2min, admin lookback 10min + grace 2min); ações globais `HALT_ALL`/`RESUME_ALL` (assetId null) agora entram na correlação; `evidenceWindow` expõe os 4 valores.
+- `app/api/v1/admin/market/route.ts`: ADJUST_PRICE grava `previousPrice`/`newPrice` (destrava o branch de causa direta, era dead-code); payload em `details`; ações globais auditadas na rota (AuditLogger do motor descarta ações sem assetId e nunca foi instanciado); zod aceita `newsId`/`title` opcionais no INJECT_NEWS.
+- `app/admin/analise-de-valor/value-analysis-client.tsx`: flags/eventos/camadas/fontes/ações/sentimentos traduzidos; book pré-preço renderizado (causa elegível); ordens executadas rotuladas como pós-preço (consequência); metodologia interpola as janelas reais do payload; dedup da linha "Causa primária".
+
+### Backlog (pré-existentes confirmados, fora do escopo desta entrega)
+
+1. Halt/pause admin via Redis é memory-only (não persiste `asset.isHalted`; evapora no restart; ordens seguem executando) — `AdminMarketActions`/`AuditLogger` são dead-code, nunca instanciados.
+2. INJECT_NEWS via POST /api/v1/admin/market não consegue derrubar preço (impact é categoria, nunca 'NEGATIVE'); caminho vivo é o NewsInjectionService.
+3. Guard `isEngineAttribution` v1 não valida campos numéricos; payload malformado derruba o relatório inteiro com 500 (comportamento já existente antes desta mudança).
+4. Branch UNEXPLAINED pode negar ordens com `orderCount > 0` no mesmo card (gate por volumeDelta).
+5. Strings legadas sem acentuação em `reportNarrative`/caveats DEGRADED.
+6. `previousPrice` do audit ADJUST_PRICE vem do DB (atraso de até 10 ticks vs motor) — mitigado pelo gate de congruência, mas a fonte ideal seria o preço em tempo real.

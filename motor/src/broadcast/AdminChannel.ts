@@ -49,7 +49,9 @@ export class AdminChannel {
 
     switch (event.type) {
       case 'PAUSE_ASSET':
-        if (event.assetId) this.engine.pauseAsset(event.assetId)
+        // Sem reason o tick de halt cai no fallback 'CIRCUIT_BREAKER' e a UI
+        // mente sobre o motivo da pausa. Propagar o motivo real do admin.
+        if (event.assetId) this.engine.pauseAsset(event.assetId, event.reason ?? 'PAUSE_ASSET')
         break
       case 'RESUME_ASSET':
         if (event.assetId) this.engine.resumeAsset(event.assetId)
@@ -63,8 +65,12 @@ export class AdminChannel {
         if (event.assetId) {
           this.engine.injectNewsImpact(event.assetId, magnitude, durationTicks, {
             newsId: typeof payload.newsId === 'string' ? payload.newsId : undefined,
-            title: typeof payload.title === 'string' ? payload.title : undefined,
-            source: typeof payload.source === 'string' ? payload.source : undefined,
+            // Injecao manual sem title usa o motivo do admin: a atribuicao passa
+            // a nomear a intervencao real em vez de "noticia ativa" anonima.
+            title: typeof payload.title === 'string'
+              ? payload.title
+              : typeof event.reason === 'string' ? event.reason : undefined,
+            source: typeof payload.source === 'string' ? payload.source : 'admin',
             impactCategory: typeof payload.impactCategory === 'string' ? payload.impactCategory : undefined,
             sentiment: typeof payload.sentiment === 'number' || typeof payload.sentiment === 'string' ? payload.sentiment : undefined,
             publishedAt: typeof payload.publishedAt === 'string' ? payload.publishedAt : undefined,
@@ -77,15 +83,19 @@ export class AdminChannel {
         const payload = event.payload ?? {}
         const newPrice = payload.newPrice as number
         if (event.assetId && newPrice > 0) {
-          this.engine.adjustPrice(event.assetId, newPrice)
+          this.engine.adjustPrice(event.assetId, newPrice, {
+            adminId: event.adminId,
+            reason: typeof event.reason === 'string' ? event.reason : undefined,
+          })
         }
         break
       }
       case 'HALT_ASSET': {
         // Admin halt individual via REST /admin/motor/halt/:ticker
         // Bloqueia processamento de preço do ativo (complementa motor:halt:{ticker} no Redis)
+        // Reason propagado: sem ele o halt tick cai no fallback 'CIRCUIT_BREAKER'.
         if (event.assetId) {
-          this.engine.pauseAsset(event.assetId)
+          this.engine.pauseAsset(event.assetId, event.reason ?? 'HALT_ASSET')
           logger.warn(`[admin-channel] HALT_ASSET: ativo ${event.assetId} pausado por admin ${event.adminId}`)
         }
         break
