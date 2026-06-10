@@ -26,7 +26,8 @@ function isDividendStatus(value: string): value is (typeof DIVIDEND_STATUS)[keyo
 async function handler(req: NextRequest, { user }: AuthContext) {
   try {
     const { searchParams } = new URL(req.url)
-    const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
+    // `|| 1` neutraliza NaN (ex: ?page=abc), o cap evita skip gigante / overflow.
+    const page = Math.min(100_000, Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1))
     const type = searchParams.get('type') ?? undefined
     const status = searchParams.get('status') ?? undefined
 

@@ -11,7 +11,7 @@ function toDateStr(d: Date) {
   return d.toISOString().slice(0, 10)
 }
 
-// GET /api/v1/admin/revenue-history?days=30 — Monitor+
+// GET /api/v1/admin/revenue-history?days=30 — Administrador+ (financial:read)
 export async function GET(request: NextRequest) {
   let auth = await getAuthUser()
 
@@ -44,7 +44,9 @@ export async function GET(request: NextRequest) {
   }
 
   if (!auth) return errors.unauthorized()
-  if (!hasAdminRole(auth.user.adminRole, 'MONITOR')) {
+  // Receita é dado financeiro: matriz RBAC (canAccess.ts) concede financial:read
+  // apenas a ADMINISTRADOR+ — MONITOR não deve ver receita.
+  if (!hasAdminRole(auth.user.adminRole, 'ADMINISTRADOR')) {
     return NextResponse.json(
       { error: { code: 'ADMIN-050', message: 'Permissão insuficiente para esta ação administrativa.' } },
       { status: 403 }

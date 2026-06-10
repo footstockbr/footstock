@@ -212,27 +212,34 @@ export class LeagueRepository {
   }
 
   async addMember(leagueId: string, userId: string): Promise<void> {
-    // Verificar limite de 20 para ligas AMIGOS
-    const league = await prisma.league.findUnique({
-      where: { id: leagueId },
-      include: { _count: { select: { members: true } } },
-    })
-
-    if (!league) throw new LeagueError(LEAGUE_ERRORS.NOT_FOUND)
-
-    if (league.type === 'AMIGOS' && league._count.members >= league.maxMembers) {
-      throw new LeagueError({
-        ...LEAGUE_ERRORS.FULL,
-        message: `Liga cheia (${league._count.members}/${league.maxMembers} membros)`,
-      })
-    }
-
     try {
-      await prisma.leagueMember.create({
-        data: { leagueId, userId, joinedAt: new Date() },
-      })
+      // Checagem de capacidade + inserção numa transação Serializable: antes a
+      // contagem e o create eram separados (TOCTOU) — dois joins concorrentes
+      // passavam ambos pela checagem e estouravam o maxMembers da liga AMIGOS.
+      await prisma.$transaction(
+        async (tx) => {
+          const league = await tx.league.findUnique({
+            where: { id: leagueId },
+            include: { _count: { select: { members: true } } },
+          })
+
+          if (!league) throw new LeagueError(LEAGUE_ERRORS.NOT_FOUND)
+
+          if (league.type === 'AMIGOS' && league._count.members >= league.maxMembers) {
+            throw new LeagueError({
+              ...LEAGUE_ERRORS.FULL,
+              message: `Liga cheia (${league._count.members}/${league.maxMembers} membros)`,
+            })
+          }
+
+          await tx.leagueMember.create({
+            data: { leagueId, userId, joinedAt: new Date() },
+          })
+        },
+        { isolationLevel: 'Serializable' },
+      )
     } catch (err: unknown) {
-      // P2002 = unique constraint violation
+      // P2002 = unique constraint violation (já é membro)
       if ((err as { code?: string })?.code === 'P2002') {
         throw new LeagueError(LEAGUE_ERRORS.ALREADY_MEMBER)
       }

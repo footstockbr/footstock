@@ -46,24 +46,31 @@ export const POST = withAdmin('financial:write')(async (request: NextRequest) =>
 
   const now = new Date()
 
-  // Somar total pendente antes de marcar como PAID (para analytics)
-  const pendingTotal = await prisma.affiliateTransaction.aggregate({
-    where: { affiliateCodeId: affiliateId, status: 'PENDING' },
-    _sum: { amount: true },
-  })
+  // Atomicidade: selecionar os IDs PENDING, somar e marcar EXATAMENTE esses como PAID
+  // numa única transação. Antes, o aggregate e o updateMany eram chamadas separadas —
+  // uma comissão criada entre elas (ex.: webhook) era paga mas não entrava no total
+  // reportado, desalinhando amount e count.
+  const { count, amount } = await prisma.$transaction(async (tx) => {
+    const pending = await tx.affiliateTransaction.findMany({
+      where: { affiliateCodeId: affiliateId, status: 'PENDING' },
+      select: { id: true, amount: true },
+    })
+    if (pending.length === 0) return { count: 0, amount: 0 }
 
-  // Marcar todas as transações PENDING como PAID
-  const result = await prisma.affiliateTransaction.updateMany({
-    where: { affiliateCodeId: affiliateId, status: 'PENDING' },
-    data:  { status: 'PAID', paidAt: now },
+    const ids = pending.map((p) => p.id)
+    const sum = pending.reduce((acc, p) => acc + p.amount.toNumber(), 0)
+    const upd = await tx.affiliateTransaction.updateMany({
+      where: { id: { in: ids }, status: 'PENDING' },
+      data: { status: 'PAID', paidAt: now },
+    })
+    return { count: upd.count, amount: sum }
   })
 
   // EVT-042: affiliate_payout_initiated
-  if (result.count > 0) {
-    const payoutAmount = pendingTotal._sum.amount?.toNumber() ?? 0
+  if (count > 0) {
     mixpanelServer.trackAffiliatePayoutInitiated(affiliate.id, {
       affiliateId: affiliate.id,
-      amount: payoutAmount.toFixed(2),
+      amount: amount.toFixed(2),
       payoutMethod: 'manual_transfer', // comprovante manual = transferencia
     })
   }
@@ -73,7 +80,7 @@ export const POST = withAdmin('financial:write')(async (request: NextRequest) =>
     data: {
       affiliateId,
       processedAt:  now,
-      countPaid:    result.count,
+      countPaid:    count,
       comprovante:  parsed.data.comprovante,
     },
   })

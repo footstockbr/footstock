@@ -64,12 +64,15 @@ export async function POST(request: NextRequest) {
       secure: false,
     })
 
-    // Set fs-admin-role cookie for middleware to validate dev access
+    // Set fs-admin-role cookie for middleware to validate dev access.
+    // httpOnly: o middleware lê via request cookies (server-side) — JS no browser
+    // nunca precisa ler isto, então fechamos para XSS não exfiltrar/forjar role.
     if (user.adminRole) {
       response.cookies.set('fs-admin-role', user.adminRole, {
         path: '/',
         maxAge: 60 * 60 * 24 * 30,
         sameSite: 'lax',
+        httpOnly: true,
         secure: false,
       })
     }

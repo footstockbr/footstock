@@ -36,9 +36,10 @@ async function flagPostHandler(
     )
   }
 
-  // Incrementar flagCount e marcar como flagged
-  await forumRepository.flagPost(id)
-  const newFlagCount = (post.flagCount ?? 0) + 1
+  // Incrementar flagCount e marcar como flagged. Usar a contagem autoritativa
+  // retornada pelo update atômico (não a leitura velha de `post`) evita decisão
+  // de auto-deleção com valor defasado sob denúncias concorrentes.
+  const newFlagCount = await forumRepository.flagPost(id)
 
   // Verificar auto-deletion (Rule 1: 3+ flags)
   const autoDeleted = await autoModeration.verificarFlagsAutoDeletion(id, newFlagCount)

@@ -125,8 +125,17 @@ export async function PATCH(request: NextRequest, { params }: NewsParams) {
     }
     if (isPublished !== undefined) {
       updateData.isPublished = isPublished
-      if (isPublished && !updateData.publishedAt) {
-        updateData.publishedAt = new Date()
+      if (isPublished) {
+        // Só carimba publishedAt na PRIMEIRA publicação. Preserva a data original
+        // em republicações/edições — antes `!updateData.publishedAt` era sempre true
+        // (objeto local recém-criado) e sobrescrevia a data histórica a cada PATCH.
+        const existing = await prisma.news.findUnique({
+          where: { id },
+          select: { publishedAt: true },
+        })
+        if (!existing?.publishedAt) {
+          updateData.publishedAt = new Date()
+        }
       }
     }
 

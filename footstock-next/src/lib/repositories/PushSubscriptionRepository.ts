@@ -29,6 +29,11 @@ export class PushSubscriptionRepository {
     await prisma.pushSubscription.upsert({
       where: { endpoint: data.endpoint },
       update: {
+        // endpoint é @unique global. Sem reatribuir userId, um upsert do mesmo
+        // endpoint por outro usuário sobrescrevia as chaves mas mantinha o dono
+        // antigo — a linha ficava com (userId da vítima, chaves do outro). Reatribuir
+        // userId mantém endpoint→(dono, chaves) sempre consistente com quem está logado.
+        userId,
         p256dh: data.p256dh,
         auth: data.auth,
         userAgent: data.userAgent,

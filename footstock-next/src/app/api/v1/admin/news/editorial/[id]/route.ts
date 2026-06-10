@@ -33,14 +33,21 @@ const patchSchema = z
     { message: 'Nenhum campo para atualizar.' }
   )
 
-function statusToPersist(status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED') {
+// `existingPublishedAt` é a data já gravada (ou null). Preserva-se a data de
+// publicação ORIGINAL: publicar carimba só na primeira vez; arquivar não mexe em
+// publishedAt (apenas oculta). Antes, qualquer transição sobrescrevia a data,
+// destruindo o histórico de auditoria.
+function statusToPersist(
+  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED',
+  existingPublishedAt: Date | null,
+) {
   if (status === NEWS_STATUS.PUBLISHED) {
-    return { isPublished: true, publishedAt: new Date() }
+    return { isPublished: true, publishedAt: existingPublishedAt ?? new Date() }
   }
   if (status === NEWS_STATUS.ARCHIVED) {
-    return { isPublished: false, publishedAt: new Date() }
+    return { isPublished: false } // preserva publishedAt original
   }
-  return { isPublished: false, publishedAt: null }
+  return { isPublished: false, publishedAt: null } // DRAFT: volta a rascunho
 }
 
 function extractNewsId(req: NextRequest): string {
@@ -102,7 +109,11 @@ async function patchHandler(req: NextRequest) {
   }
 
   if (payload.status) {
-    Object.assign(data, statusToPersist(payload.status))
+    const current = await prisma.news.findUnique({
+      where: { id },
+      select: { publishedAt: true },
+    })
+    Object.assign(data, statusToPersist(payload.status, current?.publishedAt ?? null))
   }
 
   try {

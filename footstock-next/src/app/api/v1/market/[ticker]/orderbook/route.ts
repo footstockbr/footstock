@@ -77,7 +77,8 @@ export async function GET(
       spreadPct: parseFloat(((spread / lastPrice) * 100).toFixed(4)),
       orderCount: orders.length,
     })
-  } catch {
+  } catch (err) {
+    console.error('[API] GET /market/[ticker]/orderbook error', err)
     return errors.server()
   }
 }

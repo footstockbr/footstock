@@ -190,19 +190,30 @@ export class PositionRepository extends BaseRepository<unknown> {
     const yesterday = new Date()
     yesterday.setUTCDate(yesterday.getUTCDate() - 1)
     const yesterdayStart = startOfDay(yesterday)
+    const prevCutoff = new Date(yesterdayStart.getTime() + 86400000 - 1)
+
+    // Antes: 1 findFirst por posição (N+1 — 51 round-trips p/ 50 posições). Agora um
+    // único LATERAL JOIN sobre unnest(assetIds), usando o índice (asset_id, timestamp)
+    // p/ pegar o último close <= cutoff por ativo (mesmo padrão de DelayService).
+    type PrevRow = { asset_id: string; close: string }
+    const assetIds = positions.map((p) => p.assetId)
+    const prevRows = await prisma.$queryRaw<PrevRow[]>`
+      SELECT ph.asset_id, ph.close::text
+      FROM unnest(${assetIds}::text[]) AS u(aid)
+      JOIN LATERAL (
+        SELECT asset_id, close
+        FROM price_history
+        WHERE asset_id = u.aid
+          AND timestamp <= ${prevCutoff}
+        ORDER BY timestamp DESC
+        LIMIT 1
+      ) ph ON true
+    `
+    const prevPriceByAsset = new Map(prevRows.map((r) => [r.asset_id, Number(r.close)]))
 
     for (const pos of positions) {
-      const prevHistory = await prisma.priceHistory.findFirst({
-        where: {
-          assetId: pos.assetId,
-          timestamp: { lte: new Date(yesterdayStart.getTime() + 86400000 - 1) },
-        },
-        orderBy: { timestamp: 'desc' },
-        select: { close: true },
-      })
-
-      if (prevHistory) {
-        const prevPrice = toNumber(prevHistory.close)
+      const prevPrice = prevPriceByAsset.get(pos.assetId)
+      if (prevPrice !== undefined) {
         const todayDiff = (pos.currentPrice - prevPrice) * pos.qty
         pnLToday += pos.isShort ? -todayDiff : todayDiff
       }

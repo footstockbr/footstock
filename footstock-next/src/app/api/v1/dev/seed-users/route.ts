@@ -18,12 +18,20 @@ const prisma = new PrismaClient({ adapter })
  * - Perfis: INICIANTE, CONSERVADOR, ARROJADO
  * - Admin roles: SUPER_ADMIN, ADMINISTRADOR, MONITOR, MODERADOR
  */
-export async function POST() {
+export async function POST(request: Request) {
   if (process.env.NODE_ENV === 'production') {
     return NextResponse.json(
       { error: 'This endpoint is only available in development' },
       { status: 403 }
     )
+  }
+
+  // Mesmo fora de produção (staging/local), exigir segredo — sem isto qualquer
+  // visitante anônimo poderia criar usuários de teste, inclusive com adminRole.
+  const secret = process.env.SEED_SECRET ?? process.env.CRON_SECRET
+  const authHeader = request.headers.get('authorization')
+  if (!secret || authHeader !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   }
 
   try {

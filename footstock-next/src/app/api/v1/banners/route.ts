@@ -102,11 +102,17 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return new NextResponse(null, { status: 204 })
   }
 
-  // Incrementar impressoes do primeiro banner (round-robin)
-  prisma.sponsorBanner.update({
-    where: { id: banners[0].id },
-    data: { impressions: { increment: 1 } },
-  }).catch(() => null)
+  // Incrementar impressoes do primeiro banner (round-robin). O increment é atômico;
+  // aguardamos para garantir persistência e não engolir erros silenciosamente.
+  await prisma.sponsorBanner
+    .update({
+      where: { id: banners[0].id },
+      data: { impressions: { increment: 1 } },
+    })
+    .catch((err) => {
+      console.error('[banners] falha ao incrementar impressões', err)
+      return null
+    })
 
   const result = banners.map((banner) => ({
     id:               banner.id,

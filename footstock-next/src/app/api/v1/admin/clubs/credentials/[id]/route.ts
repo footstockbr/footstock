@@ -97,6 +97,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Representante não encontrado' } }, { status: 404 })
   }
 
+  // E-mail é @unique: trocar para um já existente lançaria P2002 (500). Checar antes
+  // e devolver 409 explícito.
+  if (parsed.data.email && parsed.data.email !== existing.email) {
+    const dup = await prisma.clubUser.findUnique({
+      where: { email: parsed.data.email },
+      select: { id: true },
+    })
+    if (dup && dup.id !== id) {
+      return NextResponse.json(
+        { error: { code: 'CLUB_004', message: 'Já existe um representante com este e-mail.' } },
+        { status: 409 }
+      )
+    }
+  }
+
   const data: Record<string, unknown> = {}
   if (parsed.data.email) data.email = parsed.data.email
   if (parsed.data.name) data.name = parsed.data.name

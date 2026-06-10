@@ -1,8 +1,15 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { getAuthUser, hasAdminRole, serializeUser } from '@/lib/auth'
+import { ADMIN_ROLE_LEVELS } from '@/lib/utils/admin-roles'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
+import type { AdminRole } from '@/types'
+
+function adminLevel(role: string | null | undefined): number {
+  if (!role) return -1 // sem role admin fica abaixo de CLUB_PARTNER (0)
+  return ADMIN_ROLE_LEVELS[role as AdminRole] ?? -1
+}
 
 const AdminUpdateUserSchema = z.object({
   name: z.string().min(2).max(120).optional(),
@@ -67,6 +74,23 @@ export async function PATCH(
 
     const user = await prisma.user.findUnique({ where: { id } })
     if (!user) return errors.notFound('Usuário não encontrado.')
+
+    // ── Guard de hierarquia (anti privilege-escalation) ──────────────────────
+    // Sem esta verificação, um ADMINISTRADOR poderia promover qualquer usuário a
+    // SUPER_ADMIN (ou rebaixar/alterar um superior) via este PATCH genérico.
+    const callerLevel = adminLevel(auth.user.adminRole)
+
+    // Não pode modificar um usuário de nível igual/superior ao próprio (exceto a si mesmo).
+    if (user.id !== auth.user.id && adminLevel(user.adminRole) >= callerLevel) {
+      return errors.forbidden('Não é possível modificar um usuário de nível igual ou superior ao seu.')
+    }
+
+    // Não pode atribuir um adminRole de nível igual/superior ao próprio.
+    if (parsed.data.adminRole != null) {
+      if (adminLevel(parsed.data.adminRole) >= callerLevel) {
+        return errors.forbidden('Não é possível atribuir um nível de acesso igual ou superior ao seu.')
+      }
+    }
 
     const updated = await prisma.user.update({
       where: { id },

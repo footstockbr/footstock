@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
+import { z } from 'zod'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
@@ -13,6 +14,20 @@ export interface ImpactMatrixDTO {
   institucional: number
   esportivaMenor: number
 }
+
+// Cada peso é uma fração de 0 a 0.10 (0%..10%). Schema rejeita campos ausentes,
+// tipos errados e extras — em vez de clampar silenciosamente NaN no banco.
+const factor = z.number().finite().min(0).max(0.1)
+const ImpactMatrixSchema = z
+  .object({
+    financeiraCritica: factor,
+    esportivaMajoritaria: factor,
+    mercadoAtivos: factor,
+    integridadeSaude: factor,
+    institucional: factor,
+    esportivaMenor: factor,
+  })
+  .strict()
 
 /**
  * GET /api/v1/admin/motor/impact-matrix
@@ -94,33 +109,32 @@ export async function PUT(request: NextRequest) {
   }
 
   try {
-    const body = await request.json() as ImpactMatrixDTO
-
-    // Validar valores (0 a 0.10 = 0% a 10%)
-    const validateValue = (v: number) => {
-      const num = parseFloat(String(v))
-      return Math.max(0, Math.min(0.1, num))
+    const rawBody = await request.json().catch(() => null)
+    const parsed = ImpactMatrixSchema.safeParse(rawBody)
+    if (!parsed.success) {
+      return errors.validation(parsed.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join('; '))
     }
+    const body = parsed.data
 
     const updated = await prisma.impactMatrixConfig.upsert({
       where: { id: 'default' },
       update: {
-        financeiraCritica: validateValue(body.financeiraCritica),
-        esportivaMajoritaria: validateValue(body.esportivaMajoritaria),
-        mercadoAtivos: validateValue(body.mercadoAtivos),
-        integridadeSaude: validateValue(body.integridadeSaude),
-        institucional: validateValue(body.institucional),
-        esportivaMenor: validateValue(body.esportivaMenor),
+        financeiraCritica: body.financeiraCritica,
+        esportivaMajoritaria: body.esportivaMajoritaria,
+        mercadoAtivos: body.mercadoAtivos,
+        integridadeSaude: body.integridadeSaude,
+        institucional: body.institucional,
+        esportivaMenor: body.esportivaMenor,
         updatedBy: auth.user.id,
       },
       create: {
         id: 'default',
-        financeiraCritica: validateValue(body.financeiraCritica),
-        esportivaMajoritaria: validateValue(body.esportivaMajoritaria),
-        mercadoAtivos: validateValue(body.mercadoAtivos),
-        integridadeSaude: validateValue(body.integridadeSaude),
-        institucional: validateValue(body.institucional),
-        esportivaMenor: validateValue(body.esportivaMenor),
+        financeiraCritica: body.financeiraCritica,
+        esportivaMajoritaria: body.esportivaMajoritaria,
+        mercadoAtivos: body.mercadoAtivos,
+        integridadeSaude: body.integridadeSaude,
+        institucional: body.institucional,
+        esportivaMenor: body.esportivaMenor,
         updatedBy: auth.user.id,
       },
     })

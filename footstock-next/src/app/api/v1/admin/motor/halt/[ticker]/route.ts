@@ -84,11 +84,17 @@ export const DELETE = withAdmin('assets:halt')(async (request, { user }) => {
   }
 
   const asset = await prisma.asset.findUnique({ where: { ticker: upper }, select: { id: true } })
+  if (!asset) {
+    return NextResponse.json(
+      { error: { code: ERROR_CODES.ASSET_051, message: ERROR_MESSAGES['ASSET-051'] } },
+      { status: 404 }
+    )
+  }
   const existed = await redisPublisher.del(`motor:halt:${upper}`)
 
   await redisPublisher.publish(
     REDIS_CHANNELS.MOTOR_CONTROL,
-    JSON.stringify({ type: 'RELEASE_HALT', assetId: asset?.id, ticker: upper, adminId: user.id })
+    JSON.stringify({ type: 'RELEASE_HALT', assetId: asset.id, ticker: upper, adminId: user.id })
   )
 
   await adminAuditService.log({

@@ -68,7 +68,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     )
   }
 
-  if (!hasAdminRole(auth.user.adminRole, 'ADMINISTRADOR')) {
+  // Ativar/desativar gateway de pagamento é operação financeira crítica:
+  // restrita a SUPER_ADMIN (alinhado a /admin/gateways/config).
+  if (!hasAdminRole(auth.user.adminRole, 'SUPER_ADMIN')) {
     return NextResponse.json(
       { success: false, error: { code: 'AUTH-009', message: 'Acesso negado' } },
       { status: 403 }

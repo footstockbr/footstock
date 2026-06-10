@@ -73,6 +73,19 @@ async function handler(
 
     return NextResponse.json({ success: true, data: updated })
   } catch (err) {
+    // Corrida resolvida pelo compare-and-set no serviço: outra requisição já creditou.
+    if (err instanceof Error && err.message === 'DIVIDEND_ALREADY_PROCESSED') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: 'DIV_001',
+            message: 'Este dividendo já foi processado e não pode ser reinvestido novamente.',
+          },
+        },
+        { status: 409 }
+      )
+    }
     console.error('[POST /api/v1/dividends/reinvest]', err)
     return NextResponse.json(
       { success: false, error: { code: 'SYS_001', message: 'Erro interno do servidor.' } },

@@ -76,6 +76,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const auth = await getAuthUser()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
+  // Mesmo gate de admin do POST/DELETE — dados de patrocínio não são públicos.
+  if (!['SUPER_ADMIN', 'ADMINISTRADOR'].includes(auth.user.adminRole ?? '')) {
+    return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
+  }
+
   const { id: sponsorId } = await params
   try {
     const leagues = await prisma.league.findMany({

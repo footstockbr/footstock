@@ -270,10 +270,16 @@ export class DividendService {
     userId: string
   ): Promise<Dividend> {
     await prisma.$transaction(async (tx) => {
-      await tx.dividend.update({
-        where: { id },
+      // Compare-and-set: só credita se ainda estiver PENDING. Protege contra
+      // double-credit em requisições concorrentes (TOCTOU) — a 2ª transação
+      // encontra count=0 e aborta, sem incrementar o saldo de novo.
+      const claimed = await tx.dividend.updateMany({
+        where: { id, status: DIVIDEND_STATUS.PENDING },
         data: { status: DIVIDEND_STATUS.CREDITED },
       })
+      if (claimed.count === 0) {
+        throw new Error('DIVIDEND_ALREADY_PROCESSED')
+      }
 
       const dividend = await tx.dividend.findUniqueOrThrow({ where: { id } })
       await tx.user.update({

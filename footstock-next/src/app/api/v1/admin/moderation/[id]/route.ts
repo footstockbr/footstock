@@ -87,21 +87,23 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
         )
       }
 
-      // 1. Remover o post
-      await prisma.globalForumPost.update({
-        where: { id: params.id },
-        data: { isDeleted: true, isFlagged: true },
-      })
-      await recordModerationAction(params.id, auth.user.id, 'REMOVED', 'Banimento de usuário')
-
-      // 2. Suspender o autor (chamar endpoint interno de suspensão)
       const body = await request.json().catch(() => ({}))
       const suspendReason = (body as { reason?: string }).reason || 'Violação das regras de moderação'
 
-      await prisma.user.update({
-        where: { id: post.userId },
-        data: { suspendedAt: new Date(), suspensionReason: suspendReason },
-      })
+      // 1+2. Remover o post E suspender o autor ATOMICAMENTE — antes eram writes
+      // separados: se a suspensão falhasse após a remoção, o post sumia mas o
+      // usuário continuava ativo (banimento incompleto, irrecuperável).
+      await prisma.$transaction([
+        prisma.globalForumPost.update({
+          where: { id: params.id },
+          data: { isDeleted: true, isFlagged: true },
+        }),
+        prisma.user.update({
+          where: { id: post.userId },
+          data: { suspendedAt: new Date(), suspensionReason: suspendReason },
+        }),
+      ])
+      await recordModerationAction(params.id, auth.user.id, 'REMOVED', 'Banimento de usuário')
 
       // 3. Registrar audit trail
       console.log(

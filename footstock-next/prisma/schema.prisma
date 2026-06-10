@@ -1398,6 +1398,19 @@ model ClubAccessLog {
   @@map("club_access_logs")
 }
 
+// ─── Dados bancários do clube parceiro (repasse de royalties) ────────────────
+// Uma linha por clube (clubId = ticker do clube). bankData criptografado em
+// repouso (AES-256-GCM) — mesmo formato de AffiliateCode.bankData.
+// Consumido por /api/v1/club/affiliate/bank.
+model ClubPartner {
+  clubId    String   @id @map("club_id")
+  bankData  Json?    @map("bank_data")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("club_partners")
+}
+
 // ─── Verificacao de Maioridade via CPF (T-023) ──────────────────────────────
 // Historico completo de tentativas de verificacao de idade.
 // CPF armazenado APENAS como hash SHA-256/HMAC — nunca em texto claro.

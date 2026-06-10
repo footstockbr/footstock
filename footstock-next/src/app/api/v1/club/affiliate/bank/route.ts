@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import { Prisma } from '@prisma/client'
 import { getClubContext } from '@/lib/auth/club-auth'
 import { prisma } from '@/lib/prisma'
 import { encryptBankData, decryptBankData, type EncryptedPayload } from '@/lib/affiliate/bank-crypto'
@@ -55,8 +56,7 @@ export async function GET(): Promise<NextResponse> {
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const record = await (prisma as any).clubPartner.findUnique({
+    const record = await prisma.clubPartner.findUnique({
       where: { clubId: ctx.clubId },
       select: { bankData: true },
     })
@@ -122,14 +122,13 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
   try {
     const encrypted = encryptBankData(parsed.data)
+    // bankData é campo Json (EncryptedPayload é um objeto JSON-serializável).
+    const bankDataJson = encrypted as unknown as Prisma.InputJsonValue
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (prisma as any).clubPartner.upsert({
+    await prisma.clubPartner.upsert({
       where: { clubId: ctx.clubId },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      update: { bankData: encrypted as any },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      create: { clubId: ctx.clubId, bankData: encrypted as any },
+      update: { bankData: bankDataJson },
+      create: { clubId: ctx.clubId, bankData: bankDataJson },
     })
 
     return NextResponse.json({

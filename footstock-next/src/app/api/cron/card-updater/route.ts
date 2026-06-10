@@ -1,59 +1,32 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { CardUpdaterService } from '@/lib/services/CardUpdaterService'
 
-/** GET /api/cron/card-updater — Job de detecção de cartões expirando (executado pelo Vercel Cron) */
+/**
+ * GET /api/cron/card-updater — detecção de cartões expirando.
+ *
+ * NO-OP HONESTO. A versão anterior consultava `prisma.subscriptions` (modelo
+ * inexistente — é `subscription`) e campos `expiryMonth`/`expiryYear` que NÃO
+ * existem no schema. O optional-chaining curto-circuitava para `[]`, então o job
+ * sempre retornava `checked:0` fingindo sucesso.
+ *
+ * Não armazenamos dados de cartão (responsabilidade do gateway — PCI-DSS). A
+ * expiração e a recobrança são tratadas pelo próprio gateway + pelo fluxo de
+ * dunning (`/api/cron/dunning`, que reage a PAYMENT_FAILED do webhook). Mantemos
+ * o endpoint (a entrada de cron pode apontar para cá) como no-op explícito até
+ * que exista integração real com a metadata de cartão do gateway.
+ */
 export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   }
 
-  try {
-    // Buscar assinaturas ativas com dados de cartão
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const subscriptions = await (prisma as any).subscriptions?.findMany({
-      where: { status: 'ACTIVE' },
-      include: { user: { select: { id: true, email: true } } },
-    }) ?? []
-
-    let notified = 0
-    let atRisk = 0
-
-    for (const sub of subscriptions) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { expiryMonth, expiryYear } = (sub as any)
-      if (!expiryMonth || !expiryYear) continue
-
-      if (CardUpdaterService.isExpiringSoon(expiryMonth, expiryYear)) {
-        // Criar notificação para o usuário
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (prisma as any).notification?.create({
-          data: {
-            userId: sub.userId,
-            type: 'PAYMENT',
-            title: 'Cartão expirando em breve',
-            body: `Seu cartão expira em ${CardUpdaterService.daysUntilExpiry(expiryMonth, expiryYear)} dias. Atualize para manter sua assinatura ativa.`,
-          },
-        }).catch(() => null)
-        notified++
-      }
-
-      if (CardUpdaterService.isExpired(expiryMonth, expiryYear)) {
-        // Marcar assinatura como at_risk
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (prisma as any).subscriptions?.update({
-          where: { id: sub.id },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          data: { status: 'AT_RISK' } as any,
-        }).catch(() => null)
-        atRisk++
-      }
-    }
-
-    return NextResponse.json({ success: true, notified, atRisk, checked: subscriptions.length })
-  } catch (error) {
-    console.error('[CardUpdater Cron]', error)
-    return NextResponse.json({ error: 'Erro no card updater' }, { status: 500 })
-  }
+  return NextResponse.json({
+    success: true,
+    noop: true,
+    reason:
+      'Expiração de cartão é tratada pelo gateway/dunning; não armazenamos dados de cartão (PCI).',
+    notified: 0,
+    atRisk: 0,
+    checked: 0,
+  })
 }

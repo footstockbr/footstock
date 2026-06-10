@@ -4,8 +4,14 @@ import { getAuthUser, hasAdminRole, serializeUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
 
+// amount pode ser negativo (débito/penalidade) mas precisa ser finito e limitado
+// para evitar Infinity/NaN e fat-finger. Cap de magnitude: 100M FS$.
+const MAX_ADJUST = 100_000_000
 const AdjustBalanceSchema = z.object({
-  amount: z.number(),
+  amount: z
+    .number()
+    .finite('Valor inválido.')
+    .refine((v) => Math.abs(v) <= MAX_ADJUST, `Valor excede o limite de ${MAX_ADJUST} FS$.`),
   reason: z.string().min(5).max(255),
 })
 
@@ -30,23 +36,41 @@ export async function PATCH(
 
     const { amount, reason } = parsed.data
 
-    const user = await prisma.user.findUnique({ where: { id } })
-    if (!user) return errors.notFound('Usuário não encontrado.')
+    const exists = await prisma.user.findUnique({ where: { id }, select: { id: true } })
+    if (!exists) return errors.notFound('Usuário não encontrado.')
 
-    // TODO: Implementar via /auto-flow execute
-    // Usar transação atômica para ajustar saldo + registrar em admin_market_actions
-    const updated = await prisma.user.update({
-      where: { id },
-      data: { fsBalance: { increment: amount } },
-    })
-
-    await prisma.adminMarketAction.create({
-      data: {
-        adminId: auth.user.id,
-        action: 'ADJUST_BALANCE',
-        details: { userId: id, amount, reason },
-      },
-    })
+    // Transação atômica: lê o saldo fresco, valida invariante (nunca negativo) e
+    // aplica ajuste + auditoria juntos (ou nenhum). Lança NEGATIVE_BALANCE se o
+    // débito exceder o saldo, revertendo tudo.
+    let updated
+    try {
+      updated = await prisma.$transaction(async (tx) => {
+        const current = await tx.user.findUniqueOrThrow({
+          where: { id },
+          select: { fsBalance: true },
+        })
+        if (Number(current.fsBalance) + amount < 0) {
+          throw new Error('NEGATIVE_BALANCE')
+        }
+        const u = await tx.user.update({
+          where: { id },
+          data: { fsBalance: { increment: amount } },
+        })
+        await tx.adminMarketAction.create({
+          data: {
+            adminId: auth.user.id,
+            action: 'ADJUST_BALANCE',
+            details: { userId: id, amount, reason },
+          },
+        })
+        return u
+      })
+    } catch (txErr) {
+      if (txErr instanceof Error && txErr.message === 'NEGATIVE_BALANCE') {
+        return errors.validation('Ajuste resultaria em saldo negativo. Operação cancelada.')
+      }
+      throw txErr
+    }
 
     return ok(serializeUser(updated))
   } catch {

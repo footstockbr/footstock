@@ -32,7 +32,8 @@ export async function GET() {
         headers: { 'Cache-Control': 'no-store' },
       }
     )
-  } catch {
+  } catch (err) {
+    console.error('[API] GET /market/session error', err)
     return NextResponse.json(
       { error: 'SYS_001', message: 'Erro interno ao calcular sessão' },
       { status: 500 }

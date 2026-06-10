@@ -14,14 +14,18 @@ const VITALS_TTL_SECONDS = 7 * 24 * 60 * 60 // 7 dias
 const TRACKED_METRICS = ['CLS', 'LCP', 'INP', 'FCP', 'TTFB'] as const
 type TrackedMetric = (typeof TRACKED_METRICS)[number]
 
+// Limite superior generoso para um vital em ms (1h). CLS é adimensional (~0-5) e
+// também cabe nesse teto. Bounds impedem que valores absurdos/negativos enviados
+// por um cliente malicioso envenenem a soma agregada (INCRBYFLOAT) no Redis.
+const MAX_VITAL_VALUE = 3_600_000
 const vitalSchema = z.object({
   // next/web-vitals também emite métricas internas do Next.js (ex: Next.js-hydration).
   // Aceitamos qualquer string — filtramos apenas as métricas conhecidas antes de persistir.
   name: z.string().max(64),
-  value: z.number(),
+  value: z.number().finite().min(0).max(MAX_VITAL_VALUE),
   rating: z.enum(['good', 'needs-improvement', 'poor']).optional(),
   id: z.string().max(64),
-  delta: z.number().optional(),
+  delta: z.number().finite().min(0).max(MAX_VITAL_VALUE).optional(),
 })
 
 export async function POST(req: NextRequest): Promise<NextResponse> {

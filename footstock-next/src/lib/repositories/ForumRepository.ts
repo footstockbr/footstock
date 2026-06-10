@@ -152,14 +152,19 @@ export class ForumRepository {
   }
 
   // ─── flagPost ────────────────────────────────────────────────────────────
-  async flagPost(postId: string): Promise<void> {
-    await prisma.globalForumPost.update({
+  // Retorna o flagCount JÁ incrementado (autoritativo). O caller usa este valor
+  // na checagem de auto-deleção em vez de calcular a partir de uma leitura velha,
+  // o que sob concorrência geraria contagem incorreta.
+  async flagPost(postId: string): Promise<number> {
+    const updated = await prisma.globalForumPost.update({
       where: { id: postId },
       data: {
         flagCount: { increment: 1 },
         isFlagged: true,
       },
+      select: { flagCount: true },
     })
+    return updated.flagCount
   }
 }
 

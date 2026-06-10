@@ -177,7 +177,19 @@ export class ShortService {
 
       const balanceBefore = Number(user.fsBalance)
       const returnAmount = marginBlocked + pnl // pode ser negativo se short perdeu
-      const newBalance = balanceBefore + returnAmount
+      // Invariante: fsBalance nunca pode ficar negativo. Se a perda do short excede
+      // a margem + saldo, o piso é 0 (o sistema absorve o excesso). O ledger grava o
+      // delta REALMENTE aplicado, mantendo balanceAfter - balanceBefore == fsAmount.
+      const rawNewBalance = balanceBefore + returnAmount
+      const newBalance = Math.max(0, rawNewBalance)
+      const appliedReturn = newBalance - balanceBefore
+      if (rawNewBalance < 0) {
+        console.warn(
+          `[ShortService] perda excede saldo no fechamento — clamp em 0. ` +
+          `positionId=${positionId} userId=${userId} balanceBefore=${balanceBefore} ` +
+          `returnAmount=${returnAmount} absorvido=${(rawNewBalance).toFixed(2)}`,
+        )
+      }
       const newMarginBlocked = Math.max(0, Number(user.marginBlocked) - marginBlocked)
 
       await tx.user.update({
@@ -196,7 +208,7 @@ export class ShortService {
           price: currentPrice,
           fee: closeFee,
           totalAmount: closeOperationValue,
-          fsAmount: returnAmount,
+          fsAmount: appliedReturn,
           balanceBefore,
           balanceAfter: newBalance,
         },

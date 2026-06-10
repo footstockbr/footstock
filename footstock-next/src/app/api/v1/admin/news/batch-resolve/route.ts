@@ -31,9 +31,17 @@ export async function POST(request: NextRequest) {
   let auth = await getAuthUser()
   if (!auth) auth = devAuthFallback(request)
 
-  if (!auth) return NextResponse.json({ error: { message: 'Nao autorizado' } }, { status: 401 })
+  if (!auth) {
+    return NextResponse.json(
+      { error: { code: 'AUTH-001', message: 'Não autorizado.' } },
+      { status: 401 }
+    )
+  }
   if (!hasAdminRole(auth.user.adminRole, 'SUPER_ADMIN')) {
-    return NextResponse.json({ error: { message: 'Apenas SUPER_ADMIN' } }, { status: 403 })
+    return NextResponse.json(
+      { error: { code: 'ADMIN-050', message: 'Apenas SUPER_ADMIN pode acessar.' } },
+      { status: 403 }
+    )
   }
 
   const unlinked = await prisma.news.findMany({
