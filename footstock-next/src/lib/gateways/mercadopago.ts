@@ -114,6 +114,14 @@ export class MercadoPagoGateway implements IGateway {
 
   // ─── validateWebhook ───────────────────────────────────────────────────────
 
+  /**
+   * @deprecated NÃO está no caminho de produção. A rota /payments/webhook valida via
+   * `validateWebhookByGatewayDetailed` (lib/gateways/webhook-validator.ts), que tem acesso
+   * aos headers e monta o manifesto canônico do MP `id:{data.id};request-id:{x-request-id};ts:{ts};`.
+   * Este método recebe apenas (payload, signature, secret) — sem o header x-request-id, ele
+   * NÃO consegue reproduzir o manifesto real do MP e rejeitaria todo webhook legítimo. Mantido
+   * só pela assinatura do IGateway; sem callers. Qualquer uso futuro deve passar pelo validator.
+   */
   validateWebhook(payload: string, signature: string, secret: string): boolean {
     try {
       // signature = header X-Signature completo: "ts=1234,v1=abc..."

@@ -56,8 +56,17 @@ export async function POST(request: NextRequest) {
   // 3. Validar assinatura HMAC
   // IMPORTANTE: validação ANTES do rate limit para não contar webhooks inválidos (TASK-026 spec §5)
   let validation: Awaited<ReturnType<typeof validateWebhookByGatewayDetailed>>
+  // Spec MP: o data.id usado no manifesto HMAC vem do query param da URL de notificação
+  // (`?data.id=...`), que o MP anexa à notification_url. Usamos URL padrão (web) em vez de
+  // request.nextUrl por robustez contra variações de runtime.
+  let dataIdFromUrl: string | undefined
   try {
-    validation = await validateWebhookByGatewayDetailed(request.headers, rawBody, gatewayType)
+    dataIdFromUrl = new URL(request.url).searchParams.get('data.id') ?? undefined
+  } catch {
+    dataIdFromUrl = undefined
+  }
+  try {
+    validation = await validateWebhookByGatewayDetailed(request.headers, rawBody, gatewayType, dataIdFromUrl)
   } catch {
     validation = { valid: false, reason: 'BAD_SIGNATURE' }
   }

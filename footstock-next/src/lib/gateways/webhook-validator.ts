@@ -190,6 +190,10 @@ export function validateMercadoPagoHMACDetailed(
   headers: Headers,
   rawBody: string,
   secret: string,
+  // Spec MP: o `data.id` do manifesto vem do QUERY PARAM da URL (`?data.id=...`), não do
+  // corpo. O caller (rota) extrai e passa esse valor. Quando ausente, caímos no body como
+  // compat (webhooks de pagamento têm o mesmo id nos dois lugares).
+  dataIdFromUrl?: string,
 ): WebhookValidationResult {
   try {
     const xSignature = headers.get('x-signature') ?? ''
@@ -208,20 +212,39 @@ export function validateMercadoPagoHMACDetailed(
       return { valid: false, reason: 'TIMESTAMP_EXPIRED' }
     }
 
-    // BUG FIX: o manifesto MP usa data.id do body, não o x-request-id do header.
+    // Manifesto canônico do Mercado Pago (doc oficial):
+    //   id:{data.id};request-id:{x-request-id};ts:{ts};
+    //   - id         = data.id do body/URL (lowercase se alfanumérico; numérico p/ pagamentos)
+    //   - request-id = header x-request-id — SEMPRE presente em notificação de pagamento real;
+    //                  o segmento só é omitido quando o header de fato não vem (regra MP:
+    //                  "if any of the values are not present, remove them").
+    //   - ts         = timestamp do header x-signature
     // Referência: https://www.mercadopago.com.br/developers/en/docs/your-integrations/notifications/webhooks
-    // Formato canônico: `id:{data.id};ts:{ts};`
-    // O código anterior usava `id:{xRequestId};ts:{ts};` (errado) — todo webhook MP
-    // era rejeitado como BAD_SIGNATURE, impedindo a ativação de planos após pagamento.
-    let dataId = ''
-    try {
-      const parsed = JSON.parse(rawBody) as { data?: { id?: string | number } }
-      dataId = String(parsed?.data?.id ?? '')
-    } catch {
-      // body não-JSON: dataId fica vazio → HMAC vai falhar, comportamento correto
+    //
+    // Histórico do bug: o manifesto já errou de DUAS formas — primeiro usando o x-request-id
+    // como VALOR de `id:` (commit antigo), depois REMOVENDO o segmento `request-id:` inteiro
+    // (commit 59bb34e, "corrige HMAC MP"). Esta segunda versão rejeitava 100% dos webhooks
+    // reais como BAD_SIGNATURE (que sempre trazem x-request-id), impedindo a ativação do plano
+    // após pagamento aprovado. A correção mantém o `id:` certo E reintroduz o `request-id:`.
+    // Fonte do data.id: PRIMEIRO o query param da URL (canônico p/ o HMAC do MP); só caímos
+    // no body quando o caller não forneceu (compat com chamadas antigas/testes). Para webhooks
+    // de pagamento os dois coincidem; preferir a URL evita divergência em formatos onde diferem.
+    let dataId = (dataIdFromUrl ?? '').trim()
+    if (!dataId) {
+      try {
+        const parsed = JSON.parse(rawBody) as { data?: { id?: string | number } }
+        dataId = String(parsed?.data?.id ?? '')
+      } catch {
+        // body não-JSON e sem data.id na URL → dataId vazio → HMAC falha (correto)
+      }
     }
+    // Normalização MP: id alfanumérico vai em lowercase (no-op p/ id numérico de pagamento)
+    if (/[a-z]/i.test(dataId)) dataId = dataId.toLowerCase()
 
-    const template = `id:${dataId};ts:${ts};`
+    const xRequestId = headers.get('x-request-id') ?? ''
+    const template = xRequestId
+      ? `id:${dataId};request-id:${xRequestId};ts:${ts};`
+      : `id:${dataId};ts:${ts};`
     const expected = createHmac('sha256', secret).update(template).digest('hex')
 
     const expectedBuf = Buffer.from(expected, 'utf8')
@@ -249,12 +272,14 @@ export async function validateWebhookByGatewayDetailed(
   headers: Headers,
   rawBody: string,
   gateway: GatewayType,
+  // data.id do query param da URL (usado só pelo manifesto HMAC do Mercado Pago)
+  dataIdFromUrl?: string,
 ): Promise<WebhookValidationResult> {
   switch (gateway) {
     case GatewayType.MERCADO_PAGO: {
       const secret = env.MERCADO_PAGO_WEBHOOK_SECRET ?? ''
       if (!secret) return { valid: false, reason: 'CONFIG_MISSING' }
-      return validateMercadoPagoHMACDetailed(headers, rawBody, secret)
+      return validateMercadoPagoHMACDetailed(headers, rawBody, secret, dataIdFromUrl)
     }
     case GatewayType.PAGSEGURO: {
       const secret = env.PAGSEGURO_WEBHOOK_SECRET ?? ''
