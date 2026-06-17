@@ -135,6 +135,8 @@ export function CreateLeagueForm() {
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['leagues'] })
       qc.invalidateQueries({ queryKey: ['my-leagues'] })
+      // Item 19: a aba "Minhas" usa ['my-created-leagues'] — invalidar para nao ficar stale.
+      qc.invalidateQueries({ queryKey: ['my-created-leagues'] })
       router.push(`/ligas/${data.id}`)
     },
   })

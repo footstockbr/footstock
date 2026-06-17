@@ -34,6 +34,14 @@ async function fetchMyLeagues(): Promise<League[]> {
   return json.data ?? []
 }
 
+// Item 19: ligas CRIADAS pelo usuario (aba "Minhas"), distinta de fetchMyLeagues (membership).
+async function fetchMyCreatedLeagues(): Promise<League[]> {
+  const res = await fetch('/api/v1/leagues?createdBy=me')
+  if (!res.ok) throw new Error('Erro ao buscar as ligas que voce criou')
+  const json = await res.json()
+  return json.data ?? []
+}
+
 async function joinLeague(leagueId: string): Promise<void> {
   const res = await fetch(`/api/v1/leagues/${leagueId}/join`, { method: 'POST' })
   if (!res.ok) {
@@ -111,6 +119,15 @@ export function useMyLeagues() {
   return useQuery<League[]>({
     queryKey: ['my-leagues'],
     queryFn: fetchMyLeagues,
+    staleTime: STALE_TIME,
+  })
+}
+
+// Item 19: aba "Minhas" = ligas que o usuario criou (createdBy === me).
+export function useMyCreatedLeagues() {
+  return useQuery<League[]>({
+    queryKey: ['my-created-leagues'],
+    queryFn: fetchMyCreatedLeagues,
     staleTime: STALE_TIME,
   })
 }

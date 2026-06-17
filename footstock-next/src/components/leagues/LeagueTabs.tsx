@@ -5,18 +5,17 @@ import { cn } from '@/lib/utils'
 import { useAnalytics } from '@/hooks/useAnalytics'
 import { LeagueCard } from './LeagueCard'
 import { SponsoredLeagueCard } from './SponsoredLeagueCard'
-import { useLeagues, useMyLeagues } from '@/hooks/useLeagues'
-import { useSponsoredLeagues, useMySponsoredLeagues, type SponsoredLeaguePublic } from '@/hooks/useSponsoredLeagues'
+import { useLeagues, useMyLeagues, useMyCreatedLeagues } from '@/hooks/useLeagues'
+import { useSponsoredLeagues, type SponsoredLeaguePublic } from '@/hooks/useSponsoredLeagues'
 import type { League } from '@/types'
 
-type Tab = 'minhas' | 'publicas' | 'amigos' | 'pro' | 'patrocinadas'
+type Tab = 'minhas' | 'publicas' | 'amigos' | 'pro'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'minhas',        label: 'Minhas'        },
   { id: 'publicas',      label: 'Publicas'      },
   { id: 'amigos',        label: 'Amigos'        },
   { id: 'pro',           label: 'PRO'           },
-  { id: 'patrocinadas',  label: 'Patrocinadas'  },
 ]
 
 function LeagueList({
@@ -105,12 +104,14 @@ export function LeagueTabs() {
   const { track } = useAnalytics()
   const trackedRef = useRef(false)
 
+  // Membership (para o set "isMember" dos cards das outras abas) — distinto de "Minhas".
   const { data: myLeagues = [], isPending: myPending }             = useMyLeagues()
+  // Item 19: "Minhas" = ligas que o usuario CRIOU (createdBy === me).
+  const { data: myCreatedLeagues = [], isPending: myCreatedPending } = useMyCreatedLeagues()
   const { data: publicLeagues = [], isPending: publicPending }     = useLeagues('PUBLICA')
   const { data: friendLeagues = [], isPending: friendPending }     = useLeagues('AMIGOS')
   const { data: proLeagues = [], isPending: proPending }           = useLeagues('PRO')
   const { data: sponsoredLeagues = [], isPending: sponsorPending } = useSponsoredLeagues('ATIVA')
-  const { data: mySponsoredLeagues = [], isPending: mySponsorPending } = useMySponsoredLeagues()
 
   const myLeagueIds = new Set(myLeagues.map(l => l.id))
 
@@ -162,24 +163,13 @@ export function LeagueTabs() {
         hidden={activeTab !== 'minhas'}
       >
         {activeTab === 'minhas' && (
-          <div className="space-y-3">
-            {/* Ligas patrocinadas inscritas */}
-            {mySponsoredLeagues.length > 0 && (
-              <div data-testid="minhas-sponsored-section">
-                {mySponsoredLeagues.map(league => (
-                  <div key={`sponsored-${league.id}`} className="mb-3">
-                    <SponsoredLeagueCard league={league} />
-                  </div>
-                ))}
-              </div>
-            )}
-            {/* Ligas regulares */}
-            <LeagueList
-              leagues={myLeagues}
-              myLeagueIds={myLeagueIds}
-              isPending={myPending || mySponsorPending}
-            />
-          </div>
+          // Item 19: "Minhas" = ligas que o usuario CRIOU (createdBy === me), nao todas em que e membro.
+          // As ligas em que entrou via convite aparecem em "Amigos"; publicas/PRO nas abas globais.
+          <LeagueList
+            leagues={myCreatedLeagues}
+            myLeagueIds={myLeagueIds}
+            isPending={myCreatedPending}
+          />
         )}
       </div>
 
@@ -210,35 +200,42 @@ export function LeagueTabs() {
         )
       })}
 
-      {/* Tab panel - PRO */}
+      {/* Tab panel - PRO (item 22: "Pro" e "Patrocinadas" eram duplicatas; uma unica aba "PRO"
+          reune as ligas PRO e as patrocinadas por empresa, ambas criadas pelo ADM). */}
       <div
         role="tabpanel"
         id="tabpanel-pro"
         aria-labelledby="tab-pro"
         hidden={activeTab !== 'pro'}
       >
-        {activeTab === 'pro' && (
-          <LeagueList
-            leagues={proLeagues}
-            myLeagueIds={myLeagueIds}
-            isPending={proPending}
-          />
-        )}
-      </div>
-
-      {/* Tab panel - Patrocinadas */}
-      <div
-        role="tabpanel"
-        id="tabpanel-patrocinadas"
-        aria-labelledby="tab-patrocinadas"
-        hidden={activeTab !== 'patrocinadas'}
-      >
-        {activeTab === 'patrocinadas' && (
-          <SponsoredLeagueList
-            leagues={sponsoredLeagues}
-            isPending={sponsorPending}
-          />
-        )}
+        {activeTab === 'pro' && (() => {
+          const proEmpty = !proPending && proLeagues.length === 0
+          const sponsoredEmpty = !sponsorPending && sponsoredLeagues.length === 0
+          if (proEmpty && sponsoredEmpty) {
+            return (
+              <p className="text-center text-sm text-gray-500 py-10">
+                Nenhuma liga PRO disponível no momento.
+              </p>
+            )
+          }
+          return (
+            <div className="space-y-3">
+              {(proPending || proLeagues.length > 0) && (
+                <LeagueList
+                  leagues={proLeagues}
+                  myLeagueIds={myLeagueIds}
+                  isPending={proPending}
+                />
+              )}
+              {(sponsorPending || sponsoredLeagues.length > 0) && (
+                <SponsoredLeagueList
+                  leagues={sponsoredLeagues}
+                  isPending={sponsorPending}
+                />
+              )}
+            </div>
+          )
+        })()}
       </div>
     </div>
   )

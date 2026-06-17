@@ -12,7 +12,8 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
-import { useForumPosts } from "@/hooks/useForumPosts";
+import { useForumPosts, type ForumPostView } from "@/hooks/useForumPosts";
+import { useForumComments } from "@/hooks/useForumComments";
 import { useAnalytics } from "@/hooks/useAnalytics";
 
 // ─── Character counter colors ─────────────────────────────────────────────────
@@ -91,6 +92,199 @@ const SORT_OPTIONS = [
   { value: "curtidos", label: "Populares" },
 ] as const;
 
+// ─── Post card (com comentarios por post — item 24) ───────────────────────────
+
+interface ForumPostCardProps {
+  post: ForumPostView;
+  currentUserId: string | null;
+  onToggleLike: (post: ForumPostView) => void;
+  onFlag: (postId: string) => void;
+  onDelete: (postId: string) => void;
+  onTickerClick: (ticker: string) => void;
+}
+
+function ForumPostCard({
+  post,
+  currentUserId,
+  onToggleLike,
+  onFlag,
+  onDelete,
+  onTickerClick,
+}: ForumPostCardProps) {
+  const [expanded, setExpanded] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [draft, setDraft] = useState("");
+  const { comments, isLoading, isError, addComment, isAdding } = useForumComments(
+    post.id,
+    expanded,
+  );
+
+  async function submitComment() {
+    const text = draft.trim();
+    if (!text || isAdding) return;
+    try {
+      await addComment(text);
+      setDraft("");
+    } catch {
+      // erro ja exibido via toast no hook
+    }
+  }
+
+  const isAuthor = !!currentUserId && post.userId === currentUserId;
+
+  return (
+    <div className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.18)] p-4">
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-2">
+        <Avatar name={post.authorName} size="sm" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-[#EAECEF] truncate">{post.authorName}</p>
+          <p className="text-[10px] text-[#707A8A]">{timeAgo(post.createdAt)}</p>
+        </div>
+        {post.ticker && (
+          <button
+            onClick={() => onTickerClick(post.ticker!)}
+            className="text-xs font-mono font-bold text-[#F0B90B] hover:underline"
+          >
+            {post.ticker}
+          </button>
+        )}
+      </div>
+
+      {/* Content */}
+      <p className="text-sm text-[#929AA5] leading-relaxed">{post.content}</p>
+
+      {/* Actions */}
+      <div className="flex items-center gap-4 mt-3">
+        {/* Like toggle */}
+        <button
+          onClick={() => onToggleLike(post)}
+          className={`flex items-center gap-1 text-xs transition-colors ${
+            post.hasUserLiked ? "text-[#F6465D]" : "text-[#929AA5] hover:text-[#F6465D]"
+          }`}
+          aria-label={post.hasUserLiked ? "Descurtir post" : "Curtir post"}
+        >
+          <Heart className={`h-3.5 w-3.5 ${post.hasUserLiked ? "fill-current" : ""}`} />
+          {post.likesCount}
+        </button>
+
+        {/* Balao de comentarios (item 24) */}
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          data-testid={`forum-comment-toggle-${post.id}`}
+          aria-expanded={expanded}
+          className="flex items-center gap-1 text-xs text-[#929AA5] hover:text-[#F0B90B] transition-colors"
+          aria-label={expanded ? "Ocultar comentarios" : "Comentar"}
+        >
+          <MessageCircle className="h-3.5 w-3.5" />
+          {expanded && comments.length > 0 ? comments.length : null}
+        </button>
+
+        {/* Flag/report */}
+        {currentUserId && post.userId !== currentUserId && (
+          <button
+            onClick={() => onFlag(post.id)}
+            className="flex items-center gap-1 text-xs text-[#929AA5] hover:text-[#F0B90B] transition-colors"
+            aria-label="Denunciar post"
+          >
+            <Flag className="h-3.5 w-3.5" />
+          </button>
+        )}
+
+        {/* Delete (author only) */}
+        {isAuthor &&
+          (confirmDelete ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[#F6465D]">Excluir?</span>
+              <button
+                onClick={() => onDelete(post.id)}
+                className="text-xs text-[#F6465D] font-semibold hover:underline"
+              >
+                Sim
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="text-xs text-[#929AA5] hover:underline"
+              >
+                Nao
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="flex items-center gap-1 text-xs text-[#929AA5] hover:text-[#F6465D] transition-colors"
+              aria-label="Excluir post"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          ))}
+      </div>
+
+      {/* Comentarios por post (item 24) */}
+      {expanded && (
+        <div
+          className="mt-3 border-t border-[rgba(240,185,11,.1)] pt-3 space-y-3"
+          data-testid={`forum-comments-${post.id}`}
+        >
+          {isLoading ? (
+            <p className="text-xs text-[#707A8A]">Carregando comentarios...</p>
+          ) : isError ? (
+            <p className="text-xs text-[#F6465D]">Erro ao carregar comentarios. Tente novamente.</p>
+          ) : comments.length === 0 ? (
+            <p className="text-xs text-[#707A8A]">Seja o primeiro a comentar.</p>
+          ) : (
+            <ul className="space-y-2">
+              {comments.map((c) => (
+                <li key={c.id} className="flex items-start gap-2">
+                  <Avatar name={c.authorName} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-[#EAECEF]">
+                      {c.authorName}
+                      <span className="ml-1.5 text-[10px] font-normal text-[#707A8A]">
+                        {timeAgo(c.createdAt)}
+                      </span>
+                    </p>
+                    <p className="text-xs text-[#929AA5] break-words">{c.content}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {currentUserId && (
+            <div className="flex items-end gap-2">
+              <textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value.slice(0, MAX_CHARS))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void submitComment();
+                  }
+                }}
+                placeholder="Escreva um comentario..."
+                rows={1}
+                maxLength={MAX_CHARS}
+                data-testid={`forum-comment-input-${post.id}`}
+                className="flex-1 resize-none rounded-lg border border-[rgba(240,185,11,.18)] bg-[#181A20] px-3 py-2 text-xs text-[#EAECEF] placeholder:text-[#707A8A] focus:outline-none focus:border-[rgba(240,185,11,.4)]"
+              />
+              <button
+                onClick={() => void submitComment()}
+                disabled={!draft.trim() || isAdding}
+                data-testid={`forum-comment-submit-${post.id}`}
+                aria-label="Publicar comentario"
+                className="shrink-0 rounded-lg bg-[#F0B90B] p-2 text-[#0B0E11] transition-opacity disabled:opacity-50"
+              >
+                <Send className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export interface ComunidadeClientProps {
@@ -119,7 +313,6 @@ export function ComunidadeClient({ currentUserId }: ComunidadeClientProps) {
   const [showForm, setShowForm] = useState(false);
   const [content, setContent] = useState("");
   const [postTicker, setPostTicker] = useState("");
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const handleSubmit = useCallback(async () => {
     if (content.trim().length === 0 || content.length > MAX_CHARS) return;
@@ -133,12 +326,15 @@ export function ComunidadeClient({ currentUserId }: ComunidadeClientProps) {
     }
   }, [content, postTicker, createPost]);
 
-  const handleDelete = useCallback(
-    (postId: string) => {
-      deletePost(postId);
-      setConfirmDeleteId(null);
+  const handleToggleLike = useCallback(
+    (post: ForumPostView) => {
+      toggleLike(post.id);
+      // EVT-032: forum_post_liked — rastreia curtida (apenas ao curtir, nao descurtir)
+      if (!post.hasUserLiked) {
+        track("forum_post_liked", { plan: "JOGADOR" as const });
+      }
     },
-    [deletePost]
+    [toggleLike, track]
   );
 
   return (
@@ -257,111 +453,15 @@ export function ComunidadeClient({ currentUserId }: ComunidadeClientProps) {
         ) : (
           <div className="flex flex-col gap-3">
             {posts.map((post) => (
-              <div
+              <ForumPostCard
                 key={post.id}
-                className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.18)] p-4"
-              >
-                {/* Header */}
-                <div className="flex items-center gap-2 mb-2">
-                  <Avatar name={post.authorName} size="sm" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-[#EAECEF] truncate">
-                      {post.authorName}
-                    </p>
-                    <p className="text-[10px] text-[#707A8A]">
-                      {timeAgo(post.createdAt)}
-                    </p>
-                  </div>
-                  {post.ticker && (
-                    <button
-                      onClick={() => setTicker(post.ticker!)}
-                      className="text-xs font-mono font-bold text-[#F0B90B] hover:underline"
-                    >
-                      {post.ticker}
-                    </button>
-                  )}
-                </div>
-
-                {/* Content */}
-                <p className="text-sm text-[#929AA5] leading-relaxed">
-                  {post.content}
-                </p>
-
-                {/* Actions */}
-                <div className="flex items-center gap-4 mt-3">
-                  {/* Like toggle */}
-                  <button
-                    onClick={() => {
-                      toggleLike(post.id);
-                      // EVT-032: forum_post_liked — rastreia curtida no forum (apenas ao curtir, nao descurtir)
-                      if (!post.hasUserLiked) {
-                        track("forum_post_liked", {
-                          plan: "JOGADOR" as const,
-                        });
-                      }
-                    }}
-                    className={`flex items-center gap-1 text-xs transition-colors ${
-                      post.hasUserLiked
-                        ? "text-[#F6465D]"
-                        : "text-[#929AA5] hover:text-[#F6465D]"
-                    }`}
-                    aria-label={
-                      post.hasUserLiked ? "Descurtir post" : "Curtir post"
-                    }
-                  >
-                    <Heart
-                      className={`h-3.5 w-3.5 ${
-                        post.hasUserLiked ? "fill-current" : ""
-                      }`}
-                    />
-                    {post.likesCount}
-                  </button>
-
-                  {/* Flag/report */}
-                  {currentUserId && post.userId !== currentUserId && (
-                    <button
-                      onClick={() => flagPost(post.id)}
-                      className="flex items-center gap-1 text-xs text-[#929AA5] hover:text-[#F0B90B] transition-colors"
-                      aria-label="Denunciar post"
-                    >
-                      <Flag className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-
-                  {/* Delete (author only) */}
-                  {currentUserId && post.userId === currentUserId && (
-                    <>
-                      {confirmDeleteId === post.id ? (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-[#F6465D]">
-                            Excluir?
-                          </span>
-                          <button
-                            onClick={() => handleDelete(post.id)}
-                            className="text-xs text-[#F6465D] font-semibold hover:underline"
-                          >
-                            Sim
-                          </button>
-                          <button
-                            onClick={() => setConfirmDeleteId(null)}
-                            className="text-xs text-[#929AA5] hover:underline"
-                          >
-                            Nao
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setConfirmDeleteId(post.id)}
-                          className="flex items-center gap-1 text-xs text-[#929AA5] hover:text-[#F6465D] transition-colors"
-                          aria-label="Excluir post"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
+                post={post}
+                currentUserId={currentUserId ?? null}
+                onToggleLike={handleToggleLike}
+                onFlag={flagPost}
+                onDelete={deletePost}
+                onTickerClick={setTicker}
+              />
             ))}
           </div>
         )}

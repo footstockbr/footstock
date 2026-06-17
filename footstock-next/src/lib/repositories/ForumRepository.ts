@@ -130,6 +130,16 @@ export class ForumRepository {
     })
   }
 
+  // ─── findPublicById ──────────────────────────────────────────────────────
+  // Visibilidade publica: post existente, nao deletado E publicado/aprovado. Usado pelas
+  // rotas de comentario (item 24) para nao permitir ler/comentar post FLAGGED/REJECTED via
+  // chamada direta (a listagem publica ja filtra por status em findAll).
+  async findPublicById(id: string) {
+    return prisma.globalForumPost.findFirst({
+      where: { id, isDeleted: false, status: { in: ['PUBLISHED', 'APPROVED'] } },
+    })
+  }
+
   // ─── toggleLike ──────────────────────────────────────────────────────────
   async toggleLike(
     postId: string,

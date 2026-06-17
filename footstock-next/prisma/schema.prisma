@@ -289,6 +289,7 @@ model User {
   forumPosts               ForumPost[]
   globalForumPosts         GlobalForumPost[]
   forumLikes               ForumLike[]
+  forumComments            ForumComment[]
   dataAccessLogs           DataAccessLog[]
   dataExportJobs           DataExportJob[]
   createdLeagues           League[]                   @relation("LeagueCreator")
@@ -1120,6 +1121,7 @@ model GlobalForumPost {
 
   user              User               @relation(fields: [userId], references: [id])
   likes             ForumLike[]
+  comments          ForumComment[]
   moderationActions ModerationAction[]
 
   @@index([userId])
@@ -1148,6 +1150,25 @@ model ForumLike {
 
   @@unique([postId, userId])
   @@map("forum_likes")
+}
+
+// Item 24: comentarios por post no forum global (timeline estilo X). MVP de um nivel (sem
+// respostas aninhadas). Cascade ao deletar o post; soft-delete via isDeleted para moderacao.
+model ForumComment {
+  id        String   @id @default(cuid())
+  postId    String   @map("post_id")
+  userId    String   @map("user_id")
+  content   String   @db.VarChar(280)
+  isDeleted Boolean  @default(false) @map("is_deleted")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  post GlobalForumPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
+  @@index([userId])
+  @@map("forum_comments")
 }
 
 model GlossaryInteraction {

@@ -341,6 +341,22 @@ export class LeagueRepository {
 
     return memberships.map((m) => serializeLeague(m.league))
   }
+
+  /**
+   * Ligas CRIADAS pelo usuario (createdBy === userId), para a aba "Minhas" (taxonomia item 19:
+   * Minhas = ligas que eu criei, nao todas em que sou membro). Indice @@index([createdBy]) ja existe.
+   */
+  async findCreatedByUserId(userId: string): Promise<League[]> {
+    const leagues = await prisma.league.findMany({
+      where: { createdBy: userId },
+      orderBy: { startsAt: 'desc' },
+      include: {
+        _count: { select: { members: true } },
+        sponsor: { select: { id: true, name: true, isActive: true } },
+      },
+    })
+    return leagues.map((l) => serializeLeague(l))
+  }
 }
 
 export const leagueRepository = new LeagueRepository()

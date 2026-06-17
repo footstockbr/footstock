@@ -20,10 +20,17 @@ export async function GET(request: NextRequest) {
   const type = searchParams.get('type') ?? undefined
   const status = searchParams.get('status') ?? undefined
   const userId = searchParams.get('userId')
+  const createdBy = searchParams.get('createdBy')
   const { page, limit } = parsePagination(searchParams)
 
   try {
-    // Minhas ligas
+    // Ligas que o usuario CRIOU (aba "Minhas" — item 19: Minhas = ligas que eu criei).
+    if (createdBy === 'me') {
+      const created = await leagueRepository.findCreatedByUserId(auth.user.id)
+      return ok(created)
+    }
+
+    // Ligas das quais o usuario e MEMBRO (usado para o set de "isMember" dos cards das abas).
     if (userId === 'me') {
       const myLeagues = await leagueRepository.findByUserId(auth.user.id)
       return ok(myLeagues)
