@@ -34,6 +34,7 @@ import { cardUpdaterJob } from './jobs/cardUpdater'
 import { financialDividendJob } from './jobs/financialDividend'
 import { sessionTransitionJob } from './jobs/sessionTransition'
 import { reconcilePaymentsJob } from './jobs/reconcilePayments'
+import { classifyNewsSentimentJob } from './jobs/classifyNewsSentiment'
 
 interface Job {
   name: string
@@ -82,6 +83,8 @@ export function registerAllJobs(): void {
   registerJob('session-transition', '* * * * *', sessionTransitionJob)
   // Item 12: recuperacao de pagamento aprovado sem ativacao (webhook perdido). A cada 6h.
   registerJob('reconcile-payments', '0 */6 * * *', reconcilePaymentsJob)
+  // Item 15: classificacao de sentimento das noticias via LLM (forward + backfill). A cada 15min.
+  registerJob('classify-news-sentiment', '*/15 * * * *', classifyNewsSentimentJob)
 }
 
 /**

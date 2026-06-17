@@ -653,12 +653,16 @@ model News {
   archivedAt  DateTime?      @map("archived_at")
   clicks      Int            @default(0)
   author      String         @default("admin")
+  // Item 15: marca quando o sentimento foi definido pelo classificador LLM. NULL = ainda nao
+  // classificado (alvo do cron classify-news-sentiment + backfill). Evita reprocessar.
+  sentimentClassifiedAt DateTime? @map("sentiment_classified_at")
   createdAt   DateTime       @default(now()) @map("created_at")
   updatedAt   DateTime       @updatedAt @map("updated_at")
 
   @@index([publishedAt])
   @@index([isPublished])
   @@index([isArchived])
+  @@index([sentimentClassifiedAt])
   @@map("news")
 }
 
