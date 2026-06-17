@@ -185,6 +185,19 @@ export function CheckoutButton({
       )}
 
       <div className="flex flex-col gap-2">
+        {/* Item 10: metodos de pagamento visiveis ANTES de abrir a lista suspensa, para o
+            usuario saber que existem varias formas. Chips de texto por enquanto; quando
+            houver assets de logo dos provedores em public/payments/, trocar por <Image>. */}
+        <div className="flex flex-wrap items-center gap-1.5" aria-hidden="true">
+          {(Object.keys(GATEWAY_LABELS) as Gateway[]).map((g) => (
+            <span
+              key={g}
+              className="inline-flex items-center rounded-md border border-[rgba(240,185,11,.2)] bg-[#181A20] px-2 py-1 text-[11px] font-medium text-[#C0C4CE]"
+            >
+              {GATEWAY_LABELS[g]}
+            </span>
+          ))}
+        </div>
         <NativeSelect
           value={gateway}
           onValueChange={handleGatewayChange}

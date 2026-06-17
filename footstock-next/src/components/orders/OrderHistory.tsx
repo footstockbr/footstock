@@ -44,6 +44,12 @@ const STATUS_LABELS: Record<string, string> = {
   PARTIAL: 'Parcial',
 }
 
+// Explicacao por status para o tooltip (title). PARTIAL confundia o usuario: significa
+// que parte da ordem (tipicamente LIMIT) foi executada e o restante segue aberto no book.
+const STATUS_TOOLTIPS: Record<string, string> = {
+  PARTIAL: 'Parte da ordem foi executada; o restante continua aberto no mercado e pode ser cancelado.',
+}
+
 const TYPE_LABELS: Record<string, string> = {
   MARKET: 'Mercado',
   LIMIT: 'Limitada',
@@ -162,7 +168,10 @@ export function OrderHistory() {
               </div>
 
               <div className="flex items-center gap-3">
-                <span className={`text-xs font-medium ${STATUS_COLORS[order.status] ?? 'text-[#929AA5]'}`}>
+                <span
+                  className={`text-xs font-medium ${STATUS_COLORS[order.status] ?? 'text-[#929AA5]'}${STATUS_TOOLTIPS[order.status] ? ' cursor-help underline decoration-dotted underline-offset-2' : ''}`}
+                  title={STATUS_TOOLTIPS[order.status]}
+                >
                   {STATUS_LABELS[order.status] ?? order.status}
                 </span>
                 {(order.status === 'OPEN' || order.status === 'PARTIAL') && (

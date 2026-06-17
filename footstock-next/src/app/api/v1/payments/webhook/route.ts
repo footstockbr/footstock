@@ -7,7 +7,6 @@ import { getWebhookRateLimit } from '@/lib/ratelimit'
 import { normalizeIp } from '@/middleware/rateLimit'
 import { planService } from '@/lib/services/PlanService'
 import { webhookAuditService } from '@/lib/services/WebhookAuditService'
-import { leagueEventRecorder } from '@/lib/services/leagues/LeagueEventRecorder'
 import type { SubscriptionGateway } from '@prisma/client'
 import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
 
@@ -261,41 +260,16 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ received: true }, { status: 200 })
         }
 
-        // P5 league bonus: PLAN_UPGRADED
-        leagueEventRecorder.recordForAllActiveLeagues(subscription.userId, 'PLAN_UPGRADED', { planType: subscription.planType }).catch(() => {})
-
-        // Criar registro de Payment (para histórico e idempotência futura)
-        await prisma.payment.upsert({
-          where: { gatewayTransactionId: event.transactionId },
-          update: { status: 'PAID', processedAt: new Date() },
-          create: {
-            userId: subscription.userId,
-            subscriptionId: event.subscriptionId,
-            amount: event.amount,
-            gateway: gatewayEnum,
-            gatewayTransactionId: event.transactionId,
-            status: 'PAID',
-            processedAt: new Date(),
-          },
-        })
-
-        // EVT-022: payment_completed — track after successful payment
-        const existingPaymentCount = await prisma.payment.count({
-          where: { userId: subscription.userId, status: 'PAID' },
-        })
-        mixpanelServer.trackPaymentCompleted(subscription.userId, {
-          plan: subscription.planType as 'CRAQUE' | 'LENDA',
-          gateway: gatewayType,
-          is_first_payment: existingPaymentCount <= 1, // <= 1 because we just upserted the current one
-        })
-
-        // ── Processar comissão de afiliado ────────────────────────────────────
-        // gatewayTransactionId garante idempotência por EVENTO (não por subscription)
-        // → suporta renovações mensais sem bloquear a 2ª, 3ª comissão
-        await processAffiliateCommission({
+        // Efeitos pos-ativacao (Payment, bonus de liga PLAN_UPGRADED, analytics payment_completed
+        // e comissao de afiliado), agora compartilhados com a reconciliacao server-side
+        // (replay/cron) via PlanService.applyPaymentConfirmedEffects, para que um pagamento
+        // recuperado fora do webhook gere os MESMOS efeitos (item 12). Idempotente por
+        // gatewayTransactionId (os efeitos best-effort so disparam na primeira consolidacao).
+        await planService.applyPaymentConfirmedEffects({
           userId: subscription.userId,
           subscriptionId: event.subscriptionId,
-          subscriptionAmount: Number(event.amount),
+          amountCents: Number(event.amount),
+          gateway: gatewayEnum,
           gatewayTransactionId: event.transactionId,
           planType: subscription.planType as 'CRAQUE' | 'LENDA',
         })
@@ -538,90 +512,6 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ received: true }, { status: 200 })
 }
 
-// ============================================================================
-// processAffiliateCommission
-// Cria AffiliateTransaction (PENDING) quando um assinante referido confirma pagamento.
-// Idempotente: skipDuplicates=true + unique constraint (affiliateCodeId, subscriptionId, transactionType)
-// garante no máximo 1 comissão por renovação mesmo com replays do webhook.
-// ============================================================================
-async function processAffiliateCommission({
-  userId,
-  subscriptionId,
-  subscriptionAmount,
-  gatewayTransactionId,
-  planType,
-}: {
-  userId: string
-  subscriptionId: string
-  subscriptionAmount: number
-  gatewayTransactionId?: string
-  planType: 'CRAQUE' | 'LENDA'
-}): Promise<void> {
-  try {
-    // 1. Verificar se o assinante foi referido por um afiliado elegível
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { referredByCode: true },
-    })
-
-    if (!user?.referredByCode) return
-
-    // 2. Buscar o AffiliateCode do referrer (deve estar ativo e ser elegível)
-    const affiliateCode = await prisma.affiliateCode.findFirst({
-      where: {
-        code: user.referredByCode,
-        active: true,
-        affiliateType: { in: ['TIME_PARCEIRO', 'INFLUENCIADOR'] },
-      },
-      select: {
-        id: true,
-        userId: true,
-        commissionPercentage: true,
-        affiliateType: true,
-        code: true,
-      },
-    })
-
-    if (!affiliateCode) return
-
-    // Auto-referência: afiliado não pode ganhar comissão de si mesmo
-    if (affiliateCode.userId === userId) return
-
-    // 3. Calcular comissão em FS$ (subscriptionAmount * commissionPercentage)
-    const commissionPct = Number(affiliateCode.commissionPercentage)
-    const commissionAmount = Math.round(subscriptionAmount * commissionPct * 100) / 100
-
-    if (commissionAmount <= 0) return
-
-    // 4. Criar transação (idempotente via gatewayTransactionId único por evento de pagamento)
-    //    skipDuplicates=true ignora silenciosamente se gatewayTransactionId já existe
-    //    → replay do webhook não duplica comissão; renovações futuras geram nova linha
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (prisma.affiliateTransaction as any).createMany({
-      data: [
-        {
-          affiliateCodeId: affiliateCode.id,
-          referredUserId: userId,
-          subscriptionId,
-          gatewayTransactionId: gatewayTransactionId ?? null,
-          transactionType: 'SUBSCRIPTION_RENEWAL',
-          amount: commissionAmount,
-          commissionPercentageAtTime: commissionPct,
-          status: 'PENDING',
-        },
-      ],
-      skipDuplicates: true,
-    })
-
-    // EVT-041: affiliate_conversion
-    mixpanelServer.trackAffiliateConversion(affiliateCode.userId, {
-      affiliateCode: affiliateCode.code,
-      affiliateType: affiliateCode.affiliateType as string,
-      plan: planType,
-      commissionAmount: commissionAmount.toFixed(2),
-    })
-  } catch (err) {
-    // Logar mas não propagar — falha de comissão não impede ativação do plano
-    console.error('[webhook] Erro ao processar comissão de afiliado:', err)
-  }
-}
+// NOTA (item 12): processAffiliateCommission foi movida para PlanService (private), dentro de
+// applyPaymentConfirmedEffects, para ser reusada pela reconciliacao server-side (replay/cron) e
+// nao apenas pelo webhook. A logica e identica (idempotente por gatewayTransactionId).

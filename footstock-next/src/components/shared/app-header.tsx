@@ -5,6 +5,7 @@ import Image from "next/image";
 import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
 import { MarketSessionBadge } from "@/components/market/MarketSessionBadge";
+import { HeaderPlanBadge } from "@/components/shared/header-plan-badge";
 import { ROUTES } from "@/lib/constants/routes";
 
 // Dynamic import — evita SSR issues com hooks client-only + React Query
@@ -34,7 +35,7 @@ function AppHeader({ className }: AppHeaderProps) {
       <Link
         data-testid="header-logo"
         href={ROUTES.MERCADO}
-        aria-label="FootStock — A bolsa do futebol"
+        aria-label="FootStock — A Bolsa do futebol"
         className="flex min-w-0 items-center gap-2 md:hidden"
       >
         {/* @ASSET_PLACEHOLDER
@@ -64,14 +65,16 @@ avoid: Texto, complexidade excessiva, gradientes ruidosos
             FootStock
           </span>
           <span className="mt-0.5 truncate text-[10px] font-medium text-[#F0B90B]/80 tracking-[0.02em]">
-            A bolsa do futebol
+            A Bolsa do futebol
           </span>
         </div>
       </Link>
 
       {/* Right actions */}
       <div data-testid="header-actions" className="flex items-center gap-2">
-        {/* Mobile (≤640px): compact — s�� dot. Desktop: label + countdown + tooltip */}
+        {/* Plano do usuario, alinhado ao ticker de negociacao (canto superior direito) */}
+        <HeaderPlanBadge />
+        {/* Mobile (<=640px): compact dot. Desktop: label + countdown + tooltip */}
         <MarketSessionBadge compact className="sm:hidden" />
         <MarketSessionBadge className="hidden sm:flex" />
         <div data-tour="notification-bell" className="inline-flex items-center">

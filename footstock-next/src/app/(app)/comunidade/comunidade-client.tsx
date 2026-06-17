@@ -12,7 +12,6 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
-import { GLOSSARY_TERMS } from "@/lib/data/glossary";
 import { useForumPosts } from "@/hooks/useForumPosts";
 import { useAnalytics } from "@/hooks/useAnalytics";
 
@@ -92,10 +91,6 @@ const SORT_OPTIONS = [
   { value: "curtidos", label: "Populares" },
 ] as const;
 
-// ─── Glossary preview ─────────────────────────────────────────────────────────
-
-const GLOSSARY_PREVIEW = GLOSSARY_TERMS.slice(0, 10);
-
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export interface ComunidadeClientProps {
@@ -150,7 +145,6 @@ export function ComunidadeClient({ currentUserId }: ComunidadeClientProps) {
     <Tabs defaultValue="forum">
       <TabsList className="w-full">
         <TabsTrigger value="forum">Fórum</TabsTrigger>
-        <TabsTrigger value="glossario">Glossário</TabsTrigger>
       </TabsList>
 
       {/* ─── FORUM TAB ─────────────────────────────────────────────────────── */}
@@ -385,26 +379,6 @@ export function ComunidadeClient({ currentUserId }: ComunidadeClientProps) {
             </Button>
           </div>
         )}
-      </TabsContent>
-
-      {/* ─── GLOSSARIO TAB ─────────────────────────────────────────────────── */}
-      <TabsContent value="glossario" className="mt-4">
-        <div className="flex flex-col gap-2">
-          {GLOSSARY_PREVIEW.map((item) => (
-            <div
-              key={item.slug}
-              className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.1)] p-4"
-            >
-              <p className="text-sm font-mono font-bold text-[#F0B90B] mb-1">
-                {item.title}
-              </p>
-              <p className="text-sm text-[#929AA5]">{item.definition}</p>
-            </div>
-          ))}
-          <p className="text-xs text-center text-[#707A8A] mt-2">
-            {GLOSSARY_TERMS.length} termos disponíveis no glossário completo
-          </p>
-        </div>
       </TabsContent>
     </Tabs>
   );

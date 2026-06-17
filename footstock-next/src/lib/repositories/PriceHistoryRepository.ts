@@ -15,11 +15,10 @@ export interface OFIData {
 }
 
 // Map UI chart period → date range and granularity hint
-function resolvePeriodConfig(period: ChartPeriod): {
+function resolvePeriodConfig(period: ChartPeriod, now: Date = new Date()): {
   granularity: Granularity
   fromDate: Date | null
 } {
-  const now = new Date()
   switch (period) {
     case '1H':
       return {
@@ -84,10 +83,13 @@ export const PriceHistoryRepository = {
     if (!asset) return []
 
     const period = filters.period ?? '1M'
-    const { fromDate } = resolvePeriodConfig(period)
-
-    const resolvedFrom = filters.from ?? fromDate
+    // Ancorar a janela do periodo no limite SUPERIOR efetivo (resolvedTo). Antes, fromDate
+    // era calculado de um `now` proprio enquanto resolvedTo ja vinha atrasado pelo delay do
+    // plano (ex.: JOGADOR no 1H): from = now1 - 1h e to = now0 - 1h (now0 < now1) invertiam a
+    // janela e a query voltava 0 candles, deixando o grafico preto. Agora from = resolvedTo - periodo.
     const resolvedTo = filters.to ?? new Date()
+    const { fromDate } = resolvePeriodConfig(period, resolvedTo)
+    const resolvedFrom = filters.from ?? fromDate
 
     const candles = await prisma.priceHistory.findMany({
       where: {

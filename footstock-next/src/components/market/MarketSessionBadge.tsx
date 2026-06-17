@@ -59,11 +59,16 @@ export function MarketSessionBadge({ compact = false, className }: MarketSession
   const color = SESSION_COLORS[session]
   const label = SESSION_LABELS[session]
   const isNegociacao = session === MarketSession.TRADING || session === MarketSession.CLOSING_CALL
-  const countdownText = countdownSeconds > 0 ? `em ${formatCountdown(countdownSeconds)}` : ''
+  // Prefixo do countdown: em negociacao (TRADING/CLOSING_CALL) -> "Fecha em ..."; caso contrario
+  // (PRE_OPENING/AFTER_MARKET/CLOSED) -> "Abre em ...". Usar isNegociacao (estrito) e nao
+  // isMarketOpen, que tambem e true em PRE_OPENING e mostraria "Fecha em" antes da abertura.
+  // O detalhe de horarios de abertura/fechamento aparece no tooltip de hover (TOOLTIP_MESSAGES).
+  const transitionVerb = isNegociacao ? 'Fecha' : 'Abre'
+  const countdownText = countdownSeconds > 0 ? `${transitionVerb} em ${formatCountdown(countdownSeconds)}` : ''
   const tooltipMessage = TOOLTIP_MESSAGES[session]
   const ariaLabel = compact
     ? `Sessão: ${label}`
-    : `Sessão de mercado: ${label}${countdownText ? `, próxima transição ${countdownText}` : ''}`
+    : `Sessão de mercado: ${label}${countdownText ? `, ${countdownText}` : ''}`
 
   return (
     <div

@@ -194,6 +194,10 @@ export class LeagueRepository {
         name: data.name,
         slug,
         type: data.type,
+        // Cap de ligas AMIGOS = 11 (10 convidados + 1 criador). Ligas novas nascem com o
+        // limite correto; ligas existentes mantem o maxMembers ja persistido (sem backfill,
+        // para nao trancar ligas que ja ultrapassaram 11). undefined => @default(20) do schema.
+        maxMembers: data.type === 'AMIGOS' ? 11 : undefined,
         division: data.division,
         duration: data.duration,
         sponsorId: data.sponsorId ?? null,

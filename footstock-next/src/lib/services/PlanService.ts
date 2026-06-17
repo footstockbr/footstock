@@ -20,7 +20,11 @@ import { PLAN_HIERARCHY, type PlanType } from '@/lib/enums'
 import { getGateway } from '@/lib/gateways/GatewayFactory'
 import { GatewayType } from '@/lib/gateways/IGateway'
 import type { GatewayCheckoutInput } from '@/lib/gateways/IGateway'
+import type { SubscriptionGateway } from '@prisma/client'
+import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
+import { leagueEventRecorder } from '@/lib/services/leagues/LeagueEventRecorder'
 import { leagueAutoEnrollService } from './LeagueAutoEnrollService'
+import { buildGatewayReturnUrls } from './payment-return-urls'
 import { DAILY_ORDER_LIMITS_BY_PLAN, ALLOWED_ORDER_TYPES_BY_PLAN } from './plan-order-limits'
 
 export interface CheckoutDTO {
@@ -177,9 +181,7 @@ export class PlanService extends BaseService {
         subscriptionId: subscription.id,
         userId,
         userEmail:   dto.userEmail ?? user?.email ?? '',
-        successUrl:  `${appUrl}/planos?payment=success&sub=${subscription.id}`,
-        failureUrl:  `${appUrl}/planos?payment=failed`,
-        pendingUrl:  `${appUrl}/planos?payment=pending&sub=${subscription.id}`,
+        ...buildGatewayReturnUrls(appUrl, subscription.id, dto.planType),
       }
       const result = await gateway.createCheckout(input)
       redirectUrl = result.redirectUrl
@@ -399,6 +401,223 @@ export class PlanService extends BaseService {
       )
 
     return 'ACTIVATED'
+  }
+
+  /**
+   * Reconciliacao de pagamento aprovado SEM webhook (recuperacao). Resolve o status real do
+   * pagamento no gateway por paymentId; se 'approved', valida gateway + valor da subscription e
+   * reusa o MESMO caminho idempotente do webhook (upgradeUser + payment.upsert por
+   * gatewayTransactionId). Seguro para reexecutar: upgradeUser retorna ALREADY_ACTIVE quando ja
+   * ativo e o upsert dedupa por transacao. Consumido pelo endpoint admin de replay e pelo cron
+   * reconcile-payments. Fecha o gap residual do bug do HMAC (item 12): antes, upgradeUser so era
+   * acionado pelo webhook, sem fallback. So Mercado Pago por ora (gateway do incidente).
+   */
+  async reconcileApprovedPayment(
+    gateway: GatewayType,
+    paymentId: string
+  ): Promise<
+    | { ok: true; action: 'ACTIVATED' | 'ALREADY_ACTIVE'; subscriptionId: string; userId: string }
+    | { ok: false; reason: string; detail?: string }
+  > {
+    if (gateway !== GatewayType.MERCADO_PAGO) {
+      return { ok: false, reason: 'GATEWAY_NOT_SUPPORTED', detail: String(gateway) }
+    }
+    const gw = getGateway(gateway) as unknown as {
+      getPaymentDetails(
+        id: string
+      ): Promise<{ status?: string; externalReference?: string; amount?: number; liveMode?: boolean } | null>
+    }
+    const details = await gw.getPaymentDetails(paymentId)
+    if (!details) return { ok: false, reason: 'PAYMENT_STATUS_UNRESOLVED' }
+    // Defesa em profundidade (espelha o webhook, commit 0837831): nunca ativar plano a partir de
+    // um pagamento de TESTE do MP (live_mode=false). Rejeitar apenas quando explicitamente false.
+    if (details.liveMode === false) {
+      return { ok: false, reason: 'TEST_PAYMENT', detail: 'live_mode=false' }
+    }
+    if (details.status !== 'approved') {
+      return { ok: false, reason: 'PAYMENT_NOT_APPROVED', detail: details.status ?? 'desconhecido' }
+    }
+    const subscriptionId = details.externalReference ?? ''
+    if (!subscriptionId) return { ok: false, reason: 'NO_EXTERNAL_REFERENCE' }
+
+    const subscription = await prisma.subscription.findUnique({
+      where: { id: subscriptionId },
+      select: { userId: true, amount: true, gateway: true, planType: true },
+    })
+    if (!subscription) return { ok: false, reason: 'SUBSCRIPTION_NOT_FOUND', detail: subscriptionId }
+    if (String(subscription.gateway) !== 'MERCADO_PAGO') {
+      return { ok: false, reason: 'GATEWAY_MISMATCH', detail: String(subscription.gateway) }
+    }
+    // Hardening: valor pago bate com o da subscription (tolerancia +-1 centavo), igual ao webhook.
+    const paidCents = details.amount ? Math.round(details.amount * 100) : 0
+    if (Math.abs(paidCents - Number(subscription.amount)) > 1) {
+      return {
+        ok: false,
+        reason: 'AMOUNT_MISMATCH',
+        detail: `pago=${paidCents} esperado=${Number(subscription.amount)}`,
+      }
+    }
+
+    let upgradeResult: UpgradeResult
+    try {
+      upgradeResult = await this.upgradeUser(subscription.userId, subscriptionId)
+    } catch (err) {
+      const code = (err as { code?: string })?.code ?? 'UPGRADE_ERROR'
+      return { ok: false, reason: code, detail: err instanceof Error ? err.message : String(err) }
+    }
+    if (upgradeResult === 'NOT_ACTIVATABLE') {
+      return { ok: false, reason: 'NOT_ACTIVATABLE', detail: subscriptionId }
+    }
+
+    // Efeitos pos-ativacao compartilhados com o webhook (Payment + bonus de liga + analytics +
+    // comissao de afiliado), idempotentes. Garante que um pagamento recuperado fora do webhook
+    // gere os MESMOS efeitos (item 12), nao apenas a ativacao do plano.
+    await this.applyPaymentConfirmedEffects({
+      userId: subscription.userId,
+      subscriptionId,
+      amountCents: paidCents,
+      gateway: subscription.gateway,
+      gatewayTransactionId: paymentId,
+      planType: subscription.planType as 'CRAQUE' | 'LENDA',
+    })
+
+    return {
+      ok: true,
+      action: upgradeResult === 'ALREADY_ACTIVE' ? 'ALREADY_ACTIVE' : 'ACTIVATED',
+      subscriptionId,
+      userId: subscription.userId,
+    }
+  }
+
+  /**
+   * Efeitos pos-ativacao de um pagamento confirmado, compartilhados entre o webhook e a
+   * reconciliacao server-side (replay/cron): registro de Payment, bonus de liga PLAN_UPGRADED,
+   * analytics payment_completed e comissao de afiliado. O Payment.upsert e sempre idempotente
+   * por gatewayTransactionId; os efeitos best-effort (liga/analytics/comissao) so disparam na
+   * PRIMEIRA consolidacao do pagamento (gate por status PAID previo) para nao duplicar em replay.
+   */
+  async applyPaymentConfirmedEffects(params: {
+    userId: string
+    subscriptionId: string
+    amountCents: number
+    gateway: SubscriptionGateway
+    gatewayTransactionId: string
+    planType: 'CRAQUE' | 'LENDA'
+  }): Promise<void> {
+    const { userId, subscriptionId, amountCents, gateway, gatewayTransactionId, planType } = params
+
+    const existing = await prisma.payment.findUnique({
+      where: { gatewayTransactionId },
+      select: { status: true },
+    })
+
+    await prisma.payment.upsert({
+      where: { gatewayTransactionId },
+      update: { status: 'PAID', processedAt: new Date() },
+      create: {
+        userId,
+        subscriptionId,
+        amount: amountCents,
+        gateway,
+        gatewayTransactionId,
+        status: 'PAID',
+        processedAt: new Date(),
+      },
+    })
+
+    // Best-effort apenas na primeira consolidacao do pagamento — evita duplicar bonus de liga,
+    // analytics e comissao quando o replay/cron reprocessa um pagamento que o webhook ja tratou.
+    if (existing?.status === 'PAID') return
+
+    leagueEventRecorder
+      .recordForAllActiveLeagues(userId, 'PLAN_UPGRADED', { planType })
+      .catch(() => {})
+
+    const paidCount = await prisma.payment.count({ where: { userId, status: 'PAID' } })
+    mixpanelServer.trackPaymentCompleted(userId, {
+      plan: planType,
+      gateway,
+      is_first_payment: paidCount <= 1,
+    })
+
+    await this.processAffiliateCommission({
+      userId,
+      subscriptionId,
+      subscriptionAmount: amountCents,
+      gatewayTransactionId,
+      planType,
+    })
+  }
+
+  /**
+   * Cria AffiliateTransaction (PENDING) quando um assinante referido confirma pagamento.
+   * Idempotente: skipDuplicates=true + unique constraint (affiliateCodeId, subscriptionId,
+   * transactionType) garante no maximo 1 comissao por renovacao mesmo com replays.
+   * Movido da rota do webhook para ser reusado pela reconciliacao server-side (item 12).
+   */
+  private async processAffiliateCommission(params: {
+    userId: string
+    subscriptionId: string
+    subscriptionAmount: number
+    gatewayTransactionId?: string
+    planType: 'CRAQUE' | 'LENDA'
+  }): Promise<void> {
+    const { userId, subscriptionId, subscriptionAmount, gatewayTransactionId, planType } = params
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { referredByCode: true },
+      })
+      if (!user?.referredByCode) return
+
+      const affiliateCode = await prisma.affiliateCode.findFirst({
+        where: {
+          code: user.referredByCode,
+          active: true,
+          affiliateType: { in: ['TIME_PARCEIRO', 'INFLUENCIADOR'] },
+        },
+        select: {
+          id: true,
+          userId: true,
+          commissionPercentage: true,
+          affiliateType: true,
+          code: true,
+        },
+      })
+      if (!affiliateCode) return
+      // Auto-referencia: afiliado nao ganha comissao de si mesmo.
+      if (affiliateCode.userId === userId) return
+
+      const commissionPct = Number(affiliateCode.commissionPercentage)
+      const commissionAmount = Math.round(subscriptionAmount * commissionPct * 100) / 100
+      if (commissionAmount <= 0) return
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (prisma.affiliateTransaction as any).createMany({
+        data: [
+          {
+            affiliateCodeId: affiliateCode.id,
+            referredUserId: userId,
+            subscriptionId,
+            gatewayTransactionId: gatewayTransactionId ?? null,
+            transactionType: 'SUBSCRIPTION_RENEWAL',
+            amount: commissionAmount,
+            commissionPercentageAtTime: commissionPct,
+            status: 'PENDING',
+          },
+        ],
+        skipDuplicates: true,
+      })
+
+      mixpanelServer.trackAffiliateConversion(affiliateCode.userId, {
+        affiliateCode: affiliateCode.code,
+        affiliateType: affiliateCode.affiliateType as string,
+        plan: planType,
+        commissionAmount: commissionAmount.toFixed(2),
+      })
+    } catch (err) {
+      console.error('[PlanService.processAffiliateCommission] Erro ao processar comissao de afiliado:', err)
+    }
   }
 
   /**

@@ -5,7 +5,6 @@ import { Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AssetCard, AssetCardSkeleton, type AssetData } from "@/components/market/asset-card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { MarketSessionBadge } from "@/components/market/MarketSessionBadge";
 import { useAllMarketTicks } from "@/hooks/useAllMarketTicks";
 import { useBalance } from "@/hooks/useBalance";
 import { useAnalytics } from "@/hooks/useAnalytics";
@@ -183,12 +182,6 @@ export function MarketPageClient() {
         </div>
       )}
 
-      {/* Session badge — visivel na tela de mercado (T-008) */}
-      <div className="px-4 pt-3 pb-2 flex items-center justify-between border-b border-[rgba(240,185,11,.08)]">
-        <span className="text-xs font-medium text-[#929AA5]">Sessão atual</span>
-        <MarketSessionBadge />
-      </div>
-
       {/* Search */}
       <div className="px-4 pt-4 pb-3 border-b border-[rgba(240,185,11,.08)]">
         <div className="relative">
@@ -243,7 +236,7 @@ export function MarketPageClient() {
         </fieldset>
         <fieldset className="border-0 p-0 m-0">
           <legend className="sr-only">Filtrar por sentimento</legend>
-          <div className="flex gap-1.5 flex-wrap">
+          <div className="flex gap-1.5 flex-wrap justify-end">
             {(["positive", "neutral", "negative"] as const).map((s) => (
               <button
                 key={s}

@@ -158,7 +158,7 @@ export function ClubSidebar() {
         <div className="flex h-14 items-center justify-between px-4">
           <Link
             href={ROUTES.MERCADO}
-            aria-label="FootStock — A bolsa do futebol"
+            aria-label="FootStock — A Bolsa do futebol"
             className="flex min-w-0 items-center gap-2"
           >
             <Image
@@ -174,7 +174,7 @@ export function ClubSidebar() {
                 FootStock
               </span>
               <span className="mt-0.5 truncate text-[9px] font-medium text-[#F0B90B]/80 tracking-[0.02em]">
-                A bolsa do futebol
+                A Bolsa do futebol
               </span>
             </div>
           </Link>

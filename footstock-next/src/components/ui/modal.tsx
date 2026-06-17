@@ -103,7 +103,10 @@ function Modal({
         tabIndex={-1}
         data-testid={testId}
         className={cn(
-          "w-full bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.18)] shadow-lg animate-fade-in focus:outline-none",
+          // max-h + overflow interno: o dialogo e o proprio container de scroll. Antes, formularios
+          // altos (ex.: OrderForm de compra) estouravam a viewport centralizada com body travado
+          // (overflow:hidden), cortando o conteudo e o botao de confirmar sem como rolar ate ele.
+          "w-full bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.18)] shadow-lg animate-fade-in focus:outline-none max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain",
           sizeClasses[size],
           className
         )}

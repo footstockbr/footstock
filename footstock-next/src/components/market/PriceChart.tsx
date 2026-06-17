@@ -435,7 +435,10 @@ export function PriceChart({
   const showLoadingOverlay = isLoading
   const showRateLimitOverlay = isRateLimited && !!rateError
   const showErrorOverlay = isError && !isRateLimited
-  const showOverlay = showLoadingOverlay || showRateLimitOverlay || showErrorOverlay
+  // Janela vazia (200 sem candles) nao pode virar um quadrado preto silencioso (Zero Estados
+  // Indefinidos): mostrar overlay explicito de "sem dados" em vez de um canvas vazio.
+  const showEmptyOverlay = !isLoading && !isError && !isRateLimited && candles.length === 0
+  const showOverlay = showLoadingOverlay || showRateLimitOverlay || showErrorOverlay || showEmptyOverlay
 
   return (
     <div
@@ -514,6 +517,14 @@ export function PriceChart({
             >
               Tentar novamente
             </button>
+          </div>
+        )}
+        {showEmptyOverlay && (
+          <div
+            className="absolute inset-0 flex items-center justify-center bg-[#1E2329] rounded-lg p-4 z-10"
+            style={{ height: 300 }}
+          >
+            <p className="text-sm text-[#929AA5]">Sem dados para o periodo selecionado.</p>
           </div>
         )}
       </div>

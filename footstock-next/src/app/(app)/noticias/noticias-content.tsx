@@ -18,6 +18,7 @@ const SENTIMENT_MAP: Record<Sentiment, { variant: BadgeVariant; label: string }>
 interface News {
   id: string;
   title: string;
+  content: string | null;
   assetIds: string[];
   sentiment: Sentiment;
   source: string | null;
@@ -39,6 +40,7 @@ export function NoticiasContent() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [assetMap, setAssetMap] = useState<Map<string, { ticker: string; displayName: string }>>(new Map());
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // T-09: buscar notícias + assets ao montar e quando filtro mudar
   useEffect(() => {
@@ -133,12 +135,28 @@ export function NoticiasContent() {
             const timeAgo = news.publishedAt
               ? formatDistanceToNow(new Date(news.publishedAt), { addSuffix: true, locale: ptBR })
               : "";
+            const hasContent = !!news.content && news.content.trim().length > 0;
+            const isExpanded = expandedId === news.id;
 
             return (
               <div
                 key={news.id}
                 data-testid={`noticias-item-${news.id}`}
-                className="min-w-0 bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.18)] p-4 transition-all hover:border-[rgba(240,185,11,.35)] hover:bg-[rgba(240,185,11,.04)] cursor-pointer"
+                onClick={hasContent ? () => setExpandedId(isExpanded ? null : news.id) : undefined}
+                role={hasContent ? "button" : undefined}
+                tabIndex={hasContent ? 0 : undefined}
+                onKeyDown={
+                  hasContent
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setExpandedId(isExpanded ? null : news.id);
+                        }
+                      }
+                    : undefined
+                }
+                aria-expanded={hasContent ? isExpanded : undefined}
+                className={`min-w-0 bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.18)] p-4 transition-all hover:border-[rgba(240,185,11,.35)] hover:bg-[rgba(240,185,11,.04)] ${hasContent ? "cursor-pointer" : "cursor-default"}`}
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="flex items-center gap-2 flex-wrap min-w-0">
@@ -163,7 +181,17 @@ export function NoticiasContent() {
                   {timeAgo && <span className="text-[10px] text-[#707A8A] shrink-0">{timeAgo}</span>}
                 </div>
                 <p className="text-sm font-medium text-[#EAECEF] leading-snug break-words">{news.title}</p>
+                {isExpanded && hasContent && (
+                  <p className="text-sm text-[#C0C4CE] mt-3 leading-relaxed whitespace-pre-wrap break-words">
+                    {news.content}
+                  </p>
+                )}
                 {news.source && <p className="text-xs text-[#929AA5] mt-1 break-words">Fonte: {news.source}</p>}
+                {hasContent && (
+                  <p className="text-[10px] text-[#707A8A] mt-2">
+                    {isExpanded ? "Clique para recolher" : "Clique para ler a noticia"}
+                  </p>
+                )}
               </div>
             );
           })}

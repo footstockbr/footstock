@@ -18,11 +18,22 @@ export async function GET(
     const { id } = await params
     const league = await prisma.league.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, type: true },
     })
 
     if (!league) {
       return apiError(LEAGUE_ERRORS.NOT_FOUND.code, LEAGUE_ERRORS.NOT_FOUND.message, 404)
+    }
+
+    // Privacidade: o ranking de uma liga AMIGOS (privada) so e visivel para membros.
+    if (league.type === 'AMIGOS') {
+      const membership = await prisma.leagueMember.findFirst({
+        where: { leagueId: id, userId: auth.user.id },
+        select: { id: true },
+      })
+      if (!membership) {
+        return apiError('LEAGUE_PRIVATE_FORBIDDEN', 'Voce nao participa desta liga.', 403)
+      }
     }
 
     const ranking = await leagueRepository.getRanking(id, auth.user.id)

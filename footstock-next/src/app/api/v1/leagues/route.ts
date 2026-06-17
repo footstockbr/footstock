@@ -1,7 +1,7 @@
 // module-20: GET + POST /api/v1/leagues
 
 import { NextRequest } from 'next/server'
-import { getAuthUser, hasPlan } from '@/lib/auth'
+import { getAuthUser, hasPlan, hasAdminRole } from '@/lib/auth'
 import { ok, created, list, error as apiError, errors } from '@/lib/api'
 import { parsePagination, buildPagination } from '@/lib/api'
 import { leagueRepository } from '@/lib/repositories/LeagueRepository'
@@ -27,6 +27,18 @@ export async function GET(request: NextRequest) {
     if (userId === 'me') {
       const myLeagues = await leagueRepository.findByUserId(auth.user.id)
       return ok(myLeagues)
+    }
+
+    // Privacidade: ligas AMIGOS sao privadas. A aba "Amigos" mostra apenas as ligas de
+    // amigos em que o usuario foi CONVIDADO (e membro mas nao o criador) — nunca a
+    // listagem global de todas as ligas AMIGOS do sistema (que vazava ligas privadas).
+    // O criador ve as ligas que criou na aba "Minhas" (userId=me).
+    if (type === 'AMIGOS') {
+      const myLeagues = await leagueRepository.findByUserId(auth.user.id)
+      const friendLeagues = myLeagues.filter(
+        (l) => l.type === 'AMIGOS' && l.createdBy !== auth.user.id
+      )
+      return ok(friendLeagues)
     }
 
     const { data, total } = await leagueRepository.findAll({ type, status, page, limit })
@@ -66,6 +78,16 @@ export async function POST(request: NextRequest) {
         LEAGUE_ERRORS.PLAN_RESTRICTION.code,
         LEAGUE_ERRORS.PLAN_RESTRICTION.message,
         LEAGUE_ERRORS.PLAN_RESTRICTION.status
+      )
+    }
+
+    // Taxonomia: "Públicas" = ligas criadas pelo ADM. Usuário comum cria apenas AMIGOS.
+    // Espelha o tratamento de PRO; admins criam ligas públicas via /api/v1/admin/leagues.
+    if (type === 'PUBLICA' && !hasAdminRole(auth.user.adminRole, 'ADMINISTRADOR')) {
+      return apiError(
+        'LEAGUE_ADMIN_ONLY',
+        'Ligas públicas são criadas exclusivamente por administradores.',
+        403
       )
     }
 

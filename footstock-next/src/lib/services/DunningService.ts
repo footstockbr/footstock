@@ -9,6 +9,7 @@ import { NotificationStub } from '@/lib/notifications/stubs/NotificationStub'
 import { getGateway } from '@/lib/gateways/GatewayFactory'
 import { GatewayType } from '@/lib/gateways/IGateway'
 import { DUNNING_MAX_ATTEMPTS } from '@/lib/constants/payment-security'
+import { buildGatewayReturnUrls } from '@/lib/services/payment-return-urls'
 import { env } from '@/lib/env'
 import type { ProcessResult } from '@/lib/jobs/subscription-expiry'
 
@@ -95,9 +96,7 @@ export class DunningService {
             subscriptionId: sub.id,
             userId:        sub.userId,
             userEmail:     user?.email ?? '',
-            successUrl:    `${appUrl}/planos?payment=success&sub=${sub.id}`,
-            failureUrl:    `${appUrl}/planos?payment=failed`,
-            pendingUrl:    `${appUrl}/planos?payment=pending&sub=${sub.id}`,
+            ...buildGatewayReturnUrls(appUrl, sub.id, String(sub.planType)),
           })
           checkoutUrl = checkoutResult.redirectUrl
         } catch (err) {

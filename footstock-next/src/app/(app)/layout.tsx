@@ -35,11 +35,23 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <main
             id="main-content"
             data-testid="main-content"
-            className="flex-1 pb-[calc(56px+env(safe-area-inset-bottom))] md:pb-0"
+            className="flex-1"
             tabIndex={-1}
           >
             {children}
           </main>
+
+          {/* Rodape consistente no shell autenticado (antes so existia no layout publico).
+              No mobile, o padding inferior libera espaco para a BottomTabBar fixa (56px) e
+              passa a ser o elemento que garante a area segura, no lugar do pb do <main>. */}
+          <footer
+            data-testid="app-footer"
+            className="border-t border-[rgba(240,185,11,.12)] px-4 py-6 pb-[calc(24px+56px+env(safe-area-inset-bottom))] md:pb-6"
+          >
+            <p className="max-w-3xl mx-auto text-center text-xs text-[#707A8A]">
+              © {new Date().getFullYear()} FootStock. Plataforma educacional de simulação financeira.
+            </p>
+          </footer>
 
           <BottomTabBar />
         </div>

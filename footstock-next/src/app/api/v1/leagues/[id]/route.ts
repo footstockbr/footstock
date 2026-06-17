@@ -21,6 +21,12 @@ export async function GET(
       return apiError(LEAGUE_ERRORS.NOT_FOUND.code, LEAGUE_ERRORS.NOT_FOUND.message, 404)
     }
 
+    // Privacidade: ligas AMIGOS sao privadas — apenas membros veem o detalhe e a lista
+    // de membros. Sem este gate, qualquer autenticado que saiba o id via dados privados.
+    if (league.type === 'AMIGOS' && league.isMember !== true) {
+      return apiError('LEAGUE_PRIVATE_FORBIDDEN', 'Voce nao participa desta liga.', 403)
+    }
+
     return ok(league)
   } catch (err) {
     if (err instanceof LeagueError) {
