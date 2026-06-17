@@ -68,6 +68,21 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  // Item 22: criacao de ligas patrocinadas DESCONTINUADA (fusao Pro/Patrocinadas em League
+  // type=PRO). O modelo SponsoredLeague fica apenas para leitura/rollback das ligas ja migradas.
+  // Crie ligas PRO patrocinadas via /admin/ligas-pro. Reativavel via env em emergencia.
+  if (process.env.SPONSORED_LEAGUE_CREATION_ENABLED !== 'true') {
+    return NextResponse.json(
+      {
+        error: {
+          code: 'SPONSORED-410',
+          message: 'Criacao de ligas patrocinadas descontinuada. Use Ligas PRO via /admin/ligas-pro.',
+        },
+      },
+      { status: 410 }
+    )
+  }
+
   try {
     const body = await request.json()
     const parsed = createSponsoredLeagueSchema.safeParse(body)

@@ -776,6 +776,13 @@ model League {
   inviteCode         String?    @unique @map("invite_code")
   permiteAlavancagem Boolean    @default(false) @map("permite_alavancagem")
   bannerId           String?    @map("banner_id")
+  // Item 22: campos absorvidos de SponsoredLeague na fusao Pro/Patrocinadas. So ligas type=PRO
+  // patrocinadas usam (null nas demais). A fonte unica passa a ser League type=PRO.
+  company            String?
+  sponsorUrl         String?    @map("sponsor_url")
+  minPlan            String?    @map("min_plan")
+  borderColor        String?    @map("border_color")
+  sponsorPrizes      Json?      @map("sponsor_prizes")
   createdAt          DateTime   @default(now()) @map("created_at")
   updatedAt          DateTime   @updatedAt @map("updated_at")
 
