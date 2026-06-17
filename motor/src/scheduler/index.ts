@@ -33,6 +33,7 @@ import { cancellationExpiryJob } from './jobs/cancellationExpiry'
 import { cardUpdaterJob } from './jobs/cardUpdater'
 import { financialDividendJob } from './jobs/financialDividend'
 import { sessionTransitionJob } from './jobs/sessionTransition'
+import { reconcilePaymentsJob } from './jobs/reconcilePayments'
 
 interface Job {
   name: string
@@ -52,7 +53,7 @@ export function registerJob(
 }
 
 /**
- * Registra os 23 jobs migrados do Vercel (19 originais + 4 do item 026 P1-01).
+ * Registra os jobs do scheduler (23 migrados do Vercel + reconcile-payments do item 12).
  * Deve ser chamada antes de startScheduler().
  */
 export function registerAllJobs(): void {
@@ -79,6 +80,8 @@ export function registerAllJobs(): void {
   registerJob('card-updater', '0 8 * * *', cardUpdaterJob)
   registerJob('financial-dividend', '0 5 1-7 * *', financialDividendJob)
   registerJob('session-transition', '* * * * *', sessionTransitionJob)
+  // Item 12: recuperacao de pagamento aprovado sem ativacao (webhook perdido). A cada 6h.
+  registerJob('reconcile-payments', '0 */6 * * *', reconcilePaymentsJob)
 }
 
 /**
