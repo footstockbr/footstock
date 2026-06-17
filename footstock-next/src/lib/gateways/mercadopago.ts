@@ -176,7 +176,7 @@ export class MercadoPagoGateway implements IGateway {
    */
   private async fetchPaymentStatus(
     paymentId: string
-  ): Promise<{ status?: string; externalReference?: string; amount?: number } | null> {
+  ): Promise<{ status?: string; externalReference?: string; amount?: number; liveMode?: boolean } | null> {
     const accessToken = env.MERCADO_PAGO_ACCESS_TOKEN
     if (!accessToken) {
       console.warn('[MERCADO_PAGO] fetchPaymentStatus: MERCADO_PAGO_ACCESS_TOKEN ausente — sem enriquecimento')
@@ -199,11 +199,13 @@ export class MercadoPagoGateway implements IGateway {
         status?: string
         external_reference?: string
         transaction_amount?: number
+        live_mode?: boolean
       }
       return {
         status:            body.status,
         externalReference: body.external_reference,
         amount:            body.transaction_amount,
+        liveMode:          body.live_mode,
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'erro desconhecido'
@@ -212,6 +214,18 @@ export class MercadoPagoGateway implements IGateway {
     } finally {
       clearTimeout(timeout)
     }
+  }
+
+  // ─── getPaymentDetails (publico, reconciliacao) ────────────────────────────
+
+  /**
+   * Wrapper publico de fetchPaymentStatus para a reconciliacao server-side de pagamentos
+   * (PlanService.reconcileApprovedPayment, endpoint admin de replay e cron reconcile-payments).
+   * Mesma garantia de seguranca: retorna null em qualquer falha; o chamador so ativa plano com
+   * status 'approved' explicito.
+   */
+  async getPaymentDetails(paymentId: string) {
+    return this.fetchPaymentStatus(paymentId)
   }
 
   // ─── parseWebhookEvent ────────────────────────────────────────────────────
@@ -255,6 +269,15 @@ export class MercadoPagoGateway implements IGateway {
         throw new GatewayRetryableError(
           `[MERCADO_PAGO] status indeterminado para payment ${dataId}: enriquecimento falhou — retry`
         )
+      }
+
+      // Defesa em profundidade: um pagamento em modo TESTE (live_mode=false) jamais pode
+      // ativar plano real. O token de produção (APP_USR) só processa live (live_mode=true);
+      // qualquer live_mode=false aqui é pagamento de sandbox/teste e deve ser descartado.
+      // TERMINAL (não-retryable): um pagamento de teste nunca vira live → não reenviar.
+      // Só rejeita quando explicitamente false (campo ausente não bloqueia o fluxo real).
+      if (fetched.liveMode === false) {
+        throw new Error(`[MERCADO_PAGO] pagamento em modo teste (live_mode=false) ignorado: ${dataId}`)
       }
 
       mpStatus = fetched.status ?? ''

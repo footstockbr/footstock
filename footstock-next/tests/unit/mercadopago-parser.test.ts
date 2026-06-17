@@ -65,6 +65,20 @@ describe('parseWebhookEvent — type=payment SEMPRE busca via API e ignora o pay
     expect(global.fetch).toHaveBeenCalledTimes(1)
   })
 
+  it('DEFESA: fetch approved mas live_mode=false (pagamento de teste) → descarta, NÃO confirma', async () => {
+    mockFetchJson({ status: 'approved', external_reference: 'sub_test', transaction_amount: 29.9, live_mode: false })
+    await expect(
+      gateway.parseWebhookEvent(payload({ type: 'payment', data: { id: '111000020' } }))
+    ).rejects.toThrow(/modo teste|live_mode/)
+  })
+
+  it('live_mode=true approved → confirma normalmente (guard não bloqueia pagamento real)', async () => {
+    mockFetchJson({ status: 'approved', external_reference: 'sub_live', transaction_amount: 1.2, live_mode: true })
+    const ev = await gateway.parseWebhookEvent(payload({ type: 'payment', data: { id: '111000021' } }))
+    expect(ev.eventType).toBe('PAYMENT_CONFIRMED')
+    expect(ev.subscriptionId).toBe('sub_live')
+  })
+
   it('payload diz approved mas o FETCH retorna pending → NÃO confirma (payload ignorado)', async () => {
     mockFetchJson({ status: 'pending', external_reference: 'sub_3' })
     await expect(
