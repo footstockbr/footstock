@@ -228,6 +228,51 @@ export class MercadoPagoGateway implements IGateway {
     return this.fetchPaymentStatus(paymentId)
   }
 
+  // ─── searchApprovedPaymentByExternalReference (reconciliacao por subscription) ──
+
+  /**
+   * Busca no MP um pagamento APROVADO (live_mode) por external_reference (= subscriptionId).
+   * Usado pelo cron reconcile-payments para recuperar uma subscription PENDING cujo webhook se
+   * perdeu — sem depender do paymentId (que so chega no webhook). Crucial porque webhooks
+   * rejeitados no HMAC sao logados SEM transaction_id, entao um sweep por audit log nao acha
+   * candidatos. Retorna o paymentId do primeiro pagamento approved+live, ou null. Falha em
+   * qualquer erro retorna null (nunca ativa sem confirmacao explicita).
+   */
+  async searchApprovedPaymentByExternalReference(externalReference: string): Promise<string | null> {
+    const accessToken = env.MERCADO_PAGO_ACCESS_TOKEN
+    if (!accessToken || !externalReference) return null
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), GATEWAY_TIMEOUT_MS)
+    try {
+      const url =
+        `https://api.mercadopago.com/v1/payments/search?external_reference=${encodeURIComponent(externalReference)}` +
+        `&sort=date_created&criteria=desc`
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${accessToken}` },
+        signal: controller.signal,
+      })
+      if (!response.ok) {
+        console.warn(`[MERCADO_PAGO] searchByExternalReference: HTTP ${response.status} para ref ${externalReference}`)
+        return null
+      }
+      const body = (await response.json()) as {
+        results?: Array<{ id?: string | number; status?: string; live_mode?: boolean }>
+      }
+      const approved = (body.results ?? []).find(
+        (r) => r.status === 'approved' && r.live_mode !== false,
+      )
+      return approved?.id != null ? String(approved.id) : null
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'erro desconhecido'
+      console.warn(`[MERCADO_PAGO] searchByExternalReference falhou para ref ${externalReference}: ${msg}`)
+      return null
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+
   // ─── parseWebhookEvent ────────────────────────────────────────────────────
 
   async parseWebhookEvent(payload: string): Promise<WebhookEvent> {
