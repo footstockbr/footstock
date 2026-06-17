@@ -186,7 +186,11 @@ describe('AdminMarketActions', () => {
 
     const result = await actions.handle(action)
     expect(result.success).toBe(true)
-    expect(mockEngine.adjustPrice).toHaveBeenCalledWith('asset_001', 35.00)
+    // adjustPrice recebe metadados de auditoria (adminId, reason) como 3o argumento.
+    expect(mockEngine.adjustPrice).toHaveBeenCalledWith('asset_001', 35.00, {
+      adminId: 'admin_001',
+      reason: 'Ajuste manual de preço',
+    })
     // log é chamado com (action, previousPrice, newPrice)
     expect(mockLogger.log).toHaveBeenCalledWith(action, undefined, 35)
   })
