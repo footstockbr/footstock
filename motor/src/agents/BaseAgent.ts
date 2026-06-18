@@ -20,6 +20,15 @@ export interface MarketContext {
   fairValue: number
   priceChange24h: number
   volume24h: number
+  /**
+   * Profundidade canônica do book do cluster (params.baseVolume). É um valor
+   * FIXO por cluster (não realimentado por state.volume), usado pelos agentes
+   * que dimensionam quantity por profundidade — MarketMaker e PanicSeller — em
+   * vez de volume24h. Desacopla quantity do volume executado (Item T2.2): com
+   * state.volume zerado a quantity permanece finita e coerente; com volume alto
+   * não há explosão por realimentação.
+   */
+  baseVolume: number
   bid: number
   ask: number
   spread: number

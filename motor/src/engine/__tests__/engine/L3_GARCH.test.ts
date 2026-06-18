@@ -75,17 +75,64 @@ describe('L3_GARCHLite', () => {
     expect(result.metadata?.capped).toBe(1)
   })
 
-  test('fórmula GARCH: Var_t = 0.000002 + 0.12*r² + 0.85*Var_{t-1}', () => {
-    const closePrice = 100
-    const currentPrice = 102  // r = 0.02
+  test('fórmula GARCH: Var_t = 0.000002 + 0.12*r² + 0.85*Var_{t-1} (r = retorno do tick anterior)', () => {
     const prevVariance = 0.0001
-    const state = baseState({ closePrice, currentPrice, variance: prevVariance })
+    const r = 0.02  // retorno tick-a-tick do tick anterior (NÃO acumulado do dia)
+    const state = baseState({ lastTickReturn: r, variance: prevVariance })
 
-    const r = (currentPrice - closePrice) / closePrice  // 0.02
     const expectedVariance = 0.000002 + 0.12 * r ** 2 + 0.85 * prevVariance
 
     l3.applyLayer(state, params(), 0)
     expect(state.variance).toBeCloseTo(Math.min(expectedVariance, 0.0001 * 1.8), 10)
+  })
+
+  test('T3.2 — garch.lastReturn == retorno do tick anterior (state.lastTickReturn), não vs close diário', () => {
+    // closePrice distante de currentPrice produziria um retorno diário espúrio (~+11%)
+    // se a L3 ainda usasse (currentPrice - closePrice)/closePrice. O valor correto é o
+    // retorno tick-a-tick propagado pelo PriceCalculator (T3.1).
+    const tickReturn = -0.0007
+    const state = baseState({ lastTickReturn: tickReturn, closePrice: 90, currentPrice: 100 })
+
+    const result = l3.applyLayer(state, params(), 0)
+    expect(result.metadata?.lastReturn).toBeCloseTo(tickReturn, 12)
+  })
+
+  test('T3.2 — lastTickReturn ausente (primeiro tick pós-restart) => lastReturn 0', () => {
+    const state = baseState({ closePrice: 90, currentPrice: 100 })  // sem lastTickReturn
+    const result = l3.applyLayer(state, params(), 0)
+    expect(result.metadata?.lastReturn).toBe(0)
+  })
+
+  test('T3.2/T3.3 — termo estocástico escala por √dt, consistente com L1 (default-safe legacy 5/390)', () => {
+    const state = baseState({ variance: 0.0001 })
+    const noise = 1.3
+    const result = l3.applyLayer(state, params(), noise)
+
+    const dt = Number(result.metadata?.dt)
+    const sigmaEff = Number(result.metadata?.sigmaEff)
+    // T3.3: MOTOR_TICK_DT_SECONDS ausente => default EXPLÍCITO legacy 5/390 (não mais 1.0 acidental).
+    expect(dt).toBeCloseTo(5 / 390, 12)
+    // deltaPrice = σ_eff × √dt × noise × P
+    expect(result.deltaPrice).toBeCloseTo(sigmaEff * Math.sqrt(dt) * noise * state.currentPrice, 12)
+  })
+
+  test('T3.2 — √dt aplicado (não dt linear): dt=4 escala o ruído por 2×, não 4×', () => {
+    const prev = process.env.MOTOR_TICK_DT_SECONDS
+    process.env.MOTOR_TICK_DT_SECONDS = '4'
+    jest.isolateModules(() => {
+      // re-import com DT capturado em module-scope = 4 (mesmo padrão de L1_OU)
+      const { L3_GARCHLite: L3Scaled } = require('../../layers/L3_GARCHLite')
+      const l3Scaled = new L3Scaled()
+      const noise = 1.0
+      const state = baseState({ variance: 0.0001 })
+      const result = l3Scaled.applyLayer(state, params(), noise)
+      const sigmaEff = Number(result.metadata?.sigmaEff)
+      expect(result.metadata?.dt).toBe(4)
+      // √4 = 2 (não 4): prova que é √dt e não dt linear
+      expect(result.deltaPrice).toBeCloseTo(sigmaEff * 2 * noise * state.currentPrice, 12)
+    })
+    if (prev === undefined) delete process.env.MOTOR_TICK_DT_SECONDS
+    else process.env.MOTOR_TICK_DT_SECONDS = prev
   })
 
   test('dailySigmaMultiplier=0 congela GARCH (delta zero)', () => {

@@ -29,18 +29,89 @@ import { LeverageInterestRunner } from './LeverageInterestRunner'
 import { CLUB_STATE_BY_TICKER } from '../microstructure/clubStates'
 import type { PreviousTickDelta } from '../types/motor.types'
 import { NUDGE_MIN_PRICE } from './nudge-constants'
+import { deriveAgentQuotes } from './agent-quotes'
 import { NEWS_IMPACT_DURATION_TICKS } from '../contracts/news-inject-contract'
+// TODO:REMOVE debug instrumentation (loop 06-17-motor-footstock-correcoes-variacoes / T0.1)
+import { maybeEmitTickDebug } from '../utils/tickDebug'
 
 const TICK_INTERVAL_MS = parseInt(process.env.MOTOR_TICK_INTERVAL_MS ?? '2000', 10)
 const PERSIST_HISTORY_EVERY = 6  // Persistir PriceHistory a cada N ticks ≈ 1min com tick=10s (reduzido de 30 para evitar gráficos degrau-degrau em B_LIQUID/B_ILLIQ; A_TOP persiste sempre — ver item 004)
 const PAUSE_RESUME_MS = 5 * 60 * 1000  // 5 minutos absolutos (independente de TICK_INTERVAL_MS)
 // Heartbeat a cada N ticks (reduz comandos Redis — TTL do MotorHealthService: 60s)
 const HEARTBEAT_EVERY = parseInt(process.env.MOTOR_HEARTBEAT_EVERY ?? '5', 10)
+// T1.4 (loop 06-17): semântica de execução de ordens reais. 'pre-agent' (default-safe)
+// casa ordens reais no preço PRÉ-agente (somente dinâmica do motor); 'post-agent' casa
+// no preço publicado (com o impacto do agente). A decisão pre/pos é uma flag operacional
+// (donos: operador técnico + produto/mercado) — trocar de lado não exige reimplementação.
+// Qualquer valor diferente de 'post-agent' resolve para o default seguro 'pre-agent'.
+const REAL_ORDER_MATCH_PRICE: 'pre-agent' | 'post-agent' =
+  process.env.MOTOR_REAL_ORDER_MATCH_PRICE === 'post-agent' ? 'post-agent' : 'pre-agent'
 // Sanity cap em state.volume — defesa em profundidade contra feedback loop dos
 // agents que escalam quantity por volume24h (PanicSeller, MarketMaker).
 // MAX_INT64 e ~9.2e18; usar 1e15 (1 quatrilhao) deixa folga absurda para
 // volume legitimo e ainda detecta loop bem antes de overflow.
 const MAX_DAILY_VOLUME = 1_000_000_000_000_000  // 1e15
+
+/**
+ * T2.1 — Soma o volume EXECUTADO de um conjunto de fills casados pelo OrderBook.
+ * state.volume reflete fluxo executado (synthetic dos agentes + fills), nunca book
+ * pendente; alimentar volume com o book inflava o 24h com ordens que talvez nunca
+ * executassem. Pura e determinística (testável com 500 ticks sem fills).
+ */
+export function sumExecutedVolume(fills: ReadonlyArray<{ quantity: number }>): number {
+  let total = 0
+  for (const fill of fills) total += fill.quantity
+  return total
+}
+
+/**
+ * T4.2 — Resolve a âncora do circuit breaker (closePrice) no warm-start/hidratação.
+ *
+ * NÃO re-ancora em currentPrice: re-ancorar a cada reinício do motor descartava a
+ * âncora real do dia, alargando a banda de 8% indefinidamente. Combinado com a
+ * re-âncora de retomada do CB, produzia a catraca que descia o preço em escada até
+ * o floor R$1 (sintoma documentado no próprio loadAssets/tick). A re-âncora legítima
+ * acontece apenas na abertura do dia (transição de sessão PRE_OPENING).
+ *
+ * Precedência:
+ *   1. recoveryPrice — auto-recovery reseta o ativo ao preço canônico; a âncora
+ *      acompanha esse preço (reset legítimo, não warm-start).
+ *   2. persistedClose — a âncora do dia persistida no DB sobrevive ao restart.
+ *   3. currentPrice — fallback de segurança quando o close persistido é inválido
+ *      (<=0 ou não-finito): evita âncora nula que desligaria o CB (L10 ignora
+ *      closePrice === 0). Cobre a condição de reversão "produzir referência nula".
+ *
+ * Pura e determinística.
+ */
+export function resolveWarmStartClosePrice(
+  persistedClose: number,
+  currentPrice: number,
+  recoveryPrice: number | null,
+): number {
+  if (recoveryPrice !== null) return recoveryPrice
+  if (Number.isFinite(persistedClose) && persistedClose > 0) return persistedClose
+  return currentPrice
+}
+
+/**
+ * T3.1 — Retorno realizado entre o tick anterior e o atual de um ativo:
+ *   (currentPrice - previousPrice) / previousPrice
+ * Alimenta previousTickDeltas -> L10_Correlation. NÃO usa o close diário: antes
+ * o delta saía de (currentPrice - close)/close, que é o retorno DIÁRIO (vs a
+ * âncora do CB), inflando a correlação inter-ativos por ordens de grandeza.
+ *
+ * Sem previousPrice (primeiro tick após (re)start) ou com previousPrice/currentPrice
+ * não-positivos o delta é 0 — dado inicial tratável. Crucialmente, NÃO substitui o
+ * previousPrice ausente pelo close diário (que produziria um retorno diário espúrio
+ * silenciosamente no reinício do motor). Pura e determinística.
+ */
+export function computeTickReturnDelta(
+  currentPrice: number,
+  previousPrice: number | undefined,
+): number {
+  if (previousPrice === undefined || previousPrice <= 0 || currentPrice <= 0) return 0
+  return (currentPrice - previousPrice) / previousPrice
+}
 
 export class MarketEngine {
   private redis: Redis
@@ -62,6 +133,12 @@ export class MarketEngine {
   private leverageInterestRunner: LeverageInterestRunner
   /** Deltas percentuais do tick anterior — alimenta L10_Correlation. */
   private previousTickDeltas = new Map<string, PreviousTickDelta>()
+  /**
+   * Preço de fechamento do TICK anterior por ativo (T3.1) — base do retorno
+   * tick-a-tick em previousTickDeltas. Vazio em (re)start: o primeiro tick fica
+   * com delta 0 em vez de cair no close diário. NÃO é o close diário do candle.
+   */
+  private previousTickPrices = new Map<string, number>()
   /** Sessão do tick anterior — detecta transições para resetar âncora do CB. */
   private previousSessionType: SessionType | null = null
   /** Atribuições acumuladas entre candles persistidos por ativo. */
@@ -137,6 +214,10 @@ export class MarketEngine {
       clearTimeout(timer)
     }
     this.circuitBreakerTimers.clear()
+    // T3.1 — zera a base de retorno tick-a-tick: após (re)start o primeiro tick
+    // recomeça com delta 0, sem herdar o preço de antes do restart nem o close diário.
+    this.previousTickPrices.clear()
+    this.previousTickDeltas.clear()
     agentOrchestrator.dispose()
     if (disconnectPrisma) {
       await this.prisma.$disconnect()
@@ -159,15 +240,13 @@ export class MarketEngine {
       state.isPaused = false
       state.haltReason = null
       state.haltResumeAt = null
-      // Re-ancora o CB no preço de retomada. Ao disparar, o preço já se afastou
-      // >=8% da âncora (closePrice). Mantê-la (ou reusar openPrice, que no warm
-      // start é o mesmo valor congelado) faz o CB re-disparar no tick seguinte,
-      // criando um loop de halt permanente (sintoma: maioria dos ativos presa em
-      // "Pausado"). Re-centrar em currentPrice dá uma banda de 8% nova a partir de
-      // onde o ativo retomou — mesma semântica do reset de transição de sessão.
-      if (state.currentPrice > 0) {
-        state.closePrice = state.currentPrice
-      }
+      // T4.2: NÃO re-ancorar closePrice na retomada. A âncora do dia é preservada
+      // da pré-halt. O L9/L10 travam o movimento que excederia a banda, então na
+      // retomada currentPrice está logo abaixo de 8% da âncora e o CB não
+      // re-dispara. Re-ancorar em currentPrice criava uma catraca: cada halt abria
+      // uma banda de 8% nova a partir do preço de retomada, escalando o preço em
+      // escada (sintoma documentado: queda em escada até o floor R$1). A re-âncora
+      // legítima ocorre apenas na abertura do dia (transição de sessão PRE_OPENING).
       const sessionType = sessionManager.getCurrentSession()
       logger.info(`[engine] ${state.ticker} retomado após circuit breaker (closePrice=${state.closePrice.toFixed(4)}, currentPrice=${state.currentPrice.toFixed(4)})`)
       this.persistHaltState(assetId, false, null, null).catch(console.error)
@@ -205,8 +284,9 @@ export class MarketEngine {
     const recoveryUpdates: Array<{ id: string; ticker: string; price: number; fv: number }> = []
 
     for (const asset of assets) {
-      // Warm start: closePrice = currentPrice para evitar circuit breaker imediato
-      // no reinício do motor (L9 compara currentPrice vs closePrice).
+      // Warm start: a âncora do CB (closePrice) adota o close persistido do dia
+      // (ver resolveWarmStartClosePrice abaixo), preservando a banda real entre
+      // reinícios. L9/L10 comparam currentPrice vs closePrice.
       const rawPrice = Number(asset.currentPrice)
 
       // ── Auto-recovery ────────────────────────────────────────────────────
@@ -259,7 +339,10 @@ export class MarketEngine {
         openPrice: currentPriceNum,
         highPrice: currentPriceNum,
         lowPrice: currentPriceNum,
-        closePrice: currentPriceNum,   // warm start: âncora do CB = preço atual
+        // T4.2: warm start NÃO re-ancora a âncora do CB em currentPrice — adota o
+        // close persistido do dia (resolveWarmStartClosePrice). Re-ancorar a cada
+        // restart alargava a banda de 8% e alimentava a escada de preço.
+        closePrice: resolveWarmStartClosePrice(Number(asset.closePrice), currentPriceNum, recoveryPrice),
         fairValue: recoveryPrice ?? Number(asset.fairValue ?? asset.currentPrice),
         volume: 0,
         variance: 0.00001,  // Variância GARCH inicial (reduzida 10x: evita ruído GARCH soterrar L2_Anchor)
@@ -411,15 +494,55 @@ export class MarketEngine {
         // Propagar multiplicador de sessão para o estado (L1/L3 leem de state)
         state.volatilityMultiplier = volatilityMultiplier
 
-        // Calcular novo preço via 10 camadas (L1-L10) + Correlação
-        const calcResult = this.calculator.calculate(state, params, noise, this.previousTickDeltas)
-        const { newPrice, halted } = calcResult
+        // T1.4: os agentes são computados ANTES do PriceCalculator e o impacto entra
+        // como delta DENTRO do pipeline (antes de L8/correlação/freio/L10). O contexto
+        // do agente usa o preço de início do tick (previousPrice = state.currentPrice),
+        // não o preço pós-camadas — o agente reage ao mercado estabelecido e seu impacto
+        // flui pelo motor, em vez de ser aplicado por fora escapando do cap e do CB.
+        //
+        // Spread bid-ask do BOOK REAL na unidade FRACIONAL (ask-bid)/mid — a mesma
+        // de TARGET_SPREAD do MarketMaker. Fallback: params.spread (spread base do
+        // cluster, já fracional) quando o book está vazio/unilateral. ANTES (Item
+        // T1.1 do loop 06-17): ctx.spread era newPrice*0.002, um valor ABSOLUTO
+        // comparado contra TARGET_SPREAD=0.001 (fração) — o mismatch de unidade
+        // fazia o MarketMaker disparar em todo tick. A fórmula de impacto NÃO muda.
+        // Logica pura e testada em isolamento: ver agent-quotes.ts + __tests__.
+        const { bid: agentBid, ask: agentAsk, spread: fractionalSpread } = deriveAgentQuotes(
+          orderBook.getBestBid(),
+          orderBook.getBestAsk(),
+          previousPrice,
+          params.spread,
+        )
+
+        // Aplicar impacto dos agentes de mercado (module-8/TASK-3)
+        const agentCtx: MarketContext = {
+          ticker: state.ticker,
+          currentPrice: previousPrice,
+          fairValue: state.fairValue, // Fair value da coluna fair_value (âncora OU)
+          priceChange24h: state.openPrice > 0 ? (previousPrice - state.openPrice) / state.openPrice : 0,
+          volume24h: state.volume,
+          baseVolume: params.baseVolume, // T2.2: profundidade fixa do cluster (desacopla quantity de state.volume)
+          bid: agentBid,
+          ask: agentAsk,
+          spread: fractionalSpread,
+          session: sessionType,
+          volatilityMultiplier,
+        }
+        const { impact: agentImpact, syntheticVolume, marketMakerDecision } = agentOrchestrator.tickAsset(assetId, agentCtx)
+
+        // Calcular novo preço via 10 camadas (L1-L10) + Correlação, com o impacto do
+        // agente injetado como delta antes de L8/correlação/freio/L10 (T1.4).
+        const calcResult = this.calculator.calculate(state, params, noise, this.previousTickDeltas, agentImpact)
+        const { newPrice, enginePrice, halted } = calcResult
 
         // Armazenar resultado das camadas para o endpoint de debug (admin only)
         this.lastLayerResults.set(state.ticker, calcResult)
 
         if (halted) {
-          // Circuit breaker: notificar, pausar e persistir halt no DB
+          // Circuit breaker: notificar, pausar e persistir halt no DB. O agente já foi
+          // ticado neste ciclo (seu impacto pode ter contribuído para o halt — é o
+          // comportamento desejado: agente sujeito ao CB); o volume sintético NÃO é
+          // acumulado em tick de halt.
           const variationPct = state.closePrice > 0
             ? Math.abs((state.currentPrice - state.closePrice) / state.closePrice) * 100
             : 0
@@ -440,23 +563,16 @@ export class MarketEngine {
           continue
         }
 
-        // Aplicar impacto dos agentes de mercado (module-8/TASK-3)
-        const agentCtx: MarketContext = {
-          ticker: state.ticker,
-          currentPrice: newPrice,
-          fairValue: state.fairValue, // Fair value da coluna fair_value (âncora OU)
-          priceChange24h: state.openPrice > 0 ? (newPrice - state.openPrice) / state.openPrice : 0,
-          volume24h: state.volume,
-          bid: newPrice * 0.999,
-          ask: newPrice * 1.001,
-          spread: newPrice * 0.002,
-          session: sessionType,
-          volatilityMultiplier,
-        }
-        const { impact: agentImpact, syntheticVolume } = agentOrchestrator.tickAsset(assetId, agentCtx)
-        // Fix A: re-aplicar floor depois do impacto dos agentes — sem isso,
-        // o agente puxa o preço abaixo de NUDGE_MIN_PRICE e equilibra em ~0.98.
-        const finalPrice = Math.max(NUDGE_MIN_PRICE, newPrice * (1 + agentImpact))
+        // Preço publicado (canônico): inclui o impacto do agente, já capado por L8 e
+        // verificado pelo CB dentro do calculate. NÃO há mais o caminho alternativo
+        // finalPrice = newPrice*(1+agentImpact) — o floor já foi reaplicado no calculate.
+        const finalPrice = newPrice
+
+        // T1.4 default-safe: ordens reais casam ao preço PRÉ-agente por padrão
+        // (MOTOR_REAL_ORDER_MATCH_PRICE=pre-agent). O toggle 'post-agent' casa no preço
+        // publicado (com agente). A decisão pre/pos é uma flag operacional, não
+        // reimplementação. Ver env.ts e .env.example.
+        const matchPrice = REAL_ORDER_MATCH_PRICE === 'post-agent' ? finalPrice : enginePrice
         const tickEndedAt = new Date()
         // Ajustes admin aplicados desde a última atribuição deste ativo: o salto
         // old→new ocorreu entre ticks, então a atribuição parte do preço
@@ -478,7 +594,10 @@ export class MarketEngine {
         })
         const attribution = buildPriceAttributionV2({
           previousPrice: attributionPreviousPrice,
-          enginePrice: newPrice,
+          // enginePrice = preço PRÉ-agente (T1.4); a atribuição deriva o delta do agente
+          // como finalPrice - enginePrice. Antes era newPrice (que já incluía o agente
+          // por fora), o que zerava a contribuição atribuída ao agente.
+          enginePrice,
           finalPrice,
           agentImpact,
           syntheticVolume,
@@ -506,8 +625,10 @@ export class MarketEngine {
         // do cap interno, nao ha overflow do BigInt persistido em assets.volume.
         state.volume = Math.min(state.volume + syntheticVolume, MAX_DAILY_VOLUME)
 
-        // Match de ordens pendentes
-        const fills = orderBook.matchOrders(finalPrice)
+        // Match de ordens pendentes ao preço de execução escolhido pelo toggle T1.4
+        // (default pre-agente: matchPrice == enginePrice; post-agente: == finalPrice).
+        const fills = orderBook.matchOrders(matchPrice)
+        const executedVolume = sumExecutedVolume(fills)
         if (fills.length > 0) {
           this.processFills(fills, state).catch(console.error)
         }
@@ -516,13 +637,30 @@ export class MarketEngine {
         state.currentPrice = finalPrice
         state.highPrice = Math.max(state.highPrice, finalPrice)
         state.lowPrice = Math.min(state.lowPrice, finalPrice)
-        state.volume = Math.min(
-          state.volume + state.pendingBuyVolume + state.pendingSellVolume,
-          MAX_DAILY_VOLUME,
-        )
+        // T2.1 — volume 24h acumula APENAS fluxo EXECUTADO (fills casados neste tick).
+        // O book pendente (pendingBuy+pendingSell) é "book pressure", métrica SEPARADA
+        // exposta em state.bookPressure; somá-lo a state.volume inflava o 24h com ordens
+        // que talvez nunca executem. L5 (KyleLambda) ainda lê os campos pending direto.
+        state.bookPressure = state.pendingBuyVolume + state.pendingSellVolume
+        state.volume = Math.min(state.volume + executedVolume, MAX_DAILY_VOLUME)
 
         const tick = buildMotorTick(state, finalPrice, sessionType)
         ticks.push(tick)
+
+        // TODO:REMOVE debug instrumentation (loop 06-17-motor-footstock-correcoes-variacoes / T0.1)
+        // No-op quando MOTOR_TICK_DEBUG está OFF. Apenas LÊ campos já computados.
+        maybeEmitTickDebug({
+          timestamp: tick.timestamp,
+          ticker: state.ticker,
+          agentImpact,
+          syntheticVolume,
+          stateVolume: state.volume,
+          pendingBuyVolume: state.pendingBuyVolume,
+          pendingSellVolume: state.pendingSellVolume,
+          marketMakerDecision,
+          ofiState: state.ofiState ?? 0,
+          layerResults: calcResult.layerResults,
+        })
 
         /** A_TOP persiste sempre (FDD canônico). Demais tiers persistem a cada PERSIST_HISTORY_EVERY ticks. */
         const shouldPersist =
@@ -554,18 +692,24 @@ export class MarketEngine {
       await this.redis.publish(REDIS_CHANNELS.MARKET_TICK, serializeTick(ticks))
     }
 
-    // Atualizar mapa de deltas para L10_Correlation no próximo tick
+    // Atualizar mapa de deltas para L10_Correlation no próximo tick.
+    // T3.1 — deltaPercent é o retorno TICK-A-TICK (currentPrice vs preço do tick
+    // anterior do mesmo ativo), não o retorno vs close diário. Sem preço do tick
+    // anterior (primeiro tick após restart) o delta é 0; nunca substituímos pelo
+    // close diário silenciosamente.
     this.previousTickDeltas.clear()
     for (const [assetId, state] of this.assetStates) {
       if (state.isPaused) continue
       const tick = ticks.find(t => t.assetId === assetId)
       if (tick && state.currentPrice > 0) {
-        const prevClose = tick.close > 0 ? tick.close : state.currentPrice
+        const previousPrice = this.previousTickPrices.get(assetId)
         this.previousTickDeltas.set(assetId, {
-          deltaPercent: prevClose > 0 ? (state.currentPrice - prevClose) / prevClose : 0,
+          deltaPercent: computeTickReturnDelta(state.currentPrice, previousPrice),
           cluster: state.cluster,
           state: state.state,
         })
+        // Grava o preço deste tick como base do retorno do PRÓXIMO tick.
+        this.previousTickPrices.set(assetId, state.currentPrice)
       }
     }
 

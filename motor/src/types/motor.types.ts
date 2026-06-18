@@ -80,6 +80,10 @@ export interface AssetState {
   variance: number           // Variância GARCH atual (σ²)
   pendingBuyVolume: number   // OFI: volume comprador pendente
   pendingSellVolume: number  // OFI: volume vendedor pendente
+  // T2.1 — Book pressure: pendingBuyVolume + pendingSellVolume do último tick.
+  // Métrica SEPARADA do volume 24h: o book pendente NÃO alimenta state.volume
+  // (que reflete fluxo EXECUTADO — synthetic dos agentes + fills casados).
+  bookPressure?: number
   isPaused: boolean          // Circuit breaker ou ação admin
   haltReason: string | null  // Motivo do halt ('CIRCUIT_BREAKER', 'FORCE_CIRCUIT_BREAKER', etc.)
   haltResumeAt: number | null // Unix ms estimado para retomada automática
@@ -97,6 +101,11 @@ export interface AssetState {
   // Nudge — ticks consecutivos sem variação de preço (reset a cada movimento real).
   // Quando atinge NUDGE_TICKS, dispara micro-choque ±0.01 na direção do fairValue.
   ticksSinceLastChange?: number
+  // T3.2 — Retorno tick-a-tick do tick ANTERIOR ((P_t - P_{t-1})/P_{t-1}), o r_{t-1}
+  // consumido por L3_GARCH. Transiente: o PriceCalculator repopula a cada tick a partir
+  // de previousTickDeltas (mesmo retorno tick-a-tick de T3.1), NÃO do retorno vs close
+  // diário. Ausente no primeiro tick pós-restart => tratado como 0 por L3.
+  lastTickReturn?: number
 }
 
 // ─── Correlação Inter-Ativos ─────────────────────────────────────────────────

@@ -9,7 +9,7 @@
  *   (iv)  Nudge respeita invariantes de L8 (velocity cap) e L10 (circuit breaker).
  */
 import { PriceCalculator } from '../PriceCalculator'
-import { NUDGE_TICKS, NUDGE_DELTA } from '../nudge-constants'
+import { NUDGE_TICKS, NUDGE_DELTA, classifyNudgeMove } from '../nudge-constants'
 import type { AssetState, ClusterParams } from '../../types/motor.types'
 
 // State minimo que mantem L1-L7 silenciosos (delta = 0) para isolar o nudge.
@@ -188,5 +188,67 @@ describe('Minimum Activity Nudge (L7.5)', () => {
     expect(result.halted).toBe(true)
     // _applyNudge nao foi chamado (pipeline retorna no guard de isPaused)
     expect(state.ticksSinceLastChange).toBe(NUDGE_TICKS - 1) // contador inalterado
+  })
+})
+
+/**
+ * T4.4 — criterio de inatividade por TOLERANCIA percentual/absoluta no lugar da
+ * igualdade a 2 casas. Cobre os 6 contratos de aceite (a..f) na funcao pura
+ * `classifyNudgeMove`, que o `_applyNudge` consome:
+ *   'stable' -> conta inatividade (alimenta o contador do nudge).
+ *   'moved'  -> movimento real (reseta o contador, sem nudge espurio).
+ *   'invalid'-> aborta defensivamente (sem disparo silencioso, sem excecao).
+ */
+describe('Nudge tolerance criterion (T4.4)', () => {
+  const P = 28.0
+
+  test('(a) move acima da tolerancia conta como movimento real (sem nudge espurio)', () => {
+    // tolerancia absoluta 0.01; delta 0.05 (> limiar) -> movimento real.
+    expect(classifyNudgeMove(0.05, P, 0, 0.01)).toBe('moved')
+    expect(classifyNudgeMove(-0.05, P, 0, 0.01)).toBe('moved')
+  })
+
+  test('(b) estavel dentro da tolerancia conta como inatividade (eventual nudge)', () => {
+    // delta 0.004 dentro do limiar 0.01 -> permanece estavel.
+    expect(classifyNudgeMove(0.004, P, 0, 0.01)).toBe('stable')
+    expect(classifyNudgeMove(-0.004, P, 0, 0.01)).toBe('stable')
+    // limite inclusivo: |delta| == limiar ainda e estavel.
+    expect(classifyNudgeMove(0.01, P, 0, 0.01)).toBe('stable')
+  })
+
+  test('(c) ruido de centavos (delta 0.01) com tolerancia >= 0.01 fica estavel; acima dispara reset', () => {
+    expect(classifyNudgeMove(0.01, P, 0, 0.01)).toBe('stable')   // ruido absorvido
+    expect(classifyNudgeMove(0.0101, P, 0, 0.01)).toBe('moved')  // acima da tolerancia
+  })
+
+  test('(d) entrada invalida (NaN/null/undefined) aborta sem excecao', () => {
+    expect(classifyNudgeMove(NaN, P, 0, 0.01)).toBe('invalid')
+    expect(classifyNudgeMove(0.01, NaN, 0, 0.01)).toBe('invalid')
+    expect(classifyNudgeMove(0.01, P, NaN, 0.01)).toBe('invalid')
+    expect(classifyNudgeMove(0.01, P, 0, NaN)).toBe('invalid')
+    // null/undefined forcados via runtime (chegam da hidratacao do Redis).
+    expect(classifyNudgeMove(null as unknown as number, P, 0, 0.01)).toBe('invalid')
+    expect(classifyNudgeMove(0.01, undefined as unknown as number, 0, 0.01)).toBe('invalid')
+    // Nunca lanca: a chamada acima ja teria estourado se houvesse excecao.
+    expect(() => classifyNudgeMove(Infinity, P, 0, 0.01)).not.toThrow()
+    expect(classifyNudgeMove(Infinity, P, 0, 0.01)).toBe('invalid')
+  })
+
+  test('(e) tolerancia percentual e absoluta ambas zero volta a igualdade estrita a 2 casas', () => {
+    // Igualdade estrita: candidate rounded == P rounded -> stable; senao moved.
+    expect(classifyNudgeMove(0.004, P, 0, 0)).toBe('stable')   // 28.004 -> 28.00 == 28.00
+    expect(classifyNudgeMove(0.006, P, 0, 0)).toBe('moved')    // 28.006 -> 28.01 != 28.00
+    expect(classifyNudgeMove(0.0, P, 0, 0)).toBe('stable')
+  })
+
+  test('(f) ambos configurados nao-zero aplicam max(pct*ref, abs), nunca a soma', () => {
+    // pct alto (0.01 * 28 = 0.28) domina abs (0.01). limiar = 0.28, NAO 0.29 (soma).
+    // delta 0.28 esta no limite do max -> estavel; se fosse soma (0.29) tambem seria
+    // estavel, entao usamos um delta que distingue os dois: 0.285.
+    expect(classifyNudgeMove(0.285, P, 0.01, 0.01)).toBe('moved')   // > max(0.28,0.01)=0.28; soma daria 0.29 (stable)
+    expect(classifyNudgeMove(0.28, P, 0.01, 0.01)).toBe('stable')   // == limiar max
+    // simetria: abs domina pct quando pct*ref < abs.
+    expect(classifyNudgeMove(0.05, P, 0.0001, 0.1)).toBe('stable')  // max(0.0028,0.1)=0.1
+    expect(classifyNudgeMove(0.15, P, 0.0001, 0.1)).toBe('moved')   // > 0.1
   })
 })

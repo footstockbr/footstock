@@ -106,4 +106,31 @@ export class OrderBook {
   getOrderCount(): number {
     return this.buyOrders.size + this.sellOrders.size
   }
+
+  /**
+   * Melhor (maior) preço de compra LIMIT resting no book, ou null quando não há
+   * bids LIMIT. Apenas ordens LIMIT formam cotação de book (STOP/TAKE_PROFIT são
+   * gatilhos, não quotes). Usado pelo MarketEngine para derivar o spread real.
+   */
+  getBestBid(): number | null {
+    let best: number | null = null
+    for (const o of this.buyOrders.values()) {
+      if (o.type !== 'LIMIT') continue
+      if (best === null || o.price > best) best = o.price
+    }
+    return best
+  }
+
+  /**
+   * Melhor (menor) preço de venda LIMIT resting no book, ou null quando não há
+   * asks LIMIT. Vide getBestBid para a justificativa de filtrar só LIMIT.
+   */
+  getBestAsk(): number | null {
+    let best: number | null = null
+    for (const o of this.sellOrders.values()) {
+      if (o.type !== 'LIMIT') continue
+      if (best === null || o.price < best) best = o.price
+    }
+    return best
+  }
 }

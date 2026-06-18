@@ -66,11 +66,21 @@ export class L7_PressureQueue implements QuantLayer {
       phaseLabel = 'absorption'
     }
 
-    let deltaPrice = activeMagnitude * decayFactor * state.currentPrice
+    let rawDeltaPrice = activeMagnitude * decayFactor * state.currentPrice
 
     // Spot cap: limitar impacto instantâneo a ±2.5%
     const maxDelta = spotCap * state.currentPrice
-    deltaPrice = Math.max(-maxDelta, Math.min(maxDelta, deltaPrice))
+    rawDeltaPrice = Math.max(-maxDelta, Math.min(maxDelta, rawDeltaPrice))
+
+    // T4.1 (loop 06-17): escala o impacto de notícia (JÁ capado) pelo multiplicador de
+    // SESSÃO (volatilityMultiplier), mesmo idioma de L1_OU/L3_GARCHLite. Em janela de
+    // freeze/dimmer o impacto cai na proporção do multiplicador; sessão normal (1.0) é
+    // identidade. O countdown de ticks (state.newsImpactTicks/ticksRemaining) NÃO é
+    // escalado — a notícia consome o mesmo número de ticks independente da sessão; só o
+    // delta de preço publicado encolhe. O freeze da L9 (dailySigmaMultiplier) permanece
+    // exclusivo de L1/L3.
+    const sessionMul = state.volatilityMultiplier ?? 1.0
+    const deltaPrice = rawDeltaPrice * sessionMul
 
     // Decrementar ticks restantes
     if (activeNews) {
@@ -102,6 +112,8 @@ export class L7_PressureQueue implements QuantLayer {
         spotCap,
         phase: phaseLabel === 'spread' ? 0 : 1, // 0=spread, 1=absorption
         phaseLabel,
+        volatilityMultiplier: sessionMul,
+        rawDeltaPrice,
       },
     }
   }

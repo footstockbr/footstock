@@ -21,8 +21,13 @@ export class PanicSellerAgent extends BaseAgent {
       return { side: 'HOLD', quantity: 0, priceModifier: 0, reason: 'no_panic' }
     }
 
+    // Item T2.2: quantity dimensionada pela PROFUNDIDADE do book (ctx.baseVolume,
+    // fixo por cluster) e NÃO por ctx.volume24h (= state.volume, volume executado).
+    // Desacopla a cascata de pânico do volume realimentado: com state.volume zerado
+    // a quantity continua finita e coerente; com volume alto não há explosão por
+    // realimentação. MAX_PANIC_QUANTITY permanece como salvaguarda defensiva.
     const MAX_PANIC_QUANTITY = 10_000
-    let quantity = Math.ceil(ctx.volume24h * 0.005)
+    let quantity = Math.ceil(ctx.baseVolume * 0.005)
     if (ctx.priceChange24h <= -0.15) {
       quantity *= 2
     }

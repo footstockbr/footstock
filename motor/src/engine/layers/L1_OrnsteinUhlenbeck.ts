@@ -1,5 +1,6 @@
 import type { QuantLayer } from './base'
 import type { AssetState, ClusterParams, LayerResult } from '../../types/motor.types'
+import { getTickDt } from '../tick-dt'
 
 /**
  * L1 — Ornstein-Uhlenbeck (OU) — Componente Estocástica
@@ -15,10 +16,10 @@ import type { AssetState, ClusterParams, LayerResult } from '../../types/motor.t
  *   - 0.5..1.0: exaustão de mercado (2.0%–2.5% de variação diária acumulada)
  *   - 0.0: freeze total de volatilidade (≥2.5% diário)
  *
- * dt = 1 tick = 1 segundo (configurável via MOTOR_TICK_DT_SECONDS)
+ * dt = escala temporal do tick, resolvida de forma EXPLÍCITA por `getTickDt()`
+ * (T3.3): default-safe legacy 5/390, ou `MOTOR_TICK_DT_SECONDS`/flag de
+ * recalibração. Lido por tick (não congelado em module-scope) para auditoria.
  */
-const DT = parseFloat(process.env.MOTOR_TICK_DT_SECONDS ?? '1')
-
 export class L1_OrnsteinUhlenbeck implements QuantLayer {
   name = 'L1_OrnsteinUhlenbeck'
 
@@ -27,6 +28,7 @@ export class L1_OrnsteinUhlenbeck implements QuantLayer {
       return { layer: this.name, deltaPrice: 0, metadata: { sigmaEff: 0 } }
     }
 
+    const dt = getTickDt()
     const sigma = params.sigma ?? 0.001
     // dailySigmaMultiplier é setado por L9 no tick anterior (default 1.0)
     // volatilityMultiplier é setado por SessionManager a cada tick (CLOSED=0, TRADING=1.0, etc.)
@@ -35,7 +37,7 @@ export class L1_OrnsteinUhlenbeck implements QuantLayer {
     const sigmaEff = sigma * dailyMul * sessionMul
 
     // Componente estocástica: σ_eff × √dt × N(0,1) × P
-    const deltaPrice = sigmaEff * Math.sqrt(DT) * noise * state.currentPrice
+    const deltaPrice = sigmaEff * Math.sqrt(dt) * noise * state.currentPrice
 
     return {
       layer: this.name,
@@ -46,7 +48,7 @@ export class L1_OrnsteinUhlenbeck implements QuantLayer {
         dailySigmaMultiplier: dailyMul,
         volatilityMultiplier: sessionMul,
         noise,
-        dt: DT,
+        dt,
       },
     }
   }

@@ -44,6 +44,18 @@ export const env = {
   ATTRIBUTION_STRICT_MODE: optional('ATTRIBUTION_STRICT_MODE', 'false') === 'true',
   ORDER_FLOW_SNAPSHOT_ENABLED: optional('ORDER_FLOW_SNAPSHOT_ENABLED', 'true') === 'true',
   ORDER_FLOW_SNAPSHOT_P95_BUDGET_MS: parseInt(optional('ORDER_FLOW_SNAPSHOT_P95_BUDGET_MS', '50'), 10),
+  // TODO:REMOVE debug instrumentation (loop 06-17-motor-footstock-correcoes-variacoes / T0.1)
+  // Flag de log estruturado por tick. Default OFF: zero overhead em prod.
+  // Habilitar para diagnostico/harness: MOTOR_TICK_DEBUG=true.
+  MOTOR_TICK_DEBUG: optional('MOTOR_TICK_DEBUG', 'false') === 'true',
+  // T1.4 (loop 06-17-motor-footstock-correcoes-variacoes): semantica de execucao de
+  // ordens reais. Default-safe 'pre-agent' casa ordens reais no preco PRE-agente (somente
+  // dinamica do motor L1-L7 atraves de cap/correlacao/freio, SEM o overlay sintetico dos
+  // agentes). 'post-agent' casa no preco publicado (com o impacto do agente). A ratificacao
+  // pre vs pos e decisao de operador tecnico + produto/mercado; trocar de lado e uma flag,
+  // nao reimplementacao. Qualquer valor != 'post-agent' resolve para 'pre-agent'.
+  MOTOR_REAL_ORDER_MATCH_PRICE:
+    optional('MOTOR_REAL_ORDER_MATCH_PRICE', 'pre-agent') === 'post-agent' ? 'post-agent' : 'pre-agent',
 } as const
 
 // Aviso de segurança: TLS em produção

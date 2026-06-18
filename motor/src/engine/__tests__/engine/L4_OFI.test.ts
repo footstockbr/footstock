@@ -48,12 +48,13 @@ const params = (overrides: Partial<ClusterParams> = {}): ClusterParams => ({
 })
 
 describe('L4_OrderFlowImbalance', () => {
-  test('volume zero retorna delta zero mas mantém ofiState decaído', () => {
+  test('volume zero retorna delta zero mas decai ofiState (ofi_t = rho*ofi_{t-1})', () => {
     const state = baseState({ pendingBuyVolume: 0, pendingSellVolume: 0, ofiState: 0.5 })
     const result = new L4_OrderFlowImbalance().applyLayer(state, params(), 0)
     expect(result.deltaPrice).toBe(0)
-    // ofiState não é alterado se volume=0 (formula: ofi_raw não existe)
-    expect(state.ofiState).toBe(0.5)  // mantido
+    // Sem ordens novas o OFI decai por memória: 0.5 * 0.91 = 0.455
+    expect(state.ofiState).toBeCloseTo(0.5 * 0.91, 10)
+    expect(result.metadata?.ofi as number).toBeCloseTo(0.5 * 0.91, 10)
   })
 
   test('mais compras que vendas gera delta positivo', () => {
@@ -90,12 +91,46 @@ describe('L4_OrderFlowImbalance', () => {
     l4.applyLayer(state, params(), 0)
     const ofiAfterTick1 = state.ofiState ?? 0
 
-    // Tick 2: sem volume — ofiState deve decair (mas formula retorna 0 delta)
+    // Tick 2: sem volume — ofiState decai por memória (ofi_t = rho*ofi_{t-1}), delta=0
     const stateT2 = { ...state, pendingBuyVolume: 0, pendingSellVolume: 0 }
+    const rho = 0.91
     l4.applyLayer(stateT2, params(), 0)
 
-    // Se volume=0, ofiState não é atualizado nesta implementação
-    expect(stateT2.ofiState).toBe(ofiAfterTick1)
+    // Volume=0 agora decai o estado em vez de congelar
+    expect(stateT2.ofiState).toBeCloseTo(ofiAfterTick1 * rho, 10)
+    expect(Math.abs(stateT2.ofiState!)).toBeLessThan(Math.abs(ofiAfterTick1))
+  })
+
+  test('30 ticks sem ordens: decaimento monotônico em módulo, converge a zero, sem troca de sinal', () => {
+    const l4 = new L4_OrderFlowImbalance()
+    const rho = 0.93
+    const ofi0 = 0.42
+    const state = baseState({ pendingBuyVolume: 0, pendingSellVolume: 0, ofiState: ofi0 })
+
+    let prevAbs = Math.abs(ofi0)
+    const sign0 = Math.sign(ofi0)
+
+    for (let tick = 0; tick < 30; tick++) {
+      const result = l4.applyLayer(state, params({ ofiDecay: rho }), 0)
+      const ofi = state.ofiState ?? 0
+
+      // delta sempre zero sem fluxo
+      expect(result.deltaPrice).toBe(0)
+      // monotônico estritamente decrescente em módulo
+      expect(Math.abs(ofi)).toBeLessThan(prevAbs)
+      // nunca troca de sinal por ruído
+      if (ofi !== 0) {
+        expect(Math.sign(ofi)).toBe(sign0)
+      }
+      // nunca vira NaN/undefined
+      expect(Number.isFinite(ofi)).toBe(true)
+
+      prevAbs = Math.abs(ofi)
+    }
+
+    // Após 30 ticks de decay convergiu para perto de zero: |ofi| = ofi0 * rho^30
+    expect(Math.abs(state.ofiState ?? 0)).toBeCloseTo(ofi0 * Math.pow(rho, 30), 10)
+    expect(Math.abs(state.ofiState ?? 0)).toBeLessThan(0.05)
   })
 
   test('decaimento rho=0.97 (B_ILLIQ) persiste mais que rho=0.91 (A_TOP)', () => {

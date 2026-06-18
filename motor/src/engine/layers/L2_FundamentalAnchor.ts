@@ -1,5 +1,6 @@
 import type { QuantLayer } from './base'
 import type { AssetState, ClusterParams, LayerResult } from '../../types/motor.types'
+import { getTickDt } from '../tick-dt'
 
 /**
  * L2 — Fundamental Anchor — Componente Determinística (Mean Reversion Capped)
@@ -18,7 +19,6 @@ import type { AssetState, ClusterParams, LayerResult } from '../../types/motor.t
  * Sem double-counting: cada componente do OU tem sua camada.
  */
 const DEFAULT_MAX_ANCHOR_PERCENT = 0.003  // 0.3% por tick (cap absoluto)
-const DT = parseFloat(process.env.MOTOR_TICK_DT_SECONDS ?? '1')
 
 export class L2_FundamentalAnchor implements QuantLayer {
   name = 'L2_FundamentalAnchor'
@@ -29,13 +29,15 @@ export class L2_FundamentalAnchor implements QuantLayer {
       return { layer: this.name, deltaPrice: 0, metadata: { theta: params.theta } }
     }
 
+    // dt EXPLÍCITO (T3.3): mesma fonte de L1/L3 via getTickDt(). Lido por tick.
+    const dt = getTickDt()
     const theta = params.theta ?? 0.05
     // volatilityMultiplier: sessão (CLOSED=0, TRADING=1.0, etc.)
     // Congela mean-reversion durante sessões inativas (mercado fechado = sem movimento)
     const sessionMul = state.volatilityMultiplier ?? 1.0
 
     // Componente determinística: θ × (FV − P) × dt × sessionMul
-    const raw = theta * (fv - state.currentPrice) * DT * sessionMul
+    const raw = theta * (fv - state.currentPrice) * dt * sessionMul
 
     // Cap: máximo 0.3% do preço atual por tick em direção ao FV
     const anchorCap = params.fundamentalReversionRate ?? DEFAULT_MAX_ANCHOR_PERCENT

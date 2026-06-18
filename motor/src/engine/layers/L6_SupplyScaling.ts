@@ -52,7 +52,14 @@ export class L6_SupplyScaling implements QuantLayer {
     // Quando float → 0: amplifier → 2 (dobra o impacto)
     const amplification = 1 + (1 - floatAvailableRatio) * maxAmplification
 
-    const deltaPrice = params.drift * state.currentPrice * amplification
+    const rawDeltaPrice = params.drift * state.currentPrice * amplification
+
+    // T4.1 (loop 06-17): escala o drift amplificado pelo multiplicador de SESSÃO
+    // (volatilityMultiplier), mesmo idioma de L1_OU/L3_GARCHLite. Em janela de
+    // freeze/dimmer o impacto cai na proporção do multiplicador; sessão normal (1.0)
+    // é identidade. O freeze da L9 (dailySigmaMultiplier) permanece exclusivo de L1/L3.
+    const sessionMul = state.volatilityMultiplier ?? 1.0
+    const deltaPrice = rawDeltaPrice * sessionMul
 
     return {
       layer: this.name,
@@ -64,6 +71,8 @@ export class L6_SupplyScaling implements QuantLayer {
         ampCap,
         volume: state.volume,
         capacity,
+        volatilityMultiplier: sessionMul,
+        rawDeltaPrice,
       },
     }
   }

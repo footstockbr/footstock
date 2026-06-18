@@ -49,6 +49,20 @@ const params = (): ClusterParams => ({
 describe('L2_FundamentalAnchor', () => {
   const l2 = new L2_FundamentalAnchor()
 
+  // T3.3: este suite valida a LÓGICA da âncora (cap 0,3%, sinal) com aritmética
+  // calibrada em dt=1 (raw = θ×(FV−P)×dt). Fixa o dt no passo unitário de referência
+  // para isolar a lógica do default-safe legacy (5/390). O default explícito é
+  // coberto por engine/tick-dt.test.ts e pelo harness (Item T3.3).
+  let prevDt: string | undefined
+  beforeAll(() => {
+    prevDt = process.env.MOTOR_TICK_DT_SECONDS
+    process.env.MOTOR_TICK_DT_SECONDS = '1'
+  })
+  afterAll(() => {
+    if (prevDt === undefined) delete process.env.MOTOR_TICK_DT_SECONDS
+    else process.env.MOTOR_TICK_DT_SECONDS = prevDt
+  })
+
   test('preço igual ao FV retorna delta zero', () => {
     const result = l2.applyLayer(baseState({ currentPrice: 100, fairValue: 100 }), params(), 0)
     expect(result.deltaPrice).toBe(0)

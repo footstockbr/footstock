@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "1.0.0",
+  "generator": "src/harness/runBaseline.ts",
+  "purpose": "Baseline GOLDEN pre-fix do motor FootStock (loop 06-17, Item 003). Reproduz o serrilhado ~2%/tick diagnosticado (agentes cravando o cap +-2%).",
+  "seed": 1337,
+  "fixtures": {
+    "tickIntervalSeconds": 10,
+    "dtSeconds": 1,
+    "agentCounts": "V1_LEGACY",
+    "sessionType": "TRADING",
+    "sessionVolatilityMultiplier": 1,
+    "ticksPerAsset": 8640,
+    "balancedBook": true,
+    "assets": [
+      {
+        "ticker": "URU3",
+        "cluster": "A_TOP"
+      },
+      {
+        "ticker": "ABT3",
+        "cluster": "B_ILLIQ"
+      }
+    ]
+  },
+  "predicates": {
+    "URU3": {
+      "ticker": "URU3",
+      "totalTicks": 8640,
+      "CA1_absReturn": {
+        "p50": 0.02128299,
+        "p95": 0.02150945,
+        "p99": 0.02150945,
+        "max": 0.02357
+      },
+      "CA2_pctAbove0_35": 1,
+      "CA3_pctAgentSaturated": 1,
+      "CA4_ofiDecay": {
+        "meanAbs": 0,
+        "maxAbs": 0,
+        "final": 0
+      },
+      "CA5_l5MeanImpact": {
+        "mean": 0,
+        "meanAbs": 0
+      },
+      "CA6_pctDeadMarket": 0,
+      "MM_pctActive": 1,
+      "nonFiniteCount": 0
+    },
+    "ABT3": {
+      "ticker": "ABT3",
+      "totalTicks": 8640,
+      "CA1_absReturn": {
+        "p50": 0.02254022,
+        "p95": 0.02306,
+        "p99": 0.02306,
+        "max": 0.02306
+      },
+      "CA2_pctAbove0_35": 0.89537,
+      "CA3_pctAgentSaturated": 0.729514,
+      "CA4_ofiDecay": {
+        "meanAbs": 0,
+        "maxAbs": 0,
+        "final": 0
+      },
+      "CA5_l5MeanImpact": {
+        "mean": 0,
+        "meanAbs": 0
+      },
+      "CA6_pctDeadMarket": 0.070486,
+      "MM_pctActive": 1,
+      "nonFiniteCount": 0
+    }
+  },
+  "approxCost": {
+    "assets": 2,
+    "ticksPerAsset": 8640,
+    "totalAssetTicks": 17280,
+    "estimatedLayerInvocations": 190080
+  }
+}

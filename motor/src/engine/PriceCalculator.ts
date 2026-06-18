@@ -32,10 +32,32 @@ import { L8_VelocityCap } from './layers/L8_VelocityCap'
 import { L9_DailyVolTarget } from './layers/L9_DailyVolTarget'
 import { L10_CircuitBreaker } from './layers/L10_CircuitBreaker'
 import { correlationLayer } from './CorrelationLayer'
-import { NUDGE_TICKS, NUDGE_DELTA, NUDGE_MIN_PRICE } from './nudge-constants'
+import {
+  NUDGE_TICKS,
+  NUDGE_DELTA,
+  PRICE_EPSILON,
+  NUDGE_TOL_PCT,
+  NUDGE_TOL_ABS,
+  classifyNudgeMove,
+} from './nudge-constants'
 
 export interface PriceCalculationResult {
+  /**
+   * Preço publicado (canônico): dinâmica do motor (L1-L7) MAIS o delta do agente,
+   * tudo passando por L8 (cap), correlação, freio e L10 (circuit breaker). É o preço
+   * que evolui o estado do ativo e alimenta o candle/correlação. T1.4: antes o impacto
+   * do agente era aplicado POR FORA (newPrice*(1+agentImpact)), escapando do cap e do CB.
+   */
   newPrice: number
+  /**
+   * Preço PRÉ-agente (somente dinâmica do motor L1-L7 através de cap/correlação/freio,
+   * SEM o delta do agente). Usado pelo matching default-safe de ordens reais (T1.4):
+   * `MOTOR_REAL_ORDER_MATCH_PRICE=pre-agent` (default) casa ordens reais neste preço;
+   * `post-agent` casa em `newPrice`. A escolha pre/pos é uma flag, não reimplementação.
+   */
+  enginePrice: number
+  /** Impacto fracional do agente efetivamente injetado neste tick (0 quando não há agente). */
+  agentImpact: number
   layerResults: LayerResult[]
   halted: boolean
 }
@@ -67,17 +89,27 @@ export class PriceCalculator {
    * @param params         Parâmetros do cluster
    * @param noise          Ruído gaussiano N(0,1) injetado externamente (testável)
    * @param previousDeltas Deltas do tick anterior para correlação inter-ativos
+   * @param agentImpact    Impacto fracional dos agentes de mercado (T1.4). Entra como
+   *                       delta ANTES de L8/correlação/freio/L10 — 100% do impacto passa
+   *                       pela trava de velocidade e pelo circuit breaker, sem caminho
+   *                       alternativo nem duplo desconto. Default 0 (sem agentes).
    */
   calculate(
     state: AssetState,
     params: ClusterParams,
     noise: number,
-    previousDeltas?: Map<string, PreviousTickDelta>
+    previousDeltas?: Map<string, PreviousTickDelta>,
+    agentImpact: number = 0
   ): PriceCalculationResult {
     // Guard: ativo pausado (circuit breaker ou admin) — short-circuit sem processar
     if (state.isPaused) {
-      return { newPrice: state.currentPrice, layerResults: [], halted: true }
+      return { newPrice: state.currentPrice, enginePrice: state.currentPrice, agentImpact: 0, layerResults: [], halted: true }
     }
+
+    // T3.2 — Propaga o retorno tick-a-tick do tick ANTERIOR (r_{t-1}) para L3_GARCH.
+    // previousDeltas.deltaPercent é o MESMO retorno tick-a-tick de T3.1 (não o retorno
+    // vs close diário). Ausente no primeiro tick pós-restart => 0.
+    state.lastTickReturn = previousDeltas?.get(state.id)?.deltaPercent ?? 0
 
     const layerResults: LayerResult[] = []
 
@@ -118,15 +150,39 @@ export class PriceCalculator {
       })
     }
 
-    // L8: velocity cap no delta acumulado (0.35% absoluto por tick)
-    const cappedDelta = this.l8.applyCap(totalDelta, state.currentPrice, params.maxTickChange)
+    // Delta acumulado da dinâmica do motor (L1-L7 + nudge), PRÉ-agente. Preservado
+    // separadamente para derivar o preço pré-agente do matching default-safe (T1.4).
+    const engineDelta = totalDelta
+
+    // T1.4: impacto dos agentes entra como DELTA no pipeline, ANTES de L8/correlação/
+    // freio/L10. Antes era aplicado por fora (finalPrice = newPrice*(1+agentImpact)),
+    // escapando da trava de velocidade e do circuit breaker (D2: "nenhuma fonte de preço
+    // escapa"). agentImpact é fracional (cap ±2% no orquestrador); convertido para delta
+    // absoluto sobre o preço do tick e somado ANTES do cap para que L8 e L10 vejam o
+    // movimento combinado motor+agente — 100% do impacto passa pelo cap e pelo CB, sem
+    // caminho alternativo nem duplo desconto (o impacto entra UMA vez, aqui).
+    const agentDelta = state.currentPrice * agentImpact
+    const combinedRawDelta = engineDelta + agentDelta
+    if (agentDelta !== 0) {
+      // Registro pré-cap do impacto bruto do agente, para rastreabilidade na atribuição
+      // e no debug. O efeito pós-cap está embutido no L8 abaixo (cap sobre o COMBINADO).
+      layerResults.push({
+        layer: 'L7_9_AgentImpact',
+        deltaPrice: agentDelta,
+        metadata: { agentImpact, engineDelta, combinedRawDelta },
+      })
+    }
+
+    // L8: velocity cap no delta acumulado COMBINADO (0.35% absoluto por tick)
+    const cappedDelta = this.l8.applyCap(combinedRawDelta, state.currentPrice, params.maxTickChange)
     layerResults.push({
       layer: 'L8_VelocityCap',
-      deltaPrice: cappedDelta - totalDelta,
-      metadata: { originalDelta: totalDelta, cappedDelta },
+      deltaPrice: cappedDelta - combinedRawDelta,
+      metadata: { originalDelta: combinedRawDelta, cappedDelta, engineDelta, agentDelta },
     })
 
-    // Correlação inter-ativos (cluster + regional)
+    // Correlação inter-ativos (cluster + regional). Independe do agente; o mesmo delta
+    // de correlação entra nos dois caminhos (publicado e pré-agente).
     let correlationDelta = 0
     if (previousDeltas && previousDeltas.size > 1) {
       const corrResult = correlationLayer.compute(state, previousDeltas)
@@ -162,26 +218,43 @@ export class PriceCalculator {
       })
     }
 
-    // Preço candidato final (antes do CB trigger)
-    const candidatePrice = Math.max(NUDGE_MIN_PRICE, state.currentPrice + brakedDelta)
+    // Preço candidato PUBLICADO (com agente, antes do CB trigger). T4.5: o piso e a
+    // protecao numerica PRICE_EPSILON (1 centavo), nao a ancora economica R$1 — ativos
+    // sub-R$1 nao sao mais catapultados ao floor (sem retorno artificial pelo piso),
+    // e o preco permanece estritamente positivo (sem divisao por zero a jusante).
+    const candidatePrice = Math.max(PRICE_EPSILON, state.currentPrice + brakedDelta)
 
-    // L10: Circuit Breaker trigger — verifica candidatePrice vs closePrice
+    // Preço PRÉ-agente: mesma sequência cap → correlação → freio aplicada APENAS à
+    // dinâmica do motor (sem agentDelta). Alimenta o matching default-safe de ordens
+    // reais (T1.4). Quando agentImpact == 0, enginePrice == candidatePrice (identidade).
+    const cappedEngineDelta = agentDelta !== 0
+      ? this.l8.applyCap(engineDelta, state.currentPrice, params.maxTickChange)
+      : cappedDelta
+    const brakedEngineDelta = agentDelta !== 0
+      ? this._applyApproachBrake(cappedEngineDelta + correlationDelta, state)
+      : brakedDelta
+    const enginePrice = Math.max(PRICE_EPSILON, state.currentPrice + brakedEngineDelta)
+
+    // L10: Circuit Breaker trigger — verifica o preço PUBLICADO (com agente) vs closePrice.
+    // Assim o impacto do agente está sujeito ao CB (D2): se o agente empurrar o preço além
+    // da banda de 8%, o halt dispara igual a qualquer outra fonte de movimento.
     const cbResult = this.l10.checkTrigger(candidatePrice, state, params)
     layerResults.push(cbResult)
 
     if (cbResult.triggered) {
       // Halt: MarketEngine gerencia timer de retomada
-      return { newPrice: state.currentPrice, layerResults, halted: true }
+      return { newPrice: state.currentPrice, enginePrice: state.currentPrice, agentImpact, layerResults, halted: true }
     }
 
-    // Acumular variação diária para L9 (próximo tick)
+    // Acumular variação diária para L9 (próximo tick) — usa o delta PUBLICADO (com agente),
+    // que é o movimento real do preço canônico.
     const deltaFrac = state.currentPrice > 0 ? Math.abs(brakedDelta) / state.currentPrice : 0
     this.l9.accumulate(state, deltaFrac)
 
     // Persistir estados críticos no Redis de forma assíncrona (sem bloquear o tick)
     this._persistToRedis(state)
 
-    return { newPrice: candidatePrice, layerResults, halted: false }
+    return { newPrice: candidatePrice, enginePrice, agentImpact, layerResults, halted: false }
   }
 
   /**
@@ -245,10 +318,12 @@ export class PriceCalculator {
    * Minimum Activity Nudge — porta de FootStock-new2.jsx L1158-L1177.
    *
    * Mantem contador per-asset `ticksSinceLastChange` no proprio AssetState.
-   * Quando o preco candidato (P + totalDelta) arredondado a 2 decimais
-   * iguala o preco atual, incrementa contador. Ao atingir NUDGE_TICKS,
-   * retorna delta ±NUDGE_DELTA na direcao do fairValue para destravar UX
-   * em ativos de baixa liquidez. Reset do contador a qualquer movimento real.
+   * Quando o delta acumulado (P + totalDelta) fica DENTRO da tolerancia
+   * (max(NUDGE_TOL_PCT*|P|, NUDGE_TOL_ABS); tolerancia zero = igualdade estrita
+   * a 2 casas), o tick conta como inatividade e incrementa o contador. Ao atingir
+   * NUDGE_TICKS, retorna delta ±NUDGE_DELTA na direcao do fairValue para destravar
+   * UX em ativos de baixa liquidez. Movimento acima da tolerancia reseta o contador.
+   * Entrada invalida (NaN/null/undefined) aborta defensivamente, sem nudge silencioso.
    *
    * Nao opera durante circuit breaker (state.isPaused) — preco intencionalmente
    * congelado. L8 (cap) e L10 (CB) recebem o nudge aplicado e continuam invioláveis.
@@ -259,10 +334,25 @@ export class PriceCalculator {
     if (state.isPaused) return 0
 
     const P = state.currentPrice
-    const candidate = +(P + totalDelta).toFixed(2)
-    const moved = candidate !== +P.toFixed(2)
 
-    if (moved) {
+    // Criterio de inatividade (T4.4): tolerancia percentual/absoluta no lugar da
+    // antiga igualdade a 2 casas. limiar = max(pct*|P|, abs); dentro da tolerancia
+    // conta como parado, acima conta como movimento real. tolerancia zero volta a
+    // igualdade estrita anterior.
+    const moveClass = classifyNudgeMove(totalDelta, P, NUDGE_TOL_PCT, NUDGE_TOL_ABS)
+
+    // Defensivo: entrada invalida (NaN/null/undefined em delta/preco/tolerancia)
+    // aborta o nudge sem disparo silencioso e sem excecao; contador intacto.
+    if (moveClass === 'invalid') {
+      console.error(
+        `[nudge] entrada invalida em _applyNudge (ticker=${state.ticker}, ` +
+        `delta=${totalDelta}, price=${P}, tolPct=${NUDGE_TOL_PCT}, tolAbs=${NUDGE_TOL_ABS}); ` +
+        `nudge abortado.`
+      )
+      return 0
+    }
+
+    if (moveClass === 'moved') {
       state.ticksSinceLastChange = 0
       return 0
     }
@@ -273,7 +363,10 @@ export class PriceCalculator {
     if (ticks < NUDGE_TICKS) return 0
 
     const dir = state.fairValue >= P ? 1 : -1
-    const target = Math.max(NUDGE_MIN_PRICE, +(P + dir * NUDGE_DELTA).toFixed(2))
+    // T4.5: o nudge tambem respeita o piso NUMERICO (PRICE_EPSILON), nunca a ancora R$1
+    // — caso contrario um ativo sub-R$1 inativo seria empurrado ao floor de R$1 pelo
+    // proprio micro-choque, reintroduzindo o retorno artificial que esta task elimina.
+    const target = Math.max(PRICE_EPSILON, +(P + dir * NUDGE_DELTA).toFixed(2))
     state.ticksSinceLastChange = 0
     return target - P
   }
@@ -336,11 +429,36 @@ export class PriceCalculator {
         this.redis.get(`daily_vol:${state.ticker}:${today}`),
       ])
 
-      if (savedVariance) state.variance        = parseFloat(savedVariance)
-      if (savedOfi)      state.ofiState         = parseFloat(savedOfi)
-      if (savedDailyVol) state.dailyVolAccum     = parseFloat(savedDailyVol)
+      state.variance      = this._hydrateNum(savedVariance, state.variance, 'garch:var', state.ticker)
+      state.ofiState      = this._hydrateNum(savedOfi, state.ofiState, 'ofi:state', state.ticker)
+      state.dailyVolAccum = this._hydrateNum(savedDailyVol, state.dailyVolAccum, 'daily_vol', state.ticker)
     } catch {
       // Falha silenciosa — Redis indisponível não bloqueia o motor
     }
+  }
+
+  /**
+   * Parse defensivo de um valor numérico hidratado do Redis.
+   *
+   * Aceita somente valores que passam `Number.isFinite`. Payload ausente
+   * (null/string vazia) mantém o default atual silenciosamente; payload
+   * presente porém inválido (NaN, Infinity, lixo) mantém o default e emite
+   * warn — nunca propaga NaN/Infinity para o estado do motor. A semântica
+   * dos defaults permanece inalterada: valores válidos persistidos continuam
+   * sobrescrevendo o estado exatamente como antes.
+   */
+  private _hydrateNum(
+    raw: string | null,
+    current: number,
+    key: string,
+    ticker: string
+  ): number {
+    if (raw === null || raw === '') return current
+    const parsed = parseFloat(raw)
+    if (Number.isFinite(parsed)) return parsed
+    console.warn(
+      `[PriceCalculator] hidratacao Redis invalida para ${key} (${ticker}): "${raw}" -> mantendo default ${current}`
+    )
+    return current
   }
 }

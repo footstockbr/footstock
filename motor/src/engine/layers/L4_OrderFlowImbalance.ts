@@ -32,15 +32,22 @@ export class L4_OrderFlowImbalance implements QuantLayer {
     const sellVol = state.pendingSellVolume
     const total   = buyVol + sellVol
 
+    // Decaimento exponencial por cluster
+    const rho = params.ofiDecay ?? 0.91
+
+    // Sem ordens novas (total==0): o OFI ainda decai por memória — ofi_t = ρ × ofi_{t-1}.
+    // Sem este decay o ofiState congelava no último valor (impacto e sub-chart nunca
+    // convergiam a zero em janelas sem fluxo). Como ρ ∈ (0,1), o decaimento é monotônico
+    // em módulo, converge a zero e nunca troca de sinal.
     if (total === 0) {
-      return { layer: this.name, deltaPrice: 0, metadata: { ofi: state.ofiState ?? 0 } }
+      const ofiT = rho * (state.ofiState ?? 0)
+      state.ofiState = ofiT
+      return { layer: this.name, deltaPrice: 0, metadata: { ofi: ofiT, ofiDecayed: ofiT, rho } }
     }
 
     // OFI raw: normalizado entre -1 e +1
     const ofiRaw = (buyVol - sellVol) / total
 
-    // Decaimento exponencial por cluster
-    const rho  = params.ofiDecay ?? 0.91
     const ofiT = rho * (state.ofiState ?? 0) + (1 - rho) * ofiRaw
 
     // Persistir OFI no estado (fonte de verdade em memória)
@@ -48,7 +55,17 @@ export class L4_OrderFlowImbalance implements QuantLayer {
 
     // Impacto: delta_OFI = alpha_ofi × OFI_t × P
     const alphaOfi = params.alphaOfi ?? 0.0005
-    const deltaPrice = alphaOfi * ofiT * state.currentPrice
+    const rawDeltaPrice = alphaOfi * ofiT * state.currentPrice
+
+    // T4.1 (loop 06-17): escala o IMPACTO no preço pelo multiplicador de SESSÃO
+    // (volatilityMultiplier: CLOSED=0, AFTER_HOURS=0.10, TRADING=1.0, ...), mesmo
+    // idioma de L1_OU/L3_GARCHLite (sessionMul). Em janela de freeze/dimmer o impacto
+    // de fluxo cai na proporção do multiplicador; em sessão normal (1.0) é identidade.
+    // A MEMÓRIA de OFI (state.ofiState) NÃO é escalada — só o delta de preço publicado.
+    // O freeze da L9 (dailySigmaMultiplier) permanece EXCLUSIVO de L1/L3: não é aplicado
+    // aqui, pois L4 é fluxo direcional, não volatilidade gaussiana.
+    const sessionMul = state.volatilityMultiplier ?? 1.0
+    const deltaPrice = rawDeltaPrice * sessionMul
 
     return {
       layer: this.name,
@@ -60,6 +77,8 @@ export class L4_OrderFlowImbalance implements QuantLayer {
         alphaOfi,
         buyVol,
         sellVol,
+        volatilityMultiplier: sessionMul,
+        rawDeltaPrice,
       },
     }
   }
