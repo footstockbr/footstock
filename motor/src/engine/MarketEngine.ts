@@ -46,6 +46,10 @@ const HEARTBEAT_EVERY = parseInt(process.env.MOTOR_HEARTBEAT_EVERY ?? '5', 10)
 // Qualquer valor diferente de 'post-agent' resolve para o default seguro 'pre-agent'.
 const REAL_ORDER_MATCH_PRICE: 'pre-agent' | 'post-agent' =
   process.env.MOTOR_REAL_ORDER_MATCH_PRICE === 'post-agent' ? 'post-agent' : 'pre-agent'
+// Threshold de banda do CB usado pelo warm-start (resolveWarmStartClosePrice) para
+// decidir re-ancoragem de ativos que reiniciam JA fora da banda (incidente 06-18).
+// Casa com o default do L10_CircuitBreaker (8%); respeita override de env.
+const WARM_START_CB_THRESHOLD = parseFloat(process.env.MOTOR_CIRCUIT_BREAKER_THRESHOLD ?? '0.08')
 // Sanity cap em state.volume — defesa em profundidade contra feedback loop dos
 // agents que escalam quantity por volume24h (PanicSeller, MarketMaker).
 // MAX_INT64 e ~9.2e18; usar 1e15 (1 quatrilhao) deixa folga absurda para
@@ -87,9 +91,23 @@ export function resolveWarmStartClosePrice(
   persistedClose: number,
   currentPrice: number,
   recoveryPrice: number | null,
+  cbThreshold = 0.08,
 ): number {
   if (recoveryPrice !== null) return recoveryPrice
-  if (Number.isFinite(persistedClose) && persistedClose > 0) return persistedClose
+  if (Number.isFinite(persistedClose) && persistedClose > 0) {
+    // Incidente 06-18 (follow-up do T4.2): preservar a ancora persistida quando o preco
+    // vivo ja esta FORA da banda do CB (|curr-close|/close >= cbThreshold) causa halt em
+    // cadeia permanente no warm-start — a retomada do CB nao re-ancora (T4.2) e o preco
+    // nao retorna sozinho na sessao (passo <= 0,35%/tick contra desvio de dezenas de %),
+    // ficando preso no trava-destrava de 5 em 5 min. Nesse caso re-ancora ao preco atual
+    // (mesma semantica da transicao de sessao), zerando o desvio. Ativos DENTRO da banda
+    // mantem a ancora diaria persistida (intencao original do T4.2).
+    if (Number.isFinite(currentPrice) && currentPrice > 0) {
+      const deviation = Math.abs(currentPrice - persistedClose) / persistedClose
+      if (deviation >= cbThreshold) return currentPrice
+    }
+    return persistedClose
+  }
   return currentPrice
 }
 
@@ -342,7 +360,7 @@ export class MarketEngine {
         // T4.2: warm start NÃO re-ancora a âncora do CB em currentPrice — adota o
         // close persistido do dia (resolveWarmStartClosePrice). Re-ancorar a cada
         // restart alargava a banda de 8% e alimentava a escada de preço.
-        closePrice: resolveWarmStartClosePrice(Number(asset.closePrice), currentPriceNum, recoveryPrice),
+        closePrice: resolveWarmStartClosePrice(Number(asset.closePrice), currentPriceNum, recoveryPrice, WARM_START_CB_THRESHOLD),
         fairValue: recoveryPrice ?? Number(asset.fairValue ?? asset.currentPrice),
         volume: 0,
         variance: 0.00001,  // Variância GARCH inicial (reduzida 10x: evita ruído GARCH soterrar L2_Anchor)

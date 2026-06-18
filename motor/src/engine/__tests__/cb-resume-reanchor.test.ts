@@ -43,6 +43,31 @@ describe('T4.2 warm-start — closePrice adota o close persistido, não currentP
     expect(resolveWarmStartClosePrice(-1, 50, null)).toBe(50)
     expect(resolveWarmStartClosePrice(Number.NaN, 50, null)).toBe(50)
   })
+
+  // Incidente 06-18: ativo reinicia JA fora da banda do CB (preco inflado pelo codigo
+  // antigo). Preservar a ancora persistida prenderia o ativo em halt permanente (o CB
+  // dispara todo tick e a retomada nao re-ancora). RED antes do fix: retornava a ancora
+  // persistida (8.07 / 100), prendendo o ativo. GREEN depois: re-ancora ao preco atual.
+  describe('warm-start FORA da banda do CB re-ancora (anti halt em cadeia)', () => {
+    it('desvio extremo (-43%): re-ancora ao preco atual em vez de preservar a ancora', () => {
+      expect(resolveWarmStartClosePrice(8.07, 4.5964, null, 0.08)).toBeCloseTo(4.5964, 4)
+    })
+
+    it('desvio 10% (> threshold 8%): re-ancora ao preco atual', () => {
+      expect(resolveWarmStartClosePrice(100, 90, null, 0.08)).toBe(90)
+      expect(resolveWarmStartClosePrice(100, 110, null, 0.08)).toBe(110)
+    })
+
+    it('borda: 7% DENTRO da banda preserva ancora; >= 8% re-ancora', () => {
+      expect(resolveWarmStartClosePrice(100, 93, null, 0.08)).toBe(100)   // 7% dentro
+      expect(resolveWarmStartClosePrice(100, 92, null, 0.08)).toBe(92)    // 8% na borda -> re-ancora
+    })
+
+    it('recovery e close invalido tem precedencia sobre a checagem de banda', () => {
+      expect(resolveWarmStartClosePrice(8.07, 4.5964, 7.0, 0.08)).toBe(7.0)  // recovery vence
+      expect(resolveWarmStartClosePrice(0, 4.5964, null, 0.08)).toBe(4.5964) // close invalido -> current
+    })
+  })
 })
 
 describe('T4.2 retomada de CB — closePrice preservado da pré-halt, sem catraca', () => {
