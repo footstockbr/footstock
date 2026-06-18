@@ -112,6 +112,20 @@ export function resolveWarmStartClosePrice(
 }
 
 /**
+ * C2 (06-18) — decide se a transicao de sessao deve re-ancorar a banda diaria do CB
+ * (closePrice = currentPrice). A re-ancora e LEGITIMA apenas no rollover diario, isto e,
+ * ao ENTRAR em PRE_OPENING. Antes (bug) re-ancorava em QUALQUER troca de sessao
+ * (PRE_OPENING->TRADING, TRADING->CLOSING_CALL, ...), reabrindo a banda ~4-5x/dia e
+ * permitindo drift intradiario maior que o limite diario pretendido. Pura e deterministica.
+ */
+export function shouldReanchorCbAnchor(
+  previousSession: SessionType | null,
+  nextSession: SessionType,
+): boolean {
+  return previousSession !== null && previousSession !== nextSession && nextSession === 'PRE_OPENING'
+}
+
+/**
  * T3.1 — Retorno realizado entre o tick anterior e o atual de um ativo:
  *   (currentPrice - previousPrice) / previousPrice
  * Alimenta previousTickDeltas -> L10_Correlation. NÃO usa o close diário: antes
@@ -298,6 +312,13 @@ export class MarketEngine {
     const loadTime = Date.now()
     const assets = await this.prisma.asset.findMany({ where: { isActive: true } })
 
+    // C1 (06-18): o warm-start re-ancora ativos fora da banda do CB usando o MESMO
+    // threshold por cluster que o L10 usa no tick (runtime config do Redis ->
+    // halt_trigger por cluster), e nao a constante de env solta. Sem isso, se o
+    // operador setar motor:layers:config:v1 com halt_trigger != env, o warm-start
+    // decidiria re-ancora com uma banda e o CB haltaria com outra (pode nao destravar).
+    const runtimeConfig = await this.layerRuntimeConfig.getConfig()
+
     // Assets que precisam de update no DB (fairValue corrompido ou preço no floor)
     const recoveryUpdates: Array<{ id: string; ticker: string; price: number; fv: number }> = []
 
@@ -360,7 +381,16 @@ export class MarketEngine {
         // T4.2: warm start NÃO re-ancora a âncora do CB em currentPrice — adota o
         // close persistido do dia (resolveWarmStartClosePrice). Re-ancorar a cada
         // restart alargava a banda de 8% e alimentava a escada de preço.
-        closePrice: resolveWarmStartClosePrice(Number(asset.closePrice), currentPriceNum, recoveryPrice, WARM_START_CB_THRESHOLD),
+        // C1: o threshold de re-ancora fora-da-banda vem do runtime config por cluster
+        // (mesma fonte do L10), com fallback ao default de cluster e ao env.
+        closePrice: resolveWarmStartClosePrice(
+          Number(asset.closePrice),
+          currentPriceNum,
+          recoveryPrice,
+          (runtimeConfig.clusterParams[asset.cluster as AssetState['cluster']]
+            ?? getClusterParams(asset.cluster as AssetState['cluster'])).circuitBreakerThreshold
+            ?? WARM_START_CB_THRESHOLD,
+        ),
         fairValue: recoveryPrice ?? Number(asset.fairValue ?? asset.currentPrice),
         volume: 0,
         variance: 0.00001,  // Variância GARCH inicial (reduzida 10x: evita ruído GARCH soterrar L2_Anchor)
@@ -453,15 +483,17 @@ export class MarketEngine {
     const ticks: MotorTick[] = []
     const orderFlowSnapshots = await this.orderFlowSnapshotService.capture([...this.assetStates.keys()], tickStartedAt)
 
-    // Transição de sessão: resetar closePrice para evitar CB acumulado entre sessões
+    // Transição de sessão.
     if (this.previousSessionType !== null && this.previousSessionType !== sessionType) {
-      logger.info(`[engine] Transição de sessão: ${this.previousSessionType} → ${sessionType} — resetando âncoras do CB`)
-      for (const state of this.assetStates.values()) {
-        state.closePrice = state.currentPrice
-      }
-      // Reset do DailyVolTarget e volume acumulado ao iniciar o dia de negociação
-      if (sessionType === 'PRE_OPENING') {
+      logger.info(`[engine] Transição de sessão: ${this.previousSessionType} → ${sessionType}`)
+      // C2 (06-18): a âncora diária do CB (closePrice) só é re-ancorada no ROLLOVER
+      // diário (entrada em PRE_OPENING), NÃO em toda troca de sessão. Re-ancorar em
+      // qualquer transição reabria a banda ~4-5x/dia e permitia drift intradiário >
+      // o limite diário pretendido (ver shouldReanchorCbAnchor). closePrice, volume e
+      // openPrice são resetados juntos, no mesmo ponto, para a abertura do novo dia.
+      if (shouldReanchorCbAnchor(this.previousSessionType, sessionType)) {
         for (const s of this.assetStates.values()) {
+          s.closePrice = s.currentPrice  // âncora diária do CB = preço de abertura do dia
           this.calculator.resetDailyVolTarget(s)
           s.volume = 0  // Reset volume 24h (evita acumulação ilimitada de volume sintético)
           // BUG FIX: openPrice nunca era resetado, fazendo priceChange24h acumular
@@ -476,7 +508,7 @@ export class MarketEngine {
           s.openPrice = s.currentPrice
         }
         this.calculator.resetDailyVolCap()  // compatibilidade retroativa
-        logger.info('[engine] DailyVolTarget, volume e openPrice resetados para nova sessão PRE_OPENING')
+        logger.info('[engine] CB anchor (closePrice), DailyVolTarget, volume e openPrice resetados para novo dia (PRE_OPENING)')
       }
     }
     this.previousSessionType = sessionType
@@ -881,6 +913,13 @@ export class MarketEngine {
           // ou outras operações admin que alteram DB.openPrice criam divergência
           // entre o % da página e o % do SSE do motor.
           openPrice: state.openPrice,
+          // C3 (06-18): persistir a ÂNCORA DIÁRIA (state.closePrice), não re-sincronizar
+          // com currentPrice. NÃO viola o "Fix B" acima: aqui gravamos o valor estável da
+          // âncora (que só muda no rollover PRE_OPENING, no warm-start fora-da-banda, em
+          // admin adjust ou auto-recovery), não o currentPrice. Sem isto, a re-ancora em
+          // memória some no restart (recria freeze) e o DB.closePrice diverge do motor/SSE
+          // (a API /mercado calcula % com DB.closePrice).
+          closePrice: state.closePrice,
           volume: BigInt(safeVolume),
         },
       })

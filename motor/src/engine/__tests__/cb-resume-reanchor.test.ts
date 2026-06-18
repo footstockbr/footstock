@@ -17,7 +17,7 @@
 // falhava (closePrice virava currentPrice, não o close persistido).
 // ============================================================================
 
-import { resolveWarmStartClosePrice } from '../MarketEngine'
+import { resolveWarmStartClosePrice, shouldReanchorCbAnchor } from '../MarketEngine'
 import { L10_CircuitBreaker } from '../layers/L10_CircuitBreaker'
 import type { AssetState } from '../../types/motor.types'
 
@@ -67,6 +67,34 @@ describe('T4.2 warm-start — closePrice adota o close persistido, não currentP
       expect(resolveWarmStartClosePrice(8.07, 4.5964, 7.0, 0.08)).toBe(7.0)  // recovery vence
       expect(resolveWarmStartClosePrice(0, 4.5964, null, 0.08)).toBe(4.5964) // close invalido -> current
     })
+
+    // C1 (06-18): o warm-start honra o threshold passado (que no engine vem do runtime
+    // config por cluster, mesma fonte do L10). Com banda runtime mais larga (12%), um
+    // desvio de 10% fica DENTRO e NAO re-ancora; com banda 8% (default), 10% re-ancora.
+    it('respeita o threshold do runtime: 10% dentro de banda 12% preserva ancora', () => {
+      expect(resolveWarmStartClosePrice(100, 90, null, 0.12)).toBe(100)  // 10% < 12% -> preserva
+      expect(resolveWarmStartClosePrice(100, 90, null, 0.08)).toBe(90)   // 10% >= 8% -> re-ancora
+    })
+  })
+})
+
+describe('C2 — re-ancora da banda do CB so no rollover diario (PRE_OPENING)', () => {
+  // RED antes do fix: o engine re-ancorava closePrice em QUALQUER transicao de sessao
+  // (`previousSessionType !== sessionType`). GREEN depois: so ao ENTRAR em PRE_OPENING.
+  it('CLOSED -> PRE_OPENING (rollover diario): re-ancora', () => {
+    expect(shouldReanchorCbAnchor('CLOSED', 'PRE_OPENING')).toBe(true)
+  })
+
+  it('transicoes intradia NAO re-ancoram (mantem a banda diaria)', () => {
+    expect(shouldReanchorCbAnchor('PRE_OPENING', 'TRADING')).toBe(false)
+    expect(shouldReanchorCbAnchor('TRADING', 'CLOSING_CALL')).toBe(false)
+    expect(shouldReanchorCbAnchor('CLOSING_CALL', 'AFTER_MARKET')).toBe(false)
+    expect(shouldReanchorCbAnchor('AFTER_MARKET', 'CLOSED')).toBe(false)
+  })
+
+  it('primeiro tick (sem sessao anterior) e mesma sessao NAO re-ancoram', () => {
+    expect(shouldReanchorCbAnchor(null, 'PRE_OPENING')).toBe(false)  // boot, sem transicao
+    expect(shouldReanchorCbAnchor('PRE_OPENING', 'PRE_OPENING')).toBe(false)  // sem mudanca
   })
 })
 
