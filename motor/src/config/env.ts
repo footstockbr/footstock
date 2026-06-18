@@ -9,6 +9,13 @@ config()
 function required(key: string): string {
   const value = process.env[key]
   if (!value) {
+    // Em NODE_ENV=test (CI roda `npm test` sem .env e sem REDIS_URL/DATABASE_URL no
+    // ambiente), NAO fail-fast no carregamento do modulo: Redis e Prisma sao mockados
+    // nos testes, entao um placeholder inerte basta para o modulo carregar. O fail-fast
+    // permanece intacto em dev/prod (NODE_ENV != test).
+    if (process.env.NODE_ENV === 'test') {
+      return `test-placeholder-${key}`
+    }
     throw new Error(
       `[env] Variável obrigatória ausente: ${key}. Consulte motor/.env.example.`
     )
