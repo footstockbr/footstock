@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs'
+import { readFileSync, existsSync } from 'fs'
 import { resolve } from 'path'
 import type { PrismaClient } from '@prisma/client'
 import { buildPriceAttributionV2, parsePriceAttribution } from './PriceAttribution'
@@ -96,7 +96,13 @@ export class AttributionPreflightService {
     checks.parserCanary = this.checkParserCanary(details)
     checks.transactionalCanary = await this.checkTransactionalCanary(details)
 
-    const failures = details.map((failure) => `${failure.code}: ${failure.message}`)
+    // F2 (06-18): codigos INFORMATIVOS nao contam como failure (preflight nao degrada o
+    // boot por eles). ATTRIBUTION_SCHEMA_SYNC_SKIPPED e esperado no container motor-only
+    // (schemas nao copiados) — fica em `details` para observabilidade, fora de `failures`.
+    const INFO_CODES = new Set(['ATTRIBUTION_SCHEMA_SYNC_SKIPPED'])
+    const failures = details
+      .filter((d) => !INFO_CODES.has(d.code))
+      .map((failure) => `${failure.code}: ${failure.message}`)
     return { ok: failures.length === 0, failures, checks, details }
   }
 
@@ -126,9 +132,25 @@ export class AttributionPreflightService {
   }
 
   private checkPrismaSchemaSync(details: AttributionPreflightFailure[]): boolean {
+    const rootPath = resolve(this.workspaceRoot, 'prisma/schema.prisma')
+    const nextPath = resolve(this.workspaceRoot, 'footstock-next/prisma/schema.prisma')
+    // F2 (06-18): no container de runtime so o motor/ e copiado (sem prisma/ nem
+    // footstock-next/), entao o cross-schema sync e ESTRUTURALMENTE impossivel. Antes isso
+    // virava ENOENT -> ATTRIBUTION_SCHEMA_SYNC_FAILED (boot degradado todo deploy) e ainda
+    // MASCARAVA drift real (ex: enum SessionType motor vs next). Quando os schemas nao
+    // estao presentes (deploy esperado), PULA a checagem com aviso explicito (NAO e
+    // failure); a deteccao de drift fica para o CI/monorepo onde os dois schemas existem.
+    // Erro de leitura com os arquivos PRESENTES continua sendo failure real.
+    if (!existsSync(rootPath) || !existsSync(nextPath)) {
+      details.push({
+        code: 'ATTRIBUTION_SCHEMA_SYNC_SKIPPED',
+        message: `schema-sync pulado: schemas ausentes no runtime (esperado no container motor-only). Drift validado no CI.`,
+      })
+      return true
+    }
     try {
-      const rootSchema = readFileSync(resolve(this.workspaceRoot, 'prisma/schema.prisma'), 'utf8')
-      const nextSchema = readFileSync(resolve(this.workspaceRoot, 'footstock-next/prisma/schema.prisma'), 'utf8')
+      const rootSchema = readFileSync(rootPath, 'utf8')
+      const nextSchema = readFileSync(nextPath, 'utf8')
       const failures = comparePriceHistoryContract(rootSchema, nextSchema)
       for (const failure of failures) {
         details.push({ code: 'ATTRIBUTION_SCHEMA_DRIFT', message: failure })

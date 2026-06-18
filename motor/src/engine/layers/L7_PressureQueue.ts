@@ -1,6 +1,7 @@
 import type { QuantLayer } from './base'
 import type { AssetState, ClusterParams, LayerResult } from '../../types/motor.types'
 import { NEWS_IMPACT_DURATION_TICKS } from '../../contracts/news-inject-contract'
+import { NEWS_CB_GRACE_TICKS } from './L10_CircuitBreaker'
 
 /**
  * L7 - Pressure Queue (News Impact Absorption)
@@ -41,6 +42,13 @@ export class L7_PressureQueue implements QuantLayer {
       if (state.activeNewsImpacts.length === 0) {
         state.newsImpact = 0
         state.newsImpactTicks = 0
+      }
+      // News-expiry CB grace (06-18): este e o caminho REAL apos a expiracao (sem noticia
+      // ativa). Decai a janela de grace aqui — sem isto o grace ficaria preso (o decremento
+      // abaixo e inalcancavel por causa deste early-return) e o CB ficaria em 20% para
+      // sempre em qualquer ativo que ja teve noticia.
+      if ((state.newsCbGraceTicks ?? 0) > 0) {
+        state.newsCbGraceTicks = (state.newsCbGraceTicks ?? 0) - 1
       }
       return { layer: this.name, deltaPrice: 0 }
     }
@@ -89,9 +97,20 @@ export class L7_PressureQueue implements QuantLayer {
       const aggregateMagnitude = state.activeNewsImpacts.reduce((sum, news) => sum + news.magnitude, 0)
       state.newsImpact = Math.max(-1, Math.min(1, aggregateMagnitude || 0))
       state.newsImpactTicks = state.activeNewsImpacts[0]?.ticksRemaining ?? 0
-    } else {
+      // News-expiry CB grace (06-18): ao expirar a ULTIMA noticia (fila vazia), inicia a
+      // janela de decaimento do threshold do CB. Este e o caminho REAL de producao
+      // (activeNewsImpacts), nao so o legacy newsImpactTicks abaixo. O decaimento da
+      // janela acontece no early-return acima (ticks subsequentes sem noticia ativa).
+      if (state.activeNewsImpacts.length === 0) {
+        state.newsCbGraceTicks = NEWS_CB_GRACE_TICKS
+      }
+    } else if (state.newsImpactTicks > 0) {
+      // Caminho legacy (sem activeNewsImpacts): conta o newsImpactTicks cru.
       state.newsImpactTicks -= 1
-      if (state.newsImpactTicks === 0) state.newsImpact = 0
+      if (state.newsImpactTicks === 0) {
+        state.newsImpact = 0
+        state.newsCbGraceTicks = NEWS_CB_GRACE_TICKS
+      }
     }
 
     return {

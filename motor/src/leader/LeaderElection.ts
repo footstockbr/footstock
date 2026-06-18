@@ -43,18 +43,15 @@ export class LeaderElection {
    * Retorna true se bem-sucedido, false se outro motor já é líder.
    */
   async tryAcquire(): Promise<boolean> {
-    const pipeline = this.redis.pipeline()
-    pipeline.set(LEADER_KEY, this.motorId, 'PX', LEADER_TTL_MS, 'NX')
-    pipeline.incr(FENCING_KEY)
-
-    const results = await pipeline.exec()
-    if (!results) return false
-
-    const [setResult, incrResult] = results
-    const acquired = setResult[1] === 'OK'
+    // D6 (06-18): SET NX primeiro; so incrementa o fencing token quando REALMENTE adquire
+    // a lideranca. Antes o INCR rodava em TODA tentativa (mesmo falha de aquisicao),
+    // inflando o token a cada poll de cada instancia secundaria — o fencing token deve
+    // mudar uma vez por aquisicao, nao por tentativa.
+    const setResult = await this.redis.set(LEADER_KEY, this.motorId, 'PX', LEADER_TTL_MS, 'NX')
+    const acquired = setResult === 'OK'
 
     if (acquired) {
-      this.fencingToken = (incrResult[1] as number) ?? 0
+      this.fencingToken = await this.redis.incr(FENCING_KEY)
       this._isLeader = true
       this.startHeartbeat()
       console.log(`[leader] Liderança adquirida. Fencing token: ${this.fencingToken}`)

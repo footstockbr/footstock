@@ -208,7 +208,10 @@ export class PriceCalculator {
     // progressivamente apenas os deltas que AFASTAM o preço da âncora (closePrice)
     // conforme ele se aproxima da banda; movimentos de volta ao centro nunca são
     // freados. Notícias (CB a 20%) ficam isentas. Ver L10_CircuitBreaker.
-    const combinedDelta = cappedDelta + correlationDelta
+    // D5 (06-18): re-aplica o velocity cap L8 INCLUINDO a correlacao. Antes a correlacao
+    // era somada APOS o cap, entao o delta final podia exceder maxTickChange (bounded,
+    // mas furava o teto de 0,35%/tick). O total motor+agente+correlacao agora respeita o cap.
+    const combinedDelta = this.l8.applyCap(cappedDelta + correlationDelta, state.currentPrice, params.maxTickChange)
     const brakedDelta = this._applyApproachBrake(combinedDelta, state)
     if (brakedDelta !== combinedDelta) {
       layerResults.push({
@@ -231,7 +234,10 @@ export class PriceCalculator {
       ? this.l8.applyCap(engineDelta, state.currentPrice, params.maxTickChange)
       : cappedDelta
     const brakedEngineDelta = agentDelta !== 0
-      ? this._applyApproachBrake(cappedEngineDelta + correlationDelta, state)
+      ? this._applyApproachBrake(
+          this.l8.applyCap(cappedEngineDelta + correlationDelta, state.currentPrice, params.maxTickChange),
+          state,
+        )
       : brakedDelta
     const enginePrice = Math.max(PRICE_EPSILON, state.currentPrice + brakedEngineDelta)
 

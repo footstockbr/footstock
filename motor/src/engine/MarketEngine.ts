@@ -34,7 +34,14 @@ import { NEWS_IMPACT_DURATION_TICKS } from '../contracts/news-inject-contract'
 // TODO:REMOVE debug instrumentation (loop 06-17-motor-footstock-correcoes-variacoes / T0.1)
 import { maybeEmitTickDebug } from '../utils/tickDebug'
 
-const TICK_INTERVAL_MS = parseInt(process.env.MOTOR_TICK_INTERVAL_MS ?? '2000', 10)
+// C5 (06-18): default alinhado ao contrato (config/env.ts usa 10000) e a calibracao
+// do dt (tick-dt assume tick de 10s). Antes 2000 -> escala de volatilidade 5x errada
+// se a env sumisse. Validacao (hardening): rejeita NaN/extremo -> setInterval(NaN) ou
+// cadencia agressiva. Floor 1000ms. Em prod MOTOR_TICK_INTERVAL_MS=10000 esta setado.
+const TICK_INTERVAL_MS = (() => {
+  const n = parseInt(process.env.MOTOR_TICK_INTERVAL_MS ?? '10000', 10)
+  return Number.isFinite(n) && n >= 1000 ? n : 10000
+})()
 const PERSIST_HISTORY_EVERY = 6  // Persistir PriceHistory a cada N ticks ≈ 1min com tick=10s (reduzido de 30 para evitar gráficos degrau-degrau em B_LIQUID/B_ILLIQ; A_TOP persiste sempre — ver item 004)
 const PAUSE_RESUME_MS = 5 * 60 * 1000  // 5 minutos absolutos (independente de TICK_INTERVAL_MS)
 // Heartbeat a cada N ticks (reduz comandos Redis — TTL do MotorHealthService: 60s)
@@ -156,6 +163,12 @@ export class MarketEngine {
   private assetStates: Map<string, AssetState> = new Map()
   private tickTimer: ReturnType<typeof setInterval> | null = null
   private tickCount = 0
+  // R1 (06-18): guarda de reentrancia. runTick e async e da await em Redis/DB antes de
+  // mutar estado; sem isto, se um tick durar mais que TICK_INTERVAL_MS o setInterval
+  // enfileira outro e dois runTick mutam assetStates/previousTickDeltas/tickCount em
+  // paralelo (corrupcao temporal). O ciclo sobreposto e PULADO, nao enfileirado.
+  private tickInFlight = false
+  private tickSkips = 0  // skips consecutivos por reentrancia (observabilidade do R1)
   private healthService: MotorHealthService
   private orderExecutor: OrderExecutor
   private orderMatcher: OrderMatcher
@@ -227,7 +240,19 @@ export class MarketEngine {
     logger.info(`[engine] ${this.assetStates.size} ativos carregados. Iniciando ticks...`)
 
     this.tickTimer = setInterval(() => {
-      this.runTick().catch(err => logger.error('[engine] Erro no tick:', err))
+      if (this.tickInFlight) {
+        this.tickSkips++
+        // Escalona: warn no 1o skip e a cada 6 consecutivos (~1min a 10s). Skips
+        // sustentados indicam tick travado em I/O (Redis/DB) — sinal para investigar.
+        if (this.tickSkips === 1 || this.tickSkips % 6 === 0) {
+          logger.warn(`[engine] tick em andamento — ciclo pulado (anti-reentrancia). skips_consecutivos=${this.tickSkips}`)
+        }
+        return
+      }
+      this.tickInFlight = true
+      this.runTick()
+        .catch(err => logger.error('[engine] Erro no tick:', err))
+        .finally(() => { this.tickInFlight = false; this.tickSkips = 0 })
     }, TICK_INTERVAL_MS)
   }
 
@@ -334,7 +359,8 @@ export class MarketEngine {
       // Condições de recovery:
       //   A) fairValue no DB < 50% do canônico (corrompido pelo reset-prices bugado)
       //   B) currentPrice <= 1.5 (no floor) e canônico existe
-      //   C) currentPrice > canônico * 5 (inflado por CB loop ascendente)
+      //   C) currentPrice > canônico * 4 (inflado por CB loop ascendente) — DESTRUTIVO,
+      //      default log-only (ver C4 abaixo)
       const canonicalFV = MarketEngine.CANONICAL_FAIR_VALUES[asset.ticker]
       const dbFairValue  = Number(asset.fairValue ?? 0)
       const dbPrice      = rawPrice
@@ -344,12 +370,26 @@ export class MarketEngine {
         const fvCorrupted  = dbFairValue > 0 && dbFairValue < canonicalFV * 0.5
         const atFloor      = dbPrice <= NUDGE_MIN_PRICE * 1.5
         const inflated     = dbPrice > canonicalFV * 4
-        if (fvCorrupted || atFloor || inflated) {
+        // C4 (06-18): o trigger `inflated` reseta um ativo possivelmente LEGITIMO
+        // (valorizacao real > 4x) para o IPO no boot, de forma destrutiva e silenciosa,
+        // sem dono. Default agora e LOG-ONLY: so reseta com MOTOR_AUTORECOVERY_INFLATED=true
+        // (acao explicita de operador). fvCorrupted/atFloor (corrupcao clara) seguem ativos.
+        const inflatedActionable = inflated && process.env.MOTOR_AUTORECOVERY_INFLATED === 'true'
+        if (inflated && !inflatedActionable) {
+          logger.warn(
+            `[engine] AUTO-RECOVERY inflated DETECTADO (log-only, NAO resetado): ${asset.ticker} ` +
+            `price ${dbPrice.toFixed(2)} > 4x canonico ${canonicalFV}. ` +
+            `Setar MOTOR_AUTORECOVERY_INFLATED=true para resetar (decisao de operador).`
+          )
+          // Metrica: preco inflado nao deve passar despercebido so por estar em log.
+          this.redis.incr('motor:metrics:inflated_detected').catch(() => {})
+        }
+        if (fvCorrupted || atFloor || inflatedActionable) {
           recoveryPrice = canonicalFV
           logger.warn(
             `[engine] AUTO-RECOVERY ${asset.ticker}: price ${dbPrice.toFixed(2)}→${canonicalFV} ` +
             `fv ${dbFairValue.toFixed(2)}→${canonicalFV} ` +
-            `(fvCorrupted=${fvCorrupted} atFloor=${atFloor} inflated=${inflated})`
+            `(fvCorrupted=${fvCorrupted} atFloor=${atFloor} inflated=${inflatedActionable})`
           )
           recoveryUpdates.push({ id: asset.id, ticker: asset.ticker, price: canonicalFV, fv: canonicalFV })
         }
@@ -467,6 +507,10 @@ export class MarketEngine {
     for (const detail of preflight.details) {
       if (detail.code === 'ATTRIBUTION_SCHEMA_DRIFT') {
         logger.warn(`[engine] hipotese: drift de schema Prisma detectado antes do modo estrito: ${detail.message}`)
+      } else if (detail.code === 'ATTRIBUTION_SCHEMA_SYNC_SKIPPED') {
+        // F2 (06-18): Zero Silencio — registra que o cross-schema sync foi PULADO (esperado
+        // no container motor-only); operador sabe que a deteccao de drift fica para o CI.
+        logger.info(`[engine] attribution schema-sync pulado (nao bloqueia o boot): ${detail.message}`)
       }
     }
     return { ok: preflight.ok, failures: preflight.failures }
@@ -1085,7 +1129,8 @@ export class MarketEngine {
 
     state.newsImpact = clampedMagnitude
     state.newsImpactTicks = clampedTicks
-    state.activeNewsImpacts = [
+    state.newsCbGraceTicks = 0  // nova noticia: zera grace residual (sera renovado ao expirar)
+    const mergedNewsImpacts = [
       {
         newsId,
         title: context.title?.slice(0, 160),
@@ -1100,11 +1145,17 @@ export class MarketEngine {
         qualityFlags,
       },
       ...currentNewsImpacts,
-    ].slice(0, 5)
+    ]
+    state.activeNewsImpacts = mergedNewsImpacts.slice(0, 5)
 
-    if (state.activeNewsImpacts.length >= 5) {
-      const last = state.activeNewsImpacts[state.activeNewsImpacts.length - 1]
-      last.qualityFlags = [...new Set([...last.qualityFlags, 'NEWS_QUEUE_AGGREGATED' as const])]
+    // D4 (06-18): se a fila saturou e algum item foi DESCARTADO pelo slice, marca o item
+    // RECEM-INJETADO (index 0, o que causou a saturacao) como agregado. Antes marcava o
+    // sobrevivente mais antigo (index 4 — um item VIVO), rotulando o item errado, e ainda
+    // disparava com a fila em exatamente 5 (sem descarte real).
+    if (mergedNewsImpacts.length > 5 && state.activeNewsImpacts[0]) {
+      state.activeNewsImpacts[0].qualityFlags = [
+        ...new Set([...state.activeNewsImpacts[0].qualityFlags, 'NEWS_QUEUE_AGGREGATED' as const]),
+      ]
     }
   }
 

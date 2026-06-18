@@ -41,6 +41,19 @@ const HALT_DURATION_TICKS       = 150    // ~5 minutos (150 ticks × 2s)
  */
 const NEWS_CB_THRESHOLD = 0.20            // 20% durante notícia (em vez de 8%)
 
+// News-expiry CB grace (06-18): apos a noticia expirar, o threshold NAO faz snap
+// 20%->8% instantaneo; decai linearmente ao longo de NEWS_CB_GRACE_TICKS, dando a
+// reversao (L1 OU / L2 fairValue) tempo de trazer o preco para dentro da banda antes
+// do halt. Sem isto, um ativo que terminou a noticia em [8%,20%) do close era
+// force-halted no instante da expiracao e reentrava em ciclo de halt de 5min (L2
+// ancora em fairValue, nao garante reversao ao close). Tunavel via env; default 60
+// ticks (~10min a 10s/tick). 0 desliga o grace (volta ao snap instantaneo).
+export const NEWS_CB_GRACE_TICKS = (() => {
+  const n = parseInt(process.env.MOTOR_NEWS_CB_GRACE_TICKS ?? '60', 10)
+  if (!Number.isFinite(n) || n < 0) return 60
+  return Math.min(n, 600)  // teto operacional: grace longa demais mascara movimento legitimo
+})()
+
 export interface CircuitBreakerResult extends LayerResult {
   triggered: boolean
   haltTicks?: number
@@ -77,9 +90,21 @@ export class L10_CircuitBreaker implements QuantLayer {
     // newsActive exige newsImpact !== 0 também: protege contra ticks "fantasma"
     // (newsImpact=0 sem decrement em L7 manteria o flag preso eternamente).
     const newsActive = state.newsImpact !== 0 && state.newsImpactTicks > 0
-    const threshold = newsActive
-      ? NEWS_CB_THRESHOLD
-      : (params?.circuitBreakerThreshold ?? DEFAULT_CIRCUIT_BREAKER_THRESHOLD)
+    const normalThreshold = params?.circuitBreakerThreshold ?? DEFAULT_CIRCUIT_BREAKER_THRESHOLD
+    let threshold: number
+    if (newsActive) {
+      threshold = NEWS_CB_THRESHOLD
+    } else {
+      threshold = normalThreshold
+      // News-expiry grace: decai de NEWS_CB_THRESHOLD ate normalThreshold ao longo da
+      // janela, em vez de snap instantaneo. frac=1 logo apos a expiracao -> 0 no fim.
+      const grace = state.newsCbGraceTicks ?? 0
+      if (grace > 0 && NEWS_CB_GRACE_TICKS > 0) {
+        const frac = Math.min(1, grace / NEWS_CB_GRACE_TICKS)
+        const decayed = normalThreshold + (NEWS_CB_THRESHOLD - normalThreshold) * frac
+        threshold = Math.max(threshold, decayed)
+      }
+    }
 
     if (changePercent >= threshold) {
       // Halt: MarketEngine trata o estado isPaused e o timer de retomada

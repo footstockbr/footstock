@@ -89,6 +89,8 @@ export interface AssetState {
   haltResumeAt: number | null // Unix ms estimado para retomada automática
   newsImpact: number         // Magnitude de notícia ativa (0.0 a 1.0)
   newsImpactTicks: number    // Ticks restantes do efeito da notícia
+  newsCbGraceTicks?: number  // 06-18: ticks de decaimento do threshold do CB pos-noticia
+                             // (evita snap 20%->8% instantaneo na expiracao -> halt loop)
   activeNewsImpacts?: ActiveNewsImpact[]
   // L4 — OFI: estado do decaimento exponencial (OFI_t = rho*OFI_{t-1} + (1-rho)*ofi_raw_t)
   ofiState: number

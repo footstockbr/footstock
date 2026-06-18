@@ -30,6 +30,10 @@ function optional(key: string, fallback: string): string {
 export const env = {
   REDIS_URL: required('REDIS_URL'),
   DATABASE_URL: required('DATABASE_URL'),
+  // S2 (06-18): JWT_SECRET é usado por verifyJwt nas rotas SSE/HTTP. Sem ele, TODA
+  // conexão SSE vira 401 com o engine "saudável" — outage total mascarado de erro de
+  // cliente. Torna o boot fail-fast (em test, required() devolve placeholder inerte).
+  JWT_SECRET: required('JWT_SECRET'),
   MOTOR_TICK_INTERVAL_MS: parseInt(optional('MOTOR_TICK_INTERVAL_MS', '10000'), 10),
   MOTOR_LEADER_TTL_S: parseInt(optional('MOTOR_LEADER_TTL_S', '30'), 10),
   MOTOR_LEADER_HEARTBEAT_S: parseInt(optional('MOTOR_LEADER_HEARTBEAT_S', '10'), 10),

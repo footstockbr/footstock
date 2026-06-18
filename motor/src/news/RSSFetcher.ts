@@ -43,8 +43,23 @@ export class RSSFetcher {
     private readonly redis: Redis,
     private readonly prisma?: PrismaClient
   ) {
-    this.parser = new Parser({ timeout: 10_000 })
+    this.parser = new Parser({
+      timeout: 10_000,
+      // F3-C (06-18): UA browser-like + Accept. Varios feeds (ex: O Gol 403) bloqueiam
+      // clientes sem UA de navegador; o rss-parser default manda "User-Agent: rss-parser".
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; FootStockBot/1.0; +https://footstock.com.br)',
+        'Accept': 'application/rss+xml, application/atom+xml, application/xml;q=0.9, */*;q=0.8',
+      },
+    })
   }
+
+  // F3-B (06-18): contador de falhas consecutivas por feed (in-memory). Sem isto, um feed
+  // cronicamente morto rendia 0 itens + 1 log [SYS_001] por ciclo, para sempre, sem sinal
+  // escalonado. Ao cruzar o limiar, emite um ALERTA estruturado (1x) e uma metrica Redis.
+  private consecutiveFailures = new Map<string, number>()
+  private deadFeedAlerted = new Set<string>()  // dedup: 1 alerta por incidente, re-arma no recovery
+  private static readonly DEAD_FEED_ALERT_THRESHOLD = 5
 
   // ---------------------------------------------------------------------------
   // Resolução dos feeds: DB → fallback hardcoded
@@ -75,6 +90,8 @@ export class RSSFetcher {
   async fetchFeed(feedConfig: { url: string; source: string }, attempt = 1): Promise<RawNewsItem[]> {
     try {
       const feed = await this.parser.parseURL(feedConfig.url)
+      this.consecutiveFailures.set(feedConfig.source, 0)  // F3-B: feed saudavel -> zera contador
+      this.deadFeedAlerted.delete(feedConfig.source)      // re-arma o alerta se voltar a morrer
       return (feed.items ?? []).map(item => ({
         url: item.link ?? item.guid ?? '',
         title: item.title ?? '',
@@ -89,6 +106,19 @@ export class RSSFetcher {
         return this.fetchFeed(feedConfig, attempt + 1)
       }
       logger.error(`[SYS_001] Feed ${feedConfig.source} falhou após 3 tentativas: ${(err as Error).message}`)
+      // F3-B: escalona feed cronicamente morto. Ao cruzar o limiar, emite ALERTA 1x +
+      // metrica Redis (operador desativa is_active=false / corrige a URL no DB).
+      const failures = (this.consecutiveFailures.get(feedConfig.source) ?? 0) + 1
+      this.consecutiveFailures.set(feedConfig.source, failures)
+      // Alerta 1x por incidente (>= limiar + dedup), nao so no instante == limiar.
+      if (failures >= RSSFetcher.DEAD_FEED_ALERT_THRESHOLD && !this.deadFeedAlerted.has(feedConfig.source)) {
+        this.deadFeedAlerted.add(feedConfig.source)
+        logger.error(
+          `[ALERT][RSS_DEAD_FEED] Feed "${feedConfig.source}" (${feedConfig.url}) falhou ` +
+          `${failures} ciclos consecutivos. Verificar URL/desativar is_active no rss_feeds.`
+        )
+        this.redis.incr('motor:metrics:rss_dead_feeds').catch(() => {})
+      }
       return []
     }
   }

@@ -10,6 +10,7 @@ import { RedisClientService } from '../../services/RedisClientService'
 import { REDIS_CHANNELS } from '../../types/events.types'
 import { logger } from '../../utils/logger'
 import { verifyJwt, JwtVerifyError, extractTokenFromRequest } from '../../lib/auth'
+import { tryAcquireSseSlot, releaseSseSlot } from '../sseConnectionLimiter'
 import { PriceBuffer } from '../../lib/PriceBuffer'
 import { DELAY_BY_PLAN } from '../../constants/delays'
 import type { MarketTickEvent } from '../../types/events.types'
@@ -72,6 +73,14 @@ export function handleMarketStream(req: IncomingMessage, res: ServerResponse): v
   const delayMs = DELAY_BY_PLAN[payload.planType]
   // ──────────────────────────────────────────────────────────────────────────
 
+  // S6: cap global de conexoes SSE (apos auth, antes de aceitar). 429 se esgotado.
+  if (!tryAcquireSseSlot()) {
+    setCorsHeaders(res, origin)
+    res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '5' })
+    res.end(JSON.stringify({ error: 'too_many_connections' }))
+    return
+  }
+
   setCorsHeaders(res, origin)
 
   const headers: Record<string, string> = {
@@ -82,10 +91,16 @@ export function handleMarketStream(req: IncomingMessage, res: ServerResponse): v
     'X-Content-Type-Options': 'nosniff',
   }
 
-  res.writeHead(200, headers)
-
-  // Envia comment inicial para estabilizar conexão
-  res.write(': connected\n\n')
+  // S6: se a montagem inicial falhar (socket morto antes do wiring do cleanup), libera o
+  // slot adquirido para nao vazar — cleanup so assume apos os listeners abaixo.
+  try {
+    res.writeHead(200, headers)
+    // Envia comment inicial para estabilizar conexão
+    res.write(': connected\n\n')
+  } catch {
+    releaseSseSlot()
+    return
+  }
 
   let closed = false
   let subscriber: ReturnType<typeof RedisClientService.createSubscriber> | null = null
@@ -95,6 +110,7 @@ export function handleMarketStream(req: IncomingMessage, res: ServerResponse): v
   function cleanup(): void {
     if (closed) return
     closed = true
+    releaseSseSlot()  // S6: devolve o slot adquirido (cleanup roda uma unica vez)
     if (heartbeat) {
       clearInterval(heartbeat)
       heartbeat = null

@@ -73,32 +73,37 @@ export class MarginCallChecker {
     marginRatio: number,
   ): Promise<void> {
     try {
-      const interestAccrued = Number(position.interestAccrued)
-      const marginBlocked = Number(position.marginBlocked)
-      const avgPrice = Number(position.avgPrice)
+      // CAS anti-double-liquidation (06-18) + recompute-in-tx (hardening): reivindica a
+      // posicao OPEN->CLOSED de forma ATOMICA e SO entao computa o financeiro a partir de
+      // uma RELEITURA transacional (interestAccrued/marginBlocked/avgPrice/quantity podem
+      // ter mudado entre o snapshot do checker e agora — ex: cron de juros). claim.count!==1
+      // => outro fluxo (buy-to-cover do Next / checker reentrante) ja fechou => no-op (sem
+      // double-credit/double-release). Serializable alinha com OrderExecutor/OrderMatcher;
+      // em conflito serializavel (P2034) a tx aborta e o proximo tick re-liquida (posicao
+      // segue OPEN), entao a liquidacao nao se perde.
+      const result = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        const claim = await tx.position.updateMany({
+          where: { id: position.id, status: 'OPEN' },
+          data: { status: 'CLOSED' },  // ainda NAO zera quantity: relemos os valores frescos
+        })
+        if (claim.count !== 1) return null  // ja fechada por fluxo concorrente
 
-      // P&L negativo (forçado)
-      const pnl = (avgPrice - currentPrice) * position.quantity - interestAccrued
-      const returnAmount = marginBlocked + pnl
+        const fresh = await tx.position.findUniqueOrThrow({ where: { id: position.id } })
+        const fMarginBlocked = Number(fresh.marginBlocked)
+        const fPnl = (Number(fresh.avgPrice) - currentPrice) * fresh.quantity - Number(fresh.interestAccrued)
+        const fReturn = fMarginBlocked + fPnl
 
-      await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const user = await tx.user.findUniqueOrThrow({ where: { id: position.userId } })
-
         const balanceBefore = Number(user.fsBalance)
         // Guard: saldo nunca negativo — perda além da margem é registrada como loss absorvida
-        const newBalance = Math.max(0, balanceBefore + returnAmount)
-        const newMarginBlocked = Math.max(0, Number(user.marginBlocked) - marginBlocked)
+        const newBalance = Math.max(0, balanceBefore + fReturn)
+        const newMarginBlocked = Math.max(0, Number(user.marginBlocked) - fMarginBlocked)
 
         await tx.user.update({
           where: { id: position.userId },
           data: { fsBalance: newBalance, marginBlocked: newMarginBlocked },
         })
-
-        await tx.position.update({
-          where: { id: position.id },
-          data: { status: 'CLOSED', quantity: 0 },
-        })
-
+        await tx.position.update({ where: { id: position.id }, data: { quantity: 0 } })
         await tx.transaction.create({
           data: {
             userId: position.userId,
@@ -106,16 +111,25 @@ export class MarginCallChecker {
             type: 'MARKET',
             financialType: 'SHORT_CLOSE',
             side: 'BUY',
-            quantity: position.quantity,
+            quantity: fresh.quantity,
             price: currentPrice,
             fee: 0,
-            totalAmount: Math.abs(returnAmount),
-            fsAmount: returnAmount,
+            totalAmount: Math.abs(fReturn),
+            fsAmount: fReturn,
             balanceBefore,
             balanceAfter: newBalance,
           },
         })
-      })
+        return { pnl: fPnl }
+      }, { isolationLevel: 'Serializable' })
+
+      if (result === null) {
+        logger.info(
+          `[MarginCallChecker] liquidacao ignorada: posicao ${position.id} ja fechada por fluxo concorrente`
+        )
+        return
+      }
+      const pnl = result.pnl
 
       // Notificar usuário da liquidação forçada + canal margin:call
       await Promise.allSettled([

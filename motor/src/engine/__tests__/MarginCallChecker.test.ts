@@ -62,6 +62,10 @@ function makePrisma(positions: any[] = [], user: any = makeUser()): any {
     },
     position: {
       update: jest.fn().mockResolvedValue({}),
+      // CAS claim (06-18): default count:1 = posicao reivindicada com sucesso.
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      // recompute-in-tx: relê a posicao fresca dentro da transacao.
+      findUniqueOrThrow: jest.fn().mockResolvedValue(positions[0]),
     },
     transaction: {
       create: jest.fn().mockResolvedValue({}),
@@ -348,12 +352,39 @@ describe('MarginCallChecker', () => {
 
       await checker.checkMarginCalls({ CRAQUE10: currentPrice })
 
+      // CAS (06-18): a posicao e reivindicada via updateMany com guarda status:'OPEN'
+      // (claim atomico, sem zerar quantity ainda — relemos os valores frescos).
+      expect(prisma._tx.position.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: position.id, status: 'OPEN' }),
+          data: expect.objectContaining({ status: 'CLOSED' }),
+        })
+      )
+      // quantity e zerada ao final, apos a releitura/recompute.
       expect(prisma._tx.position.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: position.id },
-          data: expect.objectContaining({ status: 'CLOSED', quantity: 0 }),
+          data: expect.objectContaining({ quantity: 0 }),
         })
       )
+    })
+
+    test('CAS no-op: posicao ja fechada por fluxo concorrente (count!=1) NAO credita nem publica', async () => {
+      const position = makePosition({ avgPrice: 100, marginBlocked: 1000, quantity: 10 })
+      const currentPrice = priceForRatio(0.15, 100, 1000, 10)
+
+      prisma = makePrisma([position])
+      // Simula corrida: o claim CAS encontra 0 linhas OPEN (outro fluxo ja fechou).
+      prisma._tx.position.updateMany.mockResolvedValue({ count: 0 })
+      redis = makeRedis()
+      checker = new MarginCallChecker(prisma, redis)
+
+      await checker.checkMarginCalls({ CRAQUE10: currentPrice })
+
+      // Sem efeito financeiro: nenhum credito ao usuario, nenhuma transaction, nenhum publish.
+      expect(prisma._tx.user.update).not.toHaveBeenCalled()
+      expect(prisma._tx.transaction.create).not.toHaveBeenCalled()
+      expect((redis.publish as jest.Mock).mock.calls.length).toBe(0)
     })
   })
 

@@ -7,6 +7,7 @@
 import type { IncomingMessage, ServerResponse } from 'http'
 import { RedisClientService } from '../../services/RedisClientService'
 import { logger } from '../../utils/logger'
+import { tryAcquireSseSlot, releaseSseSlot } from '../sseConnectionLimiter'
 
 const NEWS_INJECT_CHANNEL = 'news:inject'
 const HEARTBEAT_INTERVAL_MS = 15_000
@@ -49,6 +50,14 @@ export function handleNewsStream(req: IncomingMessage, res: ServerResponse): voi
     return
   }
 
+  // S6: cap global de conexoes SSE (compartilhado com /stream/market). 429 se esgotado.
+  if (!tryAcquireSseSlot()) {
+    setCorsHeaders(res, origin)
+    res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '5' })
+    res.end(JSON.stringify({ error: 'too_many_connections' }))
+    return
+  }
+
   setCorsHeaders(res, origin)
 
   const headers: Record<string, string> = {
@@ -59,10 +68,15 @@ export function handleNewsStream(req: IncomingMessage, res: ServerResponse): voi
     'X-Content-Type-Options': 'nosniff',
   }
 
-  res.writeHead(200, headers)
-
-  // Envia comment inicial para estabilizar conexão
-  res.write(': connected\n\n')
+  // S6: libera o slot se a montagem inicial falhar antes do wiring do cleanup (anti-leak).
+  try {
+    res.writeHead(200, headers)
+    // Envia comment inicial para estabilizar conexão
+    res.write(': connected\n\n')
+  } catch {
+    releaseSseSlot()
+    return
+  }
 
   let closed = false
   let subscriber: ReturnType<typeof RedisClientService.createSubscriber> | null = null
@@ -71,6 +85,7 @@ export function handleNewsStream(req: IncomingMessage, res: ServerResponse): voi
   function cleanup(): void {
     if (closed) return
     closed = true
+    releaseSseSlot()  // S6: devolve o slot adquirido (cleanup roda uma unica vez)
     if (heartbeat) {
       clearInterval(heartbeat)
       heartbeat = null

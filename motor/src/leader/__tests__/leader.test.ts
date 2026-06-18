@@ -3,6 +3,9 @@ import { LeaderElection } from '../LeaderElection'
 // Mock do Redis
 const mockRedis = {
   pipeline: jest.fn(),
+  // D6 (06-18): tryAcquire agora usa set NX + incr condicional (nao mais pipeline).
+  set: jest.fn(),
+  incr: jest.fn(),
   eval: jest.fn(),
   get: jest.fn(),
   pttl: jest.fn(),
@@ -30,39 +33,36 @@ describe('LeaderElection', () => {
   })
 
   test('tryAcquire retorna true quando Redis retorna OK', async () => {
-    mockPipeline.exec.mockResolvedValue([
-      [null, 'OK'],
-      [null, 42],
-    ])
+    mockRedis.set.mockResolvedValue('OK')
+    mockRedis.incr.mockResolvedValue(42)
 
     const result = await leader.tryAcquire()
     expect(result).toBe(true)
     expect(leader.isLeader).toBe(true)
+    // D6: incr SO no acquire (nao em toda tentativa).
+    expect(mockRedis.incr).toHaveBeenCalledTimes(1)
   })
 
   test('tryAcquire retorna false quando outro motor é líder', async () => {
-    mockPipeline.exec.mockResolvedValue([
-      [null, null],  // SETNX retorna null quando a chave existe
-      [null, 42],
-    ])
+    mockRedis.set.mockResolvedValue(null)  // SET NX retorna null quando a chave existe
 
     const result = await leader.tryAcquire()
     expect(result).toBe(false)
     expect(leader.isLeader).toBe(false)
+    // D6: nao incrementa o fencing token quando a aquisicao falha.
+    expect(mockRedis.incr).not.toHaveBeenCalled()
   })
 
-  test('tryAcquire retorna false se pipeline retorna null', async () => {
-    mockPipeline.exec.mockResolvedValue(null)
+  test('tryAcquire retorna false se SET NX falha (null)', async () => {
+    mockRedis.set.mockResolvedValue(null)
     const result = await leader.tryAcquire()
     expect(result).toBe(false)
   })
 
   test('release libera liderança com Lua script', async () => {
     // Primeiro adquire
-    mockPipeline.exec.mockResolvedValue([
-      [null, 'OK'],
-      [null, 1],
-    ])
+    mockRedis.set.mockResolvedValue('OK')
+    mockRedis.incr.mockResolvedValue(1)
     await leader.tryAcquire()
 
     // Depois libera
@@ -84,7 +84,8 @@ describe('LeaderElection', () => {
   })
 
   test('isCurrentLeader verifica estado no Redis', async () => {
-    mockPipeline.exec.mockResolvedValue([[null, 'OK'], [null, 1]])
+    mockRedis.set.mockResolvedValue('OK')
+    mockRedis.incr.mockResolvedValue(1)
     await leader.tryAcquire()
 
     mockRedis.get.mockResolvedValue('motor-test-001')
@@ -93,7 +94,8 @@ describe('LeaderElection', () => {
   })
 
   test('isCurrentLeader retorna false se outro motor assumiu', async () => {
-    mockPipeline.exec.mockResolvedValue([[null, 'OK'], [null, 1]])
+    mockRedis.set.mockResolvedValue('OK')
+    mockRedis.incr.mockResolvedValue(1)
     await leader.tryAcquire()
 
     mockRedis.get.mockResolvedValue('motor-outro-999')

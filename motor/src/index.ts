@@ -5,8 +5,10 @@
 
 import './config/env'   // fail-fast para variáveis ausentes
 import http from 'http'
+import crypto from 'crypto'
 import { handleMarketStream } from './server/routes/marketStream'
 import { handleNewsStream } from './server/routes/newsStream'
+import { verifyJwt, extractTokenFromRequest } from './lib/auth'
 import { registerAllJobs, startScheduler } from './scheduler'
 import { logger } from './utils/logger'
 import { LeaderElection } from './leader/LeaderElection'
@@ -27,6 +29,34 @@ const MOTOR_ID = `motor-${process.env.RAILWAY_REPLICA_ID ?? 'local'}-${Date.now(
 const PORT = parseInt(process.env.PORT ?? '3001', 10)
 
 let _engineRef: import('./engine/MarketEngine').MarketEngine | null = null
+// R2: readiness != liveness. _engineReady só vira true quando o engine ticando
+// (lider adquirido + loadAssets concluido). /health = liveness; /ready = readiness.
+let _engineReady = false
+
+// S1/S3/S4: secret de admin para endpoints operacionais (layers-debug). Fail-closed:
+// sem secret configurado, o endpoint NAO serve (503) em vez de fail-open. Aceita
+// ADMIN_DEBUG_TOKEN (dedicado) ou MOTOR_ADMIN_SECRET (ja setado em prod) como fallback.
+const ADMIN_SECRET = process.env.ADMIN_DEBUG_TOKEN || process.env.MOTOR_ADMIN_SECRET || ''
+
+function requireAdmin(req: http.IncomingMessage, res: http.ServerResponse): boolean {
+  if (!ADMIN_SECRET) {
+    res.writeHead(503, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'admin endpoint not configured' }))
+    return false
+  }
+  // Comparacao timing-safe do Bearer (evita timing-attack na descoberta do token).
+  const auth = req.headers.authorization ?? ''
+  const provided = auth.startsWith('Bearer ') ? auth.slice(7) : ''
+  const a = Buffer.from(provided)
+  const b = Buffer.from(ADMIN_SECRET)
+  const ok = a.length === b.length && crypto.timingSafeEqual(a, b)
+  if (!ok) {
+    res.writeHead(401, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'Unauthorized' }))
+    return false
+  }
+  return true
+}
 
 const healthServer = http.createServer(async (req, res) => {
   const url = req.url ?? ''
@@ -34,22 +64,34 @@ const healthServer = http.createServer(async (req, res) => {
   // que quebrava o exact-match dos endpoints SSE e fazia cair no 404 final.
   const pathname = url.split('?')[0]
 
-  // GET /health — health check padrão Railway/Docker
+  // GET /health — liveness (Railway/Docker). Sempre 200 enquanto o processo vive.
   if (pathname === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ status: 'ok', id: MOTOR_ID }))
     return
   }
 
-  // GET /api/v1/market/engine/layers-debug — contribuição de cada camada por ticker (admin only)
-  // Requer header: Authorization: Bearer {ADMIN_DEBUG_TOKEN}
+  // GET /ready — LEADER readiness (R2). 200 só quando o engine esta ticando (lider +
+  // assets carregados). ATENCAO: e readiness de LIDER, nao readiness de processo — uma
+  // instancia secundaria saudavel (standby aguardando lideranca) responde 503 com
+  // role:'standby'. NAO usar como healthcheck per-replica (causaria restart-loop em
+  // standbys); use para LB/probe que deve rotear so ao produtor de ticks. /health
+  // (liveness) permanece o healthcheck do container (railway.toml).
+  if (pathname === '/ready') {
+    const leaderReady = _engineReady && _engineRef !== null
+    res.writeHead(leaderReady ? 200 : 503, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({
+      status: leaderReady ? 'ready' : 'not-ready',
+      role: leaderReady ? 'leader' : 'standby',
+      id: MOTOR_ID,
+    }))
+    return
+  }
+
+  // GET /api/v1/market/engine/layers-debug — contribuição de cada camada por ticker.
+  // S1: admin-only, FAIL-CLOSED (requireAdmin retorna 503 sem secret, 401 sem Bearer).
   if (pathname === '/api/v1/market/engine/layers-debug') {
-    const adminToken = process.env.ADMIN_DEBUG_TOKEN
-    if (adminToken && req.headers.authorization !== `Bearer ${adminToken}`) {
-      res.writeHead(401, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ error: 'Unauthorized' }))
-      return
-    }
+    if (!requireAdmin(req, res)) return
     const params  = new URL(url, 'http://localhost').searchParams
     const ticker  = params.get('ticker') ?? undefined
     const debug   = await (_engineRef?.getLayersDebug(ticker) ?? Promise.resolve({}))
@@ -58,9 +100,17 @@ const healthServer = http.createServer(async (req, res) => {
     return
   }
 
-  // GET /api/v1/assets/:ticker/ofi-history — histórico OFI para sub-chart
+  // GET /api/v1/assets/:ticker/ofi-history — histórico OFI para sub-chart.
+  // S3: exige JWT de usuario (mesmo contrato do /stream/market). Antes era publico.
   const ofiMatch = pathname.match(/^\/api\/v1\/assets\/([A-Z0-9]+)\/ofi-history$/)
   if (ofiMatch) {
+    try {
+      verifyJwt(extractTokenFromRequest(req))
+    } catch {
+      res.writeHead(401, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Unauthorized' }))
+      return
+    }
     const ticker  = ofiMatch[1]
     const history = await _engineRef?.getOfiHistory(ticker) ?? []
     res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -134,6 +184,7 @@ async function main() {
     }
 
     await engine.start()
+    _engineReady = true  // R2: engine ticando -> /ready passa a responder 200
 
     // Pipeline RSS — inicia junto com o engine
     if (!rssFetcher) {
@@ -157,6 +208,7 @@ async function main() {
     // polling — engine.start() pode ser chamado novamente sem recriar o PrismaClient.
     leader.onLeadershipLost = () => {
       logger.warn('[motor] Liderança perdida — parando engine e aguardando re-aquisição...')
+      _engineReady = false  // R2: deixou de ser lider -> nao pronto ate re-adquirir
       engine.stop(false).catch(err => logger.error('[motor] Erro ao parar engine:', err))
       startPolling()
     }
