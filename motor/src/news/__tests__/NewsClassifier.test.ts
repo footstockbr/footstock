@@ -7,6 +7,7 @@ import RedisMock from 'ioredis-mock'
 import type Redis from 'ioredis'
 import { NewsClassifier, RateLimitError } from '../NewsClassifier'
 import { newsQueue, type RawNewsItem } from '../NewsQueue'
+import { buildAliasIndex } from '../ticker-fallback'
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -116,6 +117,26 @@ describe('NewsClassifier', () => {
     expect(result.ticker).toBe('')
     expect(mockCreate).toHaveBeenCalledTimes(1) // sem retry em 4xx não-retentável
     expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('não-retentável'))
+  })
+
+  test('[FALLBACK — 400 crédito esgotado + índice carregado] resolve ticker pelo título', async () => {
+    // Cenário REAL de prod (2026-06-23): API Anthropic sem crédito → toda chamada
+    // falha com 400. O fallback determinístico DEVE rodar mesmo nesse caminho de erro.
+    ;(classifier as unknown as { tickerIndex: ReturnType<typeof buildAliasIndex> }).tickerIndex =
+      buildAliasIndex([
+        { ticker: 'POR3', searchText: 'palmeiras, verdao' },
+        { ticker: 'URU3', searchText: 'flamengo, mengao' },
+      ])
+    const err = Object.assign(new Error('credit balance too low'), { status: 400 })
+    mockCreate.mockRejectedValue(err)
+
+    const result = await classifier.classify({
+      ...makeRawItem(),
+      title: 'Palmeiras goleia rival e dispara na liderança',
+    })
+    expect(result.ticker).toBe('POR3')
+    expect(result.relevance).toBe(0) // fallback NÃO infla relevance → sem impacto de preço
+    expect(mockCreate).toHaveBeenCalledTimes(1)
   })
 
   test('[RETRY — 401/403/404 não-retentáveis] falham rápido sem reentregar', async () => {

@@ -411,17 +411,7 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
         result = { ...CLASSIFICATION_FALLBACK }
       }
 
-      // Fallback determinístico (gatilho "sem time"): quando o LLM não identifica
-      // o clube (ticker vazio), tenta resolver pelo TÍTULO de forma precision-first.
-      // NÃO altera relevance/sentiment → notícias institucionais ganham o badge do
-      // time sem disparar impacto de preço (que exige relevance > 0.3 no publish).
-      if (!result.ticker) {
-        const hit = resolveFromIndex(item.title, this.tickerIndex)
-        if (hit) {
-          logger.info(`[NewsClassifier] Fallback determinístico: "${item.title.slice(0, 60)}" → ${hit.ticker} (alias="${hit.alias}")`)
-          result = { ...result, ticker: hit.ticker }
-        }
-      }
+      result = this.withTickerFallback(result, item.title)
 
       this.logCall(response, { attempt, latencyMs: Date.now() - startMs, ticker: result.ticker, parseValid })
       return result
@@ -439,7 +429,7 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
       // Falha rápido para o fallback.
       if (!retryable) {
         logger.error(`[SYS_002] Sonnet API erro não-retentável (status=${status ?? 'n/a'}): ${error.message}`)
-        return { ...CLASSIFICATION_FALLBACK }
+        return this.withTickerFallback({ ...CLASSIFICATION_FALLBACK }, item.title)
       }
 
       // Timeout/abort tem teto próprio (1 retry) para não multiplicar custo numa
@@ -451,10 +441,26 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
       }
 
       logger.error(`[SYS_002] Sonnet API indisponível após ${attempt} tentativa(s): ${error.message}`)
-      return { ...CLASSIFICATION_FALLBACK }
+      return this.withTickerFallback({ ...CLASSIFICATION_FALLBACK }, item.title)
     } finally {
       clearTimeout(timeout)
     }
+  }
+
+  /**
+   * Fallback determinístico (gatilho "sem time"): quando o classificador não
+   * identifica o clube (ticker vazio — seja por julgamento do LLM, parse inválido
+   * OU falha de API como crédito esgotado/timeout), tenta resolver pelo TÍTULO de
+   * forma precision-first. NÃO altera relevance/sentiment → notícias institucionais
+   * ganham o badge do time sem disparar impacto de preço (que exige relevance>0.3
+   * no publish). Aplicado em TODOS os caminhos de retorno de classify().
+   */
+  private withTickerFallback(result: ClassifiedNews, title: string): ClassifiedNews {
+    if (result.ticker) return result
+    const hit = resolveFromIndex(title, this.tickerIndex)
+    if (!hit) return result
+    logger.info(`[NewsClassifier] Fallback determinístico: "${title.slice(0, 60)}" → ${hit.ticker} (alias="${hit.alias}")`)
+    return { ...result, ticker: hit.ticker }
   }
 
   // ---------------------------------------------------------------------------
