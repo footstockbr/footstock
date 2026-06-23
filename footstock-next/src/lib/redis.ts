@@ -5,6 +5,7 @@
 // ============================================================================
 
 import Redis from 'ioredis'
+import { emitDegradationSignal } from '@/lib/observability/degradation-signal'
 
 // ─── Singleton com detecção de conexão morta ─────────────────────────────────
 
@@ -211,8 +212,16 @@ export class SlidingWindowRateLimiter {
 
   async limit(identifier: string): Promise<RateLimitResult> {
     const r = getRedisClient()
-    // Fail-open: Redis offline não bloqueia usuário
-    if (!r) return { success: true, remaining: this.limitCount, reset: 0 }
+    // Fail-open: Redis offline não bloqueia usuário — mas a degradação não pode
+    // ser silenciosa: emitir sinal observável (FIX-14). O sinal é throttled e
+    // fail-open, jamais altera a decisão de fail-open nem lança no caminho real.
+    if (!r) {
+      emitDegradationSignal('rate_limiter.fail_open', {
+        level: 'warn',
+        context: { prefix: this.prefix, reason: 'redis_unavailable' },
+      })
+      return { success: true, remaining: this.limitCount, reset: 0 }
+    }
 
     const key = `${this.prefix}:${identifier}`
     const now = Date.now()
@@ -232,7 +241,16 @@ export class SlidingWindowRateLimiter {
         remaining: result[1],
         reset: result[2] || now + this.windowMs,
       }
-    } catch {
+    } catch (err) {
+      // Fail-open na falha do EVAL (Redis errando) — observável (FIX-14).
+      emitDegradationSignal('rate_limiter.fail_open', {
+        level: 'warn',
+        context: {
+          prefix: this.prefix,
+          reason: 'eval_error',
+          error: err instanceof Error ? err.message : 'unknown',
+        },
+      })
       return { success: true, remaining: this.limitCount, reset: 0 }
     }
   }

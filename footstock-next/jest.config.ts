@@ -30,10 +30,6 @@ export default createJestConfig({
     '/node_modules/',
     '/.next/',
     '/tests/e2e/',
-    // SKIP via item 015 — migration-exec:fix-failing-tests (PENDING-ACTIONS L728-772).
-    // Reativar quando: Redis testcontainer + Prisma mock completo (webhookAuditLog, etc)
-    // forem providos no jest setup. Coverage business logic preservada em motor/ unit tests.
-    '/tests/integration/creditBonus.test.ts',
   ],
 // coverageThreshold is valid Jest config but not in next/jest's InitialProjectOptions type
 } as never)

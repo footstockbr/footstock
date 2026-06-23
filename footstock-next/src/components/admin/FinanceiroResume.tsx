@@ -1,7 +1,7 @@
 'use client'
 
 import type { GatewayConfig } from '@/lib/types/admin'
-import { PLAN_LABELS, PLAN_HEX_COLORS, getGatewayMeta } from '@/lib/constants/admin-ui'
+import { PLAN_LABELS, PLAN_HEX_COLORS, PLAN_PRICE_VALUES, getGatewayMeta } from '@/lib/constants/admin-ui'
 import { formatBRLValue } from '@/lib/utils/format'
 
 interface FinancialData {
@@ -21,10 +21,11 @@ const formatBRL = formatBRLValue
 export function FinanceiroResume({ financial, gateways }: { financial: FinancialData; gateways: GatewayData }) {
   const planCounts = financial.planDistribution
 
-  // Calculate revenue per plan from total MRR
+  // Receita estimada por plano. FIX-12: preço unitário vem da SSoT
+  // (PLAN_PRICE_VALUES deriva de PLAN_AMOUNTS_CENTS), nunca hardcoded.
   const mrrByPlan = {
-    CRAQUE: (planCounts.CRAQUE || 0) * 19.9,
-    LENDA: (planCounts.LENDA || 0) * 39.9,
+    CRAQUE: (planCounts.CRAQUE || 0) * PLAN_PRICE_VALUES.CRAQUE,
+    LENDA: (planCounts.LENDA || 0) * PLAN_PRICE_VALUES.LENDA,
   }
 
   const activeGateways = gateways.gateways.filter(g => g.active)

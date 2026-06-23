@@ -10,6 +10,20 @@ interface EmailPayload {
   html: string
 }
 
+/**
+ * Resultado rastreável de uma tentativa de envio (FIX-25 — persist-first).
+ * status:
+ *   - 'sent'   : provider aceitou; providerId preenchido.
+ *   - 'failed' : timeout/4xx/5xx/exceção; error preenchido.
+ *   - 'skipped': sem RESEND_API_KEY (infra ausente) — tratado como 'failed' pelo
+ *                NotificationService (rastreável, elegível a retry quando a infra subir).
+ */
+export interface EmailSendResult {
+  status: 'sent' | 'failed' | 'skipped'
+  providerId?: string
+  error?: string
+}
+
 // Tipos que disparam email (baseado em NOTIFICATION-SPEC.md)
 // ADMIN_BROADCAST removido: spec define apenas canal in-app (sem base legal para email broadcast)
 // BONUS_CREDITED adicionado: NOTIF-009 define template de email obrigatório
@@ -42,14 +56,14 @@ class EmailNotificationService {
   }
 
   /**
-   * Envia email transacional via Resend.
-   * Falha silenciosa — não bloqueia o canal in-app.
+   * Envia email transacional via Resend e retorna o resultado rastreável.
+   * Não lança — falha de email nunca bloqueia o canal in-app (persist-first).
    */
-  async send(payload: EmailPayload): Promise<void> {
+  async send(payload: EmailPayload): Promise<EmailSendResult> {
     const apiKey = this.getApiKey()
     if (!apiKey) {
       console.warn('[EmailNotificationService] RESEND_API_KEY não configurado. Email não enviado para:', payload.to)
-      return
+      return { status: 'skipped', error: 'RESEND_API_KEY ausente' }
     }
 
     try {
@@ -63,30 +77,21 @@ class EmailNotificationService {
       })
       if (result.error) {
         console.error('[EmailNotificationService] Erro Resend:', result.error)
+        return { status: 'failed', error: String(result.error.message ?? result.error) }
       }
+      return { status: 'sent', providerId: result.data?.id }
     } catch (err) {
       console.error('[EmailNotificationService] Falha ao enviar email:', err)
+      return { status: 'failed', error: err instanceof Error ? err.message : String(err) }
     }
   }
 
-  /**
-   * Gera e envia email para um tipo de notificação específico.
-   * Retorna false se o tipo não possui canal email.
-   */
-  async sendForType(
-    type: NotificationType,
-    to: string,
-    data: {
-      userName?: string
-      title: string
-      body: string
-      ctaLabel?: string
-      ctaUrl?: string
-      metadata?: Record<string, unknown>
-    }
-  ): Promise<boolean> {
-    if (!this.hasEmailChannel(type)) return false
-
+  private renderHtml(data: {
+    title: string
+    body: string
+    ctaLabel?: string
+    ctaUrl?: string
+  }): string {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://footstock.app'
     const ctaHtml = data.ctaLabel && data.ctaUrl
       ? `<p style="margin-top:24px">
@@ -96,7 +101,7 @@ class EmailNotificationService {
          </p>`
       : ''
 
-    const html = `
+    return `
       <!DOCTYPE html>
       <html lang="pt-BR">
       <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -118,7 +123,9 @@ class EmailNotificationService {
       </body>
       </html>
     `
+  }
 
+  private subjectFor(type: NotificationType, fallback: string): string {
     const subjects: Partial<Record<NotificationType, string>> = {
       PAYMENT_CONFIRMED: 'Pagamento confirmado — FootStock',
       PAYMENT_FAILED: 'Não conseguimos processar seu pagamento',
@@ -132,15 +139,56 @@ class EmailNotificationService {
       MARGIN_CALL_ALERT: '⚠️ Alerta crítico de margem — Ação necessária',
       MARGIN_CALL_WARNING: 'Aviso de margem — FootStock',
       BONUS_CREDITED: 'Seu bônus foi creditado — FootStock', // NOTIF-009
+      REFUND_PROCESSED: 'Seu reembolso foi processado — FootStock', // FIX-25
     }
+    return subjects[type] ?? fallback
+  }
 
+  /**
+   * Gera e envia email para um tipo de notificação específico.
+   * Retorna false se o tipo não possui canal email.
+   */
+  async sendForType(
+    type: NotificationType,
+    to: string,
+    data: {
+      userName?: string
+      title: string
+      body: string
+      ctaLabel?: string
+      ctaUrl?: string
+      metadata?: Record<string, unknown>
+    }
+  ): Promise<boolean> {
+    if (!this.hasEmailChannel(type)) return false
     await this.send({
       to,
-      subject: subjects[type] ?? data.title,
-      html,
+      subject: this.subjectFor(type, data.title),
+      html: this.renderHtml(data),
     })
-
     return true
+  }
+
+  /**
+   * Variante de sendForType que NÃO gateia por hasEmailChannel (o chamador já decidiu
+   * a elegibilidade de email) e RETORNA o resultado rastreável — usado pelo
+   * NotificationService (FIX-25) para gravar email_status/email_provider_id/email_error.
+   */
+  async sendForTypeResult(
+    type: NotificationType,
+    to: string,
+    data: {
+      title: string
+      body: string
+      ctaLabel?: string
+      ctaUrl?: string
+    }
+  ): Promise<EmailSendResult> {
+    return this.send({
+      to,
+      subject: this.subjectFor(type, data.title),
+      html: this.renderHtml(data),
+    })
   }
 }
 

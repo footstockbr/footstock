@@ -16,8 +16,6 @@ function serializeSubscription(s: {
   cancelledAt: Date | null
   cancellationLockStartedAt: Date | null
   cancellationLockExpiresAt: Date | null
-  forcedLiquidationAt: Date | null
-  forcedLiquidationExecutedAt: Date | null
   bonusAmount: Prisma.Decimal | null
   bonusScheduledAt: Date | null
   bonusCreditedAt: Date | null
@@ -61,8 +59,6 @@ function serializeSubscription(s: {
     cancelledAt: s.cancelledAt?.toISOString() ?? null,
     cancellationLockStartedAt: s.cancellationLockStartedAt?.toISOString() ?? null,
     cancellationLockExpiresAt: s.cancellationLockExpiresAt?.toISOString() ?? null,
-    forcedLiquidationAt: s.forcedLiquidationAt?.toISOString() ?? null,
-    forcedLiquidationExecutedAt: s.forcedLiquidationExecutedAt?.toISOString() ?? null,
     // T-021: campos de bônus com carência
     bonusAmount: s.bonusAmount !== null ? Number(s.bonusAmount) : null,
     bonusScheduledAt: s.bonusScheduledAt?.toISOString() ?? null,
@@ -75,7 +71,6 @@ function serializeSubscription(s: {
       ? {
           expiresAt: s.cancellationLockExpiresAt.toISOString(),
           hoursRemaining: Math.ceil((lockMsRemaining ?? 0) / 3_600_000),
-          forcedLiquidationAt: s.forcedLiquidationAt?.toISOString() ?? null,
         }
       : null,
     createdAt: s.createdAt.toISOString(),
@@ -163,8 +158,6 @@ export async function DELETE() {
         cancelledAt: now,
         cancellationLockStartedAt: lockStartedAt,
         cancellationLockExpiresAt: lockExpiresAt,
-        forcedLiquidationAt: null,
-        forcedLiquidationExecutedAt: null,
         bonusScheduledAt: null, // T-021: CANCELLATION_LOCK cancela bônus pendente
       },
     })

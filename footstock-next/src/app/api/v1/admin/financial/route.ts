@@ -5,13 +5,6 @@ import { ok, errors } from '@/lib/api'
 import type { User, AdminRole } from '@/types'
 import { GatewayType } from '@/lib/gateways/IGateway'
 
-// Preços por plano em BRL (canônicos — sincronizados com LLD)
-const PLAN_PRICES: Record<string, number> = {
-  JOGADOR: 0,
-  CRAQUE: 19.9,
-  LENDA: 39.9,
-}
-
 // GET /api/v1/admin/financial — ADMIN+
 // Retorna: MRR, ARR, churn, novas assinaturas 24h, receita por gateway, histórico MRR 30d, distribuição por plano
 export async function GET(request: NextRequest) {
@@ -62,21 +55,24 @@ export async function GET(request: NextRequest) {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
     const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
 
-    // Assinaturas ativas por plano (para MRR)
+    // Assinaturas ativas por plano (para MRR e distribuição)
+    // FIX-12: MRR = soma de Subscription.amount (centavos cobrados de fato),
+    // não preços hardcoded. Garante MRR == Σ amount das assinaturas ativas.
     const activeSubsByPlan = await prisma.subscription.groupBy({
       by: ['planType'],
       where: { status: 'ACTIVE' },
       _count: { id: true },
+      _sum: { amount: true },
     })
 
-    // MRR calculado
-    let mrr = 0
+    // MRR calculado a partir do valor efetivamente cobrado (centavos → BRL)
+    let mrrCents = 0
     const planDistribution: Record<string, number> = { JOGADOR: 0, CRAQUE: 0, LENDA: 0 }
     for (const group of activeSubsByPlan) {
-      const price = PLAN_PRICES[group.planType] ?? 0
-      mrr += price * group._count.id
+      mrrCents += group._sum.amount ?? 0
       planDistribution[group.planType] = group._count.id
     }
+    const mrr = mrrCents / 100
     const arr = mrr * 12
 
     // Novas assinaturas últimas 24h

@@ -4,12 +4,6 @@ import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
 import type { AdminRole, User } from '@/types'
 
-const PLAN_PRICES: Record<string, number> = {
-  JOGADOR: 0,
-  CRAQUE: 19.9,
-  LENDA: 39.9,
-}
-
 export interface FinancialStatsDTO {
   totalRevenue: number
   mrr: number
@@ -61,6 +55,7 @@ export async function GET(request: NextRequest) {
         by: ['planType'],
         where: { status: 'ACTIVE' },
         _count: { id: true },
+        _sum: { amount: true },
       }),
       prisma.subscription.count({ where: { status: 'ACTIVE' } }),
       prisma.payment.aggregate({
@@ -81,12 +76,15 @@ export async function GET(request: NextRequest) {
       }),
     ])
 
-    // MRR
+    // MRR (FIX-12): soma de Subscription.amount (centavos) das assinaturas
+    // ACTIVE — valor efetivamente cobrado, NUNCA preço hardcoded. Garante
+    // MRR == Σ amount e alinhamento com o checkout Pix.
     const planOrder = ['JOGADOR', 'CRAQUE', 'LENDA']
-    let mrr = 0
+    let mrrCents = 0
     for (const group of activeSubsByPlan) {
-      mrr += (PLAN_PRICES[group.planType] ?? 0) * group._count.id
+      mrrCents += group._sum.amount ?? 0
     }
+    const mrr = mrrCents / 100
 
     // Assinantes por plano
     const subscribersByPlan = planOrder.map((plan) => {

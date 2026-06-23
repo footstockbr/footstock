@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { AlertTriangle, Copy, Check, X, QrCode, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { formatBRLFromCents } from '@/lib/constants/plan-amounts-cents'
 
 type PlanType = 'CRAQUE' | 'LENDA'
 type Period = 'monthly' | 'yearly'
@@ -18,17 +19,14 @@ interface PixData {
   pixCode: string
   qrCodeImageUrl: string
   expiresAt: string
+  // SSoT (FIX-12): valor cobrado em centavos, vindo do backend.
+  amountCents: number
   nonRecurrenceWarning: string
 }
 
 const PLAN_LABELS: Record<PlanType, string> = {
   CRAQUE: 'Craque',
   LENDA: 'Lenda',
-}
-
-const PLAN_PRICES: Record<PlanType, Record<Period, string>> = {
-  CRAQUE: { monthly: 'R$ 19,90', yearly: 'R$ 179,04' },
-  LENDA:  { monthly: 'R$ 39,90', yearly: 'R$ 359,04' },
 }
 
 const EXPIRY_SECONDS = 30 * 60 // 30 minutes
@@ -59,6 +57,13 @@ export function PixQRModal({ planType, period = 'monthly', onClose }: PixQRModal
   const overlayRef = useRef<HTMLDivElement>(null)
 
   const { display: countdown, expired } = useCountdown(pixData?.expiresAt ?? null)
+
+  // SSoT (FIX-12): preco exibido deriva exclusivamente do valor cobrado (amountCents).
+  // Enquanto carrega ou em erro, NAO inventa preco e NUNCA mostra "R$ 0,00" mascarando ausencia.
+  const priceLabel =
+    typeof pixData?.amountCents === 'number' && pixData.amountCents > 0
+      ? formatBRLFromCents(pixData.amountCents)
+      : null
 
   const fetchPixQR = useCallback(async () => {
     setLoading(true)
@@ -176,8 +181,13 @@ export function PixQRModal({ planType, period = 'monthly', onClose }: PixQRModal
             <h2 id="pix-modal-title" style={{ color: '#EAECEF', fontSize: '16px', fontWeight: 700, margin: 0 }}>
               Pagar com Pix
             </h2>
-            <p style={{ color: '#929AA5', fontSize: '12px', margin: 0 }}>
-              Plano {PLAN_LABELS[planType]} — {PLAN_PRICES[planType][period]}
+            <p style={{ color: '#929AA5', fontSize: '12px', margin: 0 }} data-testid="pix-plan-price">
+              Plano {PLAN_LABELS[planType]}
+              {priceLabel
+                ? ` — ${priceLabel}`
+                : loading
+                  ? ' — calculando valor...'
+                  : ''}
             </p>
           </div>
         </div>

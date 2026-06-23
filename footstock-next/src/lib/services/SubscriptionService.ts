@@ -3,10 +3,10 @@
 // ============================================================================
 
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 import { BaseService } from './base'
 import {
   isWithinCoolingOff,
-  getRestrictedPositionTypes,
   calcBonusAmount,
   type SubscriptionForLogic,
 } from './plan-logic'
@@ -93,12 +93,15 @@ export class SubscriptionService extends BaseService {
     if (subscription.status === 'CANCELLATION_LOCK' && subscription.cancellationLockExpiresAt) {
       const msRemaining = Math.max(0, subscription.cancellationLockExpiresAt.getTime() - now.getTime())
       const hoursRemaining = Math.ceil(msRemaining / 3_600_000)
-      const restrictedTypes = getRestrictedPositionTypes(subscription.planType as PlanType, 'JOGADOR')
-      const requiresLiquidation = subscription.forcedLiquidationAt !== null && restrictedTypes.length > 0
+      // FIX-20 (alinhamento a FIX-10): a liquidacao forcada T+48h foi
+      // descontinuada; `forcedLiquidationAt` nunca e setado non-null, logo
+      // requiresLiquidation era sempre false. Removemos a leitura morta da coluna
+      // (e a regra de getRestrictedPositionTypes que so a alimentava), mantendo o
+      // campo no contrato para os consumidores. Sem referencias incoerentes.
       cancellationLock = {
         expiresAt: subscription.cancellationLockExpiresAt.toISOString(),
         hoursRemaining,
-        requiresLiquidation,
+        requiresLiquidation: false,
       }
     }
 
@@ -146,18 +149,34 @@ export class SubscriptionService extends BaseService {
       })
     }
 
-    return prisma.subscription.create({
-      data: {
-        userId: data.userId,
-        planType: data.planType as never,
-        gateway: data.gateway as never,
-        period: data.period as never,
-        amount: data.amount,
-        status: 'PENDING',
-        startsAt: data.startsAt,
-        expiresAt: data.expiresAt,
-      },
-    })
+    try {
+      return await prisma.subscription.create({
+        data: {
+          userId: data.userId,
+          planType: data.planType as never,
+          gateway: data.gateway as never,
+          period: data.period as never,
+          amount: data.amount,
+          status: 'PENDING',
+          startsAt: data.startsAt,
+          expiresAt: data.expiresAt,
+        },
+      })
+    } catch (err) {
+      // FU-023-2: o INSERT colide com o indice unico parcial M060
+      // (subscriptions_user_plan_pending_active_uq em (user_id, plan_type) WHERE status IN
+      // ('PENDING','ACTIVE')) sob requisicoes concorrentes do mesmo (userId, planType): o 2o
+      // INSERT falha com P2002. Traduzimos para 409 CONFLICT codificado no ponto do INSERT
+      // (defesa em profundidade, qualquer caller herda a protecao) em vez de deixar o P2002
+      // cru vazar como 500. Anti dupla-cobranca + Zero Silencio.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw Object.assign(
+          new Error('Já existe uma assinatura pendente ou ativa para este plano'),
+          { code: 'PAYMENT_054', statusCode: 409 }
+        )
+      }
+      throw err
+    }
   }
 
   /** Agenda cancelamento para o fim do periodo pago. Reembolso CDC e opt-in separado. */
@@ -192,8 +211,6 @@ export class SubscriptionService extends BaseService {
         cancelledAt: now,
         cancellationLockStartedAt: lockStartedAt,
         cancellationLockExpiresAt: lockExpiresAt,
-        forcedLiquidationAt: null,
-        forcedLiquidationExecutedAt: null,
         bonusScheduledAt: null,
       },
     })

@@ -19,8 +19,8 @@ jest.mock('@/lib/services/SubscriptionService', () => ({
 jest.mock('@/lib/services/LeagueAutoEnrollService', () => ({
   leagueAutoEnrollService: { enrollUserInPublicLeague: jest.fn() },
 }))
-jest.mock('@/lib/notifications/stubs/NotificationStub', () => ({
-  NotificationStub: { notify: jest.fn() },
+jest.mock('@/lib/notifications', () => ({
+  notificationService: { notify: jest.fn().mockResolvedValue({ notification: {}, deduped: false }) },
 }))
 
 import { PlanService } from '@/lib/services/PlanService'

@@ -1,0 +1,45 @@
+-- M058 — PaymentStatus: adicionar valor CAPTURED_NOT_ACTIVATED
+-- Rastreabilidade: FIX-01 (loop 06-22-footstock-financeiro-planos, Task 03)
+--
+-- Fecha o ramo NOT_ACTIVATABLE do webhook de pagamento. Antes, um PAYMENT_CONFIRMED
+-- para uma assinatura em estado terminal (CANCELLED/EXPIRED/SUSPENDED/CANCELLATION_LOCK)
+-- logava ACCEPTED e respondia 200 SEM criar nenhum Payment: o dinheiro era capturado
+-- pelo gateway e desaparecia do lado do app (zero rastro financeiro, reenvios viravam
+-- DUPLICATE). Este novo status registra explicitamente o caixa recebido cuja assinatura
+-- nao foi ativada, habilitando auditoria + refund alerta-primeiro.
+--
+-- Sem esta migration, qualquer INSERT/UPDATE de Payment com status
+-- 'CAPTURED_NOT_ACTIVATED' retorna:
+--   ERROR: invalid input value for enum "PaymentStatus"
+--
+-- Aplicacao em PROD = acao do operador (fora do loop). ALTER TYPE ... ADD VALUE
+-- e auto-commit no PostgreSQL e idempotente via IF NOT EXISTS.
+
+-- ─── UP ──────────────────────────────────────────────────────────────────────
+ALTER TYPE "PaymentStatus" ADD VALUE IF NOT EXISTS 'CAPTURED_NOT_ACTIVATED';
+
+-- ─── DOWN (rollback manual) ──────────────────────────────────────────────────
+-- PostgreSQL NAO suporta `ALTER TYPE ... DROP VALUE`. O rollback exige recriar o
+-- enum sem o valor, o que so e seguro apos migrar/zerar as linhas que o utilizam.
+-- Executar manualmente, em transacao, SOMENTE se nenhum Payment usar o valor:
+--
+-- BEGIN;
+--   -- 1. Garantir que nenhuma linha usa o valor a remover.
+--   --    (Decisao operacional: estornar ou reclassificar antes — NUNCA dropar caixa.)
+--   UPDATE "payments" SET "status" = 'REFUNDED'
+--     WHERE "status" = 'CAPTURED_NOT_ACTIVATED';
+--   -- 2. Recriar o enum sem CAPTURED_NOT_ACTIVATED.
+--   ALTER TYPE "PaymentStatus" RENAME TO "PaymentStatus_old";
+--   CREATE TYPE "PaymentStatus" AS ENUM ('PENDING', 'PAID', 'FAILED', 'REFUNDED');
+--   ALTER TABLE "payments" ALTER COLUMN "status" DROP DEFAULT;
+--   ALTER TABLE "payments"
+--     ALTER COLUMN "status" TYPE "PaymentStatus"
+--     USING ("status"::text::"PaymentStatus");
+--   ALTER TABLE "payments" ALTER COLUMN "status" SET DEFAULT 'PENDING';
+--   ALTER TABLE "dunning_attempts" ALTER COLUMN "status" DROP DEFAULT;
+--   ALTER TABLE "dunning_attempts"
+--     ALTER COLUMN "status" TYPE "PaymentStatus"
+--     USING ("status"::text::"PaymentStatus");
+--   ALTER TABLE "dunning_attempts" ALTER COLUMN "status" SET DEFAULT 'PENDING';
+--   DROP TYPE "PaymentStatus_old";
+-- COMMIT;

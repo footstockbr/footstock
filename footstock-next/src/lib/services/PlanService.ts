@@ -15,12 +15,14 @@ import {
   type SubscriptionForLogic,
 } from './plan-logic'
 import { throwPaymentError } from '@/lib/errors/payment-errors'
-import { NotificationStub } from '@/lib/notifications/stubs/NotificationStub'
+import { notificationService } from '@/lib/notifications'
 import { PLAN_HIERARCHY, type PlanType } from '@/lib/enums'
 import { getGateway } from '@/lib/gateways/GatewayFactory'
 import { GatewayType } from '@/lib/gateways/IGateway'
 import type { GatewayCheckoutInput } from '@/lib/gateways/IGateway'
+import { Prisma } from '@prisma/client'
 import type { SubscriptionGateway } from '@prisma/client'
+import { captureException } from '@/lib/monitoring/sentry'
 import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
 import { leagueEventRecorder } from '@/lib/services/leagues/LeagueEventRecorder'
 import { leagueAutoEnrollService } from './LeagueAutoEnrollService'
@@ -33,6 +35,11 @@ export interface CheckoutDTO {
   gateway: string
   userEmail?: string
   amount?: number // calculado internamente se não fornecido
+  // FU-023-5: caminho Pix usa /v1/payments direto (na rota), nao a preferencia de
+  // redirect do gateway. Quando true, createCheckout cria a Subscription PENDING mas
+  // PULA a chamada /checkout/preferences do gateway (que geraria preference + merchant_order
+  // orfaos). redirectUrl volta como string vazia nesse caso (o caminho Pix nao a consome).
+  skipGatewayCheckout?: boolean
 }
 
 export interface CheckoutResult {
@@ -50,6 +57,19 @@ export interface CheckoutResult {
  *                    NÃO registrar pagamento como PAID.
  */
 export type UpgradeResult = 'ACTIVATED' | 'ALREADY_ACTIVE' | 'NOT_ACTIVATABLE'
+
+/**
+ * Dados da conversao de afiliado retornados por processAffiliateCommission quando uma
+ * AffiliateTransaction PENDING e criada. `null` quando nao ha comissao a creditar (sem
+ * codigo de referido, codigo inativo, auto-referencia ou valor <= 0). Consumido por
+ * applyPaymentConfirmedEffects para disparar o evento de analytics FORA da transacao.
+ */
+type AffiliateCommissionResult = {
+  affiliateUserId: string
+  affiliateCode: string
+  affiliateType: string
+  commissionAmount: number
+} | null
 
 // Mapeia string de gateway para GatewayType enum
 function resolveGatewayType(gateway: string): GatewayType {
@@ -155,16 +175,42 @@ export class PlanService extends BaseService {
     const now = new Date()
     const expiresAt = calcExpiresAt(now, dto.period)
 
-    // Criar subscription PENDING
-    const subscription = await subscriptionService.createSubscription({
-      userId,
-      planType: dto.planType,
-      gateway: dto.gateway,
-      period: dto.period.toUpperCase(),
-      amount,
-      startsAt: now,
-      expiresAt,
-    })
+    // Criar subscription PENDING.
+    // FU-023-2: o INSERT colide com o indice unico parcial M060
+    // (subscriptions_user_plan_pending_active_uq em (user_id, plan_type) WHERE status IN
+    // ('PENDING','ACTIVE')) quando duas requisicoes concorrentes do mesmo (userId, planType)
+    // passam ambas pela guarda de idempotencia antes de qualquer INSERT. O Prisma sinaliza isso
+    // como P2002; SubscriptionService.createSubscription ja o traduz para PAYMENT_054/409 no ponto
+    // do INSERT. Aqui mantemos uma malha de seguranca caso o P2002 cru escape de outro caminho:
+    // traduzimos para o mesmo 409 CONFLICT em vez de deixar vazar como 500/DECLINED generico
+    // (anti dupla-cobranca + Zero Silencio).
+    let subscription: Awaited<ReturnType<typeof subscriptionService.createSubscription>>
+    try {
+      subscription = await subscriptionService.createSubscription({
+        userId,
+        planType: dto.planType,
+        gateway: dto.gateway,
+        period: dto.period.toUpperCase(),
+        amount,
+        startsAt: now,
+        expiresAt,
+      })
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw Object.assign(
+          new Error('Já existe uma assinatura pendente ou ativa para este plano'),
+          { code: 'PAYMENT_054', statusCode: 409 }
+        )
+      }
+      throw err
+    }
+
+    // FU-023-5: no caminho Pix a rota faz POST /v1/payments direto e nao consome redirectUrl.
+    // Pular a preferencia do gateway (/checkout/preferences) evita preference + merchant_order
+    // orfaos. Cartao/redirect continuam criando a preferencia normalmente.
+    if (dto.skipGatewayCheckout) {
+      return { redirectUrl: '', subscriptionId: subscription.id }
+    }
 
     // Chamar gateway via GatewayFactory (module-12)
     const appUrl = env.NEXT_PUBLIC_APP_URL
@@ -186,15 +232,34 @@ export class PlanService extends BaseService {
       const result = await gateway.createCheckout(input)
       redirectUrl = result.redirectUrl
     } catch (err) {
-      // Subscription permanece PENDING — não excluir (para auditoria)
+      // Subscription permanece PENDING — não excluir (para auditoria).
+      // FU-023-4: propagar codigo/statusCode ORIGINAL do gateway em vez de achatar tudo para
+      // DECLINED/422. Um erro de config (PAYMENT_010/500) ou indisponibilidade (PAYMENT_050/503)
+      // nao deve virar 422 (que sinaliza "verifique seus dados") — semantica e status corretos
+      // permitem a UI e o webhook/cron distinguirem falha do cliente de falha de infra.
+      const code = (err as { code?: unknown }).code
+      const statusCode = (err as { statusCode?: unknown }).statusCode
+      if (typeof code === 'string' && typeof statusCode === 'number') {
+        const message = err instanceof Error ? err.message : String(err)
+        throw Object.assign(new Error(message), { code, statusCode })
+      }
       throwPaymentError('DECLINED', String(err))
     }
 
     return { redirectUrl: redirectUrl!, subscriptionId: subscription.id }
   }
 
-  /** Ativa plano após confirmação de webhook — operação idempotente */
-  async upgradeUser(userId: string, subscriptionId: string): Promise<UpgradeResult> {
+  /**
+   * Ativa plano após confirmação de webhook — operação idempotente.
+   * `paymentRef` = identificador do PAGAMENTO que confirmou esta ativação
+   * (gatewayTransactionId no webhook, paymentId na recuperação MP). É o
+   * occurrence_marker de `pagamento_confirmado` (ver Task 11 > "Idempotencia":
+   * occurrence_marker = paymentId para pagamento_*). Sem ele, uma renovação que
+   * reativa a MESMA subscription (dunning/FIX-01) colidiria na idempotency_key da
+   * ativação original e o cliente não receberia a confirmação da renovação
+   * (Zero Silêncio). Opcional para retrocompat; ausente cai no subscriptionId.
+   */
+  async upgradeUser(userId: string, subscriptionId: string, paymentRef?: string): Promise<UpgradeResult> {
     const [subscription, user] = await Promise.all([
       prisma.subscription.findUnique({ where: { id: subscriptionId } }),
       prisma.user.findUnique({ where: { id: userId }, select: { planType: true, adminRole: true } }),
@@ -234,6 +299,10 @@ export class PlanService extends BaseService {
     // permanecem ativáveis; CANCELLED/EXPIRED/SUSPENDED/CANCELLATION_LOCK não devem voltar
     // a ACTIVE por um PAYMENT_CONFIRMED tardio (reversão de cancelamento tem fluxo próprio).
     const NON_ACTIVATABLE_STATUSES = ['CANCELLED', 'EXPIRED', 'SUSPENDED', 'CANCELLATION_LOCK']
+    // ST006 — estados não-ACTIVE a partir dos quais um pagamento confirmado pode ativar a
+    // assinatura: a cobrança inicial (PENDING) e a recuperação de dunning/trial
+    // (PAST_DUE/TRIAL/TRIALING). Espelha o conjunto ativável do guard de estado terminal acima.
+    const ACTIVATABLE_RECOVERY_STATUSES = ['PENDING', 'PAST_DUE', 'TRIAL', 'TRIALING']
     if (NON_ACTIVATABLE_STATUSES.includes(subscription.status)) {
       console.warn(
         `[PlanService.upgradeUser] Ignorando ativação de assinatura em estado terminal: ` +
@@ -262,14 +331,23 @@ export class PlanService extends BaseService {
         select: { id: true, planType: true },
       })
       if (!lockedSub) {
+        // ST006 — cobrir todos os estados ativáveis-por-recuperação, não só PENDING. Uma
+        // subscription PAST_DUE/TRIAL obsoleta (cujo plano superior já foi restaurado) precisa
+        // ser cancelada aqui; antes, com o filtro só-PENDING, ela escapava do cancelamento e
+        // caía na transação de ativação (que aceita PAST_DUE/TRIAL), aplicando um downgrade
+        // obsoleto que derrubava o plano restaurado.
         await prisma.subscription.updateMany({
-          where: { id: subscriptionId, userId, status: 'PENDING' },
+          where: {
+            id: subscriptionId,
+            userId,
+            status: { in: ACTIVATABLE_RECOVERY_STATUSES as never[] },
+          },
           data: { status: 'CANCELLED', cancelledAt: new Date() },
         })
         console.warn(
           `[PlanService.upgradeUser] Downgrade obsoleto ignorado: ` +
           `subscriptionId=${subscriptionId} currentPlan=${effectivePreviousPlanType} ` +
-          `targetPlan=${targetPlanType}`
+          `targetPlan=${targetPlanType} status=${subscription.status}`
         )
         return 'NOT_ACTIVATABLE'
       }
@@ -290,8 +368,9 @@ export class PlanService extends BaseService {
 
     await prisma.$transaction(async (tx) => {
       // Assinaturas abertas anteriores deste usuário (qualquer plano), exceto a que está sendo ativada.
-      // CANCELLATION_LOCK substituída por downgrade pago deve sair do ciclo T+7d,
-      // mas manter forcedLiquidationAt para o job T+48h encerrar posições restritas.
+      // CANCELLATION_LOCK substituída por downgrade pago deve sair do ciclo T+7d.
+      // (A liquidação forçada T+48h foi descontinuada — FIX-10/FU-023-3 — e não há
+      // mais cron dependente de forcedLiquidationAt.)
       const priorOpen = await tx.subscription.findMany({
         where: { userId, status: { in: ['ACTIVE', 'CANCELLATION_LOCK'] as never[] }, id: { not: subscriptionId } },
         select: {
@@ -367,11 +446,21 @@ export class PlanService extends BaseService {
 
     const hasBonusToSchedule = scheduledBonusAmount > 0
 
-    // Notificação via G-003 stub
-    await NotificationStub.notify(userId, 'PAYMENT_CONFIRMED', {
-      planType: subscription.planType,
-      amount:   subscription.amount,
-      subscriptionId,
+    // Notificação real (FIX-25) — persiste + email best-effort, idempotente POR PAGAMENTO.
+    // occurrence_marker = paymentRef (paymentId/gatewayTransactionId), não subscriptionId:
+    // a renovação reativa a mesma subscription (dunning/FIX-01) mas é um pagamento NOVO, então
+    // precisa de uma idempotency_key nova para não ser deduplicada (Zero Silêncio em renovação).
+    // Fallback ao subscriptionId só quando o call site não conhece o pagamento (retrocompat).
+    await notificationService.notify({
+      type:     'pagamento_confirmado',
+      userId,
+      entityId: paymentRef ?? subscriptionId,
+      payload: {
+        planType: subscription.planType,
+        amount:   subscription.amount,
+        subscriptionId,
+        paymentRef,
+      },
     })
 
     // Notificação de bônus agendado — quando há bônus a creditar (diferencial + pendente preservado)
@@ -460,7 +549,7 @@ export class PlanService extends BaseService {
 
     let upgradeResult: UpgradeResult
     try {
-      upgradeResult = await this.upgradeUser(subscription.userId, subscriptionId)
+      upgradeResult = await this.upgradeUser(subscription.userId, subscriptionId, paymentId)
     } catch (err) {
       const code = (err as { code?: string })?.code ?? 'UPGRADE_ERROR'
       return { ok: false, reason: code, detail: err instanceof Error ? err.message : String(err) }
@@ -495,6 +584,16 @@ export class PlanService extends BaseService {
    * analytics payment_completed e comissao de afiliado. O Payment.upsert e sempre idempotente
    * por gatewayTransactionId; os efeitos best-effort (liga/analytics/comissao) so disparam na
    * PRIMEIRA consolidacao do pagamento (gate por status PAID previo) para nao duplicar em replay.
+   *
+   * FIX-05 (atomicidade + sinal observavel): o Payment.upsert e a criacao da comissao de afiliado
+   * (AffiliateTransaction PENDING — a fila de reconciliacao consumida pelo cron
+   * affiliate-commission) acontecem na MESMA `$transaction`. Antes, a comissao rodava DEPOIS do
+   * upsert e qualquer falha era engolida por um `console.error`: o Payment ficava PAID mas a
+   * comissao do afiliado sumia em silencio (perda de receita irrecuperavel). Agora, se a comissao
+   * falhar ao persistir, a transacao inteira faz rollback e webhook/cron reprocessam de forma
+   * idempotente (payment.upsert por gatewayTransactionId, upgradeUser -> ALREADY_ACTIVE,
+   * createMany skipDuplicates), e a falha vira sinal observavel (Sentry + log [ALERT]) ao inves
+   * de desaparecer. Efeitos externos nao-DB (liga/analytics) ficam FORA da transacao.
    */
   async applyPaymentConfirmedEffects(params: {
     userId: string
@@ -510,24 +609,66 @@ export class PlanService extends BaseService {
       where: { gatewayTransactionId },
       select: { status: true },
     })
+    const firstConsolidation = existing?.status !== 'PAID'
 
-    await prisma.payment.upsert({
-      where: { gatewayTransactionId },
-      update: { status: 'PAID', processedAt: new Date() },
-      create: {
+    // Atomiza Payment.upsert + comissao de afiliado. Falha na comissao -> rollback do Payment ->
+    // reprocessamento idempotente (zero perda silenciosa). A comissao so e criada na primeira
+    // consolidacao para nao duplicar em replay/cron.
+    let commission: AffiliateCommissionResult = null
+    try {
+      commission = await prisma.$transaction(async (trx) => {
+        await trx.payment.upsert({
+          where: { gatewayTransactionId },
+          update: { status: 'PAID', processedAt: new Date() },
+          create: {
+            userId,
+            subscriptionId,
+            amount: amountCents,
+            gateway,
+            gatewayTransactionId,
+            status: 'PAID',
+            processedAt: new Date(),
+          },
+        })
+
+        if (!firstConsolidation) return null
+
+        return this.processAffiliateCommission(
+          {
+            userId,
+            subscriptionId,
+            subscriptionAmount: amountCents,
+            gatewayTransactionId,
+            planType,
+          },
+          trx
+        )
+      })
+    } catch (err) {
+      // Zero Silencio: a comissao de afiliado nao pode falhar despercebida. Eleva o antigo
+      // console.error a sinal OBSERVAVEL (Sentry.captureException + log [ALERT] estruturado) e
+      // RE-LANCA para que webhook/cron reprocessem atomicamente — o rollback ja preservou a
+      // consistencia (Payment + comissao all-or-nothing).
+      captureException(err instanceof Error ? err : new Error(String(err)), {
+        tags: { area: 'affiliate_commission', signal: 'ALERT' },
         userId,
         subscriptionId,
-        amount: amountCents,
-        gateway,
         gatewayTransactionId,
-        status: 'PAID',
-        processedAt: new Date(),
-      },
-    })
+        planType,
+      })
+      console.error(
+        `[PlanService][ALERT] Falha atomica Payment+comissao de afiliado — rollback aplicado, ` +
+          `reprocessamento idempotente esperado. userId=${userId} subscriptionId=${subscriptionId} ` +
+          `transactionId=${gatewayTransactionId}`,
+        err
+      )
+      throw err
+    }
 
     // Best-effort apenas na primeira consolidacao do pagamento — evita duplicar bonus de liga,
     // analytics e comissao quando o replay/cron reprocessa um pagamento que o webhook ja tratou.
-    if (existing?.status === 'PAID') return
+    // Efeitos externos (nao-DB) ficam FORA da transacao para nao bloquear nem participar do rollback.
+    if (!firstConsolidation) return
 
     leagueEventRecorder
       .recordForAllActiveLeagues(userId, 'PLAN_UPGRADED', { planType })
@@ -540,83 +681,111 @@ export class PlanService extends BaseService {
       is_first_payment: paidCount <= 1,
     })
 
-    await this.processAffiliateCommission({
-      userId,
-      subscriptionId,
-      subscriptionAmount: amountCents,
-      gatewayTransactionId,
-      planType,
-    })
+    if (commission) {
+      mixpanelServer.trackAffiliateConversion(commission.affiliateUserId, {
+        affiliateCode: commission.affiliateCode,
+        affiliateType: commission.affiliateType,
+        plan: planType,
+        commissionAmount: commission.commissionAmount.toFixed(2),
+      })
+    }
   }
 
   /**
    * Cria AffiliateTransaction (PENDING) quando um assinante referido confirma pagamento.
-   * Idempotente: skipDuplicates=true + unique constraint (affiliateCodeId, subscriptionId,
-   * transactionType) garante no maximo 1 comissao por renovacao mesmo com replays.
+   * Idempotente: o dedup real e o `@unique` em `gatewayTransactionId` no banco (uma comissao
+   * por evento de pagamento) combinado com `skipDuplicates=true`. NAO existe constraint composta
+   * (affiliateCodeId, subscriptionId, transactionType) — a chave de idempotencia e a transacao do
+   * gateway, que por isso e obrigatoria (assert non-null antes do write): em Postgres multiplos
+   * NULL nao colidem, entao gravar a comissao sem a chave reintroduziria duplicidade sob replay.
    * Movido da rota do webhook para ser reusado pela reconciliacao server-side (item 12).
+   *
+   * FIX-05: aceita um client `db` (default `prisma`) para rodar dentro da `$transaction` de
+   * `applyPaymentConfirmedEffects` (atomicidade com o Payment.upsert). NAO engole erros — deixa
+   * a excecao propagar para que a transacao faca rollback e o caller emita o sinal observavel +
+   * reprocesse. Retorna os dados da conversao (ou `null` quando nao ha comissao a creditar) para
+   * que o caller dispare o evento de analytics FORA da transacao.
+   *
+   * Unidades: `subscriptionAmount` chega em CENTAVOS; `amount` gravado fica em FS$ (1 FS$ = R$1).
    */
-  private async processAffiliateCommission(params: {
-    userId: string
-    subscriptionId: string
-    subscriptionAmount: number
-    gatewayTransactionId?: string
-    planType: 'CRAQUE' | 'LENDA'
-  }): Promise<void> {
-    const { userId, subscriptionId, subscriptionAmount, gatewayTransactionId, planType } = params
-    try {
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { referredByCode: true },
-      })
-      if (!user?.referredByCode) return
+  private async processAffiliateCommission(
+    params: {
+      userId: string
+      subscriptionId: string
+      /** Valor da assinatura em CENTAVOS (amountCents). Convertido para reais antes do pct. */
+      subscriptionAmount: number
+      gatewayTransactionId?: string
+      planType: 'CRAQUE' | 'LENDA'
+    },
+    db: Prisma.TransactionClient | typeof prisma = prisma
+  ): Promise<AffiliateCommissionResult> {
+    const { userId, subscriptionId, subscriptionAmount, gatewayTransactionId } = params
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { referredByCode: true },
+    })
+    if (!user?.referredByCode) return null
 
-      const affiliateCode = await prisma.affiliateCode.findFirst({
-        where: {
-          code: user.referredByCode,
-          active: true,
-          affiliateType: { in: ['TIME_PARCEIRO', 'INFLUENCIADOR'] },
+    const affiliateCode = await db.affiliateCode.findFirst({
+      where: {
+        code: user.referredByCode,
+        active: true,
+        affiliateType: { in: ['TIME_PARCEIRO', 'INFLUENCIADOR'] },
+      },
+      select: {
+        id: true,
+        userId: true,
+        commissionPercentage: true,
+        affiliateType: true,
+        code: true,
+      },
+    })
+    if (!affiliateCode) return null
+    // Auto-referencia: afiliado nao ganha comissao de si mesmo.
+    if (affiliateCode.userId === userId) return null
+
+    const commissionPct = Number(affiliateCode.commissionPercentage)
+    // subscriptionAmount chega em CENTAVOS (amountCents). A comissao gravada em
+    // AffiliateTransaction.amount e denominada em FS$ (1 FS$ = R$1) e creditada
+    // direto no fsBalance pelo cron affiliate-commission, entao converte
+    // centavos -> reais ANTES de aplicar o pct. Ex: R$39,90 (3990c) @ 10% -> 3,99 FS$.
+    const subscriptionAmountReais = subscriptionAmount / 100
+    const commissionAmount = Math.round(subscriptionAmountReais * commissionPct * 100) / 100
+    if (commissionAmount <= 0) return null
+
+    // FIX-16: assert non-null da chave de idempotencia. O unico dedup da comissao e o `@unique`
+    // de gatewayTransactionId; gravar com a chave ausente (NULL) reintroduziria duplicidade sob
+    // replay (multiplos NULL nao colidem no Postgres). Sem a chave a transacao falha (rollback +
+    // sinal observavel no caller) em vez de criar uma comissao nao-deduplicavel.
+    if (!gatewayTransactionId) {
+      throw new Error(
+        '[PlanService] processAffiliateCommission: gatewayTransactionId ausente — chave de ' +
+          'idempotencia obrigatoria para a comissao de afiliado (dedup via @unique no banco).'
+      )
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (db.affiliateTransaction as any).createMany({
+      data: [
+        {
+          affiliateCodeId: affiliateCode.id,
+          referredUserId: userId,
+          subscriptionId,
+          gatewayTransactionId,
+          transactionType: 'SUBSCRIPTION_RENEWAL',
+          amount: commissionAmount,
+          commissionPercentageAtTime: commissionPct,
+          status: 'PENDING',
         },
-        select: {
-          id: true,
-          userId: true,
-          commissionPercentage: true,
-          affiliateType: true,
-          code: true,
-        },
-      })
-      if (!affiliateCode) return
-      // Auto-referencia: afiliado nao ganha comissao de si mesmo.
-      if (affiliateCode.userId === userId) return
+      ],
+      skipDuplicates: true,
+    })
 
-      const commissionPct = Number(affiliateCode.commissionPercentage)
-      const commissionAmount = Math.round(subscriptionAmount * commissionPct * 100) / 100
-      if (commissionAmount <= 0) return
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (prisma.affiliateTransaction as any).createMany({
-        data: [
-          {
-            affiliateCodeId: affiliateCode.id,
-            referredUserId: userId,
-            subscriptionId,
-            gatewayTransactionId: gatewayTransactionId ?? null,
-            transactionType: 'SUBSCRIPTION_RENEWAL',
-            amount: commissionAmount,
-            commissionPercentageAtTime: commissionPct,
-            status: 'PENDING',
-          },
-        ],
-        skipDuplicates: true,
-      })
-
-      mixpanelServer.trackAffiliateConversion(affiliateCode.userId, {
-        affiliateCode: affiliateCode.code,
-        affiliateType: affiliateCode.affiliateType as string,
-        plan: planType,
-        commissionAmount: commissionAmount.toFixed(2),
-      })
-    } catch (err) {
-      console.error('[PlanService.processAffiliateCommission] Erro ao processar comissao de afiliado:', err)
+    return {
+      affiliateUserId: affiliateCode.userId,
+      affiliateCode: affiliateCode.code,
+      affiliateType: affiliateCode.affiliateType as string,
+      commissionAmount,
     }
   }
 

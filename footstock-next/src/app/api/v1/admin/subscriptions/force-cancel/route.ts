@@ -55,6 +55,17 @@ export async function POST(request: NextRequest) {
 
     // Executa cancelamento imediato + reset de saldo em transação atômica
     await prisma.$transaction(async (tx) => {
+      // FIX-17: captura o saldo ANTES do reset para a trilha de auditoria.
+      // Decisão (Task 17, DECIDIDO 2026-06-22): o force-cancel NÃO faz estorno
+      // automático do saldo. Resetar para o padrão JOGADOR (2000 FS$) é a regra
+      // anti-abuso vigente, não um estorno; o fsBalance anterior é apenas
+      // registrado no audit para que um operador decida sobre estorno manual
+      // fora deste fluxo. Sem este registro, o saldo pré-cancelamento se perderia.
+      const balanceBefore = await tx.user.findUnique({
+        where: { id: userId },
+        select: { fsBalance: true, marginBlocked: true },
+      })
+
       // Encerrar todas as posições abertas
       await tx.position.updateMany({
         where: { userId, status: 'OPEN' },
@@ -81,8 +92,6 @@ export async function POST(request: NextRequest) {
           cancelledAt: now,
           cancellationLockStartedAt: null,
           cancellationLockExpiresAt: null,
-          forcedLiquidationAt: null,
-          forcedLiquidationExecutedAt: null,
         },
       })
 
@@ -110,6 +119,13 @@ export async function POST(request: NextRequest) {
             reason,
             notes: notes ?? null,
             executedAt: now.toISOString(),
+            // FIX-17: saldo anterior registrado para auditoria; sem estorno
+            // automático. Operador decide sobre estorno manual a partir destes
+            // valores. fsBalanceAfter fixo em 2000 (reset anti-abuso JOGADOR).
+            previousFsBalance: balanceBefore?.fsBalance ?? null,
+            previousMarginBlocked: balanceBefore?.marginBlocked ?? null,
+            fsBalanceAfter: 2000,
+            automaticRefund: false,
           },
         },
       })

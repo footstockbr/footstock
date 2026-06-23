@@ -6,6 +6,13 @@ import { NativeSelect } from '@/components/ui/select'
 import { PixQRModal } from '@/components/payments/PixQRModal'
 import { useAnalytics } from '@/hooks/useAnalytics'
 import { usePlanGuard } from '@/hooks/usePlanGuard'
+import {
+  type CheckoutGateway,
+  CHECKOUT_GATEWAY_LABELS,
+  DEFAULT_CHECKOUT_GATEWAY,
+  ENABLED_CHECKOUT_GATEWAYS,
+  getEnabledCheckoutGatewayOptions,
+} from '@/lib/constants/checkout-gateways'
 
 
 const TIER_ORDER: Record<string, number> = {
@@ -38,15 +45,10 @@ function resolveBlockMessage(code: string | undefined, fallback: string | undefi
 
 type PlanType = 'CRAQUE' | 'LENDA'
 type CurrentPlan = 'JOGADOR' | 'CRAQUE' | 'LENDA'
-type Gateway = 'MERCADO_PAGO' | 'PAGSEGURO' | 'PAYPAL' | 'PIX'
+// Gateway types/labels e a lista do que e oferecido vivem em
+// @/lib/constants/checkout-gateways (FIX-19 — fonte unica de verdade).
+type Gateway = CheckoutGateway
 type Period = 'MONTHLY' | 'YEARLY'
-
-const GATEWAY_LABELS: Record<Gateway, string> = {
-  MERCADO_PAGO: 'Mercado Pago',
-  PAGSEGURO: 'PagSeguro',
-  PAYPAL: 'PayPal',
-  PIX: 'Pix (Mercado Pago)',
-}
 
 interface CheckoutButtonProps {
   planType: PlanType
@@ -68,7 +70,7 @@ export function CheckoutButton({
   className,
   currentPlan: currentPlanProp,
 }: CheckoutButtonProps) {
-  const [gateway, setGateway] = useState<Gateway>('MERCADO_PAGO')
+  const [gateway, setGateway] = useState<Gateway>(DEFAULT_CHECKOUT_GATEWAY)
   const [period] = useState<Period>(defaultPeriod)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -189,12 +191,12 @@ export function CheckoutButton({
             usuario saber que existem varias formas. Chips de texto por enquanto; quando
             houver assets de logo dos provedores em public/payments/, trocar por <Image>. */}
         <div className="flex flex-wrap items-center gap-1.5" aria-hidden="true">
-          {(Object.keys(GATEWAY_LABELS) as Gateway[]).map((g) => (
+          {ENABLED_CHECKOUT_GATEWAYS.map((g) => (
             <span
               key={g}
               className="inline-flex items-center rounded-md border border-[rgba(240,185,11,.2)] bg-[#181A20] px-2 py-1 text-[11px] font-medium text-[#C0C4CE]"
             >
-              {GATEWAY_LABELS[g]}
+              {CHECKOUT_GATEWAY_LABELS[g]}
             </span>
           ))}
         </div>
@@ -203,10 +205,7 @@ export function CheckoutButton({
           onValueChange={handleGatewayChange}
           disabled={loading}
           placeholder="Forma de pagamento"
-          options={(Object.keys(GATEWAY_LABELS) as Gateway[]).map((g) => ({
-            value: g,
-            label: GATEWAY_LABELS[g],
-          }))}
+          options={getEnabledCheckoutGatewayOptions()}
           triggerClassName="bg-[#1E2329] border-[rgba(240,185,11,.2)] text-[#EAECEF] text-sm h-9"
           data-testid="checkout-gateway-select"
         />

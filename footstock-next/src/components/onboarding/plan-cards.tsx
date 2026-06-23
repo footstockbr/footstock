@@ -3,6 +3,25 @@
 import { Button, Badge } from "@/components/ui";
 import { PlanType, PLAN_LABELS } from "@/lib/constants/plans";
 import { ROUTES } from "@/lib/constants/routes";
+import {
+  PLAN_AMOUNTS_CENTS,
+  formatBRLFromCents,
+} from "@/lib/constants/plan-amounts-cents";
+
+// SSoT (FIX-12): preco mensal exibido deriva do valor cobrado em centavos.
+const craqueMonthlyCents = PLAN_AMOUNTS_CENTS[PlanType.CRAQUE].monthly;
+const craqueYearlyCents = PLAN_AMOUNTS_CENTS[PlanType.CRAQUE].yearly;
+const lendaMonthlyCents = PLAN_AMOUNTS_CENTS[PlanType.LENDA].monthly;
+
+// Desconto anual real derivado da SSoT (12x mensal vs anual). So exibe quando
+// o desconto for genuino e dentro de faixa sa (1-90%); precos de teste com
+// mensal==anual nao geram desconto valido e a linha anual e omitida.
+const craqueAnnualFullCents = craqueMonthlyCents * 12;
+const craqueDiscountPct =
+  craqueAnnualFullCents > 0
+    ? Math.round((1 - craqueYearlyCents / craqueAnnualFullCents) * 100)
+    : 0;
+const craqueShowYearly = craqueDiscountPct >= 1 && craqueDiscountPct <= 90;
 
 const PLAN_FEATURES_DISPLAY: Record<PlanType, string[]> = {
   [PlanType.JOGADOR]: [
@@ -119,13 +138,15 @@ export function PlanCards({ onSelect, onSkip, currentPlan }: PlanCardsProps) {
           </div>
           <div className="text-right">
             <span className="text-base font-bold text-[#EAECEF]">
-              R$&nbsp;19,90
+              {formatBRLFromCents(craqueMonthlyCents)}
             </span>
             <span className="text-xs text-[#929AA5]">/mês</span>
-            <p className="text-[10px] text-[#2EBD85]">
-              ou R$&nbsp;179/ano
-              <span className="ml-1 opacity-80">(-25%)</span>
-            </p>
+            {craqueShowYearly && (
+              <p className="text-[10px] text-[#2EBD85]">
+                ou {formatBRLFromCents(craqueYearlyCents)}/ano
+                <span className="ml-1 opacity-80">(-{craqueDiscountPct}%)</span>
+              </p>
+            )}
           </div>
         </div>
         <ul className="flex flex-col gap-1">
@@ -168,7 +189,7 @@ export function PlanCards({ onSelect, onSkip, currentPlan }: PlanCardsProps) {
           </div>
           <div className="text-right">
             <span className="text-base font-bold text-[#EAECEF]">
-              R$&nbsp;39,90
+              {formatBRLFromCents(lendaMonthlyCents)}
             </span>
             <span className="text-xs text-[#929AA5]">/mês</span>
           </div>

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getGatewayByHeader, detectGatewayType } from '@/lib/gateways/GatewayFactory'
-import { GatewayRetryableError } from '@/lib/gateways/IGateway'
+import { getGatewayByHeader, detectGatewayType, getGateway } from '@/lib/gateways/GatewayFactory'
+import { GatewayRetryableError, GatewayType } from '@/lib/gateways/IGateway'
+import { env } from '@/lib/env'
 import { validateWebhookByGatewayDetailed } from '@/lib/gateways/webhook-validator'
 import { getWebhookRateLimit } from '@/lib/ratelimit'
 import { normalizeIp } from '@/middleware/rateLimit'
@@ -9,6 +10,8 @@ import { planService } from '@/lib/services/PlanService'
 import { webhookAuditService } from '@/lib/services/WebhookAuditService'
 import type { SubscriptionGateway } from '@prisma/client'
 import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
+import { liquidateRestrictedPositions } from '@/lib/services/forced-liquidation'
+import { isPaidPlan } from '@/lib/enums'
 
 // POST /api/v1/payments/webhook
 // Público — autenticado por HMAC-SHA256 (sem Bearer token)
@@ -234,29 +237,75 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ received: true }, { status: 200 })
         }
 
-        // Ativar plano do usuário
-        const upgradeResult = await planService.upgradeUser(subscription.userId, event.subscriptionId)
-
-        // Estado terminal (CANCELLED/EXPIRED/SUSPENDED/CANCELLATION_LOCK): a assinatura NÃO
-        // foi ativada. Registrar Payment PAID / comissão / analytics aqui criaria um pagamento
-        // "pago" para uma assinatura morta. Logar e encerrar sem efeitos colaterais financeiros.
-        if (upgradeResult === 'NOT_ACTIVATABLE') {
-          console.warn(
-            `[webhook] PAYMENT_CONFIRMED para assinatura em estado terminal — pagamento não registrado. ` +
-            `subscriptionId=${event.subscriptionId} transactionId=${event.transactionId}`
+        // ST007 — validar o planType castado ANTES de qualquer efeito financeiro. Sem isto,
+        // `subscription.planType as 'CRAQUE' | 'LENDA'` mascara um valor inesperado (ex.: JOGADOR,
+        // enum novo, dado corrompido) e migraria o usuário para um "plano indefinido". Rejeição
+        // terminal (não-retryable): o planType da subscription não muda por reenvio. Observável
+        // via [ALERT] + audit REJECTED; 200 para o provedor parar.
+        if (!isPaidPlan(subscription.planType)) {
+          console.error(
+            `[webhook][ALERT] PAYMENT_CONFIRMED com planType inválido/não-pagável — plano NÃO migrado. ` +
+            `subscriptionId=${event.subscriptionId} planType=${String(subscription.planType)} ` +
+            `transactionId=${event.transactionId}`
           )
-          // Decisão TERMINAL: não há o que ativar. Logar ACCEPTED para que reenvios do provedor
-          // caiam como DUPLICATE (não reprocessar) — não é uma falha transitória que mereça retry.
+          await webhookAuditService.logWebhook({
+            gateway: gatewayEnum, eventType: event.eventType,
+            transactionId: event.transactionId, subscriptionId: event.subscriptionId,
+            status: 'REJECTED', hmacValid: true, ipAddress: originalIp,
+            errorMessage: `planType inválido/não-pagável: ${String(subscription.planType)}`,
+          })
+          return NextResponse.json({ received: true }, { status: 200 })
+        }
+        const validPlanType = subscription.planType
+
+        // Ativar plano do usuário. event.transactionId = occurrence_marker do pagamento
+        // (Task 11 > "Idempotencia"): garante idempotency_key distinta por cobrança, inclusive
+        // em renovação que reativa a mesma subscription via dunning (senão a confirmação da
+        // renovação seria deduplicada na idempotency_key da ativação original — Zero Silêncio).
+        const upgradeResult = await planService.upgradeUser(
+          subscription.userId, event.subscriptionId, event.transactionId
+        )
+
+        // FIX-01 — Estado terminal (CANCELLED/EXPIRED/SUSPENDED/CANCELLATION_LOCK): a assinatura
+        // NÃO foi ativada. Registrar Payment PAID / comissão / analytics aqui criaria um pagamento
+        // "pago" que ativa um plano morto. MAS o dinheiro FOI capturado pelo gateway — antes este
+        // ramo logava ACCEPTED e respondia 200 SEM criar Payment algum: o caixa real desaparecia do
+        // lado do app (zero rastro, reenvios viravam DUPLICATE, refund impossível de rastrear).
+        // Agora: registrar Payment CAPTURED_NOT_ACTIVATED (idempotente por gatewayTransactionId) +
+        // audit REJECTED estruturado + política de refund ALERTA-PRIMEIRO. NUNCA ACCEPTED sem Payment.
+        if (upgradeResult === 'NOT_ACTIVATABLE') {
+          const settlement = await settleOrphanCapture({
+            userId: subscription.userId,
+            subscriptionId: event.subscriptionId,
+            planType: validPlanType,
+            amountCents: Number(event.amount),
+            gateway: gatewayEnum,
+            gatewayTransactionId: event.transactionId,
+          })
+          // Alerta OBSERVÁVEL (capturado por log/monitoramento) — captura órfã nunca passa
+          // despercebida. Inspeção pelo operador: WebhookAuditService.listLogs, filtro REJECTED.
+          console.error(
+            `[webhook][ALERT] PAYMENT_CONFIRMED capturado para assinatura em estado terminal — ` +
+            `plano NÃO ativado. payment=${settlement.paymentStatus} refunded=${settlement.refunded} ` +
+            `motivo="${settlement.reason}" subscriptionId=${event.subscriptionId} ` +
+            `transactionId=${event.transactionId}`
+          )
           await webhookAuditService.logWebhook({
             gateway: gatewayEnum,
             eventType: event.eventType,
             transactionId: event.transactionId,
             subscriptionId: event.subscriptionId,
-            status: 'ACCEPTED',
+            // REJECTED (não ACCEPTED): houve captura sem ativação — exige atenção do operador.
+            // Não bloqueia reprocessamento (dedup só olha ACCEPTED); o settlement é idempotente.
+            status: 'REJECTED',
             hmacValid: true,
             ipAddress: originalIp,
-            errorMessage: 'Assinatura em estado terminal — sem efeitos financeiros',
+            errorMessage:
+              `Assinatura em estado terminal — Payment ${settlement.paymentStatus} registrado, sem ativação. ` +
+              `Refund=${settlement.refunded ? 'executado' : 'não-executado'} (${settlement.reason})`,
           })
+          // Terminal: a assinatura não vai mudar de estado por reenvio. 200 para o provedor parar;
+          // o Payment idempotente garante que um eventual replay não duplique caixa nem refund.
           return NextResponse.json({ received: true }, { status: 200 })
         }
 
@@ -271,7 +320,7 @@ export async function POST(request: NextRequest) {
           amountCents: Number(event.amount),
           gateway: gatewayEnum,
           gatewayTransactionId: event.transactionId,
-          planType: subscription.planType as 'CRAQUE' | 'LENDA',
+          planType: validPlanType,
         })
       } else {
         // C4 (task-007): PAYMENT_CONFIRMED cujo subscriptionId não casa com nenhuma
@@ -301,16 +350,31 @@ export async function POST(request: NextRequest) {
         )
       }
     } else if (event.eventType === 'PAYMENT_FAILED') {
-      // Marcar subscription como PAST_DUE para acionar dunning
-      await prisma.subscription.updateMany({
-        where: { id: event.subscriptionId, status: { in: ['ACTIVE', 'PENDING'] } },
-        data: { status: 'PAST_DUE' },
-      })
-
-      // Buscar subscription para obter userId e planType para analytics
+      // FIX-04 (Task 12): PAYMENT_FAILED transiciona a assinatura DIRETO para EXPIRED, e não
+      // para PAST_DUE. PAST_DUE era um estado-sink latente: nenhum processo o retirava de lá.
+      // subscription-expiry só transiciona status=ACTIVE; DunningService só consome
+      // EXPIRED (e PENDING com tentativa); o único caminho de saída de PAST_DUE era
+      // PAST_DUE -> ACTIVE via upgradeUser numa recuperação de pagamento. Sem essa
+      // recuperação, a assinatura ficava presa em PAST_DUE para sempre, mantendo acesso e
+      // sem nunca cair para JOGADOR. EXPIRED é consumido tanto pelo DunningService
+      // (retentativas D+1/D+3/D+7) quanto pelo subscription-expiry (suspensão/downgrade),
+      // eliminando o sink na origem (alinhado ao comportamento atual do DunningService).
+      // Buscar a sub ANTES da transição: precisamos de expiresAt para garantir que ela fique
+      // não-nula ao virar EXPIRED — o DunningService faz deref `expiresAt!` sem filtrá-lo no
+      // WHERE, logo um EXPIRED com expiresAt nulo (ex.: PENDING que nunca teve vigência) o
+      // derrubaria. Carimbar "agora" quando ausente dá âncora temporal ao ciclo de dunning.
       const failedSub = await prisma.subscription.findUnique({
         where: { id: event.subscriptionId },
-        select: { userId: true, planType: true },
+        select: { userId: true, planType: true, expiresAt: true },
+      })
+
+      await prisma.subscription.updateMany({
+        where: { id: event.subscriptionId, status: { in: ['ACTIVE', 'PENDING'] } },
+        data: {
+          status: 'EXPIRED',
+          // Coalesce: preserva uma vigência futura existente; só estampa now() quando nula.
+          ...(failedSub?.expiresAt ? {} : { expiresAt: new Date() }),
+        },
       })
 
       await prisma.payment.upsert({
@@ -335,6 +399,27 @@ export async function POST(request: NextRequest) {
         })
       }
     } else if (event.eventType === 'REFUND_COMPLETED') {
+      // ST008 — early-return idempotente: se já existe um Payment REFUNDED para esta
+      // transação, o estorno já foi processado. A dedup do passo 5b só pega quando houve
+      // ACCEPTED prévio; uma reentrega do provedor após a tx commitar mas antes do ACCEPTED
+      // ser gravado (janela de crash) escaparia e RESETARIA o fsBalance para 2000 de novo
+      // (dupla reversão, perda de saldo legítimo). O guard por Payment REFUNDED fecha isso.
+      if (event.transactionId) {
+        const alreadyRefunded = await prisma.payment.findUnique({
+          where: { gatewayTransactionId: event.transactionId },
+          select: { status: true },
+        })
+        if (alreadyRefunded?.status === 'REFUNDED') {
+          await webhookAuditService.logWebhook({
+            gateway: gatewayEnum, eventType: event.eventType,
+            transactionId: event.transactionId, subscriptionId: event.subscriptionId,
+            status: 'DUPLICATE', hmacValid: true, ipAddress: originalIp,
+            errorMessage: 'REFUND_COMPLETED já processado (early-return idempotente)',
+          })
+          return NextResponse.json({ received: true }, { status: 200 })
+        }
+      }
+
       const refundedSub = await prisma.subscription.findUnique({
         where: { id: event.subscriptionId },
         select: { userId: true, planType: true, cancelledAt: true },
@@ -370,6 +455,30 @@ export async function POST(request: NextRequest) {
         // tier igual/superior que sustente esse plano.
         const shouldDowngrade = currentTier === refundedTier && !hasOtherActiveGteTier
         const refundCompletedAt = refundedSub.cancelledAt ?? new Date()
+
+        // FIX-08: ao rebaixar para JOGADOR via refund externo, liquidar posições
+        // restritas (SHORT, alavancada) + cancelar ordens OCO/SCHEDULED ANTES do
+        // downgrade — nunca deixar posição órfã. Diferente da rota self-service, o
+        // estorno aqui já foi processado pelo gateway (irreversível), então NÃO há
+        // como bloquear: liquidação é best-effort e qualquer resíduo gera ALERTA
+        // observável para acompanhamento manual do suporte.
+        if (shouldDowngrade) {
+          const liquidation = await liquidateRestrictedPositions(
+            refundedSub.userId,
+            event.subscriptionId,
+            'REFUND_COMPLETED_WEBHOOK',
+          ).catch((err) => {
+            console.error(`[webhook][ALERT] REFUND_COMPLETED falha na liquidação. sub=${event.subscriptionId}:`, err)
+            return null
+          })
+          if (!liquidation || !liquidation.cleared) {
+            console.error(
+              `[webhook][ALERT] REFUND_COMPLETED liquidação incompleta — downgrade prossegue ` +
+              `(estorno externo irreversível). sub=${event.subscriptionId} ` +
+              `remaining=${liquidation?.remaining ?? 'unknown'} failed=${liquidation?.failed ?? 'unknown'}`,
+            )
+          }
+        }
 
         await prisma.$transaction(async (tx) => {
           if (shouldDowngrade) {
@@ -515,3 +624,122 @@ export async function POST(request: NextRequest) {
 // NOTA (item 12): processAffiliateCommission foi movida para PlanService (private), dentro de
 // applyPaymentConfirmedEffects, para ser reusada pela reconciliacao server-side (replay/cron) e
 // nao apenas pelo webhook. A logica e identica (idempotente por gatewayTransactionId).
+
+// ─── FIX-01: settlement de captura órfã (NOT_ACTIVATABLE) ────────────────────────────────────
+// Planos que "cobrem" uma captura — uma captura é coberta quando existe uma sub ACTIVE de tier
+// IGUAL ou SUPERIOR ao plano capturado (o dinheiro corresponde a um plano vivo, estorno proibido).
+const COVERING_PLANS: Record<'CRAQUE' | 'LENDA', string[]> = {
+  CRAQUE: ['CRAQUE', 'LENDA'],
+  LENDA: ['LENDA'],
+}
+
+type OrphanSettlement = {
+  paymentStatus: 'CAPTURED_NOT_ACTIVATED' | 'REFUNDED'
+  refunded: boolean
+  reason: string
+}
+
+/**
+ * Liquida uma captura órfã: o gateway confirmou o pagamento mas a assinatura estava em estado
+ * terminal (upgradeUser → NOT_ACTIVATABLE). Garante rastro financeiro + política alerta-primeiro.
+ *
+ * Contrato (Aceite FIX-01):
+ *  - SEMPRE registra um Payment CAPTURED_NOT_ACTIVATED idempotente por gatewayTransactionId
+ *    (nunca responde ACCEPTED sem Payment).
+ *  - auto-refund SOMENTE com AUTO_REFUND_ON_ORPHAN=true E órfão comprovado (sem sub ACTIVE
+ *    cobrindo o tier) E idempotente (X-Idempotency-Key=refund-{paymentId} + guard de status).
+ *  - PROIBIDO estornar pagamento com plano ATIVO correspondente: havendo sub ACTIVE cobrindo,
+ *    o estorno é retido (refunded=false) e fica para decisão manual do operador.
+ */
+async function settleOrphanCapture(params: {
+  userId: string
+  subscriptionId: string
+  planType: 'CRAQUE' | 'LENDA'
+  amountCents: number
+  gateway: SubscriptionGateway
+  gatewayTransactionId: string
+}): Promise<OrphanSettlement> {
+  const { userId, subscriptionId, planType, amountCents, gateway, gatewayTransactionId } = params
+
+  // 1. Rastro financeiro idempotente. update:{} preserva um estado já avançado (ex.: REFUNDED de
+  //    um replay anterior) — nunca rebaixa o Payment de volta a CAPTURED_NOT_ACTIVATED.
+  const payment = await prisma.payment.upsert({
+    where: { gatewayTransactionId },
+    update: {},
+    create: {
+      userId,
+      subscriptionId,
+      amount: amountCents,
+      gateway,
+      gatewayTransactionId,
+      status: 'CAPTURED_NOT_ACTIVATED',
+      processedAt: new Date(),
+    },
+    select: { id: true, status: true },
+  })
+
+  // 2. Idempotência de replay: já estornado → nada a fazer.
+  if (payment.status === 'REFUNDED') {
+    return { paymentStatus: 'REFUNDED', refunded: true, reason: 'já estornado (replay idempotente)' }
+  }
+
+  // 3. Política alerta-primeiro: sem a flag, não há estorno automático (default seguro).
+  if (env.AUTO_REFUND_ON_ORPHAN !== 'true') {
+    return {
+      paymentStatus: 'CAPTURED_NOT_ACTIVATED',
+      refunded: false,
+      reason: 'auto-refund desabilitado (alerta-primeiro) — resolução manual do operador',
+    }
+  }
+
+  // 4. Provar órfão: PROIBIDO estornar se há sub ACTIVE de tier >= cobrindo a captura.
+  const coveringActive = await prisma.subscription.findFirst({
+    where: {
+      userId,
+      status: 'ACTIVE',
+      planType: { in: (COVERING_PLANS[planType] ?? [planType]) as never[] },
+    },
+    select: { id: true, planType: true },
+  })
+  if (coveringActive) {
+    return {
+      paymentStatus: 'CAPTURED_NOT_ACTIVATED',
+      refunded: false,
+      reason:
+        `plano ATIVO correspondente (sub=${coveringActive.id} ${coveringActive.planType}) — ` +
+        `estorno retido (proibido estornar pagamento com plano ativo)`,
+    }
+  }
+
+  // 5. Órfão comprovado + flag on → estorno idempotente no gateway.
+  try {
+    const result = await getGateway(gateway as unknown as GatewayType).refundPayment(gatewayTransactionId)
+    // CAS: só promove para REFUNDED a partir de CAPTURED_NOT_ACTIVATED — corrida/replay não duplica.
+    await prisma.payment.updateMany({
+      where: { id: payment.id, status: 'CAPTURED_NOT_ACTIVATED' },
+      data: { status: 'REFUNDED' },
+    })
+    return {
+      paymentStatus: 'REFUNDED',
+      refunded: true,
+      reason: result.alreadyRefunded
+        ? 'estorno idempotente (gateway já havia estornado)'
+        : `estorno executado (gateway refundId=${result.refundId})`,
+    }
+  } catch (err) {
+    // Transitório: não marca REFUNDED; mantém CAPTURED_NOT_ACTIVATED para nova tentativa/operador.
+    if (err instanceof GatewayRetryableError) {
+      return {
+        paymentStatus: 'CAPTURED_NOT_ACTIVATED',
+        refunded: false,
+        reason: `estorno transitório (retry): ${err.message}`,
+      }
+    }
+    // Terminal: estorno rejeitado pelo gateway — registrar para resolução manual.
+    return {
+      paymentStatus: 'CAPTURED_NOT_ACTIVATED',
+      refunded: false,
+      reason: `estorno rejeitado pelo gateway: ${err instanceof Error ? err.message : String(err)}`,
+    }
+  }
+}

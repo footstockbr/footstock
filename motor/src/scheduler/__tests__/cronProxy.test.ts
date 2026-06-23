@@ -3,10 +3,13 @@
 // ============================================================================
 
 import { cronProxy } from '../cronProxy'
+import { logger } from '../../utils/logger'
 
 jest.mock('../../utils/logger', () => ({
   logger: { info: jest.fn(), error: jest.fn(), debug: jest.fn(), warn: jest.fn() },
 }))
+
+const errorMock = logger.error as jest.Mock
 
 const ORIGINAL_ENV = process.env
 
@@ -19,6 +22,7 @@ describe('cronProxy', () => {
       CRON_SECRET: 'secret-abc',
     }
     ;(global.fetch as jest.Mock | undefined)?.mockReset?.()
+    errorMock.mockClear()
   })
 
   afterEach(() => {
@@ -40,6 +44,8 @@ describe('cronProxy', () => {
     expect(url).toBe('http://next.test:3000/api/cron/scoring')
     expect(init.method).toBe('GET')
     expect(init.headers.Authorization).toBe('Bearer secret-abc')
+    // Nunca seguir redirect automaticamente (preserva o header Authorization e expoe o 3xx).
+    expect(init.redirect).toBe('manual')
   })
 
   test('respeita apiVersion v1 e monta /api/v1/cron/{job}', async () => {
@@ -65,6 +71,56 @@ describe('cronProxy', () => {
     global.fetch = fetchMock as unknown as typeof fetch
 
     await expect(cronProxy('dunning')).rejects.toThrow(/HTTP 503/)
+  })
+
+  test('trata 3xx cross-origin como erro DURO e emite alerta CRON_REDIRECT (nao fica verde)', async () => {
+    // Cenario real: FOOTSTOCK_NEXT_BASE_URL no apex -> 301 para www. Com redirect:'manual'
+    // o 3xx volta como resposta final; o proxy NAO pode marcar sucesso.
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 301,
+      headers: { get: (name: string) => (name === 'location' ? 'https://www.footstock.com.br/api/cron/scoring' : null) },
+      text: async () => '',
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
+
+    await expect(cronProxy('scoring')).rejects.toThrow(/redirect HTTP 301/)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0][1].redirect).toBe('manual')
+    expect(errorMock).toHaveBeenCalledWith(
+      expect.stringContaining('[ALERT][CRON_REDIRECT]')
+    )
+    expect(errorMock).toHaveBeenCalledWith(
+      expect.stringContaining('https://www.footstock.com.br/api/cron/scoring')
+    )
+  })
+
+  test('3xx sem header location ainda falha e alerta (location: <no-location>)', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 308,
+      text: async () => '',
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
+
+    await expect(cronProxy('reconcile-payments')).rejects.toThrow(/redirect HTTP 308/)
+    expect(errorMock).toHaveBeenCalledWith(
+      expect.stringContaining('[ALERT][CRON_REDIRECT]')
+    )
+  })
+
+  test('trata 401 como erro e emite alerta CRON_UNAUTHORIZED', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: async () => 'unauthorized',
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
+
+    await expect(cronProxy('bonus-credit')).rejects.toThrow(/nao autorizado: HTTP 401/)
+    expect(errorMock).toHaveBeenCalledWith(
+      expect.stringContaining('[ALERT][CRON_UNAUTHORIZED]')
+    )
   })
 
   test('lanca erro determinista se FOOTSTOCK_NEXT_BASE_URL ausente', async () => {

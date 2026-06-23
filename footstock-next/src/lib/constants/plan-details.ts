@@ -1,4 +1,8 @@
 import { PlanType } from "@/lib/constants/plans";
+import {
+  PLAN_AMOUNTS_CENTS,
+  formatBRLFromCents,
+} from "@/lib/constants/plan-amounts-cents";
 
 /**
  * Dados canonicos dos planos (nome, preco, features). Fonte da pagina de sucesso de
@@ -42,7 +46,8 @@ export const PLAN_DETAILS: Record<PlanType, PlanDetail> = {
   },
   [PlanType.CRAQUE]: {
     name: "Craque",
-    price: "R$ 1,00",
+    // SSoT (FIX-12): preco de cobranca derivado de PLAN_AMOUNTS_CENTS (centavos).
+    price: formatBRLFromCents(PLAN_AMOUNTS_CENTS.CRAQUE.monthly),
     period: "/mês",
     description: "Para traders sérios",
     features: [
@@ -68,7 +73,8 @@ export const PLAN_DETAILS: Record<PlanType, PlanDetail> = {
   },
   [PlanType.LENDA]: {
     name: "Lenda",
-    price: "R$ 1,00",
+    // SSoT (FIX-12): preco de cobranca derivado de PLAN_AMOUNTS_CENTS (centavos).
+    price: formatBRLFromCents(PLAN_AMOUNTS_CENTS.LENDA.monthly),
     period: "/mês",
     description: "Experiência completa",
     features: [

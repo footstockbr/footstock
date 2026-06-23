@@ -6,13 +6,19 @@
 // ============================================================================
 
 import { prisma } from '@/lib/prisma'
-import { NotificationStub } from '@/lib/notifications/stubs/NotificationStub'
+import { notificationService } from '@/lib/notifications'
 import {
   shouldSuspendAccount,
   shouldDowngradeToJogador,
   type SubscriptionForLogic,
 } from '@/lib/services/plan-logic'
 import { PLAN_HIERARCHY, type PlanType } from '@/lib/enums'
+
+// FIX-25 — period (YYYY-MM) do ciclo de cobrança, usado no occurrence_marker das
+// notificações assinatura_* (uma chave de idempotência distinta por ciclo).
+function billingPeriod(expiresAt: Date | null): string {
+  return (expiresAt ?? new Date()).toISOString().slice(0, 7)
+}
 
 export interface ProcessResult {
   processed: number
@@ -113,11 +119,16 @@ export async function processExpiredSubscriptions(): Promise<ProcessResult> {
           continue
         }
 
-        await NotificationStub.notify(sub.userId, 'PLAN_CANCEL_ALERT', {
-          planName: sub.planType,
-          expiresAt: sub.expiresAt!.toISOString(),
-          reason: 'expired',
-          channels: ['in_app'],
+        await notificationService.notify({
+          type:     'assinatura_expirada',
+          userId:   sub.userId,
+          entityId: `${sub.id}:expired`,
+          period:   billingPeriod(sub.expiresAt),
+          payload: {
+            planType:  sub.planType,
+            expiresAt: sub.expiresAt!.toISOString(),
+            reason:    'expired',
+          },
         })
         result.details.push({ subscriptionId: sub.id, action: 'SUSPENDED' })
         result.processed++
@@ -190,10 +201,15 @@ export async function processExpiredSubscriptions(): Promise<ProcessResult> {
         continue
       }
 
-      await NotificationStub.notify(sub.userId, 'PLAN_CANCEL_ALERT', {
-        planName: sub.planType,
-        reason: 'downgraded',
-        channels: ['in_app', 'email'],
+      await notificationService.notify({
+        type:     'assinatura_expirada',
+        userId:   sub.userId,
+        entityId: `${sub.id}:downgraded`,
+        period:   billingPeriod(sub.expiresAt),
+        payload: {
+          planType: sub.planType,
+          reason:   'downgraded',
+        },
       })
       result.details.push({ subscriptionId: sub.id, action: 'DOWNGRADED_TO_JOGADOR' })
       result.processed++
@@ -250,12 +266,17 @@ export async function processRenewalReminders(): Promise<ProcessResult> {
       })
       if (claim.count !== 1) continue // outro processo reivindicou OU estado mudou — não notificar
 
-      await NotificationStub.notify(sub.userId, 'PLAN_CANCEL_ALERT', {
-        planType:       sub.planType,
-        expiresAt:      sub.expiresAt!.toISOString(),
-        daysUntilExpiry,
-        isRenewalReminder: true,
-        channels:       ['in_app', 'email'],
+      await notificationService.notify({
+        type:     'assinatura_expirando',
+        userId:   sub.userId,
+        entityId: `${sub.id}:renewal`,
+        period:   billingPeriod(sub.expiresAt),
+        payload: {
+          planType:          sub.planType,
+          expiresAt:         sub.expiresAt!.toISOString(),
+          daysUntilExpiry,
+          isRenewalReminder: true,
+        },
       })
 
       result.details.push({ subscriptionId: sub.id, action: `RENEWAL_REMINDER_D-${daysUntilExpiry}` })

@@ -49,7 +49,6 @@ export function CancellationModal({ isOpen, onClose, planType, isEligibleForRefu
     cancellationLockExpiresAt?: string
     cancellationEffectiveAt?: string
     cancellationMode?: 'SCHEDULED' | 'REFUND' | null
-    forcedLiquidationAt?: string
     isEligibleForRefund?: boolean
   } | null>(null)
 
@@ -130,7 +129,6 @@ export function CancellationModal({ isOpen, onClose, planType, isEligibleForRefu
         cancellationLockExpiresAt: json?.data?.cancellationLockExpiresAt,
         cancellationEffectiveAt: json?.data?.cancellationEffectiveAt,
         cancellationMode: json?.data?.cancellationMode,
-        forcedLiquidationAt: json?.data?.forcedLiquidationAt,
         isEligibleForRefund: json?.data?.isEligibleForRefund,
       })
       setStep('done')

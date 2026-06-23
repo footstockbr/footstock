@@ -166,6 +166,10 @@ export function UserActions({ user, currentAdminRole, onActionComplete }: UserAc
   }
 
   async function handleChangePlan(newPlan: string) {
+    // FIX-02: o PATCH agora cria Subscription ACTIVE coerente com User.planType
+    // (antes so atualizava planType, deixando a Subscription divergente). Pode
+    // recusar com AUTH-009 (conta staff) ou ADMIN-PLAN-DOWNGRADE (downgrade
+    // bloqueado); a API responde no formato { error: { code, message } }.
     const res = await fetch(`/api/v1/admin/users/${user.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -173,7 +177,8 @@ export function UserActions({ user, currentAdminRole, onActionComplete }: UserAc
     })
     if (!res.ok) {
       const body = await res.json().catch(() => null)
-      toast.error(body?.message ?? `Erro ao trocar plano (${res.status})`)
+      const message = body?.error?.message ?? body?.message ?? `Erro ao trocar plano (${res.status})`
+      toast.error(message)
       return
     }
     toast.success(`Plano de ${user.name} alterado para ${newPlan}.`)

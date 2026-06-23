@@ -9,6 +9,7 @@ import { decodeAuthjsToken } from '@/lib/auth/authjs-session'
 import { prisma } from '@/lib/prisma'
 import { canAccess, type AdminResource } from '@/lib/auth/canAccess'
 import { hasPlanAccess } from '@/lib/auth/planAccess'
+import { recordPaidFeatureUsage } from '@/lib/auth'
 import { ERROR_CODES, ERROR_MESSAGES } from '@/lib/constants/errors'
 import type { AdminRole, PlanType } from '@/lib/enums'
 import type { User } from '@/types/models'
@@ -196,6 +197,14 @@ export function withPlan(requiredPlan: PlanType) {
     return withAuth(async (req, { user }) => {
       if (!hasPlanAccess(user.planType as PlanType, requiredPlan)) {
         return errorResponse(ERROR_CODES.ORD_008, ERROR_MESSAGES['ORD-008'], 403)
+      }
+
+      // FIX-09: acesso concedido. Se a assinatura ja expirou mas esta na graca de
+      // 7 dias (planType ainda pago), tornar o uso observavel SEM cortar acesso.
+      // Fire-and-forget: o container web e persistente (Railway), entao a promise
+      // completa sem bloquear a resposta; fail-open por dentro de recordPaidFeatureUsage.
+      if (requiredPlan !== 'JOGADOR') {
+        void recordPaidFeatureUsage({ userId: user.id, requiredPlan }).catch(() => {})
       }
 
       return handler(req, { user })

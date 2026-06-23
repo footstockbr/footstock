@@ -6,6 +6,7 @@
 
 import type { PlanType } from '@/lib/enums'
 import { PLAN_HIERARCHY } from '@/lib/enums'
+import { getPlanAmountCents } from '@/lib/constants/plan-amounts-cents'
 
 // ─── Tipos auxiliares ───────────────────────────────────────────────────────
 
@@ -54,14 +55,13 @@ export function calcUpgradeBonusAmount(fromPlan: PlanType, toPlan: PlanType): nu
 }
 
 // ─── 4. calcSubscriptionAmount ──────────────────────────────────────────────
-/** Valor da assinatura em centavos BRL (Int — PCI-DSS) */
+/**
+ * Valor da assinatura em centavos BRL (Int — PCI-DSS).
+ * FIX-12: delega na SSoT `PLAN_AMOUNTS_CENTS` para que cobranca e display leiam
+ * do MESMO modulo (invariante "preco exibido == amountCents/100 cobrado").
+ */
 export function calcSubscriptionAmount(planType: PlanType, period: 'monthly' | 'yearly'): number {
-  const amounts: Record<PlanType, Record<'monthly' | 'yearly', number>> = {
-    JOGADOR: { monthly: 0, yearly: 0 },
-    CRAQUE:  { monthly: 100, yearly: 100 }, // R$1,00 — preço temporário de teste
-    LENDA:   { monthly: 120, yearly: 120 }, // R$1,20 — preço temporário de teste (difere de CRAQUE p/ evitar recusa por compra duplicada)
-  }
-  return amounts[planType][period]
+  return getPlanAmountCents(planType, period)
 }
 
 // ─── 5. isWithinCoolingOff ──────────────────────────────────────────────────
@@ -115,39 +115,7 @@ export function getCancellationLockExpiry(lockStartedAt: Date): Date {
   return new Date(lockStartedAt.getTime() + sevenDays)
 }
 
-// ─── 10b. getForcedLiquidationAt ────────────────────────────────────────────
-/**
- * Data da liquidação forçada de posições restritas (T+48h).
- * Shorts, OCO e alavancadas são encerrados compulsoriamente neste momento.
- * Todos os cálculos em UTC para evitar bugs de timezone/DST.
- */
-export function getForcedLiquidationAt(lockStartedAt: Date): Date {
-  const fortyEightHours = 48 * 60 * 60 * 1000
-  return new Date(lockStartedAt.getTime() + fortyEightHours)
-}
-
-// ─── 11. getBlockedFeatures ─────────────────────────────────────────────────
-/** Features bloqueadas IMEDIATAMENTE ao entrar em CANCELLATION_LOCK */
-export function getBlockedFeatures(fromPlan: PlanType): string[] {
-  if (fromPlan === 'LENDA') {
-    return ['ordens limitadas', 'ordens agendadas', 'OCO', 'short selling', 'alavancagem 2x', 'assessor IA', 'ligas PRO']
-  }
-  if (fromPlan === 'CRAQUE') {
-    return ['ordens limitadas', 'ordens agendadas']
-  }
-  return []
-}
-
-// ─── 12. getCompulsoryLiquidationPositions ──────────────────────────────────
-/** Tipos de posição em venda compulsória após 48h de CANCELLATION_LOCK */
-export function getCompulsoryLiquidationPositions(fromPlan: PlanType): string[] {
-  if (fromPlan === 'LENDA') return ['SHORT', 'LEVERAGED', 'OCO']
-  return []
-}
-
-// ─── 13. isCancellationLockExpired ──────────────────────────────────────────
-/** Verifica se as 48h de trava expiraram */
-export function isCancellationLockExpired(subscription: SubscriptionForLogic, now: Date): boolean {
-  if (!subscription.cancellationLockExpiresAt) return false
-  return subscription.cancellationLockExpiresAt.getTime() <= now.getTime()
-}
+// FIX-10 (2026-06-22): removidas as 4 funcoes orfas da liquidacao forcada T+48h
+// (getForcedLiquidationAt, getBlockedFeatures, getCompulsoryLiquidationPositions,
+// isCancellationLockExpired). Eram codigo morto: dependiam de forcedLiquidationAt,
+// que nunca e setado non-null. getRestrictedPositionTypes (sec. 8) preservada.

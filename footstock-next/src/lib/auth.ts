@@ -4,6 +4,10 @@ import * as Sentry from '@sentry/nextjs'
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 import { readAuthjsSession, isSessionInvalidated } from '@/lib/auth/authjs-session'
+import { isPaidFeature, type PlanFeature } from '@/lib/auth/planAccess'
+import { shouldSuspendAccount, type SubscriptionForLogic } from '@/lib/services/plan-logic'
+import { recordPaidFeatureGraceUsage } from '@/lib/observability/paid-feature-grace-counter'
+import type { PlanType } from '@/lib/enums'
 import type { User } from '@/types'
 
 // Motivo pelo qual getAuthUser nao resolveu a sessao. Emitido como breadcrumb
@@ -155,6 +159,76 @@ export async function getAuthUser(): Promise<{ user: User; userId: string } | nu
   } catch (err) {
     await reportAuthFail('unexpected-throw', err)
     return null
+  }
+}
+
+// ─── FIX-09: instrumentar uso de feature paga pos-expiracao (graca preservada) ──
+//
+// Quando a assinatura JA EXPIROU mas ainda esta dentro da graca de 7 dias, o
+// `planType` do usuario continua sendo o plano pago (o downgrade para JOGADOR so
+// ocorre apos a graca, via cron `shouldDowngradeToJogador`). Logo o uso de feature
+// paga nesse intervalo passa silencioso. Esta funcao torna esse uso OBSERVAVEL
+// (metrica/log) SEM cortar acesso — decisao 2026-06-22 (manter graca + instrumentar).
+//
+// Fail-open: qualquer erro de telemetria/DB e engolido. NUNCA deve afetar o
+// resultado de uma chamada de feature paga.
+
+/**
+ * Instrumenta o uso de uma feature paga durante a graca pos-expiracao.
+ *
+ * @returns true se o uso foi observado como pos-expiracao (dentro da graca);
+ *          false caso contrario (assinatura ativa, sem graca, tier gratuito,
+ *          assinatura ausente, ou erro engolido).
+ */
+export async function recordPaidFeatureUsage(params: {
+  userId: string
+  requiredPlan: PlanType
+  feature?: PlanFeature
+  /** Assinatura ja carregada pelo caller; quando ausente, e buscada aqui. */
+  subscription?: SubscriptionForLogic | null
+  now?: Date
+}): Promise<boolean> {
+  const { userId, requiredPlan, feature } = params
+  const now = params.now ?? new Date()
+
+  try {
+    // Feature informada que NAO e paga: nada a instrumentar.
+    if (feature && !isPaidFeature(feature)) return false
+    // Sem feature, requiredPlan no tier gratuito: nada pago envolvido.
+    if (!feature && requiredPlan === 'JOGADOR') return false
+
+    // Carregar a assinatura mais recente quando o caller nao a forneceu.
+    let sub = params.subscription ?? null
+    if (!sub) {
+      sub = (await prisma.subscription.findFirst({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          planType: true,
+          startsAt: true,
+          expiresAt: true,
+          status: true,
+          cancelledAt: true,
+          cancellationLockExpiresAt: true,
+        },
+      })) as SubscriptionForLogic | null
+    }
+    if (!sub) return false
+
+    // Graca pos-expiracao = expirou mas ainda dentro dos 7 dias (status ACTIVE).
+    if (!shouldSuspendAccount(sub, now)) return false
+
+    const dimension = feature ?? `plan:${requiredPlan}`
+    await recordPaidFeatureGraceUsage(dimension, {
+      userId,
+      plan: sub.planType,
+      requiredPlan,
+      feature: feature ?? null,
+    })
+    return true
+  } catch {
+    // fail-open: instrumentacao nunca quebra o caminho real de feature paga.
+    return false
   }
 }
 

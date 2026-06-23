@@ -9,10 +9,15 @@ import { FinanceiroResume } from '@/components/admin/FinanceiroResume'
 import { FinanceiroAssinaturas } from '@/components/admin/FinanceiroAssinaturas'
 import { FinanceiroPagamentos } from '@/components/admin/FinanceiroPagamentos'
 import { FinanceiroMovimentacoes } from '@/components/admin/FinanceiroMovimentacoes'
+import {
+  FinanceiroWebhooks,
+  fetchRejected24hCount,
+  WEBHOOKS_REJECTED_24H_KEY,
+} from '@/components/admin/FinanceiroWebhooks'
 import { AdminFinanceiroStats } from '@/components/admin/AdminFinanceiroStats'
 import { FinanceiroGateways } from './FinanceiroGateways'
 
-type FinTab = 'resumo' | 'assinaturas' | 'pagamentos' | 'movimentacoes' | 'gateways'
+type FinTab = 'resumo' | 'assinaturas' | 'pagamentos' | 'movimentacoes' | 'webhooks' | 'gateways'
 
 interface FinanceiroPageClientProps {
   isSuperAdmin: boolean
@@ -23,6 +28,7 @@ const BASE_TABS: { id: FinTab; label: string }[] = [
   { id: 'assinaturas', label: 'Assinaturas' },
   { id: 'pagamentos', label: 'Pagamentos' },
   { id: 'movimentacoes', label: 'Movimentações' },
+  { id: 'webhooks', label: 'Webhooks' },
 ]
 
 const GATEWAY_TAB: { id: FinTab; label: string } = { id: 'gateways', label: 'Gateways' }
@@ -71,6 +77,14 @@ export default function FinanceiroPageClient({ isSuperAdmin }: FinanceiroPageCli
     staleTime: 60_000,
   })
 
+  // Badge 24h da aba Webhooks: rejeitados nas ultimas 24h (count via meta.total).
+  const { data: rejected24h } = useQuery({
+    queryKey: WEBHOOKS_REJECTED_24H_KEY,
+    queryFn: fetchRejected24hCount,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  })
+
   const isLoading = financialLoading || subsLoading || gatewaysLoading
 
   return (
@@ -99,6 +113,19 @@ export default function FinanceiroPageClient({ isSuperAdmin }: FinanceiroPageCli
             )}
           >
             {tab.label}
+            {tab.id === 'webhooks' && (rejected24h ?? 0) > 0 && (
+              <span
+                data-testid="admin-financeiro-tab-webhooks-badge"
+                className={cn(
+                  'ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold align-middle',
+                  activeTab === 'webhooks'
+                    ? 'bg-[#080b12]/20 text-[#080b12]'
+                    : 'bg-[#F6465D]/20 text-[#F6465D]'
+                )}
+              >
+                {rejected24h}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -112,6 +139,8 @@ export default function FinanceiroPageClient({ isSuperAdmin }: FinanceiroPageCli
 
       {activeTab === 'movimentacoes' ? (
         <FinanceiroMovimentacoes />
+      ) : activeTab === 'webhooks' ? (
+        <FinanceiroWebhooks />
       ) : activeTab === 'gateways' && isSuperAdmin ? (
         <FinanceiroGateways />
       ) : isLoading ? (

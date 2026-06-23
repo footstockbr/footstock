@@ -8,6 +8,7 @@ import { createHmac, timingSafeEqual } from 'crypto'
 import { WEBHOOK_REPLAY_WINDOW_MS } from '@/lib/constants/payment-security'
 import { GatewayType } from './IGateway'
 import { env } from '@/lib/env'
+import { emitDegradationSignal } from '@/lib/observability/degradation-signal'
 
 // ─── Mercado Pago ─────────────────────────────────────────────────────────────
 
@@ -263,6 +264,77 @@ export function validateMercadoPagoHMACDetailed(
   }
 }
 
+// ─── Health-check do webhook secret (FIX-14) ──────────────────────────────────
+
+export interface WebhookSecretHealth {
+  /** Gateway ativo (env.ACTIVE_GATEWAY) ou null quando não declarado. */
+  gateway: GatewayType | null
+  /** true quando o secret obrigatório do gateway ativo está presente. */
+  ok: boolean
+  /** Nome da env var faltante, quando ok === false. */
+  missingVar: string | null
+}
+
+/**
+ * Verifica que o gateway ativo (env.ACTIVE_GATEWAY) tem seu webhook secret
+ * configurado. Complementa o fail-fast de boot em env.ts (FIX-24), que só
+ * dispara quando ACTIVE_GATEWAY está declarado: aqui emitimos um ALERTA
+ * observável (sem lançar) para o caso em que um gateway é usado em runtime sem
+ * o secret correspondente. Quando ACTIVE_GATEWAY não está setado, é no-op
+ * (dev/test/CI não disparam o alerta).
+ */
+export function runWebhookSecretHealthCheck(): WebhookSecretHealth {
+  const active = env.ACTIVE_GATEWAY as GatewayType | undefined
+  if (!active) return { gateway: null, ok: true, missingVar: null }
+
+  let secret = ''
+  let varName = ''
+  switch (active) {
+    case GatewayType.MERCADO_PAGO:
+      secret = env.MERCADO_PAGO_WEBHOOK_SECRET ?? ''
+      varName = 'MERCADO_PAGO_WEBHOOK_SECRET'
+      break
+    case GatewayType.PAGSEGURO:
+      secret = env.PAGSEGURO_WEBHOOK_SECRET ?? ''
+      varName = 'PAGSEGURO_WEBHOOK_SECRET'
+      break
+    case GatewayType.PAYPAL:
+      secret = env.PAYPAL_WEBHOOK_ID ?? ''
+      varName = 'PAYPAL_WEBHOOK_ID'
+      break
+    default:
+      return { gateway: active, ok: true, missingVar: null }
+  }
+
+  if (!secret) {
+    emitDegradationSignal('webhook.secret_health_check_failed', {
+      level: 'alert',
+      throttleMs: 0,
+      context: { gateway: active, missingVar: varName },
+    })
+    return { gateway: active, ok: false, missingVar: varName }
+  }
+  return { gateway: active, ok: true, missingVar: null }
+}
+
+let _healthCheckRan = false
+
+/** Roda o health-check de secret uma única vez (primeira validação real). */
+function ensureWebhookSecretHealthChecked(): void {
+  if (_healthCheckRan) return
+  _healthCheckRan = true
+  try {
+    runWebhookSecretHealthCheck()
+  } catch {
+    /* fail-open: health-check nunca quebra a validação do webhook */
+  }
+}
+
+/** Reset do memo do health-check. Apenas para testes deterministas. */
+export function __resetWebhookSecretHealthCheck(): void {
+  _healthCheckRan = false
+}
+
 /**
  * Valida HMAC pelo gateway detectado, retornando o motivo. PagSeguro/PayPal
  * nao expoem timestamp local, entao colapsam em OK/BAD_SIGNATURE.
@@ -275,21 +347,47 @@ export async function validateWebhookByGatewayDetailed(
   // data.id do query param da URL (usado só pelo manifesto HMAC do Mercado Pago)
   dataIdFromUrl?: string,
 ): Promise<WebhookValidationResult> {
+  // FIX-14: health-check do secret na primeira validação real (lazy boot check).
+  // Não há boot-hook único no Next.js; ancoramos no primeiro webhook. Idempotente
+  // e fail-open — apenas emite alerta quando o secret do gateway ativo falta.
+  ensureWebhookSecretHealthChecked()
+
   switch (gateway) {
     case GatewayType.MERCADO_PAGO: {
       const secret = env.MERCADO_PAGO_WEBHOOK_SECRET ?? ''
-      if (!secret) return { valid: false, reason: 'CONFIG_MISSING' }
+      if (!secret) {
+        // FIX-14: CONFIG_MISSING era um `false` silencioso — webhook real chega,
+        // o secret não está configurado e a validação falha sem nenhum sinal.
+        // Agora alerta (console.error + Sentry) para o operador agir.
+        emitDegradationSignal('webhook.config_missing', {
+          level: 'alert',
+          context: { gateway: GatewayType.MERCADO_PAGO, secret: 'MERCADO_PAGO_WEBHOOK_SECRET' },
+        })
+        return { valid: false, reason: 'CONFIG_MISSING' }
+      }
       return validateMercadoPagoHMACDetailed(headers, rawBody, secret, dataIdFromUrl)
     }
     case GatewayType.PAGSEGURO: {
       const secret = env.PAGSEGURO_WEBHOOK_SECRET ?? ''
-      if (!secret) return { valid: false, reason: 'CONFIG_MISSING' }
+      if (!secret) {
+        emitDegradationSignal('webhook.config_missing', {
+          level: 'alert',
+          context: { gateway: GatewayType.PAGSEGURO, secret: 'PAGSEGURO_WEBHOOK_SECRET' },
+        })
+        return { valid: false, reason: 'CONFIG_MISSING' }
+      }
       const valid = validatePagSeguroHMAC(headers, rawBody, secret)
       return { valid, reason: valid ? 'OK' : 'BAD_SIGNATURE' }
     }
     case GatewayType.PAYPAL: {
       const webhookId = env.PAYPAL_WEBHOOK_ID ?? ''
-      if (!webhookId) return { valid: false, reason: 'CONFIG_MISSING' }
+      if (!webhookId) {
+        emitDegradationSignal('webhook.config_missing', {
+          level: 'alert',
+          context: { gateway: GatewayType.PAYPAL, secret: 'PAYPAL_WEBHOOK_ID' },
+        })
+        return { valid: false, reason: 'CONFIG_MISSING' }
+      }
       const valid = await validatePayPalWebhook(headers, rawBody, webhookId)
       return { valid, reason: valid ? 'OK' : 'BAD_SIGNATURE' }
     }

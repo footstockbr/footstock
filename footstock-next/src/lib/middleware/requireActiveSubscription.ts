@@ -1,82 +1,25 @@
 // ============================================================================
 // FootStock — requireActiveSubscription middleware
-// Bloqueia ações PREMIUM quando assinatura está em CANCELLATION_LOCK
-// Usa matriz de capacidades: bloqueia criação de risco, permite redução de risco
+// FIX-10 (2026-06-22): o bloqueio compulsorio em CANCELLATION_LOCK era codigo
+// morto. Dependia de `forcedLiquidationAt`, que nunca e setado non-null (todas
+// as escritas da coluna sao `: null`), logo o branch de 403 (PAYMENT_054) e o
+// lookup que o alimentava eram inalcancaveis. Ambos foram removidos.
+// FIX-20 (2026-06-22) confirmou o no-op como decisao canonica: a funcao e mantida
+// preservando a assinatura usada pelos callers (orders, positions/short,
+// ai/analyze, leagues). A reativacao do bloqueio exige uma feature nova com spec
+// propria (liquidacao forcada T+48h descontinuada).
 // ============================================================================
 
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-
-// Ações que reduzem risco — SEMPRE permitidas em CANCELLATION_LOCK
-// O usuário deve poder sair das posições voluntariamente nas 48h
-const RISK_REDUCTION_ACTIONS = [
-  'SELL_POSITION',      // venda de posição LONG
-  'CLOSE_SHORT',        // fechamento de posição SHORT
-  'CANCEL_ORDER',       // cancelamento de ordem própria
-] as const
-
-type RiskReductionAction = typeof RISK_REDUCTION_ACTIONS[number]
-
-export function isRiskReductionAction(action: string): action is RiskReductionAction {
-  return RISK_REDUCTION_ACTIONS.includes(action as RiskReductionAction)
-}
+import type { NextResponse } from 'next/server'
 
 /**
- * Verifica se o usuário está em CANCELLATION_LOCK e retorna resposta de erro se:
- * - O status é CANCELLATION_LOCK E
- * - A capacidade solicitada está bloqueada
- *
- * Capacidades BLOQUEADAS em CANCELLATION_LOCK:
- * - Abertura de novas ordens (exceto para fechar posições)
- * - Criação de posições SHORT
- * - Uso de alavancagem 2x
- * - Inscrição em novas ligas (join)
- * - Criação de novas ligas
- * - Acesso ao AI Assessor
- * - Quaisquer novas operações que aumentem exposição
- *
- * Capacidades PERMITIDAS em CANCELLATION_LOCK:
- * - Visualização de posições, saldo, histórico (readonly)
- * - Venda de posições LONG existentes
- * - Fechamento de posições SHORT existentes
- * - Cancelamento de ordens próprias
- * - Reversão do cancelamento (endpoint /revert)
+ * Guard de CANCELLATION_LOCK. Atualmente no-op: retorna sempre `null` (sem
+ * bloqueio). O fluxo de liquidacao forcada T+48h foi descontinuado (ver FIX-10);
+ * a reativacao do bloqueio depende de uma feature nova com spec propria.
  */
-export async function requireActiveSubscription(
-  userId: string,
-  capability: 'NEW_ORDER' | 'NEW_SHORT' | 'LEVERAGE' | 'JOIN_LEAGUE' | 'CREATE_LEAGUE' | 'AI_ADVISOR'
+export function requireActiveSubscription(
+  _userId: string,
+  _capability: 'NEW_ORDER' | 'NEW_SHORT' | 'LEVERAGE' | 'JOIN_LEAGUE' | 'CREATE_LEAGUE' | 'AI_ADVISOR'
 ): Promise<NextResponse | null> {
-  const sub = await prisma.subscription.findFirst({
-    where: {
-      userId,
-      status: 'CANCELLATION_LOCK',
-    },
-    orderBy: { createdAt: 'desc' },
-    select: { status: true, cancellationLockExpiresAt: true, forcedLiquidationAt: true },
-  })
-
-  if (!sub) return null // acesso normal
-
-  // Cancelamento simples agenda o fim do plano, mas mantem os recursos ate o
-  // fim do periodo pago. Locks com forcedLiquidationAt continuam bloqueando risco.
-  if (!sub.forcedLiquidationAt) return null
-
-  const expiresAt = sub.cancellationLockExpiresAt
-  const hoursRemaining = expiresAt
-    ? Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / 3_600_000))
-    : 0
-
-  return NextResponse.json(
-    {
-      error: 'CANCELLATION_LOCK_ACTIVE',
-      code: 'PAYMENT_054',
-      message: `Sua assinatura está em processo de cancelamento. A ação "${capability}" está bloqueada. Você pode reverter o cancelamento em /configuracoes/assinatura.`,
-      cancellationLock: {
-        expiresAt: expiresAt?.toISOString() ?? null,
-        hoursRemaining,
-        revertUrl: '/configuracoes/assinatura',
-      },
-    },
-    { status: 403 }
-  )
+  return Promise.resolve(null)
 }

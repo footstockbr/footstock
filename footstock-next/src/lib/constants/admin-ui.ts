@@ -1,7 +1,13 @@
 /**
- * Constantes de UI do painel admin — fonte única de verdade.
+ * Constantes de UI do painel admin.
  * Todos os componentes admin devem importar daqui em vez de redefinir localmente.
+ *
+ * NOTA (FIX-12): a fonte única de pricing é `PLAN_AMOUNTS_CENTS`
+ * (`@/lib/constants/plan-amounts-cents`). Qualquer valor monetário aqui DERIVA
+ * dela — nunca redefina preços hardcoded neste arquivo.
  */
+
+import { PLAN_AMOUNTS_CENTS } from '@/lib/constants/plan-amounts-cents'
 
 // ── Planos ──────────────────────────────────────────────────────────────────
 
@@ -18,11 +24,15 @@ export const PLAN_HEX_COLORS: Record<string, string> = {
   LENDA: '#F0B90B',
 }
 
-/** Preços numéricos por plano (para cálculos de MRR, etc.) */
+/**
+ * Preços mensais em BRL por plano, DERIVADOS da SSoT `PLAN_AMOUNTS_CENTS`
+ * (centavos / 100). FIX-12: nunca hardcodar; garante "preço exibido == valor
+ * cobrado". MRR de verdade deve vir de `Subscription.amount`, não de count*price.
+ */
 export const PLAN_PRICE_VALUES: Record<string, number> = {
-  JOGADOR: 0,
-  CRAQUE: 19.9,
-  LENDA: 39.9,
+  JOGADOR: PLAN_AMOUNTS_CENTS.JOGADOR.monthly / 100,
+  CRAQUE: PLAN_AMOUNTS_CENTS.CRAQUE.monthly / 100,
+  LENDA: PLAN_AMOUNTS_CENTS.LENDA.monthly / 100,
 }
 
 /** Mapeamento para variante de Badge (componente UI interno) */

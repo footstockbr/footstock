@@ -3,6 +3,10 @@ import { Check, Zap, Crown, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PlanType } from "@/lib/constants/plans";
+import {
+  PLAN_AMOUNTS_CENTS,
+  formatBRLFromCents,
+} from "@/lib/constants/plan-amounts-cents";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ROUTES } from "@/lib/constants/routes";
@@ -52,7 +56,8 @@ const PLANS = [
     type: PlanType.CRAQUE,
     icon: Zap,
     name: "Craque",
-    price: "R$ 1,00",
+    // SSoT (FIX-12): preco de cobranca derivado de PLAN_AMOUNTS_CENTS (centavos).
+    price: formatBRLFromCents(PLAN_AMOUNTS_CENTS.CRAQUE.monthly),
     period: "/mês",
     description: "Para traders sérios",
     badge: "Mais popular",
@@ -81,7 +86,8 @@ const PLANS = [
     type: PlanType.LENDA,
     icon: Crown,
     name: "Lenda",
-    price: "R$ 1,00",
+    // SSoT (FIX-12): preco de cobranca derivado de PLAN_AMOUNTS_CENTS (centavos).
+    price: formatBRLFromCents(PLAN_AMOUNTS_CENTS.LENDA.monthly),
     period: "/mês",
     description: "Experiência completa",
     badge: "Premium",

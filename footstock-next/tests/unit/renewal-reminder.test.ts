@@ -8,16 +8,16 @@ jest.mock('@/lib/prisma', () => {
   const subscription = { findMany: jest.fn(), updateMany: jest.fn() }
   return { prisma: { subscription } }
 })
-jest.mock('@/lib/notifications/stubs/NotificationStub', () => ({
-  NotificationStub: { notify: jest.fn().mockResolvedValue(undefined) },
+jest.mock('@/lib/notifications', () => ({
+  notificationService: { notify: jest.fn().mockResolvedValue({ notification: {}, deduped: false }) },
 }))
 
 import { processRenewalReminders } from '@/lib/jobs/subscription-expiry'
 import { prisma } from '@/lib/prisma'
-import { NotificationStub } from '@/lib/notifications/stubs/NotificationStub'
+import { notificationService } from '@/lib/notifications'
 
 const sub = prisma.subscription as unknown as Record<string, jest.Mock>
-const notify = NotificationStub.notify as jest.Mock
+const notify = notificationService.notify as jest.Mock
 
 beforeEach(() => {
   jest.clearAllMocks()

@@ -4,7 +4,7 @@ import { User, Shield, CreditCard, Bell } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { PlanBadge } from "@/components/shared/plan-badge";
-import { PlanType } from "@/lib/constants/plans";
+import { PlanType, PLAN_PRICES } from "@/lib/constants/plans";
 import Link from "next/link";
 import { ROUTES } from "@/lib/constants/routes";
 import { getAuthUser } from "@/lib/auth";
@@ -73,7 +73,7 @@ export default async function ContaPage() {
         <div data-testid="conta-upgrade-cta" className="bg-[rgba(240,185,11,.08)] rounded-lg border border-[rgba(240,185,11,.25)] p-4 mb-4">
           <p className="text-sm font-semibold text-[#F0B90B] mb-1">⭐ Faça upgrade para Craque</p>
           <p className="text-xs text-[#929AA5] mb-3">
-            Dados em tempo real, assessor IA e muito mais por apenas R$ 19,90/mês
+            Dados em tempo real, assessor IA e muito mais por apenas {PLAN_PRICES[PlanType.CRAQUE]}
           </p>
           <Link href={ROUTES.PLANOS}>
             <Button data-testid="conta-upgrade-button" variant="plan" size="md" fullWidth>Ver planos</Button>

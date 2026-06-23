@@ -3,6 +3,7 @@
  */
 
 import type { PlanType } from '../enums'
+import { PLAN_AMOUNTS_CENTS } from '@/lib/constants/plan-amounts-cents'
 
 /** Itens por página na paginação padrão */
 export const PAGE_SIZE = 20
@@ -61,11 +62,14 @@ export const DELAY_BY_PLAN: Record<PlanType, number> = {
   LENDA: 0,
 }
 
-/** Preço mensal em BRL por plano */
+/**
+ * Preço mensal em BRL por plano, DERIVADO da SSoT `PLAN_AMOUNTS_CENTS`
+ * (centavos / 100). FIX-12: nunca hardcodar — alinha display ao valor cobrado.
+ */
 export const PLAN_PRICES: Record<PlanType, number> = {
-  JOGADOR: 0,
-  CRAQUE: 19.9,
-  LENDA: 39.9,
+  JOGADOR: PLAN_AMOUNTS_CENTS.JOGADOR.monthly / 100,
+  CRAQUE: PLAN_AMOUNTS_CENTS.CRAQUE.monthly / 100,
+  LENDA: PLAN_AMOUNTS_CENTS.LENDA.monthly / 100,
 }
 
 /** Desconto para pagamento anual (percentual decimal) */

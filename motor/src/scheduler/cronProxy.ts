@@ -38,6 +38,20 @@ function buildUrl(jobName: string, apiVersion: 'v0' | 'v1'): string {
   return `${base}${prefix}/${jobName}`
 }
 
+// O motor nao tem Sentry wired (nao ha @sentry/node em package.json). O canal canonico
+// de alerta para o operador e um log estruturado `[ALERT][CODE]` (mesmo padrao de
+// RSSFetcher e MarginCallChecker), capturado pelo agregador de logs do Railway.
+// Trocar o corpo por Sentry.captureException(...) aqui se/quando o SDK for adicionado.
+function emitCronAlert(code: string, message: string): void {
+  logger.error(`[ALERT][${code}] ${message}`)
+}
+
+function readLocationHeader(response: { headers?: { get?: (name: string) => string | null } }): string {
+  const get = response.headers?.get
+  if (typeof get !== 'function') return '<no-location>'
+  return get.call(response.headers, 'location') ?? '<no-location>'
+}
+
 export async function cronProxy(
   jobName: string,
   options: CronProxyOptions = {}
@@ -53,13 +67,46 @@ export async function cronProxy(
   const timer = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
+    // redirect: 'manual' — NUNCA seguir 3xx automaticamente. Causa classica de cron 401
+    // silencioso: FOOTSTOCK_NEXT_BASE_URL aponta para o apex (footstock.com.br) que faz
+    // 301 -> www. Ao seguir o redirect, fetch DROPA o header Authorization no hop
+    // cross-origin e o destino responde 401, mascarando a real causa (env apontando para
+    // o apex). Com 'manual', o 3xx volta como resposta final e e tratado como erro DURO
+    // abaixo, com alerta estruturado para o operador corrigir o env (-> www).
     const response = await fetch(url, {
       method: 'GET',
       headers: { Authorization: `Bearer ${cronSecret}` },
+      redirect: 'manual',
       signal: controller.signal,
     })
 
     const durationMs = Date.now() - startedAt
+
+    // 3xx: redirect nao seguido. Erro duro + alerta (env provavelmente no apex, deve ser www).
+    if (response.status >= 300 && response.status < 400) {
+      const location = readLocationHeader(response)
+      emitCronAlert(
+        'CRON_REDIRECT',
+        `[cron/${jobName}] resposta 3xx HTTP ${response.status} apos ${durationMs}ms (location: ${location}). ` +
+          `Provavel FOOTSTOCK_NEXT_BASE_URL no apex — use o host www final para preservar o header Authorization.`
+      )
+      throw new Error(
+        `[cron-proxy] ${jobName} recebeu redirect HTTP ${response.status} -> ${location} (${durationMs}ms); ` +
+          `ajuste FOOTSTOCK_NEXT_BASE_URL para o host final (www)`
+      )
+    }
+
+    // 401: secret invalido/ausente OU Authorization perdido num hop de redirect anterior.
+    if (response.status === 401) {
+      emitCronAlert(
+        'CRON_UNAUTHORIZED',
+        `[cron/${jobName}] HTTP 401 apos ${durationMs}ms — CRON_SECRET invalido/ausente ou Authorization ` +
+          `descartado em redirect. Verifique o secret e se a base URL ja e o host final.`
+      )
+      throw new Error(
+        `[cron-proxy] ${jobName} nao autorizado: HTTP 401 (${durationMs}ms)`
+      )
+    }
 
     if (!response.ok) {
       const bodyText = await response.text().catch(() => '<no-body>')

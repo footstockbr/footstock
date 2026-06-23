@@ -67,8 +67,6 @@ export async function PUT() {
         cancelledAt: null,
         cancellationLockStartedAt: null,
         cancellationLockExpiresAt: null,
-        forcedLiquidationAt: null,
-        forcedLiquidationExecutedAt: null,
       },
     })
 

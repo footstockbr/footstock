@@ -6,6 +6,7 @@ import { getGateway } from '@/lib/gateways/GatewayFactory'
 import { GatewayRetryableError, GatewayType } from '@/lib/gateways/IGateway'
 import type { PlanType } from '@/types'
 import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
+import { liquidateRestrictedPositions } from '@/lib/services/forced-liquidation'
 
 const REFUND_CONFIRMED_STATUSES = new Set(['approved', 'refunded', 'succeeded', 'success', 'completed'])
 
@@ -44,6 +45,24 @@ export async function POST() {
 
     if (!eligibleForRefund) {
       return errors.validation('O prazo de 7 dias para solicitar reembolso integral ja expirou.')
+    }
+
+    // FIX-08: liquidação compulsória de posições restritas (SHORT, alavancada) +
+    // cancelamento de ordens OCO/SCHEDULED ANTES de estornar e rebaixar. O downgrade
+    // para JOGADOR deixa essas posições órfãs (sem cobertura de margem/plano), então
+    // nunca rebaixamos sem encerrá-las. Caminho self-service: se a liquidação não
+    // conseguir zerar as posições restritas, BLOQUEIA o refund (plano e pagamento
+    // permanecem intactos) em vez de deixar posição órfã.
+    const liquidation = await liquidateRestrictedPositions(auth.user.id, sub.id, 'REFUND_COOLING_OFF')
+    if (!liquidation.cleared) {
+      console.error(
+        `[subscriptions/me/refund] liquidação incompleta — refund bloqueado: ` +
+        `sub=${sub.id} remaining=${liquidation.remaining} failed=${liquidation.failed}`,
+      )
+      return errors.validation(
+        'Não foi possível encerrar automaticamente suas posições restritas (short, alavancada ou OCO). ' +
+        'Seu plano e seu pagamento permanecem inalterados. Tente novamente em instantes ou contate o suporte.',
+      )
     }
 
     // Localiza o pagamento PAID mais recente desta assinatura — é o que será estornado.
@@ -116,8 +135,6 @@ export async function POST() {
           previousPlanType: sub.planType as never,
           cancellationLockStartedAt: null,
           cancellationLockExpiresAt: null,
-          forcedLiquidationAt: null,
-          forcedLiquidationExecutedAt: null,
           bonusScheduledAt: null,
         },
       })
@@ -148,16 +165,20 @@ export async function POST() {
         had_open_shorts: openShortCount > 0,
       })
 
+      const liquidationNote = liquidation.liquidated > 0
+        ? ` ${liquidation.liquidated} posição(ões) restrita(s) (short, alavancada ou OCO) foram encerradas automaticamente, pois são incompatíveis com o plano Jogador.`
+        : ''
+
       await prisma.notification.create({
         data: {
           userId: auth.user.id,
           type: 'PLAN_CANCEL_ALERT',
           title: 'Cancelamento e reembolso confirmados',
-          body: refundOutcome?.alreadyRefunded
+          body: (refundOutcome?.alreadyRefunded
             ? 'Seu plano foi cancelado. O estorno já havia sido processado anteriormente.'
             : payment
               ? 'Seu plano foi cancelado e o estorno foi confirmado pelo Mercado Pago. O valor retorna em até 7 dias úteis pelo mesmo meio de pagamento.'
-              : 'Seu plano foi cancelado.',
+              : 'Seu plano foi cancelado.') + liquidationNote,
           isRead: false,
         },
       }).catch((err) => {
@@ -177,6 +198,7 @@ export async function POST() {
       refund: refundOutcome
         ? { processed: true, refundId: refundOutcome.refundId, alreadyRefunded: refundOutcome.alreadyRefunded }
         : { processed: false, reason: 'no_paid_payment' },
+      liquidation: { positionsClosed: liquidation.liquidated, restrictedRemaining: liquidation.remaining },
     })
   } catch (err) {
     console.error('[subscriptions/me/refund POST] Erro:', err)

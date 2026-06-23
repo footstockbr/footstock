@@ -9,9 +9,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withAdmin } from '@/app/api/middleware'
+import { env } from '@/lib/env'
 import { planService } from '@/lib/services/PlanService'
 import { GatewayType } from '@/lib/gateways/IGateway'
 import { webhookAuditService } from '@/lib/services/WebhookAuditService'
+import { getReplayRateLimit } from '@/lib/ratelimit'
+import { resolveTrustedClientIp, retryAfterFromReset } from '@/middleware/rateLimit'
 import type { SubscriptionGateway } from '@prisma/client'
 
 const BodySchema = z.object({
@@ -20,6 +23,20 @@ const BodySchema = z.object({
 })
 
 export const POST = withAdmin('admin:audit')(async (req: NextRequest) => {
+  // ST002 + ST009 — rate-limit por IP do cliente resolvido pelo HOP CONFIÁVEL (mitiga XFF
+  // spoof: entradas forjadas à esquerda da cadeia não trocam a chave do limiter nem poluem
+  // o log). Excedido => 429 com Retry-After, sem reprocessar.
+  const clientIp = resolveTrustedClientIp(req.headers, env.TRUSTED_PROXY_HOPS)
+  const rl = await getReplayRateLimit().limit(clientIp)
+  if (!rl.success) {
+    const retryAfter = retryAfterFromReset(rl.reset) || 60
+    console.warn('[admin/payments/replay] Rate limit excedido para IP:', clientIp)
+    return NextResponse.json(
+      { error: { code: 'RATE_001', message: 'Limite de replay atingido. Tente novamente em instantes.' } },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+    )
+  }
+
   let raw: unknown
   try {
     raw = await req.json()

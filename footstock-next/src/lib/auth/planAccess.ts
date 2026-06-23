@@ -67,6 +67,16 @@ export function getPlanFeatures(plan: PlanType): PlanFeature[] {
   return PLAN_FEATURES[plan] ?? []
 }
 
+/**
+ * FIX-09: uma feature e "paga" quando NAO faz parte do plano gratuito (JOGADOR).
+ * Puro/testavel. Usado por `recordPaidFeatureUsage` (src/lib/auth.ts) para decidir
+ * se o uso pos-expiracao (graca de 7 dias) deve ser instrumentado. Nunca gateia
+ * acesso — apenas classifica a feature.
+ */
+export function isPaidFeature(feature: PlanFeature): boolean {
+  return !PLAN_FEATURES.JOGADOR.includes(feature)
+}
+
 /** Verifica se o plano do usuario atende ao plano minimo requerido.
  * Staff (planType=null) NUNCA tem acesso a features de plano de player. */
 export function hasPlanAccess(userPlan: PlanType | null | undefined, requiredPlan: PlanType): boolean {

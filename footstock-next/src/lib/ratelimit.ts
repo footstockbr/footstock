@@ -1,6 +1,12 @@
 // ============================================================================
 // FootStock — Rate Limiting centralizado (ioredis sliding window)
 // Substitui @upstash/ratelimit — mesma semântica, sem limite de comandos/dia.
+//
+// Observabilidade do fail-open (FIX-14): este módulo só CONSTRÓI os limiters.
+// O fail-open (Redis offline ou EVAL falhando libera a request) acontece dentro
+// de `SlidingWindowRateLimiter.limit()` em `@/lib/redis`, e é lá que o sinal
+// observável `rate_limiter.fail_open` é emitido (warn + Sentry, throttled). Não
+// há fail-open a instrumentar nas factories abaixo.
 // ============================================================================
 
 import { SlidingWindowRateLimiter } from '@/lib/redis'
@@ -92,6 +98,21 @@ let _webhookRL: SlidingWindowRateLimiter | null = null
 export function getWebhookRateLimit(): SlidingWindowRateLimiter {
   if (!_webhookRL) _webhookRL = new SlidingWindowRateLimiter(1000, 60 * 1000, 'rl:webhook')
   return _webhookRL
+}
+
+// ─── Admin replay de pagamentos ────────────────────────────────────────────────
+
+let _replayRL: SlidingWindowRateLimiter | null = null
+
+/**
+ * ST002 — Replay admin de pagamentos: 20 req / 60 segundos por IP confiável.
+ * O replay reprocessa um pagamento aprovado (reusa o caminho idempotente do webhook);
+ * é uma operação cara e sensível (admin), então recebe um teto baixo para conter
+ * abuso/scripts. Chave Redis: rl:admin:replay:{trustedClientIp}.
+ */
+export function getReplayRateLimit(): SlidingWindowRateLimiter {
+  if (!_replayRL) _replayRL = new SlidingWindowRateLimiter(20, 60 * 1000, 'rl:admin:replay')
+  return _replayRL
 }
 
 // ─── Checkout ────────────────────────────────────────────────────────────────

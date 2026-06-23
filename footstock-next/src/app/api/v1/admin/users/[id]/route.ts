@@ -3,7 +3,8 @@ import { z } from 'zod'
 import { getAuthUser, hasAdminRole, serializeUser } from '@/lib/auth'
 import { ADMIN_ROLE_LEVELS } from '@/lib/utils/admin-roles'
 import { prisma } from '@/lib/prisma'
-import { ok, errors } from '@/lib/api'
+import { ok, error, errors } from '@/lib/api'
+import { decidePlanChange, type PlanType } from '@/lib/admin/plan-change'
 import type { AdminRole } from '@/types'
 
 function adminLevel(role: string | null | undefined): number {
@@ -89,6 +90,91 @@ export async function PATCH(
     if (parsed.data.adminRole != null) {
       if (adminLevel(parsed.data.adminRole) >= callerLevel) {
         return errors.forbidden('Não é possível atribuir um nível de acesso igual ou superior ao seu.')
+      }
+    }
+
+    // ── FIX-02: troca de plano coerente (invariante C2) ──────────────────────
+    // Atualizar User.planType "cru" deixava Subscription divergente (User dizia
+    // LENDA sem nenhuma Subscription ACTIVE). Quando o PATCH muda o plano, a troca
+    // passa pela politica canonica (AUTH-009 staff + downgrade bloqueado) e, em
+    // upgrade valido, materializa Subscription ACTIVE coerente + audit na mesma
+    // transacao. Consolida aqui a logica que vivia no endpoint promote-plan
+    // (removido como codigo morto — ver blacksmith/decisoes-fix-02-promote-plan.md).
+    const wantsPlanChange =
+      parsed.data.planType != null && parsed.data.planType !== user.planType
+
+    if (wantsPlanChange) {
+      const newPlan = parsed.data.planType as PlanType
+      const decision = decidePlanChange(
+        { adminRole: user.adminRole, userType: user.userType, planType: user.planType },
+        newPlan,
+      )
+
+      if (decision.action === 'REJECT') {
+        return error(decision.code, decision.message, decision.status)
+      }
+
+      // decision.action === 'APPLY' (upgrade valido). NOOP nao ocorre aqui porque
+      // wantsPlanChange ja garante planType !== user.planType; o guard explicito
+      // mantem o type-narrowing e fecha o sad-path de forma defensiva.
+      if (decision.action === 'APPLY') {
+        const now = new Date()
+        const expiresAt = new Date(now)
+        expiresAt.setFullYear(expiresAt.getFullYear() + 1)
+
+        const updated = await prisma.$transaction(async (tx) => {
+        // Encerra subscriptions nao-terminais anteriores (evita 2 ACTIVE).
+        await tx.subscription.updateMany({
+          where: {
+            userId: id,
+            status: { in: ['ACTIVE', 'TRIAL', 'TRIALING', 'PENDING', 'PAST_DUE', 'CANCELLATION_LOCK'] },
+          },
+          data: { status: 'CANCELLED', cancelledAt: now },
+        })
+
+        // Subscription manual ACTIVE coerente com o novo planType.
+        // amount=0 e gateway MERCADO_PAGO marcam a origem manual (schema nao tem
+        // gateway MANUAL); a rastreabilidade fica no adminMarketAction abaixo.
+        // Decisao registrada: troca manual NAO credita bonus de upgrade — nenhum
+        // pagamento ocorreu, creditar FS$ aqui criaria dinheiro do nada.
+        const sub = await tx.subscription.create({
+          data: {
+            userId: id,
+            planType: newPlan,
+            previousPlanType: decision.from,
+            gateway: 'MERCADO_PAGO',
+            period: 'YEARLY',
+            amount: 0,
+            status: 'ACTIVE',
+            startsAt: now,
+            expiresAt,
+          },
+        })
+
+        const updatedUser = await tx.user.update({
+          where: { id },
+          data: parsed.data,
+        })
+
+        await tx.adminMarketAction.create({
+          data: {
+            adminId: auth.user.id,
+            action: 'PROMOTE_PLAN',
+            reason: 'ADMIN_MANUAL_PLAN_PROMOTION',
+            details: {
+              targetUserId: id,
+              subscriptionId: sub.id,
+              from: decision.from,
+              to: decision.to,
+              expiresAt: expiresAt.toISOString(),
+            },
+          },
+        })
+
+          return updatedUser
+        })
+
+        return ok(serializeUser(updated))
       }
     }
 

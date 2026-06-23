@@ -67,6 +67,15 @@ const envSchema = z.object({
   MERCADO_PAGO_ACCESS_TOKEN: z.string().min(1).optional(),
   MERCADO_PAGO_WEBHOOK_SECRET: z.string().min(1).optional(),
   ACTIVE_GATEWAY: z.enum(['MERCADO_PAGO', 'PAGSEGURO', 'PAYPAL']).optional(),
+  // FIX-01 — politica de refund alerta-primeiro para captura orfa (NOT_ACTIVATABLE).
+  // Default 'false': um pagamento capturado para assinatura terminal e registrado como
+  // Payment CAPTURED_NOT_ACTIVATED + audit REJECTED + alerta (resolucao manual do operador).
+  // 'true' habilita auto-refund SOMENTE quando o orfao e comprovado (sem sub ACTIVE cobrindo)
+  // e de forma idempotente. Estorno de pagamento com plano ATIVO correspondente e PROIBIDO.
+  AUTO_REFUND_ON_ORPHAN: z
+    .union([z.literal('true'), z.literal('false')])
+    .optional()
+    .default('false'),
   PAGSEGURO_EMAIL: z.string().email().optional(),
   PAGSEGURO_TOKEN: z.string().min(1).optional(),
   PAGSEGURO_WEBHOOK_SECRET: z.string().min(1).optional(),
@@ -82,6 +91,18 @@ const envSchema = z.object({
   // gateways — wiring de marketplace/partner exige mudanca em paypal.ts.
   PAYPAL_MERCHANT_ID: z.string().min(1).optional(),
   CRON_SECRET: z.string().min(1).optional(),
+
+  // ST004 — janela de execução permitida do cron reconcile-payments, em horas UTC,
+  // formato "startHour-endHour" (start inclusivo, end exclusivo; 0-24). Ausente/vazio =
+  // sempre permitido (sem mudança de comportamento). Fora da janela o cron faz early-return
+  // sem efeitos colaterais. Ex.: "2-6" só permite das 02:00 às 05:59 UTC.
+  RECONCILE_WINDOW_UTC: z.string().optional(),
+
+  // ST009 — número de proxies confiáveis entre a aplicação e a internet. O IP real do
+  // cliente é o (TRUSTED_PROXY_HOPS)-ésimo a partir da DIREITA na cadeia X-Forwarded-For;
+  // entradas à esquerda são controladas pelo cliente (XFF spoof) e NÃO confiáveis.
+  // Default 1 (edge da plataforma de hosting).
+  TRUSTED_PROXY_HOPS: z.coerce.number().int().min(1).max(10).optional().default(1),
 
   // Email (Resend)
   RESEND_API_KEY: z.string().min(1).optional(),
@@ -101,7 +122,16 @@ const envSchema = z.object({
   REVALIDATE_SECRET: z.string().min(1).optional(),
   INVITE_TOKEN_SECRET: z.string().min(32).optional(),
 
-})
+}).transform((data) => ({
+  ...data,
+  // FIX-24 — tolerancia de nomenclatura do Mercado Pago.
+  // MERCADO_PAGO_* e o nome canonico (== producao + o que o codigo le em
+  // lib/gateways/mercadopago.ts). MP_* permanece aceito como alias legado para
+  // nao quebrar provisionamento de templates antigos: o valor canonico resolve de
+  // MERCADO_PAGO_X e cai para MP_X quando o primeiro estiver ausente.
+  MERCADO_PAGO_ACCESS_TOKEN: data.MERCADO_PAGO_ACCESS_TOKEN ?? data.MP_ACCESS_TOKEN,
+  MERCADO_PAGO_WEBHOOK_SECRET: data.MERCADO_PAGO_WEBHOOK_SECRET ?? data.MP_WEBHOOK_SECRET,
+}))
 
 const _env = envSchema.safeParse(rawEnv)
 
@@ -114,6 +144,44 @@ if (!_env.success && !isBuildPhase) {
   const missing = _env.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(' | ')
   console.error('[env] Variáveis de ambiente inválidas:', missing)
   throw new Error(`[env] Configuração inválida — variáveis faltando ou inválidas: ${missing}`)
+}
+
+// FIX-24 — boot fail-fast do gateway de pagamento ativo.
+// Quando ACTIVE_GATEWAY esta declarado, suas credenciais (token + webhook secret)
+// sao obrigatorias: provisionar sem elas deixa checkout/webhook silenciosamente
+// quebrado em runtime (token ausente -> PAYMENT_010, webhook sem secret -> rejeicao).
+// Falhamos no boot para tornar a configuracao faltante visivel de imediato.
+// Pulado em build phase (env de runtime indisponivel) e quando ACTIVE_GATEWAY nao
+// foi declarado (dev/test sem gateway ativo nao dispara o gate).
+if (_env.success && !isBuildPhase) {
+  const d = _env.data
+  const active = d.ACTIVE_GATEWAY
+  const gatewayCredentials: Record<string, Array<[string, string | undefined]>> = {
+    MERCADO_PAGO: [
+      ['MERCADO_PAGO_ACCESS_TOKEN', d.MERCADO_PAGO_ACCESS_TOKEN],
+      ['MERCADO_PAGO_WEBHOOK_SECRET', d.MERCADO_PAGO_WEBHOOK_SECRET],
+    ],
+    PAGSEGURO: [
+      ['PAGSEGURO_TOKEN', d.PAGSEGURO_TOKEN],
+      ['PAGSEGURO_WEBHOOK_SECRET', d.PAGSEGURO_WEBHOOK_SECRET],
+    ],
+    PAYPAL: [
+      ['PAYPAL_CLIENT_ID', d.PAYPAL_CLIENT_ID],
+      ['PAYPAL_CLIENT_SECRET', d.PAYPAL_CLIENT_SECRET],
+      ['PAYPAL_WEBHOOK_ID', d.PAYPAL_WEBHOOK_ID],
+    ],
+  }
+  if (active) {
+    const missingGateway = (gatewayCredentials[active] ?? [])
+      .filter(([, value]) => !value)
+      .map(([key]) => key)
+    if (missingGateway.length > 0) {
+      const msg =
+        `[env] ACTIVE_GATEWAY=${active} mas faltam credenciais obrigatórias: ${missingGateway.join(', ')}`
+      console.error(msg)
+      throw new Error(msg)
+    }
+  }
 }
 
 // Build-time fallback: durante next build, env vars do Railway nao estao

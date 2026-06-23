@@ -104,6 +104,7 @@ export type NotificationType =
   | 'BALANCE_RESET'                // T-019: saldo resetado pelo admin
   | 'POST_FLAGGED'                 // T-028: post aguarda revisao (para MODERADOR+)
   | 'POST_REJECTED'                // T-028: post rejeitado (para o autor)
+  | 'REFUND_PROCESSED'             // FIX-25: reembolso_processado (in-app + email)
 
 export interface NotificationDTO {
   id: string
@@ -255,8 +256,6 @@ export interface Subscription {
   cancelledAt?: string | null
   cancellationLockStartedAt?: string | null    // inicio do cancelamento agendado
   cancellationLockExpiresAt?: string | null    // quando o cancelamento será finalizado
-  forcedLiquidationAt?: string | null          // T+48h: liquidacao de posicoes restritas
-  forcedLiquidationExecutedAt?: string | null  // marcado pelo cron de T+48h
   bonusAmount?: number | null
   bonusScheduledAt?: string | null
   bonusCreditedAt?: string | null
@@ -267,7 +266,6 @@ export interface Subscription {
   cancellationLock?: {
     expiresAt: string
     hoursRemaining: number
-    forcedLiquidationAt: string | null
   } | null
   createdAt: string
   updatedAt: string

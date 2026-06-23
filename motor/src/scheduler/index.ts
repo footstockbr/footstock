@@ -12,7 +12,6 @@ import type { LeaderElection } from '../leader/LeaderElection'
 // ─── Jobs (stubs — lógica a migrar de footstock-next/src/app/api/cron/*) ───
 import { subscriptionExpiryJob } from './jobs/subscriptionExpiry'
 import { bonusCreditJob } from './jobs/bonusCredit'
-import { cancellationLockJob } from './jobs/cancellationLock'
 import { dunningJob } from './jobs/dunning'
 import { dataRetentionJob } from './jobs/dataRetention'
 import { orderExpiryJob } from './jobs/orderExpiry'
@@ -60,7 +59,6 @@ export function registerJob(
 export function registerAllJobs(): void {
   registerJob('subscription-expiry', '0 2 * * *', subscriptionExpiryJob)
   registerJob('bonus-credit', '0 3 * * *', bonusCreditJob)
-  registerJob('cancellation-lock', '0 1 * * *', cancellationLockJob)
   registerJob('dunning', '0 4 * * *', dunningJob)
   registerJob('data-retention', '0 5 * * *', dataRetentionJob)
   registerJob('order-expiry', '0 6 * * *', orderExpiryJob)

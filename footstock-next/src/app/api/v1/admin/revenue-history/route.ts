@@ -5,8 +5,6 @@ import { ok, errors } from '@/lib/api'
 import type { RevenueDayPoint } from '@/lib/types/admin'
 import type { User, AdminRole } from '@/types'
 
-const PLAN_PRICE: Record<string, number> = { CRAQUE: 19.9, LENDA: 39.9, JOGADOR: 0 }
-
 function toDateStr(d: Date) {
   return d.toISOString().slice(0, 10)
 }
@@ -61,13 +59,15 @@ export async function GET(request: NextRequest) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
 
   try {
-    // Subscrições criadas/renovadas no período
+    // Subscrições criadas/renovadas no período.
+    // FIX-12: usar Subscription.amount (centavos cobrados de fato), nunca preço
+    // hardcoded — garante que a série histórica bata com o valor real cobrado.
     const subs = await prisma.subscription.findMany({
       where: { createdAt: { gte: since }, status: { in: ['ACTIVE', 'TRIAL'] } },
-      select: { planType: true, createdAt: true },
+      select: { amount: true, createdAt: true },
     })
 
-    // Acumular receita por dia
+    // Acumular receita por dia (em centavos)
     const revenueByDay = new Map<string, number>()
 
     // Preencher todos os dias com 0
@@ -79,13 +79,13 @@ export async function GET(request: NextRequest) {
     for (const sub of subs) {
       const dayKey = toDateStr(sub.createdAt)
       if (revenueByDay.has(dayKey)) {
-        revenueByDay.set(dayKey, (revenueByDay.get(dayKey) ?? 0) + (PLAN_PRICE[sub.planType] ?? 0))
+        revenueByDay.set(dayKey, (revenueByDay.get(dayKey) ?? 0) + (sub.amount ?? 0))
       }
     }
 
     const result: RevenueDayPoint[] = Array.from(revenueByDay.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, mrr]) => ({ date, mrr: Math.round(mrr * 100) / 100 }))
+      .map(([date, cents]) => ({ date, mrr: Math.round(cents) / 100 }))
 
     return ok(result)
   } catch {

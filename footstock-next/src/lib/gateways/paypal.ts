@@ -178,6 +178,12 @@ export class PayPalGateway implements IGateway {
       throw new Error('[PAYPAL] subscriptionId (reference_id) ausente no evento')
     }
 
+    // FIX-19: o amount do payload e INFORMATIVO, nunca autoritativo para liquidacao.
+    // O handler do webhook (api/v1/payments/webhook) compara event.amount contra
+    // subscription.amount (valor gravado no checkout) e rejeita divergencias — um
+    // payload nao pode inflar/forjar o valor cobrado. Enquanto PayPal nao esta
+    // habilitado no seletor (ver lib/constants/checkout-gateways), nenhuma
+    // Subscription PAYPAL e criada e este caminho nao e exercitado em producao.
     const amountValue = (resource.amount as { value?: string } | undefined)?.value
     const captureAmount = amountValue ? parseFloat(amountValue) * 100 : 0
 

@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { prisma } from '@/lib/prisma'
-import { NotificationStub } from '@/lib/notifications/stubs/NotificationStub'
+import { notificationService } from '@/lib/notifications'
 import { getGateway } from '@/lib/gateways/GatewayFactory'
 import { GatewayType } from '@/lib/gateways/IGateway'
 import { DUNNING_MAX_ATTEMPTS } from '@/lib/constants/payment-security'
@@ -32,11 +32,19 @@ export class DunningService {
     const now = new Date()
     const result: ProcessResult = { processed: 0, errors: 0, details: [] }
 
-    // Buscar subscriptions expiradas involuntariamente (sem cancelledAt)
+    // Buscar subscriptions expiradas involuntariamente (sem cancelledAt).
+    // FIX-01: incluir também subs PENDING que já foram reativadas por uma tentativa de dunning
+    // anterior (>=1 dunningAttempt) e ainda não foram pagas — elas continuam no ciclo de retry.
+    // Um PENDING SEM nenhuma tentativa é um checkout novo (primeira compra) e NÃO deve receber
+    // cobrança de dunning. Sem isto, reativar a sub para PENDING (passo abaixo) a removeria do
+    // ciclo D+1/D+3/D+7 e quebraria as retentativas seguintes.
     const expired = await prisma.subscription.findMany({
       where: {
-        status:      'EXPIRED',
         cancelledAt: null,
+        OR: [
+          { status: 'EXPIRED' },
+          { status: 'PENDING', dunningAttempts: { some: {} } },
+        ],
       },
       select: {
         id:               true,
@@ -45,6 +53,7 @@ export class DunningService {
         gateway:          true,
         amount:           true,
         period:           true,
+        status:           true,
         expiresAt:        true,
         dunningAttempts:  {
           select: { attemptNumber: true, scheduledAt: true, status: true },
@@ -74,6 +83,28 @@ export class DunningService {
         if (daysSinceExpiry < nextAttemptDay) {
           // Ainda não chegou o dia da próxima tentativa
           continue
+        }
+
+        // FIX-01: nunca cobrar com external_reference de assinatura em estado terminal.
+        // Uma cobrança de dunning gera um PAYMENT_CONFIRMED cujo external_reference é o id desta
+        // subscription. Se ela seguir EXPIRED, o webhook chama upgradeUser → NOT_ACTIVATABLE:
+        // dinheiro capturado, plano não ativado (o bug que FIX-01 fecha no webhook). Reativar para
+        // PENDING (estado ativável) ANTES de gerar o checkout faz o pagamento subsequente ativar o
+        // plano normalmente. CAS por updateMany: se o estado mudou concorrentemente (cancelada/
+        // reativada por outro caminho), não cobramos com referência terminal.
+        if (sub.status === 'EXPIRED') {
+          const reactivated = await prisma.subscription.updateMany({
+            where: { id: sub.id, status: 'EXPIRED', cancelledAt: null },
+            data:  { status: 'PENDING' },
+          })
+          if (reactivated.count === 0) {
+            console.warn(
+              `[DunningService] FIX-01 — subscription ${sub.id} mudou de estado antes da cobrança; ` +
+              `pulando para não cobrar com external_reference terminal.`
+            )
+            result.details.push({ subscriptionId: sub.id, action: 'SKIP_TERMINAL_REF' })
+            continue
+          }
         }
 
         // Criar nova preferência de checkout via GatewayFactory
@@ -116,13 +147,18 @@ export class DunningService {
           },
         })
 
-        // Notificar usuário com link de renovação
-        await NotificationStub.notify(sub.userId, 'PAYMENT_FAILED', {
-          planType:       sub.planType,
-          checkoutUrl,
-          attemptNumber:  nextAttemptNumber,
-          isLastAttempt:  nextAttemptNumber >= DUNNING_MAX_ATTEMPTS,
-          channels:       ['in_app', 'email'],
+        // Notificar usuário com link de renovação (FIX-25 — uma notificação por tentativa).
+        await notificationService.notify({
+          type:     'pagamento_recusado',
+          userId:   sub.userId,
+          entityId: `${sub.id}:attempt-${nextAttemptNumber}`, // idempotente por tentativa de dunning
+          payload: {
+            planType:      sub.planType,
+            checkoutUrl,
+            ctaLabel:      'Atualizar pagamento',
+            attemptNumber: nextAttemptNumber,
+            isLastAttempt: nextAttemptNumber >= DUNNING_MAX_ATTEMPTS,
+          },
         })
 
         result.details.push({

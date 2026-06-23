@@ -58,11 +58,19 @@ export async function processBonusCredits(): Promise<ProcessResult> {
       )
 
       if (bonusAmount === 0) {
-        // Sem bônus a creditar (ex: diferencial zero inesperado)
-        await prisma.subscription.update({
-          where: { id: sub.id },
+        // Sem bônus a creditar (ex: diferencial zero inesperado).
+        // FIX-06: claim condicional (updateMany com guarda bonusCreditedAt:null)
+        // em vez de escrita incondicional — evita reprocessar sob corrida concorrente.
+        const zeroClaim = await prisma.subscription.updateMany({
+          where: { id: sub.id, bonusCreditedAt: null, status: 'ACTIVE' },
           data:  { bonusCreditedAt: now },
         })
+        if (zeroClaim.count === 0) {
+          // Outro runner concorrente já reivindicou — abortar sem reprocessar
+          console.log('[bonus-credit] BONUS_ZERO_ALREADY_CLAIMED', { subscriptionId: sub.id, userId: sub.userId })
+          result.details.push({ subscriptionId: sub.id, action: 'BONUS_ZERO_ALREADY_CLAIMED' })
+          continue
+        }
         console.log('[bonus-credit] BONUS_ZERO_SKIP', { subscriptionId: sub.id, userId: sub.userId })
         result.details.push({ subscriptionId: sub.id, action: 'BONUS_ZERO_SKIP' })
         result.processed++
@@ -72,10 +80,26 @@ export async function processBonusCredits(): Promise<ProcessResult> {
       const planLabel = sub.planType === 'CRAQUE' ? 'Craque' : 'Lenda'
       let balanceBefore = 0
       let balanceAfter  = 0
+      let claimed       = false
 
-      // Transação atômica: crédito + marcar creditado + registro de extrato
-      // Usa callback form para ler saldo DENTRO da transação (evita race condition)
+      // Transação atômica: claim condicional + crédito + registro de extrato.
+      // Usa callback form para ler saldo DENTRO da transação (evita race condition).
       await prisma.$transaction(async (tx) => {
+        // FIX-06: reivindica o crédito ANTES de mexer no saldo. O updateMany com
+        // guarda bonusCreditedAt:null + status:ACTIVE marca bonusCreditedAt de forma
+        // atômica e exclusiva: apenas um runner concorrente obtém count===1. Os demais
+        // recebem count===0 e abortam a tx sem creditar (anti double-credit).
+        const claim = await tx.subscription.updateMany({
+          where: { id: sub.id, bonusCreditedAt: null, status: 'ACTIVE' },
+          data:  { bonusCreditedAt: now },
+        })
+        if (claim.count === 0) {
+          // Já creditado por outro runner — abortar sem creditar (idempotente)
+          claimed = false
+          return
+        }
+        claimed = true
+
         const userInTx = await tx.user.findUnique({
           where: { id: sub.userId },
           select: { fsBalance: true },
@@ -86,10 +110,6 @@ export async function processBonusCredits(): Promise<ProcessResult> {
         await tx.user.update({
           where: { id: sub.userId },
           data:  { fsBalance: { increment: bonusAmount } },
-        })
-        await tx.subscription.update({
-          where: { id: sub.id },
-          data:  { bonusCreditedAt: now },
         })
         // Extrato: lançamento BONUS no TransactionHistory (T-021)
         await tx.transaction.create({
@@ -110,6 +130,13 @@ export async function processBonusCredits(): Promise<ProcessResult> {
           },
         })
       })
+
+      if (!claimed) {
+        // Crédito já reivindicado por execução concorrente — sem dobra, sem erro
+        console.log('[bonus-credit] ALREADY_CREDITED_SKIP', { subscriptionId: sub.id, userId: sub.userId })
+        result.details.push({ subscriptionId: sub.id, action: 'ALREADY_CREDITED_SKIP' })
+        continue
+      }
 
       // Notificação real no banco (T-021 — não apenas stub)
       await prisma.notification.create({

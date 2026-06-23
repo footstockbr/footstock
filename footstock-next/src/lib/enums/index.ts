@@ -341,6 +341,23 @@ export const PLAN_HIERARCHY: Record<PlanType, number> = {
   LENDA: 2,
 } as const;
 
+/**
+ * Planos pagos (cobráveis). JOGADOR é o plano gratuito e nunca é alvo de
+ * ativação/efeitos de pagamento.
+ */
+export const PAID_PLAN_TYPES = ['CRAQUE', 'LENDA'] as const;
+export type PaidPlanType = (typeof PAID_PLAN_TYPES)[number];
+
+/**
+ * ST007 — Type guard que valida um `planType` recebido (vindo de DB castado ou de
+ * payload) ANTES de migrar/ativar um plano. Sem isto, um cast cego
+ * (`planType as 'CRAQUE' | 'LENDA'`) deixaria um JOGADOR ou um valor inesperado
+ * escorregar para os efeitos de pagamento, ativando um "plano indefinido".
+ */
+export function isPaidPlan(value: unknown): value is PaidPlanType {
+  return typeof value === 'string' && (PAID_PLAN_TYPES as readonly string[]).includes(value);
+}
+
 /** Status de pagamento (alinhado com Prisma PaymentStatus) */
 export const PAYMENT_STATUS = {
   /** Pagamento pendente */

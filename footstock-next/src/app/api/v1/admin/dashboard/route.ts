@@ -9,7 +9,6 @@ import type { User, AdminRole } from '@/types'
 const CACHE_KEY = 'admin:dashboard:cache'
 const CACHE_TTL = 60
 const NSM_TARGET = 500
-const PLAN_MRR: Record<string, number> = { CRAQUE: 19.9, LENDA: 39.9, JOGADOR: 0 }
 
 // GET /api/v1/admin/dashboard — Monitor+
 export async function GET(request: NextRequest) {
@@ -115,6 +114,7 @@ export async function GET(request: NextRequest) {
         by: ['planType'],
         where: { status: 'ACTIVE' },
         _count: { id: true },
+        _sum: { amount: true },
       }),
       // Usuários suspensos
       prisma.user.count({ where: { status: 'SUSPENDED' } }),
@@ -148,11 +148,12 @@ export async function GET(request: NextRequest) {
       }),
     ])
 
-    // MRR baseado em planos ativos
+    // MRR (FIX-12): soma de Subscription.amount (centavos) das assinaturas
+    // ACTIVE — valor cobrado de fato, nunca preço hardcoded.
     const MRR = planCounts.reduce(
-      (sum, row) => sum + (PLAN_MRR[row.planType] ?? 0) * row._count.id,
+      (sum, row) => sum + (row._sum.amount ?? 0),
       0
-    )
+    ) / 100
 
     // Top assets com variação de preço
     const topAssetIds = topAssetsRaw.map((r) => r.assetId)

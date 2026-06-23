@@ -1,52 +1,37 @@
-// SKIP via item 015 — migration-exec:fix-failing-tests (PENDING-ACTIONS L728-772). Reativar com Redis testcontainer + Prisma mock completo. Coverage de business logic preservada em unit tests.
-// MIGRATION-EXEC SKIP marker
-
 /**
  * T-021 — Bonus FS$ com Carência de 7 Dias (CDC Art. 49)
+ * FIX-06 — crédito de bônus via claim condicional (anti double-credit sob corrida).
  * Testes de integração para o cron de crédito de bônus e fluxos relacionados.
  *
  * Cobre:
  *  - processBonusCredits: crédito idempotente após T+7
- *  - Cancelamento dentro da carência: bonusScheduledAt nulado
- *  - CANCELLATION_LOCK: bonusScheduledAt nulado
+ *  - Claim condicional (updateMany bonusCreditedAt:null + abort count===0) — anti double-credit
  *  - Múltiplos upgrades: diferenciais corretos
  *  - bonusAmount imutável armazenado vs calculado dinamicamente
  */
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
-
-const mockSubscriptionFindMany = jest.fn()
-const mockSubscriptionUpdate   = jest.fn()
-const mockUserFindUnique        = jest.fn()
-const mockUserUpdate            = jest.fn()
-const mockTransactionCreate     = jest.fn()
-const mockNotificationCreate    = jest.fn()
-const mockPrismaTransaction     = jest.fn()
-
-// tx proxy: simula o cliente Prisma dentro de $transaction callback
-const txMock = {
-  user:         { findUnique: jest.fn(), update: jest.fn() },
-  subscription: { update: jest.fn() },
-  transaction:  { create: jest.fn() },
-}
+// Factory define jest.fn() inline (evita TDZ de const sob hoisting de jest.mock);
+// as referências são obtidas do módulo mockado após o import.
 
 jest.mock('@/lib/prisma', () => ({
   prisma: {
     subscription: {
-      findMany: mockSubscriptionFindMany,
-      update:   mockSubscriptionUpdate,
+      findMany:   jest.fn(),
+      update:     jest.fn(),
+      updateMany: jest.fn(),
     },
     user: {
-      findUnique: mockUserFindUnique,
-      update:     mockUserUpdate,
+      findUnique: jest.fn(),
+      update:     jest.fn(),
     },
     transaction: {
-      create: mockTransactionCreate,
+      create: jest.fn(),
     },
     notification: {
-      create: mockNotificationCreate,
+      create: jest.fn(),
     },
-    $transaction: mockPrismaTransaction,
+    $transaction: jest.fn(),
   },
 }))
 
@@ -54,12 +39,33 @@ jest.mock('@/lib/prisma', () => ({
 
 import { processBonusCredits } from '@/lib/jobs/bonus-credit'
 import { calcUpgradeBonusAmount } from '@/lib/services/plan-logic'
+import { prisma } from '@/lib/prisma'
+
+// ─── Referências aos mocks (pós-import) ─────────────────────────────────────────
+
+const mockSubscriptionFindMany   = prisma.subscription.findMany as jest.Mock
+const mockSubscriptionUpdateMany  = prisma.subscription.updateMany as jest.Mock
+const mockNotificationCreate      = prisma.notification.create as jest.Mock
+const mockPrismaTransaction       = prisma.$transaction as jest.Mock
+
+// tx proxy: simula o cliente Prisma dentro de $transaction callback
+const txMock = {
+  user:         { findUnique: jest.fn(), update: jest.fn() },
+  subscription: { update: jest.fn(), updateMany: jest.fn() },
+  transaction:  { create: jest.fn() },
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// Stub fiel a um Prisma.Decimal: o código de produção usa Number(bonusAmount),
+// que num Decimal real resolve via valueOf — o mock precisa expor valueOf também.
+function decimalLike(n: number) {
+  return { toNumber: () => n, valueOf: () => n }
+}
+
 function makeSubscription(overrides: Partial<{
   id: string; userId: string; planType: string; previousPlanType: string | null
-  bonusAmount: { toNumber: () => number } | null; bonusScheduledAt: Date; cancelledAt: Date | null
+  bonusAmount: { toNumber: () => number; valueOf: () => number } | null; bonusScheduledAt: Date; cancelledAt: Date | null
 }> = {}) {
   const past = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000) // T-8 dias (já passou os 7)
   return {
@@ -76,16 +82,20 @@ function makeSubscription(overrides: Partial<{
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe.skip('T-021 — processBonusCredits (cron)', () => {
+describe('T-021 / FIX-06 — processBonusCredits (cron)', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockNotificationCreate.mockResolvedValue({})
+    // Claim condicional do caminho BONUS_ZERO: por padrão reivindica (count 1)
+    mockSubscriptionUpdateMany.mockResolvedValue({ count: 1 })
 
     // Simula callback form: $transaction(async (tx) => { ... })
     // Cria um tx proxy que resolve operações com retorno padrão
     txMock.user.findUnique.mockResolvedValue({ fsBalance: 5000 })
     txMock.user.update.mockResolvedValue({})
     txMock.subscription.update.mockResolvedValue({})
+    // Claim condicional dentro da tx: por padrão reivindica com sucesso (count 1)
+    txMock.subscription.updateMany.mockResolvedValue({ count: 1 })
     txMock.transaction.create.mockResolvedValue({})
 
     mockPrismaTransaction.mockImplementation(async (fn: (tx: typeof txMock) => Promise<void>) => {
@@ -107,7 +117,7 @@ describe.skip('T-021 — processBonusCredits (cron)', () => {
   })
 
   it('usa bonusAmount armazenado quando disponível (imutabilidade)', async () => {
-    const sub = makeSubscription({ bonusAmount: { toNumber: () => 3000 } })
+    const sub = makeSubscription({ bonusAmount: decimalLike(3000) })
     mockSubscriptionFindMany.mockResolvedValue([sub])
 
     const result = await processBonusCredits()
@@ -141,13 +151,65 @@ describe.skip('T-021 — processBonusCredits (cron)', () => {
     // CRAQUE → CRAQUE (renovação sem upgrade real)
     const sub = makeSubscription({ planType: 'CRAQUE', previousPlanType: 'CRAQUE' })
     mockSubscriptionFindMany.mockResolvedValue([sub])
-    mockSubscriptionUpdate.mockResolvedValue({})
+    mockSubscriptionUpdateMany.mockResolvedValue({ count: 1 })
 
     const result = await processBonusCredits()
 
     expect(result.processed).toBe(1)
     expect(result.details[0]?.action).toBe('BONUS_ZERO_SKIP')
     expect(mockPrismaTransaction).not.toHaveBeenCalled()
+    // Claim condicional (não escrita incondicional) marca bonusCreditedAt
+    expect(mockSubscriptionUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: 'sub-001', bonusCreditedAt: null, status: 'ACTIVE' }),
+      })
+    )
+  })
+
+  it('bônus zero já reivindicado por outro runner (count 0) não reprocessa', async () => {
+    const sub = makeSubscription({ planType: 'CRAQUE', previousPlanType: 'CRAQUE' })
+    mockSubscriptionFindMany.mockResolvedValue([sub])
+    // Outro runner concorrente já reivindicou o BONUS_ZERO
+    mockSubscriptionUpdateMany.mockResolvedValue({ count: 0 })
+
+    const result = await processBonusCredits()
+
+    expect(result.processed).toBe(0)
+    expect(result.errors).toBe(0)
+    expect(result.details[0]?.action).toBe('BONUS_ZERO_ALREADY_CLAIMED')
+    expect(mockPrismaTransaction).not.toHaveBeenCalled()
+  })
+
+  it('FIX-06: claim condicional usa guarda bonusCreditedAt:null + status ACTIVE na tx', async () => {
+    const sub = makeSubscription()
+    mockSubscriptionFindMany.mockResolvedValue([sub])
+
+    await processBonusCredits()
+
+    // O claim que reserva o crédito acontece DENTRO da transação (atômico)
+    expect(txMock.subscription.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: 'sub-001', bonusCreditedAt: null, status: 'ACTIVE' }),
+        data:  expect.objectContaining({ bonusCreditedAt: expect.any(Date) }),
+      })
+    )
+  })
+
+  it('FIX-06: não credita em dobro sob corrida — claim count 0 aborta sem creditar', async () => {
+    const sub = makeSubscription()
+    mockSubscriptionFindMany.mockResolvedValue([sub])
+    // Runner concorrente já creditou: claim condicional dentro da tx retorna count 0
+    txMock.subscription.updateMany.mockResolvedValue({ count: 0 })
+
+    const result = await processBonusCredits()
+
+    // Transação abriu, mas o claim falhou → nenhum incremento de saldo nem extrato
+    expect(txMock.user.update).not.toHaveBeenCalled()
+    expect(txMock.transaction.create).not.toHaveBeenCalled()
+    expect(mockNotificationCreate).not.toHaveBeenCalled()
+    expect(result.processed).toBe(0)
+    expect(result.errors).toBe(0)
+    expect(result.details[0]?.action).toBe('ALREADY_CREDITED_SKIP')
   })
 
   it('cria notificação BONUS_CREDITED real no banco após crédito', async () => {
@@ -204,7 +266,7 @@ describe.skip('T-021 — processBonusCredits (cron)', () => {
 
 // ─── Testes de calcUpgradeBonusAmount ─────────────────────────────────────────
 
-describe.skip('T-021 — calcUpgradeBonusAmount', () => {
+describe('T-021 — calcUpgradeBonusAmount', () => {
   it('JOGADOR → CRAQUE = FS$3.000', () => {
     expect(calcUpgradeBonusAmount('JOGADOR', 'CRAQUE')).toBe(3000)
   })
@@ -229,7 +291,7 @@ describe.skip('T-021 — calcUpgradeBonusAmount', () => {
 
 // ─── Testes de múltiplos upgrades ─────────────────────────────────────────────
 
-describe.skip('T-021 — múltiplos upgrades antes do crédito', () => {
+describe('T-021 — múltiplos upgrades antes do crédito', () => {
   it('JOGADOR→CRAQUE + CRAQUE→LENDA = total FS$23.000 (3000 + 20000)', () => {
     const bonus1 = calcUpgradeBonusAmount('JOGADOR', 'CRAQUE') // 3000
     const bonus2 = calcUpgradeBonusAmount('CRAQUE', 'LENDA')   // 20000

@@ -32,16 +32,18 @@ jest.mock('@/lib/services/SubscriptionService', () => ({
 jest.mock('@/lib/services/LeagueAutoEnrollService', () => ({
   leagueAutoEnrollService: { enrollUserInPublicLeague: jest.fn().mockResolvedValue(undefined) },
 }))
-jest.mock('@/lib/notifications/stubs/NotificationStub', () => ({
-  NotificationStub: { notify: jest.fn().mockResolvedValue(undefined) },
+jest.mock('@/lib/notifications', () => ({
+  notificationService: { notify: jest.fn().mockResolvedValue({ notification: {}, deduped: false }) },
 }))
 
 import { PlanService } from '@/lib/services/PlanService'
 import { prisma } from '@/lib/prisma'
+import { notificationService } from '@/lib/notifications'
 
 const planService = new PlanService()
 const sub = prisma.subscription as unknown as Record<string, jest.Mock>
 const usr = prisma.user as unknown as Record<string, jest.Mock>
+const notify = notificationService.notify as unknown as jest.Mock
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -128,5 +130,45 @@ describe('PlanService.upgradeUser — R3', () => {
 
     expect(sub.update).not.toHaveBeenCalled()
     expect(usr.update).not.toHaveBeenCalled()
+  })
+
+  // ERR-1 (FIX-25 recovery): occurrence_marker de pagamento_confirmado = paymentRef (paymentId),
+  // não subscriptionId. Senão a renovação (dunning reativa a MESMA subscription) colidiria na
+  // idempotency_key da ativação original e o cliente não receberia a confirmação (Zero Silêncio).
+  it('pagamento_confirmado usa o paymentRef como occurrence_marker (entityId), não o subscriptionId', async () => {
+    sub.findUnique.mockResolvedValue({
+      id: 'sub-1', userId: 'u1', planType: 'LENDA', status: 'PENDING', amount: 9990,
+    })
+    usr.findUnique.mockResolvedValue({ planType: 'JOGADOR', adminRole: null })
+    sub.findMany.mockResolvedValue([])
+    sub.updateMany.mockResolvedValue({ count: 1 })
+
+    await planService.upgradeUser('u1', 'sub-1', 'pay-AAA')
+
+    expect(notify).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'pagamento_confirmado', entityId: 'pay-AAA' })
+    )
+  })
+
+  it('renovação da MESMA subscription com pagamento novo gera entityId distinto (não deduplicado)', async () => {
+    const activate = async (paymentRef: string) => {
+      sub.findUnique.mockResolvedValue({
+        id: 'sub-1', userId: 'u1', planType: 'LENDA', status: 'PENDING', amount: 9990,
+      })
+      usr.findUnique.mockResolvedValue({ planType: 'JOGADOR', adminRole: null })
+      sub.findMany.mockResolvedValue([])
+      sub.updateMany.mockResolvedValue({ count: 1 })
+      await planService.upgradeUser('u1', 'sub-1', paymentRef)
+    }
+
+    await activate('pay-CICLO-1')
+    await activate('pay-CICLO-2') // renovação: mesma subscription, pagamento novo
+
+    const entityIds = notify.mock.calls
+      .filter((c) => c[0]?.type === 'pagamento_confirmado')
+      .map((c) => c[0].entityId)
+    expect(entityIds).toEqual(['pay-CICLO-1', 'pay-CICLO-2'])
+    // duas chaves distintas => a confirmação da renovação não é silenciada por dedupe
+    expect(new Set(entityIds).size).toBe(2)
   })
 })

@@ -149,6 +149,12 @@ export class PagSeguroGateway implements IGateway {
       ?? (charges?.[0]?.id as string)
       ?? ''
 
+    // FIX-19: o amount do payload e INFORMATIVO, nunca autoritativo para liquidacao.
+    // O handler do webhook (api/v1/payments/webhook) compara event.amount contra
+    // subscription.amount (valor gravado no checkout) e rejeita divergencias — um
+    // payload nao pode inflar/forjar o valor cobrado. Enquanto PagSeguro nao esta
+    // habilitado no seletor (ver lib/constants/checkout-gateways), nenhuma
+    // Subscription PAGSEGURO e criada e este caminho nao e exercitado em producao.
     const amount = ((charges?.[0]?.amount as Record<string, number>)?.value
       ?? (parsed.amount as Record<string, number>)?.value
       ?? 0)

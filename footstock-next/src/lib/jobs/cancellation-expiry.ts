@@ -197,7 +197,6 @@ export async function processCancellationExpiries(): Promise<CancellationExpiryR
             status: 'CANCELLED',
             cancellationLockStartedAt: null,
             cancellationLockExpiresAt: null,
-            forcedLiquidationAt: null,
           },
         })
 

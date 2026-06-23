@@ -108,7 +108,9 @@ export async function GET(request: NextRequest) {
         ACTIVE:        byStatus['ACTIVE']        ?? 0,
         SUSPENDED:     byStatus['SUSPENDED']      ?? 0,
         CANCELLED:     byStatus['CANCELLED']      ?? 0,
-        TRIAL_PERIOD:  byStatus['TRIAL_PERIOD']   ?? 0,
+        // Bucket de trial usa os status reais do enum SubscriptionStatus:
+        // TRIAL (canonico) + TRIALING (legacy). 'TRIAL_PERIOD' nunca existiu -> dava sempre 0.
+        TRIAL:         (byStatus['TRIAL'] ?? 0) + (byStatus['TRIALING'] ?? 0),
       },
       renewingSoon: renewals,
       cohort: cohortRaw.map(r => ({

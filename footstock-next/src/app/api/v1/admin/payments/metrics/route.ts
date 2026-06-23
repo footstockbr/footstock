@@ -45,25 +45,53 @@ export async function GET(request: NextRequest) {
     const now = new Date()
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
 
-    // Agrupa pagamentos por gateway no mês atual
+    // Agrupa pagamentos por gateway e status no mês atual.
+    // Receita liquida = PAID menos REFUNDED (estornos descontam o caixa real).
     const paymentsByGateway = await prisma.payment.groupBy({
-      by: ['gateway'],
+      by: ['gateway', 'status'],
       where: {
-        status: 'PAID',
+        status: { in: ['PAID', 'REFUNDED'] },
         createdAt: { gte: startOfMonth },
       },
       _sum: { amount: true },
       _count: { id: true },
     })
 
-    const totalAmount = paymentsByGateway.reduce((sum, p) => sum + (p._sum.amount ?? 0), 0)
+    // Consolida por gateway separando entradas (PAID) de estornos (REFUNDED).
+    const byGateway = new Map<
+      string,
+      { paid: number; refunded: number; paidCount: number; refundCount: number }
+    >()
+    for (const row of paymentsByGateway) {
+      const entry =
+        byGateway.get(row.gateway) ?? { paid: 0, refunded: 0, paidCount: 0, refundCount: 0 }
+      const amount = row._sum.amount ?? 0
+      if (row.status === 'REFUNDED') {
+        entry.refunded += amount
+        entry.refundCount += row._count.id
+      } else {
+        entry.paid += amount
+        entry.paidCount += row._count.id
+      }
+      byGateway.set(row.gateway, entry)
+    }
 
-    // Calcula participação percentual por gateway
-    const metrics = paymentsByGateway.map((p) => ({
-      gateway: p.gateway,
-      revenue: p._sum.amount ?? 0,
-      count: p._count.id,
-      percentage: totalAmount > 0 ? parseFloat(((((p._sum.amount ?? 0) / totalAmount) * 100).toFixed(2))) : 0,
+    const gatewayRows = Array.from(byGateway.entries()).map(([gateway, e]) => ({
+      gateway,
+      revenue: e.paid - e.refunded, // receita liquida (PAID - REFUNDED)
+      grossRevenue: e.paid,
+      refunded: e.refunded,
+      count: e.paidCount,
+      refundCount: e.refundCount,
+    }))
+
+    // Receita liquida total: soma das receitas liquidas por gateway.
+    const totalAmount = gatewayRows.reduce((sum, p) => sum + p.revenue, 0)
+
+    // Calcula participação percentual por gateway sobre a receita liquida.
+    const metrics = gatewayRows.map((p) => ({
+      ...p,
+      percentage: totalAmount > 0 ? parseFloat((((p.revenue / totalAmount) * 100).toFixed(2))) : 0,
     }))
 
     return ok({

@@ -40,6 +40,42 @@ export function normalizeIp(rawIp: string): string {
   return ip
 }
 
+/**
+ * ST009 — Resolve o IP do cliente a partir do hop CONFIÁVEL, mitigando X-Forwarded-For
+ * spoof. A cadeia XFF cresce à direita conforme passa por cada proxy: o cliente pode
+ * forjar entradas à ESQUERDA, mas não consegue forjar a entrada que o proxy confiável
+ * acrescenta. Por isso o IP real é o (`trustedProxyHops`)-ésimo a partir da direita.
+ *
+ * `x-real-ip` (quando presente) é setado pelo edge confiável e tem precedência.
+ * Usar a entrada esquerda da XFF (como `normalizeIp(rawHeader)` fazia) permitia ao
+ * atacante rotacionar a chave de rate-limit e poluir o log com IPs arbitrários.
+ *
+ * @param headers     objeto com `get(name)` (Headers do request)
+ * @param trustedProxyHops  nº de proxies confiáveis entre app e internet (default 1)
+ */
+export function resolveTrustedClientIp(
+  headers: { get(name: string): string | null },
+  trustedProxyHops = 1
+): string {
+  const realIp = headers.get('x-real-ip')?.trim()
+  if (realIp) return normalizeIp(realIp)
+
+  const xff = headers.get('x-forwarded-for')
+  if (!xff) return '0.0.0.0'
+
+  const chain = xff
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (chain.length === 0) return '0.0.0.0'
+
+  const hops = Math.max(1, Math.trunc(trustedProxyHops))
+  // Hop confiável = (hops)-ésimo a partir da direita. Clamp em 0 para cadeias mais
+  // curtas que o nº de hops configurado (degrada para o IP mais à esquerda disponível).
+  const idx = Math.max(0, chain.length - hops)
+  return normalizeIp(chain[idx] ?? chain[chain.length - 1]!)
+}
+
 /** Expande notação comprimida IPv6 (::) para forma completa */
 function expandIPv6(ip: string): string {
   if (!ip.includes('::')) return ip

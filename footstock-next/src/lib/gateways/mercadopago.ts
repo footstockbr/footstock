@@ -10,6 +10,7 @@ import type { IGateway, GatewayCheckoutInput, GatewayCheckoutResult, WebhookEven
 import { GatewayRetryableError } from './IGateway'
 import { CHECKOUT_EXPIRY_MINUTES, GATEWAY_TIMEOUT_MS, WEBHOOK_REPLAY_WINDOW_MS } from '@/lib/constants/payment-security'
 import { env } from '@/lib/env'
+import { emitDegradationSignal } from '@/lib/observability/degradation-signal'
 
 interface MercadoPagoPreferenceResponse {
   id: string
@@ -44,7 +45,7 @@ export class MercadoPagoGateway implements IGateway {
 
     const accessToken = env.MERCADO_PAGO_ACCESS_TOKEN
     if (!accessToken) {
-      throw new GatewayError('[PAYMENT_010] MP_ACCESS_TOKEN não configurado', 'PAYMENT_010', 500)
+      throw new GatewayError('[PAYMENT_010] MERCADO_PAGO_ACCESS_TOKEN não configurado', 'PAYMENT_010', 500)
     }
 
     try {
@@ -323,6 +324,18 @@ export class MercadoPagoGateway implements IGateway {
       // Só rejeita quando explicitamente false (campo ausente não bloqueia o fluxo real).
       if (fetched.liveMode === false) {
         throw new Error(`[MERCADO_PAGO] pagamento em modo teste (live_mode=false) ignorado: ${dataId}`)
+      }
+
+      // FIX-14: live_mode undefined (MP não retornou o campo) ainda ativa o plano
+      // pela regra acima (campo ausente não bloqueia). Antes isso era silencioso —
+      // agora emite WARN observável para que a degradação (não foi possível
+      // confirmar que o pagamento é live) apareça em logs/Sentry. NÃO altera o
+      // fluxo: continuamos processando, apenas tornamos a incerteza visível.
+      if (fetched.liveMode === undefined) {
+        emitDegradationSignal('mercadopago.live_mode_undefined', {
+          level: 'warn',
+          context: { paymentId: dataId, status: fetched.status ?? '' },
+        })
       }
 
       mpStatus = fetched.status ?? ''

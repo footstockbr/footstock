@@ -15,7 +15,7 @@ export async function CancellationLockBannerLoader() {
   const sub = await prisma.subscription.findFirst({
     where: { userId: auth.user.id, status: 'CANCELLATION_LOCK' },
     orderBy: { createdAt: 'desc' },
-    select: { planType: true, cancellationLockExpiresAt: true, forcedLiquidationAt: true },
+    select: { planType: true, cancellationLockExpiresAt: true },
   })
 
   if (!sub || !sub.cancellationLockExpiresAt) return null
@@ -24,7 +24,6 @@ export async function CancellationLockBannerLoader() {
     <CancellationLockBanner
       planType={sub.planType}
       cancellationLockExpiresAt={sub.cancellationLockExpiresAt.toISOString()}
-      forcedLiquidationAt={sub.forcedLiquidationAt?.toISOString() ?? null}
     />
   )
 }
