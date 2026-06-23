@@ -28,6 +28,18 @@ jest.mock('@/lib/services/WebhookAuditService', () => ({
   webhookAuditService: { logWebhook: (...a: unknown[]) => logWebhookMock(...a) },
 }))
 
+// Isola o handler do Redis real: o rate-limit do replay tem suite dedicada
+// (higiene-p3-replay-ratelimit.test.ts, que mocka o limiter deterministicamente).
+// Sem este mock, esta suite chama o limiter real (Upstash) e em CI compartilha a
+// chave por-IP com a suite de rate-limit rodando em paralelo, gerando 429
+// nao-deterministico no lugar de 400/200 (local passa por fail-open quando o
+// REDIS_URL nao e um endpoint Upstash real).
+jest.mock('@/lib/ratelimit', () => ({
+  getReplayRateLimit: () => ({
+    limit: async () => ({ success: true, remaining: 19, reset: Date.now() + 60_000 }),
+  }),
+}))
+
 import { POST } from '@/app/api/v1/admin/payments/replay/route'
 
 function replayRequest(body: unknown, opts: { rawInvalid?: boolean } = {}): NextRequest {
