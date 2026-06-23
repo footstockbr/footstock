@@ -80,8 +80,15 @@ describe('resolveTickerFromText', () => {
     expect(await resolveTickerFromText('Grêmio enfrenta rival gaúcho')).toBe('IMO3')
   })
 
-  test('[PASSO2] "vitoria" (ticker LEA3, não VIT3 ghost) → LEA3', async () => {
-    expect(await resolveTickerFromText('Vitória vence o Bahia no clássico baiano')).toBe('LEA3')
+  test('[PASSO2][HARDENING] bare "vitoria" (substantivo comum) NÃO resolve LEA3', async () => {
+    // 'vitoria' está no AMBIGUITY_DENYLIST (= vitória/vitory). Linkar toda notícia
+    // com a palavra "vitória" ao Vitória-BA seria um falso-positivo massivo.
+    // "Vitória vence o Bahia" → casa 'bahia' (BMP3), NÃO 'vitoria'.
+    expect(await resolveTickerFromText('Vitória do Bayern sobre o Real Madrid foi clara')).toBeNull()
+  })
+
+  test('[PASSO2][HARDENING] forma composta "leao da barra" → LEA3', async () => {
+    expect(await resolveTickerFromText('Leão da Barra vence o clássico baiano')).toBe('LEA3')
   })
 
   test('[PASSO2] "fortaleza" (ticker LEP3, não FOR3 ghost) → LEP3', async () => {
@@ -234,5 +241,61 @@ describe('resolveByPlayersAndCoach', () => {
   test('[P3] texto vazio → null imediato (sem chamar DB)', async () => {
     expect(await resolveByPlayersAndCoach('')).toBeNull()
     expect(mockAssetFindMany).not.toHaveBeenCalled()
+  })
+})
+
+// ─── Hardening 2026-06-23: precisão-acima-de-recall ──────────────────────────
+// Valida o comportamento real contra os títulos de prod que motivaram o fix.
+describe('resolveTickerFromText — hardening precisão (2026-06-23)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockDb([]) // força Passo 2 (canonical, já alinhado ao DB)
+  })
+
+  // ── RECALL: os 4 títulos reportados como "sem time" DEVEM resolver ao sujeito
+  test('[RECALL] "São Paulo perde pênalti, mas vence Fortaleza ... sub-20" → TRI3', async () => {
+    expect(await resolveTickerFromText('São Paulo perde pênalti, mas vence Fortaleza sob chuva pelo Brasileiro sub-20')).toBe('TRI3')
+  })
+  test('[RECALL] "Lateral retorna antes ao Palmeiras ..." → POR3', async () => {
+    expect(await resolveTickerFromText('Lateral retorna antes ao Palmeiras e participa de treinos na Academia')).toBe('POR3')
+  })
+  test('[RECALL] "São Paulo empata com o América-MG ... sub-17" → TRI3 (sujeito, posição à esquerda)', async () => {
+    expect(await resolveTickerFromText('São Paulo empata com o América-MG e segue em jejum no Brasileiro sub-17')).toBe('TRI3')
+  })
+  test('[RECALL] "Palmeiras bate Atlético-MG ... sub-17" → POR3 (sujeito, posição à esquerda)', async () => {
+    expect(await resolveTickerFromText('Palmeiras bate Atlético-MG em jogo de sete gols e segue 100% no Brasileirão sub-17')).toBe('POR3')
+  })
+
+  // ── PRECISÃO: substantivos comuns / sobrenomes / partes do corpo → null
+  test('[PRECISAO] "futebol americano" NÃO resolve COE3 (americano = adjetivo)', async () => {
+    expect(await resolveTickerFromText('Por que o futebol americano cresce no Brasil')).toBeNull()
+  })
+  test('[PRECISAO] "Rafael Leão" NÃO resolve (leao = colisão entre 5 times)', async () => {
+    expect(await resolveTickerFromText('Concorrência por Rafael Leão aumenta com entrada de gigante inglês')).toBeNull()
+  })
+  test('[PRECISAO] "Lesão na coxa" NÃO resolve COX3 (coxa = parte do corpo)', async () => {
+    expect(await resolveTickerFromText('Lesão na coxa deve deixar atacante fora da Copa do Mundo')).toBeNull()
+  })
+  test('[PRECISAO] "Santos" (sobrenome) NÃO resolve PEI3 sozinho', async () => {
+    expect(await resolveTickerFromText('Neymar dos Santos é destaque no Chelsea')).toBeNull()
+  })
+
+  // ── COLISÃO: aliases ambíguos auto-suprimidos; formas únicas resolvem
+  test('[COLISAO] "tigre" sozinho NÃO resolve (colide TIG3/TIS3/TIV3)', async () => {
+    expect(await resolveTickerFromText('O tigre rugiu mais alto na rodada')).toBeNull()
+  })
+  test('[COLISAO] "criciuma" (forma única) → TIG3', async () => {
+    expect(await resolveTickerFromText('Criciúma vence e segue invicto')).toBe('TIG3')
+  })
+  test('[COLISAO] "tricolor" sozinho NÃO resolve (colide BMP3/GUE3/IMO3/LEP3)', async () => {
+    expect(await resolveTickerFromText('O tricolor conquista título inédito na temporada')).toBeNull()
+  })
+
+  // ── DRIFT FIX: DRA3 é Atlético Goianiense no DB (canonical re-sincronizado)
+  test('[DRIFT] "Atlético Goianiense" → DRA3 (não Goiás)', async () => {
+    expect(await resolveTickerFromText('Atlético Goianiense bate rival no Brasileirão')).toBe('DRA3')
+  })
+  test('[DRIFT] "Goiás" → PER3', async () => {
+    expect(await resolveTickerFromText('Goiás conquista acesso à Série A')).toBe('PER3')
   })
 })

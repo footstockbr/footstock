@@ -16,6 +16,7 @@ import { ImpactCategory } from './types'
 import { logger } from '../utils/logger'
 import { newsQueue, type RawNewsItem } from './NewsQueue'
 import type { NewsPublisher } from './NewsPublisher'
+import { buildAliasIndex, resolveFromIndex, type AliasIndex } from './ticker-fallback'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -113,6 +114,8 @@ export class NewsClassifier {
   private running = false
   /** Linha compacta "URU3=flamengo,fla,urubu | POR3=palmeiras,porco | ..." carregada do DB */
   private tickerMapLine = ''
+  /** Índice determinístico (full search_text) para fallback quando o LLM devolve ticker vazio. */
+  private tickerIndex: AliasIndex = []
 
   private readonly cacheMode: CacheMode
   private readonly promptFormat: PromptFormat
@@ -174,6 +177,12 @@ export class NewsClassifier {
           `${r.ticker}=${r.search_text.split(/[,;|]+/).map((s: string) => s.trim()).filter(Boolean).slice(0, 6).join(',')}`
         )
         .join(' | ')
+
+      // Índice determinístico de fallback usa o search_text COMPLETO (não o
+      // truncado a 6 tokens do prompt). Reconstruído a cada load (barato).
+      this.tickerIndex = buildAliasIndex(
+        rows.map((r: { ticker: string; search_text: string }) => ({ ticker: r.ticker, searchText: r.search_text })),
+      )
 
       if (nextMapLine !== this.tickerMapLine) {
         this.tickerMapLine = nextMapLine
@@ -400,6 +409,18 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
         parseValid = false
         logger.warn(`[NewsClassifier] Resposta Sonnet não é JSON válido — aplicando fallback`)
         result = { ...CLASSIFICATION_FALLBACK }
+      }
+
+      // Fallback determinístico (gatilho "sem time"): quando o LLM não identifica
+      // o clube (ticker vazio), tenta resolver pelo TÍTULO de forma precision-first.
+      // NÃO altera relevance/sentiment → notícias institucionais ganham o badge do
+      // time sem disparar impacto de preço (que exige relevance > 0.3 no publish).
+      if (!result.ticker) {
+        const hit = resolveFromIndex(item.title, this.tickerIndex)
+        if (hit) {
+          logger.info(`[NewsClassifier] Fallback determinístico: "${item.title.slice(0, 60)}" → ${hit.ticker} (alias="${hit.alias}")`)
+          result = { ...result, ticker: hit.ticker }
+        }
       }
 
       this.logCall(response, { attempt, latencyMs: Date.now() - startMs, ticker: result.ticker, parseValid })

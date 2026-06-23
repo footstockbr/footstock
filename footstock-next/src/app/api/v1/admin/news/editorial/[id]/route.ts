@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { withAdmin } from '@/app/api/middleware'
 import { prisma } from '@/lib/prisma'
 import { NEWS_STATUS } from '@/lib/enums'
+import { resolveTickerFromTitle } from '@/lib/utils/resolve-ticker'
 
 const patchSchema = z
   .object({
@@ -105,15 +106,39 @@ async function patchHandler(req: NextRequest) {
     if (!asset) {
       return NextResponse.json({ success: false, error: 'Ticker inválido.' }, { status: 422 })
     }
+    // BUGFIX 2026-06-23: gravar a coluna ticker junto de assetIds (antes só
+    // assetIds era atualizado → ticker/assetIds desincronizavam, badge "Sem time").
+    data.ticker = payload.ticker.toUpperCase()
     data.assetIds = [asset.id]
   }
 
   if (payload.status) {
     const current = await prisma.news.findUnique({
       where: { id },
-      select: { publishedAt: true },
+      select: { publishedAt: true, ticker: true, title: true },
     })
     Object.assign(data, statusToPersist(payload.status, current?.publishedAt ?? null))
+
+    // Fallback de publicação: ao PUBLICAR uma notícia ainda "sem time" (e sem
+    // ticker sendo definido neste PATCH), tenta resolver pelo título antes de ir
+    // ao ar. Determinístico e precision-first (não move preço: relevance fica a
+    // cargo do fluxo de injeção, não deste handler).
+    if (
+      payload.status === 'PUBLISHED' &&
+      data.ticker === undefined &&
+      !current?.ticker &&
+      current?.title
+    ) {
+      const resolved = await resolveTickerFromTitle(current.title)
+      if (resolved) {
+        data.ticker = resolved
+        const asset = await prisma.asset.findUnique({
+          where: { ticker: resolved },
+          select: { id: true },
+        })
+        if (asset) data.assetIds = [asset.id]
+      }
+    }
   }
 
   try {

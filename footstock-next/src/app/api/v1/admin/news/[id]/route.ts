@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
+import { resolveTickerFromTitle } from '@/lib/utils/resolve-ticker'
 import type { User, AdminRole } from '@/types'
 
 const patchSchema = z
@@ -131,10 +132,24 @@ export async function PATCH(request: NextRequest, { params }: NewsParams) {
         // (objeto local recém-criado) e sobrescrevia a data histórica a cada PATCH.
         const existing = await prisma.news.findUnique({
           where: { id },
-          select: { publishedAt: true },
+          select: { publishedAt: true, ticker: true, title: true },
         })
         if (!existing?.publishedAt) {
           updateData.publishedAt = new Date()
+        }
+        // Fallback de publicação (gatilho "sem time"): publicar uma notícia sem
+        // ticker — e sem ticker sendo definido neste PATCH — dispara a resolução
+        // determinística pelo título antes de ir ao ar.
+        if (updateData.ticker === undefined && !existing?.ticker && existing?.title) {
+          const resolved = await resolveTickerFromTitle(existing.title)
+          if (resolved) {
+            updateData.ticker = resolved
+            const asset = await prisma.asset.findUnique({
+              where: { ticker: resolved },
+              select: { id: true },
+            })
+            updateData.assetIds = asset ? [asset.id] : []
+          }
         }
       }
     }

@@ -34,6 +34,7 @@ import { financialDividendJob } from './jobs/financialDividend'
 import { sessionTransitionJob } from './jobs/sessionTransition'
 import { reconcilePaymentsJob } from './jobs/reconcilePayments'
 import { classifyNewsSentimentJob } from './jobs/classifyNewsSentiment'
+import { reconcileNullTickersJob } from './jobs/reconcileNullTickers'
 
 interface Job {
   name: string
@@ -83,6 +84,8 @@ export function registerAllJobs(): void {
   registerJob('reconcile-payments', '0 */6 * * *', reconcilePaymentsJob)
   // Item 15: classificacao de sentimento das noticias via LLM (forward + backfill). A cada 15min.
   registerJob('classify-news-sentiment', '*/15 * * * *', classifyNewsSentimentJob)
+  // Safety-net: re-resolve ticker de noticias publicadas ainda "sem time". Diario 02h UTC.
+  registerJob('reconcile-null-tickers', '0 2 * * *', reconcileNullTickersJob)
 }
 
 /**

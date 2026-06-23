@@ -168,6 +168,10 @@ async function postHandler(req: NextRequest, _ctx: AuthContext): Promise<NextRes
     impact: payload.impact as import("@prisma/client").ImpactCategory,
     sentiment: payload.sentiment as import("@prisma/client").Sentiment,
     source: payload.source?.trim() || null,
+    // BUGFIX 2026-06-23: persistir o ticker validado (antes só assetIds era
+    // gravado → coluna ticker ficava null → badge "Sem time"). ticker e assetIds
+    // são mantidos em sincronia (ADR Opcao A).
+    ticker: payload.ticker.toUpperCase(),
     assetIds: [asset.id],
     ...statusData,
   }
