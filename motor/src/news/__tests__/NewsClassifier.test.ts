@@ -116,7 +116,24 @@ describe('NewsClassifier', () => {
     const result = await classifier.classify(makeRawItem())
     expect(result.ticker).toBe('')
     expect(mockCreate).toHaveBeenCalledTimes(1) // sem retry em 4xx não-retentável
-    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('não-retentável'))
+    // Crédito esgotado agora abre o circuit-breaker (log especifico CIRCUIT_OPEN).
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('CIRCUIT_OPEN'))
+  })
+
+  test('[CIRCUIT — crédito esgotado] abre o circuito e pula a API nas chamadas seguintes', async () => {
+    const err = Object.assign(new Error('credit balance is too low'), { status: 400 })
+    mockCreate.mockRejectedValue(err)
+
+    // 1ª chamada bate na API, recebe erro de crédito e ABRE o circuito.
+    const r1 = await classifier.classify(makeRawItem())
+    expect(r1.ticker).toBe('')
+    expect(mockCreate).toHaveBeenCalledTimes(1)
+
+    // 2ª e 3ª chamadas (dentro do cooldown) PULAM a API direto pro fallback —
+    // sem floodar [SYS_002] uma vez por notícia do lote.
+    await classifier.classify(makeRawItem())
+    await classifier.classify(makeRawItem())
+    expect(mockCreate).toHaveBeenCalledTimes(1)
   })
 
   test('[FALLBACK — 400 crédito esgotado + índice carregado] resolve ticker pelo título', async () => {

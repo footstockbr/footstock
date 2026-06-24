@@ -112,6 +112,8 @@ const IMPACT_CATEGORIES = Object.values(ImpactCategory).join(', ')
 export class NewsClassifier {
   private anthropic: Anthropic
   private running = false
+  /** Circuit-breaker de credito esgotado: epoch (ms) ate quando pular a API. 0 = fechado. */
+  private creditCircuitOpenUntil = 0
   /** Linha compacta "URU3=flamengo,fla,urubu | POR3=palmeiras,porco | ..." carregada do DB */
   private tickerMapLine = ''
   /** Índice determinístico (full search_text) para fallback quando o LLM devolve ticker vazio. */
@@ -361,6 +363,13 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
   async classify(item: RawNewsItem, attempt = 1): Promise<ClassifiedNews> {
     await this.checkRateLimit()
 
+    // Circuit-breaker de credito esgotado: se a Anthropic ja sinalizou billing
+    // esgotado ha pouco, pular a chamada (todos os itens falhariam igual) e ir
+    // direto ao fallback. Evita o flood de N erros [SYS_002] por lote/rodada.
+    if (Date.now() < this.creditCircuitOpenUntil) {
+      return this.withTickerFallback({ ...CLASSIFICATION_FALLBACK }, item.title)
+    }
+
     // Lazy: garante prefixo + elegibilidade mesmo se classify for chamado
     // sem startClassifying (ex: testes, uso direto).
     if (!this.staticPrefix) await this.rebuildStaticPrefix()
@@ -414,6 +423,8 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
       result = this.withTickerFallback(result, item.title)
 
       this.logCall(response, { attempt, latencyMs: Date.now() - startMs, ticker: result.ticker, parseValid })
+      // Sucesso fecha o circuito (credito de volta / API saudavel).
+      this.creditCircuitOpenUntil = 0
       return result
     } catch (err) {
       const error = err as Error
@@ -428,7 +439,15 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
       // request malformado; bugs locais sem status) NUNCA têm sucesso ao repetir.
       // Falha rápido para o fallback.
       if (!retryable) {
-        logger.error(`[SYS_002] Sonnet API erro não-retentável (status=${status ?? 'n/a'}): ${error.message}`)
+        if (isCreditExhaustedError(err) && Date.now() >= this.creditCircuitOpenUntil) {
+          this.creditCircuitOpenUntil = Date.now() + CREDIT_EXHAUSTED_COOLDOWN_MS
+          logger.error(
+            `[SYS_002][CIRCUIT_OPEN] Credito Anthropic esgotado — circuito aberto por ` +
+            `${CREDIT_EXHAUSTED_COOLDOWN_MS / 60000}min; classificacao em fallback ate recarga: ${error.message}`,
+          )
+        } else if (!isCreditExhaustedError(err)) {
+          logger.error(`[SYS_002] Sonnet API erro não-retentável (status=${status ?? 'n/a'}): ${error.message}`)
+        }
         return this.withTickerFallback({ ...CLASSIFICATION_FALLBACK }, item.title)
       }
 
@@ -583,6 +602,21 @@ const RETRY_MAX_DELAY_MS = 8000
 // antes do abort). Limitamos a 1 retry para não reabrir o multiplicador de custo
 // que motivou esta mudança — API persistentemente lenta não vira 3x de gasto.
 const TIMEOUT_MAX_ATTEMPTS = 2
+
+// Cooldown do circuit-breaker de credito esgotado. Quando a Anthropic responde
+// "credit balance is too low" (billing), NAO adianta tentar os proximos itens do
+// lote nem as proximas rodadas de cron: todos falham igual. Abrimos o circuito por
+// este periodo, pulando a chamada e indo direto ao fallback (1 log em vez de N).
+const CREDIT_EXHAUSTED_COOLDOWN_MS = 10 * 60 * 1000
+
+// Detecta o erro nao-retentavel ESPECIFICO de credito/billing esgotado (Anthropic
+// 400 invalid_request_error "credit balance is too low"). NAO confundir com 400 de
+// request malformado (bug local) — so o credito justifica abrir o circuito.
+function isCreditExhaustedError(err: unknown): boolean {
+  const msg = (err as { message?: unknown } | null | undefined)?.message
+  if (typeof msg !== 'string') return false
+  return /credit balance|insufficient (funds|credits?)|billing/i.test(msg)
+}
 
 // Extrai o HTTP status de um erro do SDK Anthropic (APIError expõe `.status`).
 // Retorna undefined para erros sem status (conexão/rede, abort, erro genérico).

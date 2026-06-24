@@ -28,6 +28,17 @@ function getAnthropic(): Anthropic {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 }
 
+// Circuit-breaker de credito esgotado (mesma classe do motor): quando a Anthropic
+// responde "credit balance is too low", pular as proximas chamadas por um cooldown
+// em vez de floodar 1 erro por noticia ate a recarga. 0 = fechado.
+const CREDIT_EXHAUSTED_COOLDOWN_MS = 10 * 60 * 1000
+let creditCircuitOpenUntil = 0
+
+function isCreditExhaustedError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : typeof err === 'string' ? err : ''
+  return /credit balance|insufficient (funds|credits?)|billing/i.test(msg)
+}
+
 function parseSentiment(raw: string): NewsSentiment | null {
   const up = raw.toUpperCase()
   // Ordem importa pouco; a resposta esperada e uma unica palavra.
@@ -47,6 +58,9 @@ export async function classifyNewsSentiment(
 ): Promise<NewsSentiment | null> {
   if (!process.env.ANTHROPIC_API_KEY) return null
 
+  // Circuit aberto (credito esgotado recente): pular sem chamar a API nem logar.
+  if (Date.now() < creditCircuitOpenUntil) return null
+
   const userPrompt =
     `Titulo: ${title}\n` +
     (content ? `Resumo: ${content.slice(0, 600)}\n` : '') +
@@ -64,12 +78,21 @@ export async function classifyNewsSentiment(
       { timeout: 20_000 },
     )
     const textBlock = res.content.find((b): b is TextBlock => b.type === 'text')
+    creditCircuitOpenUntil = 0 // sucesso fecha o circuito
     return parseSentiment(textBlock?.text ?? '')
   } catch (err) {
-    console.warn(
-      '[NewsSentimentClassifier] falha ao classificar:',
-      err instanceof Error ? err.message : err,
-    )
+    if (isCreditExhaustedError(err) && Date.now() >= creditCircuitOpenUntil) {
+      creditCircuitOpenUntil = Date.now() + CREDIT_EXHAUSTED_COOLDOWN_MS
+      console.error(
+        `[NewsSentimentClassifier][CIRCUIT_OPEN] Credito Anthropic esgotado — pausando ` +
+        `classificacao por ${CREDIT_EXHAUSTED_COOLDOWN_MS / 60000}min ate recarga.`,
+      )
+    } else if (!isCreditExhaustedError(err)) {
+      console.warn(
+        '[NewsSentimentClassifier] falha ao classificar:',
+        err instanceof Error ? err.message : err,
+      )
+    }
     return null
   }
 }
