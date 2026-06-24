@@ -1,44 +1,58 @@
 // ============================================================================
-// FootStock — FIX-19: gateways oferecidos no seletor de checkout ao cliente
+// FootStock — gateways de pagamento oferecidos no seletor de checkout
 // ----------------------------------------------------------------------------
-// DEFAULT de menor risco (auditoria financeira 06-22, decisao D10 "default
-// seguro"): o seletor de pagamento oferece APENAS gateways efetivamente
-// configurados e validados. PagSeguro e PayPal ficam FORA da lista ate que
-// (1) suas credenciais (env PAGSEGURO_*/PAYPAL_*) estejam configuradas e
-// (2) seus fluxos sejam validados. Enquanto isso, selecionar um deles criaria
-// uma Subscription PENDING orfa e devolveria DECLINED ao cliente (ver
-// PlanService.createCheckout: cria PENDING antes de chamar o gateway, e o
-// gateway nao configurado lanca PAYMENT_053 -> DECLINED, deixando a PENDING).
-// Em producao o gateway ativo e o Mercado Pago (PIX tambem via MP).
+// Fonte unica de verdade do que o seletor de pagamento expoe ao cliente.
 //
-// Re-habilitar PagSeguro/PayPal exige, nesta ordem: configurar as credenciais
-// e adicionar o codigo a ENABLED_CHECKOUT_GATEWAYS abaixo. Esta lista e a fonte
-// unica de verdade do que o seletor oferece (consumida por CheckoutButton.tsx).
+// CORRECAO (modal de assinatura): o seletor antigo listava ['MERCADO_PAGO',
+// 'PIX']. "PIX" NAO e um gateway — e um metodo de pagamento DENTRO do Mercado
+// Pago (o proprio checkout hospedado do MP ja oferece PIX). Lista-lo como uma
+// segunda entrada "Pix (Mercado Pago)" duplicava o Mercado Pago e confundia o
+// usuario. O seletor agora oferece as 3 PLATAFORMAS reais de pagamento:
+// Mercado Pago, PagSeguro e PayPal.
+//
+// SEGURANCA (heranca da FIX-19): oferecer um gateway sem credenciais cria uma
+// Subscription PENDING orfa + devolve DECLINED ao cliente (PlanService cria a
+// PENDING antes de chamar o gateway; gateway sem credencial lanca PAYMENT_053).
+// Por isso o conjunto efetivamente oferecido NAO e mais uma constante estatica:
+// e resolvido em runtime a partir das credenciais presentes
+// (ver lib/payments/enabled-gateways.server.ts) e passado as UIs como prop /
+// via /api/v1/payments/gateways. Assim um gateway so aparece quando esta
+// efetivamente configurado, e os 3 aparecem quando os 3 estao configurados.
 // ============================================================================
 
-export type CheckoutGateway = 'MERCADO_PAGO' | 'PAGSEGURO' | 'PAYPAL' | 'PIX'
+export type CheckoutGateway = 'MERCADO_PAGO' | 'PAGSEGURO' | 'PAYPAL'
 
-// Rotulos de TODOS os gateways conhecidos (inclui os desabilitados, para
-// completude de tipo e para reabilitar trocando apenas ENABLED_CHECKOUT_GATEWAYS).
+// Rotulos exibidos no seletor. Ordem canonica de exibicao em ALL_CHECKOUT_GATEWAYS.
 export const CHECKOUT_GATEWAY_LABELS: Record<CheckoutGateway, string> = {
   MERCADO_PAGO: 'Mercado Pago',
   PAGSEGURO: 'PagSeguro',
   PAYPAL: 'PayPal',
-  PIX: 'Pix (Mercado Pago)',
 }
 
-// Gateways efetivamente oferecidos ao cliente. A ordem define a ordem de exibicao.
-export const ENABLED_CHECKOUT_GATEWAYS: readonly CheckoutGateway[] = ['MERCADO_PAGO', 'PIX']
+// Todas as plataformas conhecidas, na ordem de exibicao preferida.
+export const ALL_CHECKOUT_GATEWAYS: readonly CheckoutGateway[] = [
+  'MERCADO_PAGO',
+  'PAGSEGURO',
+  'PAYPAL',
+]
 
-// Gateway default do seletor — garantidamente habilitado (primeiro da lista).
-export const DEFAULT_CHECKOUT_GATEWAY: CheckoutGateway = ENABLED_CHECKOUT_GATEWAYS[0]
+// Gateway default quando ha >= 1 habilitado e nenhuma preferencia: o primeiro
+// habilitado (a chamada concreta resolve a partir da lista efetiva em runtime).
+export const DEFAULT_CHECKOUT_GATEWAY: CheckoutGateway = 'MERCADO_PAGO'
 
-export function isCheckoutGatewayEnabled(gateway: CheckoutGateway): boolean {
-  return ENABLED_CHECKOUT_GATEWAYS.includes(gateway)
+export function isKnownCheckoutGateway(value: string): value is CheckoutGateway {
+  return (ALL_CHECKOUT_GATEWAYS as readonly string[]).includes(value)
 }
 
-export function getEnabledCheckoutGatewayOptions(): Array<{ value: CheckoutGateway; label: string }> {
-  return ENABLED_CHECKOUT_GATEWAYS.map((gateway) => ({
+/**
+ * Monta as opcoes do <select> a partir da lista de gateways HABILITADOS
+ * (resolvida em runtime conforme credenciais presentes). Preserva a ordem
+ * canonica de ALL_CHECKOUT_GATEWAYS independente da ordem recebida.
+ */
+export function getCheckoutGatewayOptions(
+  enabled: readonly CheckoutGateway[],
+): Array<{ value: CheckoutGateway; label: string }> {
+  return ALL_CHECKOUT_GATEWAYS.filter((gateway) => enabled.includes(gateway)).map((gateway) => ({
     value: gateway,
     label: CHECKOUT_GATEWAY_LABELS[gateway],
   }))

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { CheckoutButton, ALREADY_HAS_PLAN_MESSAGE } from '@/components/payments/CheckoutButton'
 import { useAnalytics } from '@/hooks/useAnalytics'
 import { usePlanGuard } from '@/hooks/usePlanGuard'
+import type { CheckoutGateway } from '@/lib/constants/checkout-gateways'
 
 type PlanType = 'CRAQUE' | 'LENDA'
 type CurrentPlan = 'JOGADOR' | 'CRAQUE' | 'LENDA'
@@ -27,11 +28,17 @@ interface PlanCTAButtonProps {
    * CheckoutButton, garantindo que texto do card e guard usem a mesma fonte.
    */
   currentPlan?: CurrentPlan
+  /**
+   * Gateways habilitados resolvidos server-side (credenciais presentes),
+   * repassados ao CheckoutButton. Quando omitido, o CheckoutButton resolve via
+   * hook (SWR). A pagina /planos fornece para evitar flash de carregamento.
+   */
+  enabledGateways?: CheckoutGateway[]
   'data-testid'?: string
   className?: string
 }
 
-export function PlanCTAButton({ planType, label, featureBlocked = 'planos_page', currentPlan: currentPlanProp, className, ...props }: PlanCTAButtonProps) {
+export function PlanCTAButton({ planType, label, featureBlocked = 'planos_page', currentPlan: currentPlanProp, enabledGateways, className, ...props }: PlanCTAButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { track } = useAnalytics()
@@ -119,7 +126,7 @@ export function PlanCTAButton({ planType, label, featureBlocked = 'planos_page',
               Escolha a forma de pagamento para continuar
             </p>
 
-            <CheckoutButton planType={planType} label={label} currentPlan={currentPlan} />
+            <CheckoutButton planType={planType} label={label} currentPlan={currentPlan} enabledGateways={enabledGateways} />
 
             <button
               type="button"

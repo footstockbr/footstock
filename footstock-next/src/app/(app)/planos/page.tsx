@@ -13,6 +13,7 @@ import { ROUTES } from "@/lib/constants/routes";
 import { getAuthUser } from "@/lib/auth";
 import { PlanCTAButton } from "@/components/payments/PlanCTAButton";
 import { PlanRevalidateOnSuccess } from "@/components/payments/PlanRevalidateOnSuccess";
+import { resolveEnabledCheckoutGateways } from "@/lib/payments/enabled-gateways.server";
 
 export const metadata: Metadata = {
   title: "Planos — FootStock",
@@ -124,6 +125,10 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
   }
   const userPlan = (auth?.user.planType as PlanType) ?? PlanType.JOGADOR;
   const userPlanLevel = PLAN_ORDER[userPlan] ?? 1;
+  // Gateways efetivamente habilitados (credenciais presentes), resolvidos
+  // server-side e repassados aos CTAs para o seletor de pagamento nao oferecer
+  // gateway quebrado nem flashear carregamento.
+  const enabledGateways = resolveEnabledCheckoutGateways();
   const { payment } = await searchParams;
   const paymentSucceeded = payment === "success";
 
@@ -271,6 +276,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                   planType={plan.type as "CRAQUE" | "LENDA"}
                   label={ctaLabel}
                   currentPlan={userPlan}
+                  enabledGateways={enabledGateways}
                   data-testid={`plano-cta-button-${plan.type.toLowerCase()}`}
                 />
               ) : (
