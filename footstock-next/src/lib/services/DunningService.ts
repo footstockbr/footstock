@@ -41,6 +41,12 @@ export class DunningService {
     const expired = await prisma.subscription.findMany({
       where: {
         cancelledAt: null,
+        // INV-1 (loop 06-24, Task 008): dunning so recobra cobranca one_time. Em assinatura
+        // `recurring` o proprio gateway auto-debita o proximo ciclo; recobrar aqui geraria DUPLA
+        // COBRANCA (gateway debita E dunning emite novo checkout). A recuperacao de assinatura
+        // recorrente em falha e responsabilidade do webhook SUBSCRIPTION_PAYMENT_FAILED + do
+        // polling /api/cron/subscription-reconcile, nunca deste servico.
+        billingMode: 'one_time',
         OR: [
           { status: 'EXPIRED' },
           { status: 'PENDING', dunningAttempts: { some: {} } },

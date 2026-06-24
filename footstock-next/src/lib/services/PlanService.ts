@@ -19,7 +19,8 @@ import { notificationService } from '@/lib/notifications'
 import { PLAN_HIERARCHY, type PlanType } from '@/lib/enums'
 import { getGateway } from '@/lib/gateways/GatewayFactory'
 import { GatewayType } from '@/lib/gateways/IGateway'
-import type { GatewayCheckoutInput } from '@/lib/gateways/IGateway'
+import type { GatewayCheckoutInput, GatewaySubscriptionInput } from '@/lib/gateways/IGateway'
+import { isRecurringEnabled } from '@/lib/gateways/recurring-flag'
 import { Prisma } from '@prisma/client'
 import type { SubscriptionGateway } from '@prisma/client'
 import { captureException } from '@/lib/monitoring/sentry'
@@ -216,6 +217,51 @@ export class PlanService extends BaseService {
     const appUrl = env.NEXT_PUBLIC_APP_URL
     const gatewayType = resolveGatewayType(dto.gateway)
     const gateway = getGateway(gatewayType)
+
+    // Task 004 — Ponto de roteamento recorrente vs one-time (INV-4: flag default OFF).
+    // Com recurring_enabled.{gateway} ON, o checkout cria uma assinatura recorrente real
+    // (auto-renewal) no gateway via createSubscription (D1) e marca billingMode=recurring.
+    // Com o flag OFF (ou ausente/erro de leitura, que isRecurringEnabled resolve para false),
+    // o fluxo permanece one-time IDENTICO ao atual (createCheckout / D2). Gateways sem suporte
+    // a recorrencia lancam 501 explicito (task 003); a integracao MP cartao e a task 005.
+    const recurringEnabled = await isRecurringEnabled(dto.gateway)
+    if (recurringEnabled) {
+      try {
+        const subInput: GatewaySubscriptionInput = {
+          planType:    dto.planType,
+          period:      dto.period,
+          amount,
+          currency:    'BRL',
+          subscriptionId: subscription.id,
+          userId,
+          userEmail:   dto.userEmail ?? user?.email ?? '',
+          ...buildGatewayReturnUrls(appUrl, subscription.id, dto.planType),
+        }
+        const subResult = await gateway.createSubscription(subInput)
+        // Persistir identidade recorrente do gateway + billingMode (schema M061 / task 002).
+        await prisma.subscription.update({
+          where: { id: subscription.id },
+          data: {
+            billingMode:           'recurring',
+            gatewaySubscriptionId: subResult.gatewaySubscriptionId,
+            gatewayPlanId:         subResult.gatewayPlanId ?? null,
+            gatewayStatus:         subResult.status ?? null,
+          },
+        })
+        return { redirectUrl: subResult.redirectUrl, subscriptionId: subscription.id }
+      } catch (err) {
+        // Mesma politica do one-time (FU-023-4): propagar code/statusCode ORIGINAL do gateway
+        // (inclui o 501 NOT_IMPLEMENTED dos gateways sem recorrencia) em vez de achatar para
+        // DECLINED/422. Subscription permanece PENDING (billingMode one_time) para auditoria.
+        const code = (err as { code?: unknown }).code
+        const statusCode = (err as { statusCode?: unknown }).statusCode
+        if (typeof code === 'string' && typeof statusCode === 'number') {
+          const message = err instanceof Error ? err.message : String(err)
+          throw Object.assign(new Error(message), { code, statusCode })
+        }
+        throwPaymentError('DECLINED', String(err))
+      }
+    }
 
     let redirectUrl: string
     try {

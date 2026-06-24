@@ -6,7 +6,7 @@
 // ============================================================================
 
 import { createHmac, timingSafeEqual } from 'crypto'
-import type { IGateway, GatewayCheckoutInput, GatewayCheckoutResult, WebhookEvent, RefundResult } from './IGateway'
+import type { IGateway, GatewayCheckoutInput, GatewayCheckoutResult, GatewaySubscriptionInput, GatewaySubscriptionResult, WebhookEvent, RefundResult } from './IGateway'
 import { GatewayRetryableError } from './IGateway'
 import { CHECKOUT_EXPIRY_MINUTES, GATEWAY_TIMEOUT_MS, WEBHOOK_REPLAY_WINDOW_MS } from '@/lib/constants/payment-security'
 import { env } from '@/lib/env'
@@ -229,6 +229,25 @@ export class MercadoPagoGateway implements IGateway {
     return this.fetchPaymentStatus(paymentId)
   }
 
+  // ─── getSubscriptionStatus (publico, polling de assinatura — Task 008) ─────────
+
+  /**
+   * Wrapper publico de fetchPreapproval para o polling server-side de assinaturas recorrentes
+   * (SubscriptionReconcileService / cron subscription-reconcile). Retorna o status BRUTO do
+   * preapproval no MP (`authorized` | `paused` | `cancelled` | `pending`); o mapeamento para
+   * SubscriptionStatus canonico e a decisao de correcao pertencem ao servico (gateway permanece
+   * adaptador fino). Indeterminado transitorio (token ausente, 5xx, timeout) propaga
+   * GatewayRetryableError via fetchPreapproval: o chamador trata como skip-retry, NUNCA como
+   * confirmacao de mudanca de estado (INV-3 / Zero Assumido).
+   *
+   * @param gatewaySubscriptionId id do preapproval no MP (Subscription.gatewaySubscriptionId)
+   * @returns status bruto do preapproval, ou null quando o MP nao reporta status
+   */
+  async getSubscriptionStatus(gatewaySubscriptionId: string): Promise<{ status: string | null }> {
+    const pre = await this.fetchPreapproval(gatewaySubscriptionId)
+    return { status: pre.status ?? null }
+  }
+
   // ─── searchApprovedPaymentByExternalReference (reconciliacao por subscription) ──
 
   /**
@@ -292,6 +311,19 @@ export class MercadoPagoGateway implements IGateway {
     const topic = (parsed as Record<string, string>).type
       ?? (parsed as Record<string, string>).topic
       ?? ''
+
+    // ── Eventos de ASSINATURA recorrente (task 007) ─────────────────────────────
+    // O MP entrega o ciclo recorrente por dois tópicos do mesmo endpoint (já autenticado
+    // por HMAC no route): `subscription_authorized_payment` (uma cobrança de ciclo) e
+    // `subscription_preapproval` (mudança de estado da assinatura). São normalizados para
+    // os eventTypes SUBSCRIPTION_*. INV-3: enriquecimento indeterminado -> GatewayRetryableError
+    // (o route responde 5xx e o MP reentrega), NUNCA 200 silencioso que perderia o ciclo.
+    if (topic === 'subscription_authorized_payment') {
+      return this.parseSubscriptionAuthorizedPayment(dataId, payload)
+    }
+    if (topic === 'subscription_preapproval') {
+      return this.parseSubscriptionPreapproval(dataId, payload)
+    }
 
     // HARDENING (D9+): status, external_reference e amount NÃO são cobertos pelo HMAC —
     // um payload forjado pode conter esses campos alterados com data.id legítimo.
@@ -373,6 +405,201 @@ export class MercadoPagoGateway implements IGateway {
       amount,
       gateway:        'MERCADO_PAGO',
       rawPayload:     payload,
+    }
+  }
+
+  // ─── parseWebhookEvent: ramos de ASSINATURA (task 007) ─────────────────────
+
+  /**
+   * Normaliza `subscription_authorized_payment` (uma cobrança do ciclo recorrente).
+   * `data.id` = id do authorized_payment. Enriquece via GET /authorized_payments/{id}:
+   *  - pagamento `approved`                                   -> SUBSCRIPTION_RENEWED
+   *  - pagamento `rejected`/`cancelled` OU authorized_payment
+   *    em `recycling` (dunning do MP)                         -> SUBSCRIPTION_PAYMENT_FAILED
+   *  - qualquer outro estado (scheduled/pending/indeterminado) -> GatewayRetryableError (INV-3)
+   * `transactionId` = id do pagamento real (único por ciclo -> dedup INV-2); fallback para o
+   * próprio authorized_payment id quando o pagamento ainda não materializou.
+   * `subscriptionId` = external_reference do authorized_payment; se ausente, resolvido pelo
+   * preapproval vinculado (`preapproval_id`).
+   */
+  private async parseSubscriptionAuthorizedPayment(dataId: string, payload: string): Promise<WebhookEvent> {
+    if (!dataId) {
+      throw new GatewayRetryableError(
+        '[MERCADO_PAGO] subscription_authorized_payment sem data.id — indeterminado (retry)',
+      )
+    }
+    const ap = await this.fetchAuthorizedPayment(dataId)
+
+    // Pagamento de teste (sandbox) jamais credita ciclo real. Terminal (não reentregar).
+    if (ap.liveMode === false) {
+      throw new Error(`[MERCADO_PAGO] authorized_payment em modo teste (live_mode=false) ignorado: ${dataId}`)
+    }
+
+    // Resolver o dono da cobrança: external_reference do authorized_payment ou do preapproval.
+    let extRef = ap.externalReference ?? ''
+    if (!extRef && ap.preapprovalId) {
+      const pre = await this.fetchPreapproval(ap.preapprovalId)
+      extRef = pre.externalReference ?? ''
+    }
+    if (!extRef) {
+      // Sem dono não há como creditar o ciclo; o vínculo pode ainda não estar propagado no
+      // MP -> fail-safe retry (INV-3), nunca 200.
+      throw new GatewayRetryableError(
+        `[MERCADO_PAGO] authorized_payment ${dataId}: external_reference/preapproval indeterminado (retry)`,
+      )
+    }
+
+    const transactionId = ap.paymentId ?? dataId
+    const amount = ap.amount ? Math.round(ap.amount * 100) : 0
+    const payStatus = ap.paymentStatus
+    const apStatus = ap.status
+
+    let eventType: WebhookEvent['eventType']
+    if (payStatus === 'approved') {
+      eventType = 'SUBSCRIPTION_RENEWED'
+    } else if (payStatus === 'rejected' || payStatus === 'cancelled' || apStatus === 'recycling') {
+      eventType = 'SUBSCRIPTION_PAYMENT_FAILED'
+    } else {
+      // scheduled / pending / in_process / desconhecido: ciclo ainda indefinido. INV-3: 5xx.
+      throw new GatewayRetryableError(
+        `[MERCADO_PAGO] authorized_payment ${dataId}: ciclo indeterminado ` +
+          `(ap.status=${apStatus ?? '∅'} payment.status=${payStatus ?? '∅'}) — retry`,
+      )
+    }
+
+    return { eventType, transactionId, subscriptionId: extRef, amount, gateway: 'MERCADO_PAGO', rawPayload: payload }
+  }
+
+  /**
+   * Normaliza `subscription_preapproval` (mudança de estado da assinatura no MP).
+   * `data.id` = id do preapproval. Enriquece via GET /preapproval/{id}:
+   *  - status `cancelled` -> SUBSCRIPTION_CANCELLED (assinatura encerrada no gateway)
+   *  - `authorized`/`paused`/`pending`: estado espelhado pelas nossas próprias chamadas
+   *    (cancel/reactivate auto-renewal) — sem efeito de cobrança; terminal (route -> 200),
+   *    apenas observável. A reconciliação fina de gatewayStatus/status é da task 008.
+   * Enriquecimento indeterminado -> GatewayRetryableError (INV-3).
+   */
+  private async parseSubscriptionPreapproval(dataId: string, payload: string): Promise<WebhookEvent> {
+    if (!dataId) {
+      throw new GatewayRetryableError(
+        '[MERCADO_PAGO] subscription_preapproval sem data.id — indeterminado (retry)',
+      )
+    }
+    const pre = await this.fetchPreapproval(dataId)
+    const extRef = pre.externalReference ?? ''
+    if (!extRef) {
+      throw new GatewayRetryableError(
+        `[MERCADO_PAGO] preapproval ${dataId}: external_reference indeterminado (retry)`,
+      )
+    }
+
+    if (pre.status === 'cancelled') {
+      return {
+        eventType:      'SUBSCRIPTION_CANCELLED',
+        // Marcador estável por assinatura cancelada -> dedup INV-2 (uma vez por preapproval).
+        transactionId:  `preapproval-cancel-${dataId}`,
+        subscriptionId: extRef,
+        amount:         0,
+        gateway:        'MERCADO_PAGO',
+        rawPayload:     payload,
+      }
+    }
+
+    // authorized/paused/pending: sem efeito de cobrança. Terminal/observável (route -> 200).
+    throw new Error(
+      `[MERCADO_PAGO] subscription_preapproval status '${pre.status ?? '∅'}' sem efeito de cobrança ` +
+        '(reconciliação via task 008)',
+    )
+  }
+
+  // ─── Enriquecimento de eventos de ASSINATURA (recorrência, task 007) ───────
+
+  /**
+   * GET /authorized_payments/{id} — detalhe de uma cobrança recorrente. Usa `mpFetchWithRetry`:
+   * 5xx/timeout viram GatewayRetryableError (retry, INV-3). 4xx (incl. 404 por corrida de
+   * propagação do MP — o recurso pode não estar consultável quando a notificação chega) também
+   * é tratado como transitório: preferimos retry a perder o sinal de cobrança. Nunca retorna
+   * null silencioso.
+   */
+  private async fetchAuthorizedPayment(authorizedPaymentId: string): Promise<{
+    status?: string
+    paymentId?: string
+    paymentStatus?: string
+    externalReference?: string
+    preapprovalId?: string
+    amount?: number
+    liveMode?: boolean
+  }> {
+    const accessToken = env.MERCADO_PAGO_ACCESS_TOKEN
+    if (!accessToken) {
+      throw new GatewayRetryableError(
+        `[MERCADO_PAGO] authorized_payment ${authorizedPaymentId}: ACCESS_TOKEN ausente — indeterminado (retry)`,
+      )
+    }
+    const response = await this.mpFetchWithRetry(
+      `https://api.mercadopago.com/authorized_payments/${encodeURIComponent(authorizedPaymentId)}`,
+      { method: 'GET', headers: { Authorization: `Bearer ${accessToken}` } },
+      `authorized_payment ${authorizedPaymentId}`,
+    )
+    if (!response.ok) {
+      throw new GatewayRetryableError(
+        `[MERCADO_PAGO] authorized_payment ${authorizedPaymentId}: HTTP ${response.status} — indeterminado (retry)`,
+      )
+    }
+    const body = (await response.json().catch(() => ({}))) as {
+      status?: string
+      external_reference?: string
+      preapproval_id?: string
+      transaction_amount?: number
+      live_mode?: boolean
+      payment?: { id?: string | number; status?: string; live_mode?: boolean }
+    }
+    const payId = body.payment?.id
+    return {
+      status:            body.status,
+      paymentId:         payId != null ? String(payId) : undefined,
+      paymentStatus:     body.payment?.status,
+      externalReference: body.external_reference,
+      preapprovalId:     body.preapproval_id,
+      amount:            body.transaction_amount,
+      liveMode:          body.payment?.live_mode ?? body.live_mode,
+    }
+  }
+
+  /**
+   * GET /preapproval/{id} — detalhe da assinatura (preapproval). Mesma política fail-safe de
+   * `fetchAuthorizedPayment`: transitório -> GatewayRetryableError (5xx, INV-3).
+   */
+  private async fetchPreapproval(preapprovalId: string): Promise<{
+    status?: string
+    externalReference?: string
+    amount?: number
+  }> {
+    const accessToken = env.MERCADO_PAGO_ACCESS_TOKEN
+    if (!accessToken) {
+      throw new GatewayRetryableError(
+        `[MERCADO_PAGO] preapproval ${preapprovalId}: ACCESS_TOKEN ausente — indeterminado (retry)`,
+      )
+    }
+    const response = await this.mpFetchWithRetry(
+      `https://api.mercadopago.com/preapproval/${encodeURIComponent(preapprovalId)}`,
+      { method: 'GET', headers: { Authorization: `Bearer ${accessToken}` } },
+      `preapproval ${preapprovalId}`,
+    )
+    if (!response.ok) {
+      throw new GatewayRetryableError(
+        `[MERCADO_PAGO] preapproval ${preapprovalId}: HTTP ${response.status} — indeterminado (retry)`,
+      )
+    }
+    const body = (await response.json().catch(() => ({}))) as {
+      status?: string
+      external_reference?: string
+      auto_recurring?: { transaction_amount?: number }
+    }
+    return {
+      status:            body.status,
+      externalReference: body.external_reference,
+      amount:            body.auto_recurring?.transaction_amount,
     }
   }
 
@@ -471,21 +698,317 @@ export class MercadoPagoGateway implements IGateway {
     )
   }
 
+  // ─── createSubscription (assinatura recorrente real — preapproval) ─────────
+
   /**
-   * Cancela renovação automática no MercadoPago.
-   * Stub: integração real requer preassignment de subscriptionId do MP.
-   * TODO: implementar quando MP recorrente for integrado.
+   * Cria uma assinatura recorrente real (auto-renewal) no Mercado Pago via o fluxo
+   * `preapproval_plan` + `preapproval` (task 005, D1).
+   *
+   * PCI-DSS: NUNCA transmite dados de cartão. O contrato IGateway é redirect-based — o MP
+   * coleta o cartão na página de autorização (`init_point`). Por isso este método NÃO envia
+   * `card_token_id`; cria o `preapproval` no estado `pending` e devolve a `redirectUrl` de
+   * autorização (alinhado ao consumidor PlanService, que persiste `gatewaySubscriptionId`/
+   * `gatewayPlanId`/`gatewayStatus` e retorna o redirect ao cliente).
+   *
+   * Plano (`preapproval_plan_id`): resolvido por config idempotente (NUNCA hardcoded). Lê
+   * `MERCADO_PAGO_PREAPPROVAL_PLAN_IDS` (JSON map `{PLAN_TYPE}_{period}` -> id); se a planKey
+   * estiver ausente, cria o plano via `/preapproval_plan` com `X-Idempotency-Key` derivada da
+   * planKey (reenvios reusam o mesmo plano no lado do MP).
+   *
+   * Idempotência da assinatura: `external_reference` = `subscriptionId` interno (único por
+   * tentativa usuário+plano; o PlanService já bloqueia duplicata ativa/pendente via PAYMENT_054)
+   * e `X-Idempotency-Key` derivada do `subscriptionId` — um retry não cria `preapproval` duplicado.
+   *
+   * Erros: validação de input → GatewayError 422 (terminal). 4xx do MP → GatewayError 422
+   * (terminal, não retentar). 5xx/timeout → GatewayRetryableError após até 3 tentativas com
+   * backoff exponencial (o chamador NÃO marca recurring sem confirmação).
    */
-  async cancelAutoRenewal(gatewaySubscriptionId: string): Promise<void> {
-    console.warn(`[MERCADO_PAGO] cancelAutoRenewal stub — integração pendente. subscriptionId: ${gatewaySubscriptionId}`)
+  async createSubscription(input: GatewaySubscriptionInput): Promise<GatewaySubscriptionResult> {
+    if (!input.amount || input.amount <= 0) {
+      throw new GatewayError('Valor de assinatura inválido', 'PAYMENT_020', 422)
+    }
+    if (!input.successUrl || !input.failureUrl || !input.pendingUrl) {
+      throw new GatewayError('URL de redirecionamento inválida', 'PAYMENT_051', 422)
+    }
+    if (!input.userEmail) {
+      throw new GatewayError('payer_email ausente para assinatura recorrente', 'PAYMENT_059', 422)
+    }
+
+    const accessToken = env.MERCADO_PAGO_ACCESS_TOKEN
+    if (!accessToken) {
+      throw new GatewayError('[PAYMENT_010] MERCADO_PAGO_ACCESS_TOKEN não configurado', 'PAYMENT_010', 500)
+    }
+
+    // auto_recurring derivado do period: monthly = 1 mês, yearly = 12 meses.
+    const frequency = input.period === 'yearly' ? 12 : 1
+    const planKey = `${input.planType}_${input.period}`
+
+    // 1) Resolver preapproval_plan_id (config idempotente — nunca hardcoded).
+    const gatewayPlanId = await this.resolvePreapprovalPlanId(
+      accessToken,
+      planKey,
+      {
+        frequency,
+        transaction_amount: input.amount / 100,
+        currency_id: input.currency,
+      },
+      input.successUrl,
+      input.planType,
+    )
+
+    // 2) Criar o preapproval (assinatura) em modo redirect (sem card_token_id).
+    const idempotencyKey = `preapproval-${input.subscriptionId}`
+    const body = JSON.stringify({
+      preapproval_plan_id: gatewayPlanId,
+      reason:              `FootStock - Plano ${input.planType}`,
+      external_reference:  input.subscriptionId,
+      payer_email:         input.userEmail,
+      back_url:            input.successUrl,
+      status:              'pending',
+    })
+
+    const response = await this.mpFetchWithRetry(
+      'https://api.mercadopago.com/preapproval',
+      {
+        method: 'POST',
+        headers: {
+          Authorization:       `Bearer ${accessToken}`,
+          'Content-Type':      'application/json',
+          'X-Idempotency-Key': idempotencyKey,
+        },
+        body,
+      },
+      'preapproval',
+    )
+
+    if (!response.ok) {
+      const raw = await response.text().catch(() => '')
+      // 5xx já vira GatewayRetryableError dentro de mpFetchWithRetry; aqui só chega 4xx terminal.
+      throw new GatewayError(
+        `[MERCADO_PAGO] preapproval rejeitado HTTP ${response.status}: ${raw.slice(0, 200)}`,
+        'PAYMENT_059',
+        422,
+      )
+    }
+
+    const result = await response.json().catch(() => ({})) as {
+      id?: string
+      init_point?: string | null
+      sandbox_init_point?: string | null
+      status?: string
+    }
+
+    const redirectUrl = result.init_point ?? result.sandbox_init_point ?? null
+    if (!result.id || !redirectUrl) {
+      throw new GatewayError(
+        '[MERCADO_PAGO] resposta de preapproval sem id/init_point',
+        'PAYMENT_050',
+        503,
+      )
+    }
+
+    return {
+      redirectUrl,
+      gatewaySubscriptionId: result.id,
+      gatewayPlanId,
+      status: result.status ?? 'pending',
+    }
   }
 
   /**
-   * Reativa renovação automática no MercadoPago após revert.
-   * Stub: integração real requer preassignment de subscriptionId do MP.
-   * TODO: implementar quando MP recorrente for integrado.
+   * Resolve o `preapproval_plan_id` para uma planKey. Prioriza o map de config
+   * (`MERCADO_PAGO_PREAPPROVAL_PLAN_IDS`); na ausência, cria o plano idempotentemente via
+   * `/preapproval_plan` (X-Idempotency-Key derivada da planKey). NUNCA hardcoda ids.
+   */
+  private async resolvePreapprovalPlanId(
+    accessToken: string,
+    planKey: string,
+    autoRecurring: { frequency: number; transaction_amount: number; currency_id: string },
+    backUrl: string,
+    planType: string,
+  ): Promise<string> {
+    const configured = this.readConfiguredPlanId(planKey)
+    if (configured) return configured
+
+    const response = await this.mpFetchWithRetry(
+      'https://api.mercadopago.com/preapproval_plan',
+      {
+        method: 'POST',
+        headers: {
+          Authorization:       `Bearer ${accessToken}`,
+          'Content-Type':      'application/json',
+          // Idempotência: reenvios com a mesma planKey reusam o mesmo plano no MP.
+          'X-Idempotency-Key': `preapproval-plan-${planKey}`,
+        },
+        body: JSON.stringify({
+          reason: `FootStock - Plano ${planType}`,
+          auto_recurring: {
+            frequency:           autoRecurring.frequency,
+            frequency_type:      'months',
+            transaction_amount:  autoRecurring.transaction_amount,
+            currency_id:         autoRecurring.currency_id,
+          },
+          back_url: backUrl,
+        }),
+      },
+      'preapproval_plan',
+    )
+
+    if (!response.ok) {
+      const raw = await response.text().catch(() => '')
+      throw new GatewayError(
+        `[MERCADO_PAGO] criação de preapproval_plan rejeitada HTTP ${response.status}: ${raw.slice(0, 200)}`,
+        'PAYMENT_059',
+        422,
+      )
+    }
+
+    const plan = await response.json().catch(() => ({})) as { id?: string }
+    if (!plan.id) {
+      throw new GatewayError('[MERCADO_PAGO] preapproval_plan sem id na resposta', 'PAYMENT_050', 503)
+    }
+    return plan.id
+  }
+
+  /** Lê o map JSON de config `MERCADO_PAGO_PREAPPROVAL_PLAN_IDS` e retorna o id da planKey, se houver. */
+  private readConfiguredPlanId(planKey: string): string | null {
+    const raw = env.MERCADO_PAGO_PREAPPROVAL_PLAN_IDS
+    if (!raw) return null
+    try {
+      const map = JSON.parse(raw) as Record<string, unknown>
+      const id = map[planKey]
+      return typeof id === 'string' && id.length > 0 ? id : null
+    } catch {
+      console.warn('[MERCADO_PAGO] MERCADO_PAGO_PREAPPROVAL_PLAN_IDS não é JSON válido — ignorando config')
+      return null
+    }
+  }
+
+  /**
+   * fetch para endpoints de assinatura do MP com retry (max 3 tentativas) e backoff exponencial
+   * APENAS para 5xx/timeout/rede; 4xx de validação NÃO é retentado (retorna a Response para o
+   * chamador tratar). Esgotadas as tentativas em falha transitória, lança GatewayRetryableError.
+   */
+  private async mpFetchWithRetry(
+    url: string,
+    init: RequestInit,
+    label: string,
+  ): Promise<Response> {
+    const MAX_ATTEMPTS = 3
+    let lastTransient = ''
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), GATEWAY_TIMEOUT_MS)
+      try {
+        const response = await fetch(url, { ...init, signal: controller.signal })
+        // 4xx é terminal (validação): devolve sem retry.
+        if (response.status < 500) return response
+        // 5xx é transitório.
+        lastTransient = `HTTP ${response.status}`
+      } catch (err) {
+        // timeout/rede é transitório.
+        lastTransient = err instanceof Error ? err.message : 'erro desconhecido'
+      } finally {
+        clearTimeout(timeout)
+      }
+      if (attempt < MAX_ATTEMPTS) {
+        await this.backoffDelay(attempt)
+      }
+    }
+    throw new GatewayRetryableError(
+      `[MERCADO_PAGO] ${label} falhou (transitório) após ${MAX_ATTEMPTS} tentativas: ${lastTransient}`,
+    )
+  }
+
+  /** Backoff exponencial (250ms, 500ms, ...) entre tentativas transitórias. */
+  private backoffDelay(attempt: number): Promise<void> {
+    const ms = 250 * 2 ** (attempt - 1)
+    return new Promise((resolve) => setTimeout(resolve, ms))
+  }
+
+  /**
+   * Cancela a renovação automática da assinatura no MercadoPago (CANCELLATION_LOCK).
+   *
+   * Mecanismo: PUT `/preapproval/{id}` com `status: 'paused'`. Usamos `paused` (e NÃO
+   * `cancelled`) deliberadamente: o contrato IGateway exige que `reactivateAutoRenewal`
+   * restaure a MESMA assinatura, e no MP um preapproval `cancelled` é terminal/irreversível
+   * (exigiria recriar). `paused` cessa a cobrança recorrente (visível no painel MP) de forma
+   * reversível. A persistência de `gatewayStatus`/`cancelAtPeriodEnd` é responsabilidade do
+   * chamador (fluxo de CANCELLATION_LOCK); aqui apenas refletimos o estado no gateway.
+   */
+  async cancelAutoRenewal(gatewaySubscriptionId: string): Promise<void> {
+    await this.setPreapprovalStatus(gatewaySubscriptionId, 'paused', 'cancelAutoRenewal')
+  }
+
+  /**
+   * Reativa a renovação automática no MercadoPago após reversão de CANCELLATION_LOCK.
+   *
+   * Mecanismo: PUT `/preapproval/{id}` com `status: 'authorized'`, retomando a cobrança
+   * recorrente do preapproval previamente pausado por `cancelAutoRenewal`.
    */
   async reactivateAutoRenewal(gatewaySubscriptionId: string): Promise<void> {
-    console.warn(`[MERCADO_PAGO] reactivateAutoRenewal stub — integração pendente. subscriptionId: ${gatewaySubscriptionId}`)
+    await this.setPreapprovalStatus(gatewaySubscriptionId, 'authorized', 'reactivateAutoRenewal')
+  }
+
+  /**
+   * Aplica uma transição de status (`paused`/`authorized`) ao preapproval do MP, com a mesma
+   * política de erros do `createSubscription`: 4xx terminal vira GatewayError 422 (não retentar);
+   * 5xx/timeout vira GatewayRetryableError após retries (dentro de `mpFetchWithRetry`); 404 vira
+   * GatewayError PAYMENT_080 (assinatura inexistente). Confirma a transição lendo o `status` da
+   * resposta para não silenciar uma falha lógica do MP.
+   */
+  private async setPreapprovalStatus(
+    gatewaySubscriptionId: string,
+    status: 'paused' | 'authorized',
+    label: string,
+  ): Promise<void> {
+    if (!gatewaySubscriptionId) {
+      throw new GatewayError(`[MERCADO_PAGO] ${label}: gatewaySubscriptionId ausente`, 'PAYMENT_050', 422)
+    }
+
+    const accessToken = env.MERCADO_PAGO_ACCESS_TOKEN
+    if (!accessToken) {
+      throw new GatewayError('[PAYMENT_010] MERCADO_PAGO_ACCESS_TOKEN não configurado', 'PAYMENT_010', 500)
+    }
+
+    const response = await this.mpFetchWithRetry(
+      `https://api.mercadopago.com/preapproval/${encodeURIComponent(gatewaySubscriptionId)}`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization:  `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status }),
+      },
+      label,
+    )
+
+    if (!response.ok) {
+      const raw = await response.text().catch(() => '')
+      if (response.status === 404) {
+        throw new GatewayError(
+          `[MERCADO_PAGO] ${label}: preapproval ${gatewaySubscriptionId} não encontrado`,
+          'PAYMENT_080',
+          404,
+        )
+      }
+      // 5xx já vira GatewayRetryableError dentro de mpFetchWithRetry; aqui só chega 4xx terminal.
+      throw new GatewayError(
+        `[MERCADO_PAGO] ${label} rejeitado HTTP ${response.status}: ${raw.slice(0, 200)}`,
+        'PAYMENT_050',
+        422,
+      )
+    }
+
+    // Confirma a transição: o MP devolve o preapproval atualizado com o novo status.
+    const result = await response.json().catch(() => ({})) as { status?: string }
+    if (result.status && result.status !== status) {
+      throw new GatewayError(
+        `[MERCADO_PAGO] ${label}: status inesperado '${result.status}' (esperado '${status}')`,
+        'PAYMENT_050',
+        422,
+      )
+    }
   }
 }

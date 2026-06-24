@@ -36,6 +36,36 @@ export interface GatewayCheckoutResult {
   expiresAt?:    string
 }
 
+/**
+ * Input para criar uma assinatura recorrente (auto-renewal real no gateway).
+ * Método NOVO (D1): distinto de createCheckout, que permanece como cobrança one-time (D2).
+ * NUNCA inclui dados de cartão — o gateway coleta no fluxo de autorização (redirect).
+ */
+export interface GatewaySubscriptionInput {
+  planType:       PlanType
+  period:         'monthly' | 'yearly'
+  amount:         number          // centavos — valor de cada ciclo de cobrança (NUNCA Float, PCI-DSS)
+  currency:       'BRL' | 'USD'
+  subscriptionId: string          // Subscription.id interno (reference do gateway)
+  userId:         string
+  userEmail:      string
+  successUrl:     string
+  failureUrl:     string
+  pendingUrl:     string
+}
+
+/** Resultado de criação de assinatura recorrente */
+export interface GatewaySubscriptionResult {
+  /** URL de autorização/checkout da assinatura recorrente (redirect) */
+  redirectUrl:           string
+  /** ID da assinatura recorrente no gateway (Subscription.gatewaySubscriptionId) */
+  gatewaySubscriptionId: string
+  /** ID do plano/preço recorrente no gateway, quando aplicável (Subscription.gatewayPlanId) */
+  gatewayPlanId?:        string
+  /** Status inicial reportado pelo gateway (Subscription.gatewayStatus) */
+  status?:               string
+}
+
 /** Resultado de uma operação de estorno (refund) */
 export interface RefundResult {
   /** ID do estorno no gateway (ou 'already_refunded' quando idempotente) */
@@ -48,7 +78,18 @@ export interface RefundResult {
 
 /** Evento normalizado de webhook */
 export interface WebhookEvent {
-  eventType:      'PAYMENT_CONFIRMED' | 'PAYMENT_FAILED' | 'REFUND_COMPLETED'
+  // One-time (checkout): PAYMENT_CONFIRMED | PAYMENT_FAILED | REFUND_COMPLETED.
+  // Ciclo recorrente (assinatura): SUBSCRIPTION_RENEWED (novo ciclo cobrado com sucesso),
+  //   SUBSCRIPTION_PAYMENT_FAILED (falha de cobrança no ciclo — dispara dunning),
+  //   SUBSCRIPTION_CANCELLED (assinatura recorrente encerrada/cancelada no gateway).
+  // O parser de webhook de assinatura (task 007) normaliza para estes tipos.
+  eventType:
+    | 'PAYMENT_CONFIRMED'
+    | 'PAYMENT_FAILED'
+    | 'REFUND_COMPLETED'
+    | 'SUBSCRIPTION_RENEWED'
+    | 'SUBSCRIPTION_PAYMENT_FAILED'
+    | 'SUBSCRIPTION_CANCELLED'
   transactionId:  string
   subscriptionId: string
   amount:         number
@@ -78,9 +119,20 @@ export interface IGateway {
 
   /**
    * Cria checkout de assinatura e retorna URL de redirect.
+   * Cobrança one-time (D2): NÃO configura renovação automática no gateway.
    * NUNCA transmite dados de cartão — redirect checkout apenas.
    */
   createCheckout(input: GatewayCheckoutInput): Promise<GatewayCheckoutResult>
+
+  /**
+   * Cria uma assinatura recorrente real (auto-renewal) no gateway e retorna URL de autorização.
+   * Método NOVO (D1): distinto de createCheckout. Gateways que ainda não suportam recorrência
+   * DEVEM lançar erro explícito (não-implementado), NUNCA retornar undefined nem stub silencioso.
+   * NUNCA transmite dados de cartão — redirect/autorização apenas.
+   * @throws Error com code de não-implementado (statusCode 501) enquanto a integração recorrente
+   *         do gateway não estiver disponível.
+   */
+  createSubscription(input: GatewaySubscriptionInput): Promise<GatewaySubscriptionResult>
 
   /**
    * Valida assinatura HMAC do webhook recebido.

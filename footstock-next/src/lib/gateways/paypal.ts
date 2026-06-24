@@ -5,7 +5,7 @@
 //             PAYMENT_051 (URL inválida), PAYMENT_053 (credenciais inválidas)
 // ============================================================================
 
-import type { IGateway, GatewayCheckoutInput, GatewayCheckoutResult, WebhookEvent } from './IGateway'
+import type { IGateway, GatewayCheckoutInput, GatewayCheckoutResult, GatewaySubscriptionInput, GatewaySubscriptionResult, WebhookEvent } from './IGateway'
 import { GATEWAY_TIMEOUT_MS } from '@/lib/constants/payment-security'
 import { env } from '@/lib/env'
 
@@ -221,6 +221,17 @@ export class PayPalGateway implements IGateway {
       gateway:        'PAYPAL',
       rawPayload:     payload,
     }
+  }
+
+  async createSubscription(_input: GatewaySubscriptionInput): Promise<GatewaySubscriptionResult> {
+    // Assinatura recorrente PayPal (Billing Subscriptions API) não implementada (D1). Falha
+    // terminal explícita 501 — NUNCA retorna undefined nem stub silencioso para que o chamador
+    // não trate uma cobrança recorrente inexistente como configurada.
+    throw new GatewayError(
+      '[PAYPAL] createSubscription não implementado — assinatura recorrente pendente',
+      'PAYMENT_058',
+      501,
+    )
   }
 
   async cancelAutoRenewal(gatewaySubscriptionId: string): Promise<void> {

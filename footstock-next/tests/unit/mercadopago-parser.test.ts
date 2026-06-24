@@ -155,3 +155,152 @@ describe('parseWebhookEvent — enrichment GET /v1/payments/{id}', () => {
     expect(ev.amount).toBe(4990)
   })
 })
+
+// ─── task-007: eventos de ASSINATURA recorrente (preapproval / authorized_payment) ───────────
+// Mock por URL: o ramo de assinatura pode tocar /authorized_payments/{id} e /preapproval/{id}.
+function mockFetchRoutes(
+  routes: Array<{ match: string; body?: Record<string, unknown>; ok?: boolean; status?: number }>,
+) {
+  ;(global.fetch as jest.Mock) = jest.fn().mockImplementation((url: string) => {
+    const r = routes.find((x) => String(url).includes(x.match))
+    if (!r) return Promise.resolve({ ok: false, status: 404, json: async () => ({}) })
+    return Promise.resolve({ ok: r.ok ?? true, status: r.status ?? 200, json: async () => r.body ?? {} })
+  })
+}
+
+describe('parseWebhookEvent — subscription_authorized_payment (ciclo recorrente, task 007)', () => {
+  it('pagamento approved → SUBSCRIPTION_RENEWED (transactionId=payment.id, subId=external_reference)', async () => {
+    mockFetchRoutes([
+      {
+        match: '/authorized_payments/AP_1',
+        body: {
+          status: 'processed',
+          external_reference: 'sub_R1',
+          transaction_amount: 29.9,
+          payment: { id: 9001, status: 'approved', live_mode: true },
+        },
+      },
+    ])
+    const ev = await gateway.parseWebhookEvent(
+      payload({ type: 'subscription_authorized_payment', data: { id: 'AP_1' } }),
+    )
+    expect(ev.eventType).toBe('SUBSCRIPTION_RENEWED')
+    expect(ev.subscriptionId).toBe('sub_R1')
+    expect(ev.transactionId).toBe('9001')
+    expect(ev.amount).toBe(2990)
+  })
+
+  it('pagamento rejected → SUBSCRIPTION_PAYMENT_FAILED', async () => {
+    mockFetchRoutes([
+      {
+        match: '/authorized_payments/AP_2',
+        body: {
+          status: 'processed',
+          external_reference: 'sub_R2',
+          transaction_amount: 29.9,
+          payment: { id: 9002, status: 'rejected' },
+        },
+      },
+    ])
+    const ev = await gateway.parseWebhookEvent(
+      payload({ type: 'subscription_authorized_payment', data: { id: 'AP_2' } }),
+    )
+    expect(ev.eventType).toBe('SUBSCRIPTION_PAYMENT_FAILED')
+    expect(ev.transactionId).toBe('9002')
+  })
+
+  it('authorized_payment em recycling (dunning) → SUBSCRIPTION_PAYMENT_FAILED (fallback p/ ap.id)', async () => {
+    mockFetchRoutes([
+      { match: '/authorized_payments/AP_3', body: { status: 'recycling', external_reference: 'sub_R3' } },
+    ])
+    const ev = await gateway.parseWebhookEvent(
+      payload({ type: 'subscription_authorized_payment', data: { id: 'AP_3' } }),
+    )
+    expect(ev.eventType).toBe('SUBSCRIPTION_PAYMENT_FAILED')
+    expect(ev.transactionId).toBe('AP_3')
+  })
+
+  it('INV-3: status indeterminado (scheduled/pending) → GatewayRetryableError (5xx, nunca 200)', async () => {
+    mockFetchRoutes([
+      { match: '/authorized_payments/AP_4', body: { status: 'scheduled', external_reference: 'sub_R4' } },
+    ])
+    await expect(
+      gateway.parseWebhookEvent(payload({ type: 'subscription_authorized_payment', data: { id: 'AP_4' } })),
+    ).rejects.toThrow(/retry|indeterminado/)
+  })
+
+  it('INV-3: enriquecimento falho (HTTP != 2xx) → GatewayRetryableError (nunca 200)', async () => {
+    // beforeEach já deixa o fetch em 404 → fetchAuthorizedPayment lança retryable.
+    await expect(
+      gateway.parseWebhookEvent(payload({ type: 'subscription_authorized_payment', data: { id: 'AP_404' } })),
+    ).rejects.toThrow(/retry|indeterminado/)
+  })
+
+  it('external_reference ausente no authorized_payment → resolve via preapproval vinculado', async () => {
+    mockFetchRoutes([
+      {
+        match: '/authorized_payments/AP_5',
+        body: {
+          status: 'processed',
+          preapproval_id: 'PRE_5',
+          transaction_amount: 10,
+          payment: { id: 9005, status: 'approved' },
+        },
+      },
+      { match: '/preapproval/PRE_5', body: { status: 'authorized', external_reference: 'sub_R5' } },
+    ])
+    const ev = await gateway.parseWebhookEvent(
+      payload({ type: 'subscription_authorized_payment', data: { id: 'AP_5' } }),
+    )
+    expect(ev.eventType).toBe('SUBSCRIPTION_RENEWED')
+    expect(ev.subscriptionId).toBe('sub_R5')
+  })
+
+  it('DEFESA: cobrança em modo teste (live_mode=false) → descarta, não credita ciclo', async () => {
+    mockFetchRoutes([
+      {
+        match: '/authorized_payments/AP_6',
+        body: {
+          status: 'processed',
+          external_reference: 'sub_R6',
+          transaction_amount: 1,
+          payment: { id: 9006, status: 'approved', live_mode: false },
+        },
+      },
+    ])
+    await expect(
+      gateway.parseWebhookEvent(payload({ type: 'subscription_authorized_payment', data: { id: 'AP_6' } })),
+    ).rejects.toThrow(/modo teste|live_mode/)
+  })
+})
+
+describe('parseWebhookEvent — subscription_preapproval (estado da assinatura, task 007)', () => {
+  it('preapproval cancelled → SUBSCRIPTION_CANCELLED (transactionId estável p/ dedup INV-2)', async () => {
+    mockFetchRoutes([
+      { match: '/preapproval/PRE_C', body: { status: 'cancelled', external_reference: 'sub_C1' } },
+    ])
+    const ev = await gateway.parseWebhookEvent(
+      payload({ type: 'subscription_preapproval', data: { id: 'PRE_C' } }),
+    )
+    expect(ev.eventType).toBe('SUBSCRIPTION_CANCELLED')
+    expect(ev.subscriptionId).toBe('sub_C1')
+    expect(ev.transactionId).toBe('preapproval-cancel-PRE_C')
+    expect(ev.amount).toBe(0)
+  })
+
+  it('preapproval authorized (estado espelhado) → terminal, sem efeito de cobrança (route 200)', async () => {
+    mockFetchRoutes([
+      { match: '/preapproval/PRE_A', body: { status: 'authorized', external_reference: 'sub_A1' } },
+    ])
+    await expect(
+      gateway.parseWebhookEvent(payload({ type: 'subscription_preapproval', data: { id: 'PRE_A' } })),
+    ).rejects.toThrow(/sem efeito de cobrança/)
+  })
+
+  it('INV-3: preapproval com enriquecimento falho → GatewayRetryableError', async () => {
+    // beforeEach deixa o fetch em 404 → fetchPreapproval lança retryable.
+    await expect(
+      gateway.parseWebhookEvent(payload({ type: 'subscription_preapproval', data: { id: 'PRE_404' } })),
+    ).rejects.toThrow(/retry|indeterminado/)
+  })
+})

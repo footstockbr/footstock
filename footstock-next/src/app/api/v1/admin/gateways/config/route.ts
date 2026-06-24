@@ -26,6 +26,10 @@ const gatewaySchema = z.object({
   webhookEndpoint: z.string().url('Webhook endpoint invalido').optional().or(z.literal('')),
   webhookApiKey: z.string().max(256).optional().or(z.literal('')),
   webhookSecret: z.string().max(256).optional().or(z.literal('')),
+  // Task 004: flag de recorrencia real por gateway (default OFF / INV-4). Opcional (sem
+  // .default) para distinguir "nao enviado pelo PATCH" (preserva valor anterior) de "false
+  // explicito". Blobs legados sem o campo sao lidos como OFF pelo helper isRecurringEnabled.
+  recurringEnabled: z.boolean().optional(),
 })
 
 const payloadSchema = z.object({
@@ -58,6 +62,7 @@ function buildDefaultConfig(): GatewayConfig[] {
       webhookEndpoint: '',
       webhookApiKey: env.MERCADO_PAGO_ACCESS_TOKEN,
       webhookSecret: env.MERCADO_PAGO_WEBHOOK_SECRET,
+      recurringEnabled: false,
     },
     {
       code: 'PAGSEGURO',
@@ -75,6 +80,7 @@ function buildDefaultConfig(): GatewayConfig[] {
       webhookEndpoint: '',
       webhookApiKey: env.PAGSEGURO_TOKEN,
       webhookSecret: env.PAGSEGURO_WEBHOOK_SECRET,
+      recurringEnabled: false,
     },
     {
       code: 'PAYPAL',
@@ -92,6 +98,7 @@ function buildDefaultConfig(): GatewayConfig[] {
       webhookEndpoint: '',
       webhookApiKey: env.PAYPAL_CLIENT_ID,
       webhookSecret: env.PAYPAL_WEBHOOK_ID,
+      recurringEnabled: false,
     },
   ]
 }
@@ -267,6 +274,9 @@ async function patchHandler(req: NextRequest) {
         ...incoming,
         webhookApiKey: keepApiKey ? previous?.webhookApiKey : incoming.webhookApiKey,
         webhookSecret: keepSecret ? previous?.webhookSecret : incoming.webhookSecret,
+        // Task 004: PATCH que nao envia recurringEnabled preserva o valor anterior;
+        // ausencia total resolve OFF (INV-4). Evita wipe silencioso de um ON ligado em sandbox.
+        recurringEnabled: incoming.recurringEnabled ?? previous?.recurringEnabled ?? false,
       }
     })
 

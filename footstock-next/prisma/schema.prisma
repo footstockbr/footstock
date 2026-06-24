@@ -224,6 +224,11 @@ enum SubscriptionPeriod {
   YEARLY
 }
 
+enum BillingMode {
+  one_time
+  recurring
+}
+
 enum SessionType {
   PRE_MARKET
   REGULAR
@@ -583,6 +588,15 @@ model Subscription {
   bonusCreditedAt             DateTime?           @map("bonus_credited_at")
   renewalReminderSentAt       DateTime?           @map("renewal_reminder_sent_at") // G-01: lembrete 7 dias antes do vencimento
   refundRequested             Boolean             @default(false) @map("refund_requested")
+  // ─── Recorrencia real (loop 06-24, Task 002): identidade da assinatura no gateway ───
+  gatewaySubscriptionId       String?             @unique @map("gateway_subscription_id") // id da assinatura/preapproval no gateway
+  gatewayPlanId               String?             @map("gateway_plan_id") // id do plano de cobranca no gateway
+  gatewayProductId            String?             @map("gateway_product_id") // id do produto no gateway (quando aplicavel)
+  gatewayStatus               String?             @map("gateway_status") // status bruto reportado pelo gateway (auditoria)
+  currentPeriodStart          DateTime?           @map("current_period_start") // inicio do ciclo de cobranca corrente
+  currentPeriodEnd            DateTime?           @map("current_period_end") // fim do ciclo de cobranca corrente
+  cancelAtPeriodEnd           Boolean             @default(false) @map("cancel_at_period_end") // cancelamento agendado para o fim do ciclo
+  billingMode                 BillingMode         @default(one_time) @map("billing_mode") // one_time (legado) | recurring (assinatura no gateway)
   createdAt                   DateTime            @default(now()) @map("created_at")
   updatedAt                   DateTime            @updatedAt @map("updated_at")
 

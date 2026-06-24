@@ -178,10 +178,15 @@ export interface Subscription {
   userId: string;
   planType: PlanType;
   status: 'ACTIVE' | 'CANCELLED' | 'PAST_DUE' | 'TRIAL';
-  currentPeriodStart: string;
-  currentPeriodEnd: string;
+  // Recorrencia real no gateway (paridade com prisma model Subscription, M061)
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
   gatewaySubscriptionId: string | null;
+  gatewayPlanId: string | null;
+  gatewayProductId: string | null;
+  gatewayStatus: string | null;
+  billingMode: 'one_time' | 'recurring';
   createdAt: string;
   updatedAt: string;
 }

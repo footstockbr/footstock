@@ -558,6 +558,151 @@ export async function POST(request: NextRequest) {
           { status: 503 }
         )
       }
+    } else if (event.eventType === 'SUBSCRIPTION_RENEWED') {
+      // task-007: ciclo recorrente cobrado com sucesso (subscription_authorized_payment aprovado).
+      // Registrar o Payment PAID (caixa real do ciclo — Zero Silêncio) e estender a vigência.
+      // NÃO reusa applyPaymentConfirmedEffects: aquele caminho dispara comissão de afiliado +
+      // bônus PLAN_UPGRADED (efeitos de PRIMEIRA compra) que não se aplicam a uma renovação.
+      // Idempotente: Payment.upsert por gatewayTransactionId + dedup ACCEPTED do passo 5b (INV-2).
+      const renewedSub = await prisma.subscription.findUnique({
+        where: { id: event.subscriptionId },
+        select: { userId: true, planType: true, period: true, gateway: true, expiresAt: true },
+      })
+
+      if (!renewedSub) {
+        // Renovação cuja subscription não casa: corrida (preapproval antes do commit) ou
+        // mapeamento errado. Observável + retryable (não-ACCEPTED) — nunca 200 silencioso.
+        console.error(
+          `[webhook][ALERT] SUBSCRIPTION_RENEWED para subscriptionId inexistente — ciclo NÃO creditado. ` +
+          `subscriptionId=${event.subscriptionId} transactionId=${event.transactionId} gateway=${gatewayType}`
+        )
+        await webhookAuditService.logWebhook({
+          gateway: gatewayEnum, eventType: event.eventType,
+          transactionId: event.transactionId, subscriptionId: event.subscriptionId,
+          status: 'REJECTED', hmacValid: true, ipAddress: originalIp,
+          errorMessage: 'Subscription não encontrada para SUBSCRIPTION_RENEWED',
+        })
+        return NextResponse.json(
+          { error: { code: 'SUB_RENEW_NOT_FOUND', message: 'Subscription não encontrada — reenviar.' } },
+          { status: 503 }
+        )
+      }
+
+      // Hardening: gateway do webhook deve bater com o da subscription.
+      if (renewedSub.gateway !== gatewayEnum) {
+        console.error(
+          `[webhook][ALERT] SUBSCRIPTION_RENEWED gateway divergente — subscriptionId=${event.subscriptionId} ` +
+          `subscription.gateway=${renewedSub.gateway} webhook.gateway=${gatewayEnum}`
+        )
+        await webhookAuditService.logWebhook({
+          gateway: gatewayEnum, eventType: event.eventType,
+          transactionId: event.transactionId, subscriptionId: event.subscriptionId,
+          status: 'REJECTED', hmacValid: true, ipAddress: originalIp,
+          errorMessage: `Gateway divergente: sub=${renewedSub.gateway} evt=${gatewayEnum}`,
+        })
+        return NextResponse.json({ received: true }, { status: 200 })
+      }
+
+      // Estende a vigência em um período a partir do fim do ciclo atual (ou de agora, se já venceu).
+      const renewalBase =
+        renewedSub.expiresAt && renewedSub.expiresAt.getTime() > Date.now()
+          ? new Date(renewedSub.expiresAt)
+          : new Date()
+      const newExpiresAt = addSubscriptionPeriod(renewalBase, renewedSub.period)
+
+      await prisma.subscription.update({
+        where: { id: event.subscriptionId },
+        data: {
+          status: 'ACTIVE',
+          gatewayStatus: 'authorized',
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: newExpiresAt,
+          expiresAt: newExpiresAt,
+        },
+      })
+
+      await prisma.payment.upsert({
+        where: { gatewayTransactionId: event.transactionId },
+        update: { status: 'PAID', processedAt: new Date() },
+        create: {
+          subscriptionId: event.subscriptionId,
+          amount: event.amount,
+          gateway: gatewayEnum,
+          gatewayTransactionId: event.transactionId,
+          status: 'PAID',
+          userId: renewedSub.userId,
+          processedAt: new Date(),
+        },
+      })
+
+      // Analytics best-effort: renovação (não é primeira compra).
+      mixpanelServer.trackPaymentCompleted(renewedSub.userId, {
+        plan: renewedSub.planType as 'CRAQUE' | 'LENDA',
+        gateway: gatewayType,
+        is_first_payment: false,
+      })
+    } else if (event.eventType === 'SUBSCRIPTION_PAYMENT_FAILED') {
+      // task-007: falha de cobrança no ciclo recorrente. Registrar Payment FAILED (idempotente) +
+      // marcar gatewayStatus para a task 008 reconciliar/dunning. NÃO expira a assinatura aqui: o
+      // usuário mantém o acesso já pago até expiresAt; a renovação que falhou simplesmente não
+      // estende o ciclo, e subscription-expiry/DunningService cuidam do lifecycle no vencimento.
+      const failedRenewSub = await prisma.subscription.findUnique({
+        where: { id: event.subscriptionId },
+        select: { userId: true, planType: true },
+      })
+
+      await prisma.payment.upsert({
+        where: { gatewayTransactionId: event.transactionId },
+        update: { status: 'FAILED' },
+        create: {
+          subscriptionId: event.subscriptionId,
+          amount: event.amount,
+          gateway: gatewayEnum,
+          gatewayTransactionId: event.transactionId,
+          status: 'FAILED',
+          userId: failedRenewSub?.userId ?? '',
+        },
+      })
+
+      await prisma.subscription.updateMany({
+        where: { id: event.subscriptionId },
+        data: { gatewayStatus: 'payment_failed' },
+      })
+
+      if (failedRenewSub?.userId) {
+        mixpanelServer.trackPaymentFailed(failedRenewSub.userId, {
+          plan_attempted: failedRenewSub.planType as 'CRAQUE' | 'LENDA',
+          gateway: gatewayType,
+          error_code: 'GATEWAY_DECLINED',
+        })
+      }
+    } else if (event.eventType === 'SUBSCRIPTION_CANCELLED') {
+      // task-007: assinatura encerrada/cancelada no gateway (preapproval cancelled). Não há mais
+      // renovações. Semântica cancel-at-period-end: o usuário mantém acesso até expiresAt e o
+      // downgrade efetivo ocorre em subscription-expiry. Aqui apenas refletimos a intenção do
+      // gateway (cancelAtPeriodEnd + gatewayStatus), sem rebaixar o plano vigente.
+      const cancelledSub = await prisma.subscription.findUnique({
+        where: { id: event.subscriptionId },
+        select: { id: true },
+      })
+      if (cancelledSub) {
+        await prisma.subscription.update({
+          where: { id: event.subscriptionId },
+          data: { cancelAtPeriodEnd: true, gatewayStatus: 'cancelled' },
+        })
+      } else {
+        console.error(
+          `[webhook][ALERT] SUBSCRIPTION_CANCELLED para subscriptionId inexistente. ` +
+          `subscriptionId=${event.subscriptionId} transactionId=${event.transactionId} gateway=${gatewayType}`
+        )
+        await webhookAuditService.logWebhook({
+          gateway: gatewayEnum, eventType: event.eventType,
+          transactionId: event.transactionId, subscriptionId: event.subscriptionId,
+          status: 'REJECTED', hmacValid: true, ipAddress: originalIp,
+          errorMessage: 'Subscription não encontrada para SUBSCRIPTION_CANCELLED',
+        })
+        return NextResponse.json({ received: true }, { status: 200 })
+      }
     }
   } catch (err) {
     // C5 (task-008): AUTH-009 lançado por upgradeUser (conta com adminRole) é uma condição
@@ -624,6 +769,16 @@ export async function POST(request: NextRequest) {
 // NOTA (item 12): processAffiliateCommission foi movida para PlanService (private), dentro de
 // applyPaymentConfirmedEffects, para ser reusada pela reconciliacao server-side (replay/cron) e
 // nao apenas pelo webhook. A logica e identica (idempotente por gatewayTransactionId).
+
+// ─── task-007: extensão de vigência de ciclo recorrente ──────────────────────────────────────
+// Avança uma data em um período de assinatura (MONTHLY -> +1 mês, YEARLY -> +1 ano). Usado pelo
+// handler SUBSCRIPTION_RENEWED para estender expiresAt/currentPeriodEnd a cada cobrança bem-sucedida.
+function addSubscriptionPeriod(from: Date, period: 'MONTHLY' | 'YEARLY'): Date {
+  const d = new Date(from)
+  if (period === 'YEARLY') d.setFullYear(d.getFullYear() + 1)
+  else d.setMonth(d.getMonth() + 1)
+  return d
+}
 
 // ─── FIX-01: settlement de captura órfã (NOT_ACTIVATABLE) ────────────────────────────────────
 // Planos que "cobrem" uma captura — uma captura é coberta quando existe uma sub ACTIVE de tier

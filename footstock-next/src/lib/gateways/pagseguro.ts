@@ -6,7 +6,7 @@
 // ============================================================================
 
 import { createHmac, timingSafeEqual } from 'crypto'
-import type { IGateway, GatewayCheckoutInput, GatewayCheckoutResult, WebhookEvent } from './IGateway'
+import type { IGateway, GatewayCheckoutInput, GatewayCheckoutResult, GatewaySubscriptionInput, GatewaySubscriptionResult, WebhookEvent } from './IGateway'
 import { GATEWAY_TIMEOUT_MS } from '@/lib/constants/payment-security'
 import { env } from '@/lib/env'
 
@@ -180,6 +180,17 @@ export class PagSeguroGateway implements IGateway {
       gateway:    'PAGSEGURO',
       rawPayload: payload,
     }
+  }
+
+  async createSubscription(_input: GatewaySubscriptionInput): Promise<GatewaySubscriptionResult> {
+    // Assinatura recorrente PagSeguro não implementada (D1). Falha terminal explícita 501 —
+    // NUNCA retorna undefined nem stub silencioso para que o chamador não trate uma cobrança
+    // recorrente inexistente como configurada.
+    throw new GatewayError(
+      '[PAGSEGURO] createSubscription não implementado — assinatura recorrente pendente',
+      'PAYMENT_058',
+      501,
+    )
   }
 
   async cancelAutoRenewal(gatewaySubscriptionId: string): Promise<void> {

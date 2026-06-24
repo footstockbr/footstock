@@ -66,6 +66,12 @@ const envSchema = z.object({
   MP_WEBHOOK_SECRET: z.string().min(1).optional(),
   MERCADO_PAGO_ACCESS_TOKEN: z.string().min(1).optional(),
   MERCADO_PAGO_WEBHOOK_SECRET: z.string().min(1).optional(),
+  // Task 005 — ids de `preapproval_plan` do Mercado Pago resolvidos via config (NUNCA
+  // hardcoded no codigo). JSON map de planKey (`{PLAN_TYPE}_{period}`, ex.: `LENDA_monthly`)
+  // -> preapproval_plan_id ja criado no MP. Quando uma planKey esta ausente, createSubscription
+  // cria o plano de forma idempotente via API (`/preapproval_plan` + X-Idempotency-Key). Cadastro
+  // manual no painel fica fora de escopo (decisao fechada da task 005).
+  MERCADO_PAGO_PREAPPROVAL_PLAN_IDS: z.string().min(1).optional(),
   ACTIVE_GATEWAY: z.enum(['MERCADO_PAGO', 'PAGSEGURO', 'PAYPAL']).optional(),
   // FIX-01 — politica de refund alerta-primeiro para captura orfa (NOT_ACTIVATABLE).
   // Default 'false': um pagamento capturado para assinatura terminal e registrado como
