@@ -29,6 +29,13 @@ interface PromptConfigFields {
 const PROMPT_CONFIG_CACHE_KEY = 'ai:prompt-config'
 const PROMPT_CONFIG_CACHE_TTL = 3600 // 1h
 
+// Mapa ticker -> clube real (cacheado). Os ativos tem nome ficticio interno
+// (displayName, ex: "Urubu da Gavea FC") que corresponde a um clube real
+// (realName, ex: "Flamengo"). Sem este mapa no prompt, o modelo confundia o
+// ticker (ex: tratava URU3 como "selecao uruguaia").
+const TICKER_MAP_CACHE_KEY = 'ai:ticker-map'
+const TICKER_MAP_CACHE_TTL = 3600 // 1h
+
 const DEFAULT_PROMPT_CONFIG: PromptConfigFields = {
   persona: 'Você é um assessor financeiro virtual especializado no mercado de futebol do FootStock. Você combina conhecimento profundo de futebol mundial com análise técnica e fundamentalista de mercado de capitais. Seu nome é Assessor FS e você atua como um analista profissional CNPI (Certificado Nacional do Profissional de Investimentos) especializado no universo futebolístico. Você tem experiência em análise de clubes europeus, sul-americanos e seleções, e conhece profundamente as dinâmicas de transferências, desempenho em campeonatos, gestão financeira de clubes e fatores que influenciam o "valor de mercado" de cada ativo.',
   context: 'O FootStock é um simulador de mercado de capitais baseado em clubes e seleções de futebol. A moeda virtual é FS$ (FootStock Dollar). Cada ativo representa um clube ou seleção real. O preço reflete desempenho esportivo, notícias, contratações, resultados em campeonatos e sentimento da comunidade. Não há dinheiro real envolvido — é 100 porcento educacional e simulado. O mercado funciona com livro de ofertas (order book), posições long e short, dividendos trimestrais baseados em performance esportiva, e ligas competitivas entre investidores. Os planos são: Jogador (gratuito, sem assessor), Craque (assessor sem web search) e Lenda (assessor com web search em tempo real).',
@@ -172,16 +179,71 @@ export class AIAdvisorService {
   }
 
   /**
-   * Constrói o system prompt para o Claude usando configuração dinâmica.
+   * Carrega o mapa ticker -> clube real dos ativos ativos. Redis (cache) -> DB.
+   * Formato compacto: "URU3=Urubu da Gavea FC (Flamengo) | POR3=... (...) | ...".
+   * Resiliente: qualquer falha (Redis/DB) degrada para string vazia (sem mapa no
+   * prompt = comportamento anterior), nunca quebra a análise.
    */
-  buildSystemPrompt(cfg: PromptConfigFields): string {
+  async getTickerMap(): Promise<string> {
+    // 1. Redis cache
+    try {
+      const cached = await redis.get(TICKER_MAP_CACHE_KEY)
+      if (typeof cached === 'string' && cached.length > 0) return cached
+    } catch {
+      // Redis indisponível — segue para o DB
+    }
+
+    // 2. DB
+    try {
+      const assets = await prisma.asset.findMany({
+        where: { isActive: true },
+        orderBy: { ticker: 'asc' },
+        select: { ticker: true, displayName: true, realName: true },
+      })
+      if (!assets.length) return ''
+
+      const line = assets
+        .map(a => (a.realName ? `${a.ticker}=${a.displayName} (${a.realName})` : `${a.ticker}=${a.displayName}`))
+        .join(' | ')
+
+      try {
+        await redis.setex(TICKER_MAP_CACHE_KEY, TICKER_MAP_CACHE_TTL, line)
+      } catch {
+        // ignore falha de cache
+      }
+      return line
+    } catch {
+      // DB indisponível — degrada sem mapa
+      return ''
+    }
+  }
+
+  /**
+   * Constrói o system prompt para o Claude usando configuração dinâmica.
+   * Quando `tickerMap` é fornecido, injeta a seção de mapeamento ticker -> clube
+   * real para o modelo não confundir o ativo analisado nem os clubes citados.
+   */
+  buildSystemPrompt(cfg: PromptConfigFields, tickerMap?: string): string {
     const sections = [
       `# PERSONA\n${cfg.persona}`,
       `# CONTEXTO DA PLATAFORMA\n${cfg.context}`,
+    ]
+
+    if (tickerMap && tickerMap.trim()) {
+      sections.push(
+        `# MAPEAMENTO TICKER -> CLUBE REAL\n` +
+        `Cada ticker do FootStock representa um clube real sob um nome fictício interno. ` +
+        `Use este mapa para identificar corretamente o ativo analisado E quaisquer clubes citados nas notícias; ` +
+        `NUNCA confunda o ticker com outro clube (ex.: URU3 é o Flamengo, não a seleção uruguaia):\n${tickerMap.trim()}\n` +
+        `O ticker em análise é sempre um destes; baseie toda a análise no clube real correspondente.`
+      )
+    }
+
+    sections.push(
       `# DIRETRIZES DE ANÁLISE\n${cfg.analysisGuidelines}`,
       `# CRITÉRIOS DE RISCO\n${cfg.riskCriteria}`,
       `# TOM E LINGUAGEM\n${cfg.tone}`,
-    ]
+    )
 
     if (cfg.extraInstructions.trim()) {
       sections.push(`# INSTRUÇÕES ADICIONAIS\n${cfg.extraInstructions}`)
@@ -274,10 +336,11 @@ Com base nos dados acima, nas notícias e no seu conhecimento sobre o clube/sele
       // Redis indisponível — tratar como cache miss
     }
 
-    // Buscar contexto e configuração do prompt em paralelo
-    const [context, promptConfig] = await Promise.all([
+    // Buscar contexto, configuração do prompt e mapa de tickers em paralelo
+    const [context, promptConfig, tickerMap] = await Promise.all([
       this.fetchContext(ticker, userId),
       this.getPromptConfig(),
+      this.getTickerMap(),
     ])
 
     // Dev mode: retorna análise mock quando a credencial do provider ativo não está configurada
@@ -285,7 +348,7 @@ Com base nos dados acima, nas notícias e no seu conhecimento sobre o clube/sele
       return this.buildDevMockAnalysis(ticker, context, plan)
     }
 
-    const systemPrompt = this.buildSystemPrompt(promptConfig)
+    const systemPrompt = this.buildSystemPrompt(promptConfig, tickerMap)
     const userPrompt = this.buildUserPrompt(ticker, context)
     const isLenda = plan === PLAN_TYPE.LENDA
 
