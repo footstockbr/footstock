@@ -10,6 +10,7 @@ import { redisPublisher as redis } from '@/lib/redis'
 import { prisma } from '@/lib/prisma'
 import { PLAN_TYPE, type PlanType } from '@/lib/enums'
 import { aiResponseParser } from '@/lib/services/AIResponseParser'
+import { aiClientOptions, hasAIKey, resolveModel } from '@/lib/services/ai-provider'
 import type { AIAnalysis, AnalysisContext } from '@/lib/types/ai'
 
 // ---------------------------------------------------------------------------
@@ -50,11 +51,12 @@ export class TimeoutError extends Error {
 }
 
 // ---------------------------------------------------------------------------
-// Singleton Anthropic (inicializa apenas quando ANTHROPIC_API_KEY disponível)
+// Cliente Anthropic SDK apontado ao provider ativo (Anthropic ou Kimi via
+// endpoint Anthropic-compativel). Toggle em AI_PROVIDER — ver ./ai-provider.ts.
 // ---------------------------------------------------------------------------
 
 function getAnthropic(): Anthropic {
-  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  return new Anthropic(aiClientOptions())
 }
 
 function getCacheKey(ticker: string, plan: PlanType): string {
@@ -278,8 +280,8 @@ Com base nos dados acima, nas notícias e no seu conhecimento sobre o clube/sele
       this.getPromptConfig(),
     ])
 
-    // Dev mode: retorna análise mock quando ANTHROPIC_API_KEY não está configurada
-    if (!process.env.ANTHROPIC_API_KEY && process.env.NODE_ENV === 'development') {
+    // Dev mode: retorna análise mock quando a credencial do provider ativo não está configurada
+    if (!hasAIKey() && process.env.NODE_ENV === 'development') {
       return this.buildDevMockAnalysis(ticker, context, plan)
     }
 
@@ -317,7 +319,7 @@ Com base nos dados acima, nas notícias e no seu conhecimento sobre o clube/sele
           // Lenda: usa web_search tool via beta + system prompt
           const res = await (anthropic.beta.messages as unknown as BetaMessages).create(
             {
-              model: 'claude-sonnet-4-5',
+              model: resolveModel('claude-sonnet-4-5'),
               max_tokens: 1024,
               system: systemPrompt,
               tools: [{ type: 'web_search_20250305', name: 'web_search' }],
@@ -333,7 +335,7 @@ Com base nos dados acima, nas notícias e no seu conhecimento sobre o clube/sele
           // Craque: sem tools, com system prompt
           const res = await anthropic.messages.create(
             {
-              model: 'claude-sonnet-4-5',
+              model: resolveModel('claude-sonnet-4-5'),
               max_tokens: 1024,
               system: systemPrompt,
               messages: [{ role: 'user', content: userPrompt }],

@@ -119,8 +119,14 @@ const envSchema = z.object({
   WEBAUTHN_RP_NAME: z.string().min(1).optional().default('FootStock'),
   WEBAUTHN_ORIGIN: z.string().url().optional().default('http://localhost:3000'),
 
-  // IA (Anthropic Claude)
+  // IA — toggle de provider de LLM (Anthropic Claude <-> Kimi for coding).
+  // AI_PROVIDER seleciona o provider ativo; default 'kimi'. Ver lib/services/ai-provider.ts.
+  AI_PROVIDER: z.enum(['anthropic', 'kimi']).optional().default('kimi'),
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  // Kimi: chave sk-kimi-..., endpoint Anthropic-compativel e modelo (defaults no resolver).
+  KIMI_API_KEY: z.string().min(1).optional(),
+  KIMI_BASE_URL: z.string().url().optional(),
+  KIMI_MODEL: z.string().min(1).optional(),
 
   // Segurança adicional
   ENCRYPTION_KEY: z.string().min(32).optional(),

@@ -17,6 +17,7 @@ import { logger } from '../utils/logger'
 import { newsQueue, type RawNewsItem } from './NewsQueue'
 import type { NewsPublisher } from './NewsPublisher'
 import { buildAliasIndex, resolveFromIndex, type AliasIndex } from './ticker-fallback'
+import { aiClientOptions, resolveModel } from './ai-provider'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -40,7 +41,9 @@ const CLASSIFICATION_FALLBACK: ClassifiedNews = {
 // Config de model e caching
 // ---------------------------------------------------------------------------
 
-const MODEL = 'claude-sonnet-4-6'
+// Resolvido pelo provider ativo (AI_PROVIDER): claude-sonnet-4-6 no Anthropic,
+// kimi-for-coding (ou KIMI_MODEL) no Kimi. Ver ./ai-provider.ts.
+const MODEL = resolveModel('claude-sonnet-4-6')
 
 // Mínimo cacheável do Anthropic para Sonnet. Prefixos abaixo disso fazem o
 // cache_control ser IGNORADO silenciosamente (sem erro, sem cache, custo cheio).
@@ -146,7 +149,8 @@ export class NewsClassifier {
         : undefined
 
     this.anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
+      // apiKey + baseURL resolvidos pelo provider ativo (Anthropic ou Kimi).
+      ...aiClientOptions(),
       // O SDK reentrega 429/5xx/timeout até maxRetries (default 2). Combinado com
       // o retry manual 3x daqui, dava até ~9 chamadas HTTP por item — exatamente
       // o multiplicador de custo que motivou esta mudança. Centralizamos o retry

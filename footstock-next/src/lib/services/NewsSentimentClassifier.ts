@@ -9,11 +9,13 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import type { TextBlock } from '@anthropic-ai/sdk/resources/messages/messages'
+import { aiClientOptions, hasAIKey, resolveModel } from '@/lib/services/ai-provider'
 
 export type NewsSentiment = 'BULLISH' | 'BEARISH' | 'NEUTRAL'
 
 // Sentimento e tarefa simples -> modelo barato/rapido. Override via env (ex.: claude-sonnet-4-5).
-const MODEL = process.env.NEWS_SENTIMENT_MODEL ?? 'claude-haiku-4-5-20251001'
+// Resolvido pelo provider ativo (AI_PROVIDER): no Kimi mapeia para kimi-for-coding/KIMI_MODEL.
+const MODEL = resolveModel(process.env.NEWS_SENTIMENT_MODEL ?? 'claude-haiku-4-5-20251001')
 
 const SYSTEM_PROMPT = `Voce classifica o SENTIMENTO de uma noticia de futebol brasileiro para um app que simula uma "bolsa de valores" de clubes. O sentimento reflete se a noticia tende a VALORIZAR ou DESVALORIZAR o(s) clube(s) citado(s).
 
@@ -25,7 +27,7 @@ Responda com EXATAMENTE uma palavra, sem pontuacao nem explicacao:
 Considere a manchete INTEIRA (ex.: "vence e sai da zona de rebaixamento" e BULLISH, nao BEARISH).`
 
 function getAnthropic(): Anthropic {
-  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  return new Anthropic(aiClientOptions())
 }
 
 // Circuit-breaker de credito esgotado (mesma classe do motor): quando a Anthropic
@@ -56,7 +58,7 @@ export async function classifyNewsSentiment(
   title: string,
   content?: string | null,
 ): Promise<NewsSentiment | null> {
-  if (!process.env.ANTHROPIC_API_KEY) return null
+  if (!hasAIKey()) return null
 
   // Circuit aberto (credito esgotado recente): pular sem chamar a API nem logar.
   if (Date.now() < creditCircuitOpenUntil) return null
