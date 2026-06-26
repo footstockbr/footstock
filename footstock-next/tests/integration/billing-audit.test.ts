@@ -62,23 +62,6 @@ jest.mock('@/lib/ratelimit', () => {
   }
 })
 
-// Gateway determinístico só no caminho de CHECKOUT: sem isso, createCheckout chega ao gateway
-// REAL (HTTP MercadoPago). Localmente falha rápido (sem rede), mas no CI a chamada fica
-// pendurada e estoura o timeout de 5s do jest. Sobrescrevemos APENAS `getGateway` (usado pelo
-// checkout) com um stub que falha rápido (PAYMENT_050 = "gateway indisponível", semântica que
-// os checks já assumem); o resto do módulo é o REAL (getGatewayByHeader etc.), preservando os
-// checks de webhook (ST002), que usam getGatewayByHeader, não getGateway.
-jest.mock('@/lib/gateways/GatewayFactory', () => ({
-  ...jest.requireActual('@/lib/gateways/GatewayFactory'),
-  getGateway: () => ({
-    createCheckout: jest.fn().mockRejectedValue(
-      Object.assign(new Error('gateway indisponível no teste'), { code: 'PAYMENT_050', statusCode: 422 })
-    ),
-    createSubscription: jest.fn().mockRejectedValue(
-      Object.assign(new Error('gateway indisponível no teste'), { code: 'PAYMENT_050', statusCode: 422 })
-    ),
-  }),
-}))
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -214,8 +197,11 @@ describe('ST001: Checkout — Upgrade de Plano', () => {
 
   // ─── Regressão do incidente PAYMENT_054 (lockout por PENDING órfão) ──────────
   // Um PENDING CRAQUE abandonado (mais velho que 5min) NÃO pode mais travar o
-  // checkout: createCheckout deve SUPERSEDE o órfão e seguir para um insert fresco,
-  // em vez de colidir no índice M060 → P2002 → PAYMENT_054 ("plano não disponível").
+  // checkout: createCheckout deve SUPERSEDE o órfão (updateMany→CANCELLED) e seguir
+  // para um insert fresco, em vez de colidir no índice M060 → P2002 → PAYMENT_054.
+  // O insert (create) é mockado para REJEITAR de propósito: assim o fluxo termina ANTES
+  // do gateway/redis (determinístico, sem rede — o gateway real pendura no CI), mas ainda
+  // prova a recuperação (supersede ocorreu + insert tentado + NUNCA PAYMENT_054).
   test('PENDING órfão antigo é recuperado (supersede), não retorna PAYMENT_054', async () => {
     const { prisma } = require('@/lib/prisma')
     prisma.user.findUnique.mockResolvedValue({ planType: 'JOGADOR', adminRole: null })
@@ -228,9 +214,8 @@ describe('ST001: Checkout — Upgrade de Plano', () => {
       .mockResolvedValueOnce(null) // #1 existingActive (ACTIVE) → nenhum
       .mockResolvedValueOnce(stale) // #2 openPending (PENDING órfão)
     prisma.subscription.updateMany.mockResolvedValue({ count: 1 })
-    prisma.subscription.create.mockResolvedValue({
-      id: 'sub-fresh-001', userId: 'user-test-001', planType: 'CRAQUE', amount: 3990,
-    })
+    // create rejeita (não-P2002): corta o fluxo antes do gateway, sem deixar de provar o insert.
+    prisma.subscription.create.mockRejectedValue(new Error('insert interrompido no teste'))
 
     const { POST } = await import('@/app/api/v1/payments/checkout/route')
     const req = createRequest('POST', '/api/v1/payments/checkout', {
