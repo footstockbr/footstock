@@ -62,6 +62,24 @@ jest.mock('@/lib/ratelimit', () => {
   }
 })
 
+// Gateway determinístico só no caminho de CHECKOUT: sem isso, createCheckout chega ao gateway
+// REAL (HTTP MercadoPago). Localmente falha rápido (sem rede), mas no CI a chamada fica
+// pendurada e estoura o timeout de 5s do jest. Sobrescrevemos APENAS `getGateway` (usado pelo
+// checkout) com um stub que falha rápido (PAYMENT_050 = "gateway indisponível", semântica que
+// os checks já assumem); o resto do módulo é o REAL (getGatewayByHeader etc.), preservando os
+// checks de webhook (ST002), que usam getGatewayByHeader, não getGateway.
+jest.mock('@/lib/gateways/GatewayFactory', () => ({
+  ...jest.requireActual('@/lib/gateways/GatewayFactory'),
+  getGateway: () => ({
+    createCheckout: jest.fn().mockRejectedValue(
+      Object.assign(new Error('gateway indisponível no teste'), { code: 'PAYMENT_050', statusCode: 422 })
+    ),
+    createSubscription: jest.fn().mockRejectedValue(
+      Object.assign(new Error('gateway indisponível no teste'), { code: 'PAYMENT_050', statusCode: 422 })
+    ),
+  }),
+}))
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function createRequest(method: string, url: string, body?: object): NextRequest {
