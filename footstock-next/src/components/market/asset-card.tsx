@@ -1,17 +1,16 @@
 // T-022: AssetCard agora suporta badge de cotação atrasada para JOGADOR/CRAQUE.
 "use client";
 
-import Link from "next/link";
-import { WifiOff, Star } from "lucide-react";
-import { useState, useEffect } from "react";
-import { cn } from "@/lib/utils";
-import { Sparkline } from "@/components/ui/sparkline";
+import { ClubCrest } from "@/components/market/ClubCrest";
+import { PriceBadge } from "@/components/market/PriceBadge";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Sparkline } from "@/components/ui/sparkline";
 import { ROUTES } from "@/lib/constants/routes";
-import { formatFS, formatPercent } from "@/lib/utils";
-import { PriceBadge } from "@/components/market/PriceBadge";
-import { ClubCrest } from "@/components/market/ClubCrest";
+import { cn, formatFS, formatPercent } from "@/lib/utils";
+import { Star, WifiOff } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 
 export interface AssetData {
   ticker: string;
@@ -81,7 +80,7 @@ function FavoriteBadge() {
       className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-[#F0B90B] bg-[rgba(240,185,11,.14)] border border-[rgba(240,185,11,.4)] px-2 py-0.5 rounded-full"
     >
       <Star size={11} className="fill-[#F0B90B] text-[#F0B90B]" aria-hidden="true" />
-      Time do coração
+      FAVORITO
     </span>
   );
 }
@@ -244,8 +243,8 @@ function AssetCard({ asset, isFavorite }: AssetCardProps) {
                 asset.change24h > 0
                   ? "text-[#2EBD85]"
                   : asset.change24h < 0
-                  ? "text-[#F6465D]"
-                  : "text-[#94a3b8]"
+                    ? "text-[#F6465D]"
+                    : "text-[#94a3b8]"
               )}
             >
               {asset.change24h > 0 ? "▲" : asset.change24h < 0 ? "▼" : ""}{" "}
