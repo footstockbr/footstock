@@ -1,7 +1,6 @@
 'use client'
 
 import {
-  ResponsiveContainer,
   AreaChart,
   Area,
   XAxis,
@@ -9,6 +8,7 @@ import {
   Tooltip,
   CartesianGrid,
 } from 'recharts'
+import { ChartFrame } from './ChartFrame'
 import { Users, Activity, Zap, Clock, TrendingUp, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { StatCard } from '@/components/ui/stat-card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -192,9 +192,9 @@ export function EngagementMetrics({ data, history, isLoading }: EngagementMetric
         aria-label="Gráfico de DAU e WAU dos últimos 30 dias"
       >
         <h3 className="text-sm font-semibold text-[#EAECEF] mb-4">DAU / WAU — Histórico</h3>
-        <div className="h-[200px] md:h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={history} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+        <ChartFrame className="h-[200px] md:h-[300px]">
+          {({ width, height }) => (
+            <AreaChart width={width} height={height} data={Array.isArray(history) ? history : []} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="dauGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#F0B90B" stopOpacity={0.15} />
@@ -238,8 +238,8 @@ export function EngagementMetrics({ data, history, isLoading }: EngagementMetric
                 fill="transparent"
               />
             </AreaChart>
-          </ResponsiveContainer>
-        </div>
+          )}
+        </ChartFrame>
       </div>
     </div>
   )

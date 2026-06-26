@@ -7,10 +7,10 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  ResponsiveContainer,
   CartesianGrid,
 } from 'recharts'
 import { formatBRL } from '@/lib/utils/format'
+import { ChartFrame } from './ChartFrame'
 
 interface MRRHistory {
   date: string
@@ -84,9 +84,9 @@ export function MRRDashboard({
       {/* Gráfico de linha MRR */}
       <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
         <h3 className="text-sm font-medium text-[#EAECEF] mb-4">MRR — Últimos 30 dias</h3>
-        <div className="h-48 sm:h-64" role="img" aria-label="Gráfico de MRR dos últimos 30 dias">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={mrrHistory} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+        <ChartFrame className="h-48 sm:h-64" role="img" aria-label="Gráfico de MRR dos últimos 30 dias">
+          {({ width, height }) => (
+            <LineChart width={width} height={height} data={Array.isArray(mrrHistory) ? mrrHistory : []} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(240,185,11,.06)" />
               <XAxis
                 dataKey="date"
@@ -123,8 +123,8 @@ export function MRRDashboard({
                 activeDot={{ r: 4, fill: '#F0B90B' }}
               />
             </LineChart>
-          </ResponsiveContainer>
-        </div>
+          )}
+        </ChartFrame>
         {mrr === 0 && (
           <div className="flex items-center gap-2 mt-2 text-xs text-[#929AA5]">
             <AlertTriangle className="h-3.5 w-3.5 text-[#F0B90B]" />

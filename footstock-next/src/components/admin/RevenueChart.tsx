@@ -1,7 +1,8 @@
 'use client'
 
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ChartFrame } from './ChartFrame'
 import type { RevenueDayPoint } from '@/lib/types/admin'
 
 interface RevenueChartProps {
@@ -36,9 +37,9 @@ export function RevenueChart({ data, isLoading }: RevenueChartProps) {
       aria-label="Gráfico de MRR dos últimos 30 dias"
     >
       <h3 className="text-sm font-semibold text-[#EAECEF] mb-4">MRR — Últimos 30 dias</h3>
-      <div className="h-[200px] md:h-[300px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+      <ChartFrame className="h-[200px] md:h-[300px]">
+        {({ width, height }) => (
+          <AreaChart width={width} height={height} data={Array.isArray(data) ? data : []} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="mrrGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#F0B90B" stopOpacity={0.2} />
@@ -80,8 +81,8 @@ export function RevenueChart({ data, isLoading }: RevenueChartProps) {
               fill="url(#mrrGradient)"
             />
           </AreaChart>
-        </ResponsiveContainer>
-      </div>
+        )}
+      </ChartFrame>
     </div>
   )
 }

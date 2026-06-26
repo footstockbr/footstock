@@ -1,6 +1,7 @@
 'use client'
 
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { PieChart, Pie, Cell, Tooltip, Legend } from 'recharts'
+import { ChartFrame } from './ChartFrame'
 import { formatBRL } from '@/lib/utils/format'
 import { PLAN_HEX_COLORS, PLAN_PRICE_VALUES } from '@/lib/constants/admin-ui'
 
@@ -38,9 +39,9 @@ export function SubscriptionStats({ planDistribution, revenueByGateway }: Subscr
             Sem assinaturas ativas
           </div>
         ) : (
-          <div className="h-48" role="img" aria-label="Gráfico de distribuição de planos">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
+          <ChartFrame className="h-48" role="img" aria-label="Gráfico de distribuição de planos">
+            {({ width, height }) => (
+              <PieChart width={width} height={height}>
                 <Pie
                   data={pieData}
                   cx="50%"
@@ -67,8 +68,8 @@ export function SubscriptionStats({ planDistribution, revenueByGateway }: Subscr
                   formatter={(value) => <span style={{ color: '#c5b99a', fontSize: 12 }}>{value}</span>}
                 />
               </PieChart>
-            </ResponsiveContainer>
-          </div>
+            )}
+          </ChartFrame>
         )}
       </div>
 
