@@ -76,6 +76,10 @@ const layersSchema = z.object({
     max_per_tick: z.number().min(0.0001).max(0.05),
   }),
   circuitBreaker: z.object({
+    // enabled: liga/desliga o halt automatico do motor. Opcional com default true para
+    // que blobs legados (gravados antes deste campo) continuem fazendo parse sem perder
+    // as demais customizacoes.
+    enabled:         z.boolean().default(true),
     halt_trigger:    z.number().min(0.01).max(0.50),
     halt_duration_s: z.number().int().min(10).max(3600),
   }),
@@ -88,6 +92,31 @@ const layersSchema = z.object({
       CLOSED:       sessionSchema,
     }),
   }),
+  // Toggle por camada. `.default(true)` em cada campo + `.default({})` no objeto torna o
+  // bloco inteiro opcional: blobs legados (sem layerToggles) fazem parse com tudo ligado.
+  layerToggles: z
+    .object({
+      ou:                   z.boolean().default(true),
+      fundamentalReversion: z.boolean().default(true),
+      garch:                z.boolean().default(true),
+      ofi:                  z.boolean().default(true),
+      kylesLambda:          z.boolean().default(true),
+      supplyScaling:        z.boolean().default(true),
+      pressureQueue:        z.boolean().default(true),
+      velocityCap:          z.boolean().default(true),
+      sessionManagement:    z.boolean().default(true),
+    })
+    .default({
+      ou: true,
+      fundamentalReversion: true,
+      garch: true,
+      ofi: true,
+      kylesLambda: true,
+      supplyScaling: true,
+      pressureQueue: true,
+      velocityCap: true,
+      sessionManagement: true,
+    }),
 })
 
 // ─── Redis helpers ────────────────────────────────────────────────────────────
@@ -158,6 +187,11 @@ async function patchHandler(req: NextRequest, { user }: AuthContext): Promise<Ne
   }
 
   try {
+    // O editor de Camadas tem agora o toggle por camada (inclui o card do circuit breaker, que
+    // escreve circuitBreaker.enabled). Portanto salvamos o blob como veio (sem preservar enabled).
+    // O toggle do KPI (/api/v1/admin/motor/circuit-breaker) continua sendo um atalho que faz
+    // read-merge-write do mesmo campo; entre os dois vale last-writer-wins (ambos são controles
+    // de admin). O editor seeda do servidor ao abrir, então normalmente reflete o estado atual.
     const toStore: MotorLayersConfig = {
       ...parsed.data,
       updatedAt: new Date().toISOString(),

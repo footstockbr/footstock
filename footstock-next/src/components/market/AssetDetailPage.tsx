@@ -95,6 +95,25 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
   const activeTab = searchParams.get('tab') ?? 'book'
   const { track } = useAnalytics()
 
+  // Limiar e duração do circuit breaker (SSoT do admin) — evita exibir "8%"/"5 minutos"
+  // hardcoded quando o admin altera os valores. Fallback (8% / 5min) se a leitura falhar.
+  const [cbThresholdPct, setCbThresholdPct] = useState(8)
+  const [cbHaltMin, setCbHaltMin] = useState(5)
+  useEffect(() => {
+    let active = true
+    fetch('/api/v1/market/circuit-breaker-info', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!active || !j?.data) return
+        if (typeof j.data.thresholdPct === 'number') setCbThresholdPct(j.data.thresholdPct)
+        if (typeof j.data.haltDurationMin === 'number') setCbHaltMin(j.data.haltDurationMin)
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [])
+
   // EVT-017: asset_detail_viewed — rastreia visualizacao da pagina de detalhe do ativo
   useEffect(() => {
     track('asset_detail_viewed', {
@@ -214,8 +233,8 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
             <GlossaryInfoIcon fieldKey="circuit-breaker" size={12} />
           </div>
           <p className="text-[11px] text-[#707A8A]">
-            O circuit breaker é ativado quando a variação acumulada do ativo atinge 8%.
-            As negociações são retomadas automaticamente após 5 minutos ou por liberação do administrador.
+            O circuit breaker é ativado quando a variação acumulada do ativo atinge {cbThresholdPct}%.
+            As negociações são retomadas automaticamente após {cbHaltMin} minuto{cbHaltMin === 1 ? '' : 's'} ou por liberação do administrador.
             Ordens existentes permanecem na fila e são executadas ao retomar.
           </p>
         </div>

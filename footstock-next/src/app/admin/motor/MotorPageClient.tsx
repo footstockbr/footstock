@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AdminBreadcrumb } from '@/components/admin/AdminBreadcrumb'
 import { MotorStateCard } from '@/components/admin/MotorStateCard'
 import { ClubEditor } from '@/components/admin/ClubEditor'
@@ -31,6 +31,176 @@ async function fetchMotorKpis(): Promise<MotorKpis> {
   if (!res.ok) throw new Error('Failed')
   const { data } = await res.json()
   return data
+}
+
+interface CircuitBreakerConfigView {
+  enabled: boolean
+  thresholdPct: number
+  halt_trigger: number
+  halt_duration_s: number
+  source?: string
+  updatedAt?: string | null
+}
+
+async function fetchCircuitBreakerConfig(): Promise<CircuitBreakerConfigView> {
+  const res = await fetch('/api/v1/admin/motor/circuit-breaker', { credentials: 'include' })
+  if (!res.ok) throw new Error('Failed')
+  const { data } = await res.json()
+  return data
+}
+
+// Controle do circuit breaker dentro do card de KPI: toggle on/off (aplica na hora) +
+// input do limiar em % com submit. Persiste no SSoT motor:layers:config:v1 via
+// /api/v1/admin/motor/circuit-breaker; o motor lê o mesmo blob (cache ~10s).
+function CircuitBreakerControl() {
+  const queryClient = useQueryClient()
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['motor-cb-config'],
+    queryFn: fetchCircuitBreakerConfig,
+    staleTime: 60_000,
+  })
+
+  // pctDraft = null => segue o servidor; string => edição local em curso.
+  const [pctDraft, setPctDraft] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const mutation = useMutation({
+    mutationFn: async (payload: { enabled?: boolean; thresholdPct?: number }) => {
+      const res = await fetch('/api/v1/admin/motor/circuit-breaker', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error?.message ?? 'Falha ao salvar circuit breaker')
+      return json.data as CircuitBreakerConfigView
+    },
+    // Toggle otimista: a chave se move na hora; reverte no onError.
+    onMutate: async (payload) => {
+      await queryClient.cancelQueries({ queryKey: ['motor-cb-config'] })
+      const prev = queryClient.getQueryData<CircuitBreakerConfigView>(['motor-cb-config'])
+      if (payload.enabled !== undefined && prev) {
+        queryClient.setQueryData<CircuitBreakerConfigView>(['motor-cb-config'], {
+          ...prev,
+          enabled: payload.enabled,
+        })
+      }
+      return { prev }
+    },
+    onSuccess: () => {
+      setError(null)
+      queryClient.invalidateQueries({ queryKey: ['motor-cb-config'] })
+      queryClient.invalidateQueries({ queryKey: ['motor-kpis'] })
+      // Camadas lê o MESMO blob (motor:layers:config:v1) — refresca para refletir a mudança.
+      queryClient.invalidateQueries({ queryKey: ['motor-layers'] })
+    },
+    onError: (e: Error, _payload, context) => {
+      if (context?.prev) queryClient.setQueryData(['motor-cb-config'], context.prev)
+      setError(e.message)
+    },
+  })
+
+  if (isLoading) {
+    return <Skeleton className="h-16 w-full" data-testid="admin-motor-cb-loading" />
+  }
+
+  // Zero Silêncio: falha de leitura não pode virar skeleton infinito mudo.
+  if (isError || !data) {
+    return (
+      <div data-testid="admin-motor-cb-error-load" className="flex items-center justify-between gap-2">
+        <span className="text-[10px] text-[#F6465D]">Falha ao carregar o circuit breaker.</span>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          className="px-2 py-1 rounded text-[10px] font-semibold border border-[rgba(240,185,11,.3)] text-[#F0B90B]"
+        >
+          Tentar de novo
+        </button>
+      </div>
+    )
+  }
+
+  const enabled = data.enabled
+  const shownPct = pctDraft ?? String(data.thresholdPct)
+  const pctNum = Number(shownPct)
+  const pctValid = Number.isFinite(pctNum) && pctNum >= 1 && pctNum <= 50
+  const pctDirty = pctDraft !== null && pctNum !== data.thresholdPct
+
+  function submitThreshold() {
+    if (!pctValid) {
+      setError('Limiar deve ser entre 1% e 50%')
+      return
+    }
+    mutation.mutate({ thresholdPct: pctNum }, { onSuccess: () => setPctDraft(null) })
+  }
+
+  return (
+    <div data-testid="admin-motor-cb-control" className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] text-[#929AA5] uppercase tracking-wide">Halt automático</span>
+        <button
+          type="button"
+          data-testid="admin-motor-cb-toggle"
+          role="switch"
+          aria-checked={enabled}
+          aria-label={enabled ? 'Desligar circuit breaker' : 'Ligar circuit breaker'}
+          disabled={mutation.isPending}
+          onClick={() => mutation.mutate({ enabled: !enabled })}
+          className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-50"
+          style={{ background: enabled ? '#2EBD85' : '#5E6673' }}
+        >
+          <span
+            className="inline-block h-4 w-4 rounded-full bg-white transition-transform"
+            style={{ transform: enabled ? 'translateX(18px)' : 'translateX(2px)' }}
+          />
+        </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor="cb-threshold" className="text-[10px] text-[#929AA5]">
+          Limiar
+        </label>
+        <input
+          id="cb-threshold"
+          type="number"
+          data-testid="admin-motor-cb-threshold-input"
+          value={shownPct}
+          min={1}
+          max={50}
+          step={0.5}
+          onChange={(e) => {
+            setPctDraft(e.target.value)
+            setError(null)
+          }}
+          className="w-16 bg-[#0B0E11] border border-[rgba(240,185,11,.2)] rounded px-2 py-1 text-xs text-[#EAECEF] focus:outline-none focus:border-[#F0B90B]"
+        />
+        <span className="text-[10px] text-[#929AA5]">%</span>
+        <button
+          type="button"
+          data-testid="admin-motor-cb-submit"
+          onClick={submitThreshold}
+          disabled={mutation.isPending || !pctDirty || !pctValid}
+          className="ml-auto px-2.5 py-1 rounded text-[11px] font-semibold bg-[#F0B90B] text-[#080b12] transition-opacity disabled:opacity-40"
+        >
+          {mutation.isPending ? '...' : 'Salvar'}
+        </button>
+      </div>
+
+      {error ? (
+        <p data-testid="admin-motor-cb-error" className="text-[10px] text-[#F6465D]">
+          {error}
+        </p>
+      ) : data.updatedAt && !pctDirty ? (
+        <p className="text-[9px] text-[#5E6673]">
+          {enabled ? 'ativo' : 'desligado'} · halt a {data.thresholdPct}% · atualizado{' '}
+          {new Date(data.updatedAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+        </p>
+      ) : (
+        <p className="text-[9px] text-[#5E6673]">{enabled ? 'ativo' : 'desligado'} · halt a {data.thresholdPct}%</p>
+      )}
+    </div>
+  )
 }
 
 const ACTION_BADGE: Record<string, string> = {
@@ -181,7 +351,7 @@ export default function MotorPageClient({ adminRole }: MotorPageClientProps) {
       </div>
 
       {/* KPIs — dados reais */}
-      <div data-testid="admin-motor-kpis" className="grid grid-cols-2 gap-3">
+      <div data-testid="admin-motor-kpis" className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div data-testid="admin-motor-kpi-pnl" className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
           <div className="text-[10px] text-[#929AA5] uppercase tracking-wide mb-1">P&L Agregado</div>
           {kpisLoading ? (
@@ -195,23 +365,36 @@ export default function MotorPageClient({ adminRole }: MotorPageClientProps) {
         </div>
 
         <div data-testid="admin-motor-kpi-circuit-breakers" className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
-          <div className="flex items-center justify-between mb-1">
-            <div className="text-[10px] text-[#929AA5] uppercase tracking-wide">Circuit Breakers</div>
-            <span>🔒</span>
+          {/* div 1 — estado atual (conteúdo original): contagem de ativos suspensos */}
+          <div data-testid="admin-motor-kpi-circuit-breakers-status">
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-[10px] text-[#929AA5] uppercase tracking-wide">Circuit Breakers</div>
+              <span>🔒</span>
+            </div>
+            {kpisLoading ? (
+              <Skeleton className="h-7 w-12" />
+            ) : (
+              <div
+                className="text-lg font-extrabold"
+                style={{ color: (kpis?.circuitBreakers ?? 0) > 0 ? '#F6465D' : '#2EBD85' }}
+              >
+                {kpis?.circuitBreakers ?? 0}
+              </div>
+            )}
+            <div className="text-[10px] text-[#929AA5] mt-1">
+              {(kpis?.circuitBreakers ?? 0) === 0 ? 'nenhum ativo suspenso' : 'ativos com negociação suspensa'}
+            </div>
           </div>
-          {kpisLoading ? (
-            <Skeleton className="h-7 w-12" />
-          ) : (
+
+          {/* div 2 — controle admin: toggle on/off + limiar (%) com submit */}
+          {canGlobalHalt && (
             <div
-              className="text-lg font-extrabold"
-              style={{ color: (kpis?.circuitBreakers ?? 0) > 0 ? '#F6465D' : '#2EBD85' }}
+              data-testid="admin-motor-kpi-circuit-breakers-control"
+              className="mt-3 pt-3 border-t border-[rgba(240,185,11,.1)]"
             >
-              {kpis?.circuitBreakers ?? 0}
+              <CircuitBreakerControl />
             </div>
           )}
-          <div className="text-[10px] text-[#929AA5] mt-1">
-            {(kpis?.circuitBreakers ?? 0) === 0 ? 'nenhum ativo suspenso' : 'ativos com negociação suspensa'}
-          </div>
         </div>
       </div>
 

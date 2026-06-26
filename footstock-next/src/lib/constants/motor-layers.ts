@@ -25,7 +25,7 @@ export const MOTOR_LAYERS_DEFAULTS: Omit<MotorLayersConfig, 'updatedAt' | 'updat
   supplyScaling: { amp_cap: 2.0 },
   pressureQueue: { pressure_spread_ticks: 10, absorption_ticks: 40, spot_cap: 0.025 },
   velocityCap: { max_per_tick: 0.0035 },
-  circuitBreaker: { halt_trigger: 0.08, halt_duration_s: 300 },
+  circuitBreaker: { enabled: true, halt_trigger: 0.08, halt_duration_s: 300 },
   sessionManagement: {
     sessions: {
       PRE_OPENING:  { vol_multiplier: 0.30 },
@@ -34,5 +34,18 @@ export const MOTOR_LAYERS_DEFAULTS: Omit<MotorLayersConfig, 'updatedAt' | 'updat
       AFTER_MARKET: { vol_multiplier: 0.10 },
       CLOSED:       { vol_multiplier: 0.00 },
     },
+  },
+  // Toggle por camada (default tudo ligado = comportamento idêntico ao atual). O circuit
+  // breaker tem seu próprio enabled (circuitBreaker.enabled), fora deste mapa.
+  layerToggles: {
+    ou:                   true,
+    fundamentalReversion: true,
+    garch:                true,
+    ofi:                  true,
+    kylesLambda:          true,
+    supplyScaling:        true,
+    pressureQueue:        true,
+    velocityCap:          true,
+    sessionManagement:    true,
   },
 }

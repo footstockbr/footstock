@@ -78,8 +78,14 @@ export const ANNUAL_DISCOUNT = 0.25
 /** Percentual máximo do portfólio em um único ativo (decimal) */
 export const MAX_POSITION_PERCENT = 0.25
 
-/** Variação percentual que ativa o circuit breaker (decimal) — INTAKE: 8% */
+/**
+ * @deprecated NÃO use para lógica/exibição do circuit breaker. O limiar e a duração reais
+ * são CONFIGURÁVEIS e vivem na SSoT `motor:layers:config:v1` (`circuitBreaker.halt_trigger` /
+ * `halt_duration_s`), expostos por `@/lib/motor/circuit-breaker-config` e
+ * `/api/v1/admin/motor/circuit-breaker`. Esta constante é apenas o default histórico (8%) e
+ * pode divergir do valor efetivo — usá-la reintroduziria o "8% hardcoded".
+ */
 export const CIRCUIT_BREAKER_THRESHOLD = 0.08
 
-/** Duração do halt do circuit breaker em milissegundos (5 minutos) */
+/** @deprecated Ver CIRCUIT_BREAKER_THRESHOLD: a duração real é configurável (halt_duration_s). */
 export const CIRCUIT_BREAKER_HALT_DURATION = 300_000

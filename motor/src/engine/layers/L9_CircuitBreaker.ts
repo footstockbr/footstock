@@ -1,3 +1,8 @@
+// @deprecated CAMADA MORTA — NÃO está no pipeline (PriceCalculator usa L10_CircuitBreaker).
+// Hardcoda 8% e ignora o toggle/limiar configuráveis da SSoT (motor:layers:config:v1). Não
+// religar sem antes adotar `params.circuitBreakerThreshold`/`circuitBreakerEnabled`, senão o
+// circuit breaker passaria a ignorar silenciosamente a config do admin. Mantida apenas porque
+// testes legados ainda a referenciam.
 import type { QuantLayer } from './base'
 import type { AssetState, ClusterParams, LayerResult } from '../../types/motor.types'
 

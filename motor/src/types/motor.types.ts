@@ -27,6 +27,12 @@ export interface ClusterParams {
   pressureAbsorptionTicks?: number // L7: fase de absorcao da noticia
   pressureSpotCap?: number    // L7: cap instantaneo por noticia
   circuitBreakerThreshold?: number // L10: threshold de halt normal
+  circuitBreakerEnabled?: boolean // L10: liga/desliga o halt automatico (default true)
+  // Toggle por camada (admin → motor:layers:config:v1 → layerToggles). Quando uma chave é
+  // `false`, o motor pula a contribuição daquela camada. Ausência/true => camada ativa.
+  // Chaves: ou, fundamentalReversion, garch, ofi, kylesLambda, supplyScaling, pressureQueue,
+  // velocityCap, sessionManagement.
+  layersEnabled?: Partial<Record<string, boolean>>
 }
 
 // ─── Motor Tick ───────────────────────────────────────────────────────────

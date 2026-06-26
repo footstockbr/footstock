@@ -23,8 +23,9 @@ type AdminMotorLayersConfig = {
   supplyScaling: { amp_cap: number }
   pressureQueue: { pressure_spread_ticks: number; absorption_ticks: number; spot_cap: number }
   velocityCap: { max_per_tick: number }
-  circuitBreaker: { halt_trigger: number; halt_duration_s: number }
+  circuitBreaker: { enabled?: boolean; halt_trigger: number; halt_duration_s: number }
   sessionManagement: { sessions: Record<SessionType, { vol_multiplier: number }> }
+  layerToggles?: Partial<Record<string, boolean>>
   updatedAt?: string | null
   updatedBy?: string | null
 }
@@ -130,12 +131,21 @@ function toRuntimeConfig(config: AdminMotorLayersConfig | null): RuntimeMotorLay
       pressureAbsorptionTicks: Math.floor(clamp(config.pressureQueue.absorption_ticks, 5, 200)),
       pressureSpotCap: clamp(config.pressureQueue.spot_cap, 0.001, 0.10),
       circuitBreakerThreshold: clamp(config.circuitBreaker.halt_trigger, 0.01, 0.50),
+      // enabled ausente (blob legado) => true: o halt automatico só desliga com toggle explícito.
+      circuitBreakerEnabled: config.circuitBreaker.enabled ?? true,
+      // Toggle por camada (default tudo ligado quando ausente — blob legado).
+      layersEnabled: config.layerToggles ?? {},
     }
   }
 
+  // Camada sessionManagement desligada (toggle) => multiplicador neutro 1 em todas as sessões
+  // (volatilidade constante, sem escala por sessão de mercado).
+  const sessionEnabled = config.layerToggles?.sessionManagement !== false
   const sessionMultipliers = {} as Record<SessionType, number>
   for (const session of SESSION_TYPES) {
-    sessionMultipliers[session] = clamp(config.sessionManagement.sessions[session].vol_multiplier, 0, 5)
+    sessionMultipliers[session] = sessionEnabled
+      ? clamp(config.sessionManagement.sessions[session].vol_multiplier, 0, 5)
+      : 1
   }
 
   return {

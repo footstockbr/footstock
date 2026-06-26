@@ -200,6 +200,23 @@ export interface OUClusterParams { sigma: number; theta: number; spread_base: nu
 export interface OFIClusterParams { rho: number }
 export interface SessionParams { vol_multiplier: number }
 
+/**
+ * Liga/desliga cada camada do motor (toggle por camada na aba Camadas). Todas default
+ * `true` — desligar uma camada faz o motor pular a contribuição dela naquele tick. O
+ * circuit breaker NÃO entra aqui: ele tem seu próprio `circuitBreaker.enabled` (toggle do
+ * KPI), e a UI de Camadas lê/escreve esse campo para o card do CB.
+ */
+export type MotorLayerToggleKey =
+  | 'ou'
+  | 'fundamentalReversion'
+  | 'garch'
+  | 'ofi'
+  | 'kylesLambda'
+  | 'supplyScaling'
+  | 'pressureQueue'
+  | 'velocityCap'
+  | 'sessionManagement'
+
 export interface MotorLayersConfig {
   ou: { clusters: Record<ClusterKey, OUClusterParams> }
   fundamentalReversion: { reversion_rate: number }
@@ -209,8 +226,9 @@ export interface MotorLayersConfig {
   supplyScaling: { amp_cap: number }
   pressureQueue: { pressure_spread_ticks: number; absorption_ticks: number; spot_cap: number }
   velocityCap: { max_per_tick: number }
-  circuitBreaker: { halt_trigger: number; halt_duration_s: number }
+  circuitBreaker: { enabled: boolean; halt_trigger: number; halt_duration_s: number }
   sessionManagement: { sessions: Record<SessionKey, SessionParams> }
+  layerToggles: Record<MotorLayerToggleKey, boolean>
   updatedAt: string | null
   updatedBy: string | null
 }

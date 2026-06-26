@@ -109,12 +109,14 @@ interface LayerCardProps {
   expanded: boolean
   onToggle: () => void
   onReset: () => void
+  enabled: boolean
+  onToggleEnabled: () => void
   summary: string
   children: React.ReactNode
   testid: string
 }
 
-function LayerCard({ badge, name, description, color, expanded, onToggle, onReset, summary, children, testid }: LayerCardProps) {
+function LayerCard({ badge, name, description, color, expanded, onToggle, onReset, enabled, onToggleEnabled, summary, children, testid }: LayerCardProps) {
   return (
     <div
       data-testid={testid}
@@ -148,6 +150,15 @@ function LayerCard({ badge, name, description, color, expanded, onToggle, onRese
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {/* Indicador "desligada" visível mesmo com o card recolhido (Zero Silêncio). */}
+          {!enabled && (
+            <span
+              data-testid={`${testid}-off-badge`}
+              className="text-[8px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-[rgba(246,70,93,.15)] text-[#F6465D] border border-[rgba(246,70,93,.3)]"
+            >
+              off
+            </span>
+          )}
           {expanded && (
             <button
               type="button"
@@ -156,6 +167,25 @@ function LayerCard({ badge, name, description, color, expanded, onToggle, onRese
               title="Resetar para padrão"
             >
               ↺ reset
+            </button>
+          )}
+          {/* Toggle liga/desliga a camada do motor (ao lado do reset). */}
+          {expanded && (
+            <button
+              type="button"
+              role="switch"
+              aria-checked={enabled}
+              aria-label={enabled ? `Desligar camada ${name}` : `Ligar camada ${name}`}
+              data-testid={`${testid}-enabled-toggle`}
+              onClick={(e) => { e.stopPropagation(); onToggleEnabled() }}
+              className="relative inline-flex h-4 w-7 items-center rounded-full transition-colors shrink-0"
+              style={{ background: enabled ? '#2EBD85' : '#5E6673' }}
+              title={enabled ? 'Camada ativa — clique para desligar' : 'Camada desligada — clique para ligar'}
+            >
+              <span
+                className="inline-block h-3 w-3 rounded-full bg-white transition-transform"
+                style={{ transform: enabled ? 'translateX(14px)' : 'translateX(2px)' }}
+              />
             </button>
           )}
           <span className="text-[#52585F] text-[10px]">{expanded ? '▲' : '▼'}</span>
@@ -267,6 +297,20 @@ export function MotorCamadas() {
       ...prev,
       [id]: (MOTOR_LAYERS_DEFAULTS as Record<string, unknown>)[id],
     }))
+  }, [])
+
+  // Toggle liga/desliga por camada. O circuit breaker usa seu próprio `circuitBreaker.enabled`
+  // (mesmo campo do toggle do KPI); as demais camadas usam `layerToggles[id]`.
+  const layerEnabled = (id: LayerId): boolean =>
+    id === 'circuitBreaker' ? config.circuitBreaker.enabled : config.layerToggles[id]
+
+  const setLayerEnabled = useCallback((id: LayerId) => {
+    setConfig((prev) => {
+      if (id === 'circuitBreaker') {
+        return { ...prev, circuitBreaker: { ...prev.circuitBreaker, enabled: !prev.circuitBreaker.enabled } }
+      }
+      return { ...prev, layerToggles: { ...prev.layerToggles, [id]: !prev.layerToggles[id] } }
+    })
   }, [])
 
   // Typed updaters
@@ -390,6 +434,8 @@ export function MotorCamadas() {
         expanded={!!expanded.ou}
         onToggle={() => toggle('ou')}
         onReset={() => resetLayer('ou')}
+        enabled={layerEnabled('ou')}
+        onToggleEnabled={() => setLayerEnabled('ou')}
         summary={`σ=${config.ou.clusters[ouCluster].sigma.toFixed(4)} θ=${config.ou.clusters[ouCluster].theta.toFixed(2)} spread=${config.ou.clusters[ouCluster].spread_base.toFixed(3)}`}
         testid="admin-motor-layer-ou"
       >
@@ -431,6 +477,8 @@ export function MotorCamadas() {
         expanded={!!expanded.fundamentalReversion}
         onToggle={() => toggle('fundamentalReversion')}
         onReset={() => resetLayer('fundamentalReversion')}
+        enabled={layerEnabled('fundamentalReversion')}
+        onToggleEnabled={() => setLayerEnabled('fundamentalReversion')}
         summary={`reversion_rate=${config.fundamentalReversion.reversion_rate.toFixed(4)}`}
         testid="admin-motor-layer-fundamental"
       >
@@ -453,6 +501,8 @@ export function MotorCamadas() {
         expanded={!!expanded.garch}
         onToggle={() => toggle('garch')}
         onReset={() => resetLayer('garch')}
+        enabled={layerEnabled('garch')}
+        onToggleEnabled={() => setLayerEnabled('garch')}
         summary={`ω=${config.garch.omega.toFixed(6)} α=${config.garch.alpha.toFixed(2)} β=${config.garch.beta.toFixed(2)} cap=${config.garch.vol_cap.toFixed(1)}×`}
         testid="admin-motor-layer-garch"
       >
@@ -514,6 +564,8 @@ export function MotorCamadas() {
         expanded={!!expanded.ofi}
         onToggle={() => toggle('ofi')}
         onReset={() => resetLayer('ofi')}
+        enabled={layerEnabled('ofi')}
+        onToggleEnabled={() => setLayerEnabled('ofi')}
         summary={`ρ(${ofiCluster})=${config.ofi.clusters[ofiCluster].rho.toFixed(3)}`}
         testid="admin-motor-layer-ofi"
       >
@@ -537,6 +589,8 @@ export function MotorCamadas() {
         expanded={!!expanded.kylesLambda}
         onToggle={() => toggle('kylesLambda')}
         onReset={() => resetLayer('kylesLambda')}
+        enabled={layerEnabled('kylesLambda')}
+        onToggleEnabled={() => setLayerEnabled('kylesLambda')}
         summary={`scale=${config.kylesLambda.lambda_scale.toFixed(2)}×`}
         testid="admin-motor-layer-kyles-lambda"
       >
@@ -559,6 +613,8 @@ export function MotorCamadas() {
         expanded={!!expanded.supplyScaling}
         onToggle={() => toggle('supplyScaling')}
         onReset={() => resetLayer('supplyScaling')}
+        enabled={layerEnabled('supplyScaling')}
+        onToggleEnabled={() => setLayerEnabled('supplyScaling')}
         summary={`amp_cap=${config.supplyScaling.amp_cap.toFixed(1)}×`}
         testid="admin-motor-layer-supply-scaling"
       >
@@ -581,6 +637,8 @@ export function MotorCamadas() {
         expanded={!!expanded.pressureQueue}
         onToggle={() => toggle('pressureQueue')}
         onReset={() => resetLayer('pressureQueue')}
+        enabled={layerEnabled('pressureQueue')}
+        onToggleEnabled={() => setLayerEnabled('pressureQueue')}
         summary={`spread=${config.pressureQueue.pressure_spread_ticks}t absorb=${config.pressureQueue.absorption_ticks}t cap=±${(config.pressureQueue.spot_cap * 100).toFixed(1)}%`}
         testid="admin-motor-layer-pressure-queue"
       >
@@ -621,6 +679,8 @@ export function MotorCamadas() {
         expanded={!!expanded.velocityCap}
         onToggle={() => toggle('velocityCap')}
         onReset={() => resetLayer('velocityCap')}
+        enabled={layerEnabled('velocityCap')}
+        onToggleEnabled={() => setLayerEnabled('velocityCap')}
         summary={`max/tick=±${(config.velocityCap.max_per_tick * 100).toFixed(3)}%`}
         testid="admin-motor-layer-velocity-cap"
       >
@@ -643,6 +703,8 @@ export function MotorCamadas() {
         expanded={!!expanded.circuitBreaker}
         onToggle={() => toggle('circuitBreaker')}
         onReset={() => resetLayer('circuitBreaker')}
+        enabled={layerEnabled('circuitBreaker')}
+        onToggleEnabled={() => setLayerEnabled('circuitBreaker')}
         summary={`trigger=±${(config.circuitBreaker.halt_trigger * 100).toFixed(0)}% dur=${config.circuitBreaker.halt_duration_s}s`}
         testid="admin-motor-layer-circuit-breaker"
       >
@@ -675,6 +737,8 @@ export function MotorCamadas() {
         expanded={!!expanded.sessionManagement}
         onToggle={() => toggle('sessionManagement')}
         onReset={() => resetLayer('sessionManagement')}
+        enabled={layerEnabled('sessionManagement')}
+        onToggleEnabled={() => setLayerEnabled('sessionManagement')}
         summary={SESSIONS.map((s) => `${s.slice(0,2)}:${config.sessionManagement.sessions[s].vol_multiplier.toFixed(1)}×`).join(' ')}
         testid="admin-motor-layer-session"
       >

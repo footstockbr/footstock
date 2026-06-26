@@ -87,6 +87,19 @@ export class L10_CircuitBreaker implements QuantLayer {
       (candidatePrice - state.closePrice) / state.closePrice
     )
 
+    // Toggle admin (SSoT motor:layers:config:v1 → circuitBreaker.enabled): quando
+    // explicitamente desligado, o motor NUNCA suspende por variação. `undefined`
+    // (config legada/sem o campo) mantém o comportamento padrão (ligado).
+    if (params?.circuitBreakerEnabled === false) {
+      // threshold omitido de propósito: Infinity serializa para null no JSON de atribuição.
+      return {
+        layer: this.name,
+        deltaPrice: 0,
+        triggered: false,
+        metadata: { changePercent, disabled: 1 },
+      }
+    }
+
     // newsActive exige newsImpact !== 0 também: protege contra ticks "fantasma"
     // (newsImpact=0 sem decrement em L7 manteria o flag preso eternamente).
     const newsActive = state.newsImpact !== 0 && state.newsImpactTicks > 0

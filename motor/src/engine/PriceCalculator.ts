@@ -41,6 +41,19 @@ import {
   classifyNudgeMove,
 } from './nudge-constants'
 
+// Mapeia o nome de cada camada L1–L7 para a chave do toggle (admin →
+// motor:layers:config:v1 → layerToggles). Usado para pular a contribuição de uma camada
+// desligada. L8 (velocityCap) e L10 (circuitBreaker) são tratados separadamente.
+const LAYER_TOGGLE_KEY: Record<string, string> = {
+  L1_OrnsteinUhlenbeck: 'ou',
+  L2_FundamentalAnchor: 'fundamentalReversion',
+  L3_GARCHLite: 'garch',
+  L4_OrderFlowImbalance: 'ofi',
+  L5_KyleLambda: 'kylesLambda',
+  L6_SupplyScaling: 'supplyScaling',
+  L7_PressureQueue: 'pressureQueue',
+}
+
 export interface PriceCalculationResult {
   /**
    * Preço publicado (canônico): dinâmica do motor (L1-L7) MAIS o delta do agente,
@@ -130,7 +143,14 @@ export class PriceCalculator {
       this.l7,  // L7: Pressure Queue (notícias)
     ]
 
+    const layersEnabled = params.layersEnabled
     for (const layer of mainLayers) {
+      // Toggle por camada (admin): camada desligada não contribui delta neste tick.
+      const toggleKey = LAYER_TOGGLE_KEY[layer.name]
+      if (toggleKey && layersEnabled?.[toggleKey] === false) {
+        layerResults.push({ layer: layer.name, deltaPrice: 0, metadata: { disabled: 1 } })
+        continue
+      }
       const result = layer.applyLayer(state, params, noise)
       totalDelta += result.deltaPrice
       layerResults.push(result)
@@ -173,8 +193,12 @@ export class PriceCalculator {
       })
     }
 
-    // L8: velocity cap no delta acumulado COMBINADO (0.35% absoluto por tick)
-    const cappedDelta = this.l8.applyCap(combinedRawDelta, state.currentPrice, params.maxTickChange)
+    // L8: velocity cap no delta acumulado COMBINADO (0.35% absoluto por tick).
+    // Toggle por camada (admin): desligado => sem trava de velocidade (delta passa cru).
+    const velocityCapOn = layersEnabled?.velocityCap !== false
+    const cappedDelta = velocityCapOn
+      ? this.l8.applyCap(combinedRawDelta, state.currentPrice, params.maxTickChange)
+      : combinedRawDelta
     layerResults.push({
       layer: 'L8_VelocityCap',
       deltaPrice: cappedDelta - combinedRawDelta,
@@ -211,8 +235,10 @@ export class PriceCalculator {
     // D5 (06-18): re-aplica o velocity cap L8 INCLUINDO a correlacao. Antes a correlacao
     // era somada APOS o cap, entao o delta final podia exceder maxTickChange (bounded,
     // mas furava o teto de 0,35%/tick). O total motor+agente+correlacao agora respeita o cap.
-    const combinedDelta = this.l8.applyCap(cappedDelta + correlationDelta, state.currentPrice, params.maxTickChange)
-    const brakedDelta = this._applyApproachBrake(combinedDelta, state)
+    const combinedDelta = velocityCapOn
+      ? this.l8.applyCap(cappedDelta + correlationDelta, state.currentPrice, params.maxTickChange)
+      : cappedDelta + correlationDelta
+    const brakedDelta = this._applyApproachBrake(combinedDelta, state, params)
     if (brakedDelta !== combinedDelta) {
       layerResults.push({
         layer: 'L9_5_ApproachBrake',
@@ -231,12 +257,15 @@ export class PriceCalculator {
     // dinâmica do motor (sem agentDelta). Alimenta o matching default-safe de ordens
     // reais (T1.4). Quando agentImpact == 0, enginePrice == candidatePrice (identidade).
     const cappedEngineDelta = agentDelta !== 0
-      ? this.l8.applyCap(engineDelta, state.currentPrice, params.maxTickChange)
+      ? (velocityCapOn ? this.l8.applyCap(engineDelta, state.currentPrice, params.maxTickChange) : engineDelta)
       : cappedDelta
     const brakedEngineDelta = agentDelta !== 0
       ? this._applyApproachBrake(
-          this.l8.applyCap(cappedEngineDelta + correlationDelta, state.currentPrice, params.maxTickChange),
+          velocityCapOn
+            ? this.l8.applyCap(cappedEngineDelta + correlationDelta, state.currentPrice, params.maxTickChange)
+            : cappedEngineDelta + correlationDelta,
           state,
+          params,
         )
       : brakedDelta
     const enginePrice = Math.max(PRICE_EPSILON, state.currentPrice + brakedEngineDelta)
@@ -276,8 +305,12 @@ export class PriceCalculator {
    * porque têm threshold próprio de 20% no L10. O CB de 8% permanece como
    * última linha de defesa para picos multi-camada/correlação.
    */
-  private _applyApproachBrake(delta: number, state: AssetState): number {
+  private _applyApproachBrake(delta: number, state: AssetState, params?: ClusterParams): number {
     if (delta === 0 || state.closePrice <= 0) return delta
+
+    // CB desligado (toggle admin): sem freio. Coerente com L10 não haltar — o preço
+    // precisa poder se mover livremente, senão "desligar" não teria efeito visível.
+    if (params?.circuitBreakerEnabled === false) return delta
 
     // Notícia ativa: não freia (L10 tolera até 20% durante absorção).
     if (state.newsImpact !== 0 && state.newsImpactTicks > 0) return delta
@@ -289,8 +322,13 @@ export class PriceCalculator {
     const movingOut = Math.abs(candidateNet) > Math.abs(net)
     if (!movingOut) return delta
 
-    const BRAKE_START = 0.05 // 5%: começa a frear
-    const BRAKE_FULL = 0.07  // 7%: freio total (1% de folga até o CB de 8%)
+    // Banda derivada do limiar do CB (SSoT motor:layers:config:v1 → halt_trigger), não mais
+    // fixa em 5%/7%. Mantém a folga proporcional do tuning original (começa a frear em 62,5%
+    // e zera em 87,5% do limiar → 5%/7% para o default de 8%), então elevar o limiar afasta o
+    // freio junto e o preço alcança o novo limiar antes do halt (sem congelar em 7% cosmético).
+    const cbThreshold = params?.circuitBreakerThreshold ?? 0.08
+    const BRAKE_START = cbThreshold * 0.625
+    const BRAKE_FULL = cbThreshold * 0.875
     const absNet = Math.abs(net)
 
     let factor: number
