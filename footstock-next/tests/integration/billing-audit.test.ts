@@ -19,6 +19,7 @@ jest.mock('@/lib/prisma', () => ({
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
       findFirst: jest.fn(),
     },
     user: {
@@ -191,6 +192,74 @@ describe('ST001: Checkout — Upgrade de Plano', () => {
     expect(res.status).not.toBe(401)
     const body = await res.json()
     expect(body.error?.code).not.toBe('VAL_001')
+  })
+
+  // ─── Regressão do incidente PAYMENT_054 (lockout por PENDING órfão) ──────────
+  // Um PENDING CRAQUE abandonado (mais velho que 5min) NÃO pode mais travar o
+  // checkout: createCheckout deve SUPERSEDE o órfão e seguir para um insert fresco,
+  // em vez de colidir no índice M060 → P2002 → PAYMENT_054 ("plano não disponível").
+  test('PENDING órfão antigo é recuperado (supersede), não retorna PAYMENT_054', async () => {
+    const { prisma } = require('@/lib/prisma')
+    prisma.user.findUnique.mockResolvedValue({ planType: 'JOGADOR', adminRole: null })
+    const stale = makeSubscription({
+      planType: 'CRAQUE',
+      status: 'PENDING',
+      createdAt: new Date(Date.now() - 10 * 60 * 1000), // 10min atrás → fora da janela de 5min
+    })
+    prisma.subscription.findFirst
+      .mockResolvedValueOnce(null) // #1 existingActive (ACTIVE) → nenhum
+      .mockResolvedValueOnce(stale) // #2 openPending (PENDING órfão)
+    prisma.subscription.updateMany.mockResolvedValue({ count: 1 })
+    prisma.subscription.create.mockResolvedValue({
+      id: 'sub-fresh-001', userId: 'user-test-001', planType: 'CRAQUE', amount: 3990,
+    })
+
+    const { POST } = await import('@/app/api/v1/payments/checkout/route')
+    const req = createRequest('POST', '/api/v1/payments/checkout', {
+      planType: 'CRAQUE',
+      gateway: 'MERCADO_PAGO',
+      period: 'MONTHLY',
+    })
+    const res = await POST(req)
+    const body = await res.json()
+
+    // NUNCA mais o código de lockout
+    expect(body.error?.code).not.toBe('PAYMENT_054')
+    // O órfão foi superseded (CANCELLED) e um insert fresco foi tentado
+    expect(prisma.subscription.updateMany).toHaveBeenCalledTimes(1)
+    expect(prisma.subscription.updateMany.mock.calls[0][0].data.status).toBe('CANCELLED')
+    expect(prisma.subscription.create).toHaveBeenCalled()
+  })
+
+  // Corrida genuína de INSERT concorrente: o perdedor recebe P2002 → deve devolver o
+  // AVISO de pendência (201, redirect payment=pending), nunca o erro PAYMENT_054.
+  test('corrida P2002 vira aviso de pendência (201), não PAYMENT_054', async () => {
+    const { prisma } = require('@/lib/prisma')
+    const { Prisma } = require('@prisma/client')
+    prisma.user.findUnique.mockResolvedValue({ planType: 'JOGADOR', adminRole: null })
+    const winner = makeSubscription({ planType: 'CRAQUE', status: 'PENDING' })
+    prisma.subscription.findFirst
+      .mockResolvedValueOnce(null) // #1 existingActive → nenhum
+      .mockResolvedValueOnce(null) // #2 openPending → nenhum (ambos racers viram vazio)
+      .mockResolvedValueOnce(winner) // #3 re-resolve do vencedor após o P2002
+    const p2002 = new Prisma.PrismaClientKnownRequestError('Unique constraint', {
+      code: 'P2002',
+      clientVersion: '5.0.0',
+    })
+    prisma.subscription.create.mockRejectedValue(p2002)
+
+    const { POST } = await import('@/app/api/v1/payments/checkout/route')
+    const req = createRequest('POST', '/api/v1/payments/checkout', {
+      planType: 'CRAQUE',
+      gateway: 'MERCADO_PAGO',
+      period: 'MONTHLY',
+    })
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(201)
+    expect(body.error?.code).not.toBe('PAYMENT_054')
+    expect(body.data?.redirectUrl).toMatch(/payment=pending/)
   })
 })
 

@@ -154,21 +154,49 @@ export class PlanService extends BaseService {
       })
     }
 
-    // Idempotência: verificar PENDING recente (últimos 5min) para mesma combinação
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
-    const recentPending = await prisma.subscription.findFirst({
-      where: {
-        userId,
-        planType: dto.planType as never,
-        period: dto.period.toUpperCase() as never,
-        status: 'PENDING',
-        createdAt: { gte: fiveMinutesAgo },
-      },
+    // ──────────────────────────────────────────────────────────────────────────
+    // Recuperação de PENDING órfão (anti-lockout) — correção do incidente PAYMENT_054.
+    //
+    // CAUSA RAIZ: o índice único parcial M060 (subscriptions_user_plan_pending_active_uq)
+    // bloqueia (user_id, plan_type) sobre status IN ('PENDING','ACTIVE') SEM filtro de
+    // período e SEM filtro de tempo. A guarda de idempotência antiga reutilizava apenas
+    // PENDING com createdAt>=5min E MESMO período — um predicado MAIS ESTREITO que o índice.
+    // Resultado: qualquer PENDING abandonado (mais velho que 5min, OU de período diferente
+    // mesmo dentro de 5min — ex.: trocou mensal->anual) não era reutilizado; o INSERT colidia
+    // (P2002) e o checkout devolvia PAYMENT_054 ("plano não disponível a partir do seu plano
+    // atual"). Como nenhum cron expira PENDING órfão, o (user, plano) ficava travado PARA
+    // SEMPRE — o usuário não conseguia mais assinar. Aqui buscamos QUALQUER PENDING aberto de
+    // (userId, planType) — exatamente a chave do índice — e decidimos por recuperabilidade.
+    const openPending = await prisma.subscription.findFirst({
+      where: { userId, planType: dto.planType as never, status: 'PENDING' },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, period: true, createdAt: true, billingMode: true, gatewaySubscriptionId: true },
     })
-    if (recentPending) {
-      // Reutilizar — não chamar gateway novamente
-      const redirectUrl = `${env.NEXT_PUBLIC_APP_URL}/planos?payment=pending&sub=${recentPending.id}`
-      return { redirectUrl, subscriptionId: recentPending.id }
+    if (openPending) {
+      const isFresh = Date.now() - openPending.createdAt.getTime() < 5 * 60 * 1000
+      const samePeriod = openPending.period === (dto.period.toUpperCase() as never)
+      // PENDING recorrente que JÁ criou um preapproval real no gateway: cancelar/recriar
+      // localmente orfanaria o preapproval (cobrança-fantasma). Nunca criar um 2º.
+      const holdsGatewaySub =
+        openPending.billingMode === 'recurring' && openPending.gatewaySubscriptionId != null
+
+      // (a) Idempotência anti dupla-cobrança: PENDING fresco, mesmo período, SEM preapproval
+      //     real → reutiliza sem chamar o gateway de novo (double-click / retry rápido).
+      // (b) PENDING recorrente com preapproval real → reutiliza (não cria 2º, não orfana).
+      // Ambos devolvem o aviso de pendência (UX distinta do erro), não um bloqueio.
+      if ((isFresh && samePeriod && !holdsGatewaySub) || holdsGatewaySub) {
+        const redirectUrl = `${env.NEXT_PUBLIC_APP_URL}/planos?payment=pending&sub=${openPending.id}`
+        return { redirectUrl, subscriptionId: openPending.id }
+      }
+
+      // (c) PENDING órfão one-time (abandonado: velho OU de período diferente) → supersede e
+      //     segue para um checkout fresco. A preferência one-time abandonada no gateway expira
+      //     sozinha e NUNCA cobra sem ação do usuário, então não há preapproval a orfanar. O
+      //     guard status:'PENDING' no updateMany garante CAS (uma ativação concorrente vence).
+      await prisma.subscription.updateMany({
+        where: { id: openPending.id, userId, status: 'PENDING' },
+        data: { status: 'CANCELLED', cancelledAt: new Date() },
+      })
     }
 
     // Calcular amount
@@ -177,14 +205,19 @@ export class PlanService extends BaseService {
     const expiresAt = calcExpiresAt(now, dto.period)
 
     // Criar subscription PENDING.
-    // FU-023-2: o INSERT colide com o indice unico parcial M060
+    // FU-023-2: o INSERT pode colidir com o índice único parcial M060
     // (subscriptions_user_plan_pending_active_uq em (user_id, plan_type) WHERE status IN
-    // ('PENDING','ACTIVE')) quando duas requisicoes concorrentes do mesmo (userId, planType)
-    // passam ambas pela guarda de idempotencia antes de qualquer INSERT. O Prisma sinaliza isso
-    // como P2002; SubscriptionService.createSubscription ja o traduz para PAYMENT_054/409 no ponto
-    // do INSERT. Aqui mantemos uma malha de seguranca caso o P2002 cru escape de outro caminho:
-    // traduzimos para o mesmo 409 CONFLICT em vez de deixar vazar como 500/DECLINED generico
-    // (anti dupla-cobranca + Zero Silencio).
+    // ('PENDING','ACTIVE')) numa CORRIDA GENUÍNA: dois POSTs concorrentes do mesmo
+    // (userId, planType) que passaram AMBOS pela recuperação acima antes de qualquer INSERT.
+    // O Prisma sinaliza P2002; SubscriptionService.createSubscription o pré-traduz para
+    // {code:'PAYMENT_054', statusCode:409}. Em vez de devolver PAYMENT_054 — que o frontend
+    // renderiza como "plano não disponível a partir do seu plano atual" (mensagem
+    // CATASTROFICAMENTE errada para um conflito de pendência) — RE-RESOLVEMOS o estado real e
+    // devolvemos a resposta semanticamente correta (Zero Silêncio, anti dupla-cobrança):
+    //   • PENDING vencedor → aviso de pendência (mesma UX do reuse), NUNCA um erro.
+    //   • ACTIVE (ativação concorrente) → ORDER_081 "você já possui este plano ativo".
+    // Assim PAYMENT_054 fica reservado EXCLUSIVAMENTE para a guarda de downgrade (422) acima,
+    // para a qual a copy do frontend é correta.
     let subscription: Awaited<ReturnType<typeof subscriptionService.createSubscription>>
     try {
       subscription = await subscriptionService.createSubscription({
@@ -197,11 +230,30 @@ export class PlanService extends BaseService {
         expiresAt,
       })
     } catch (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        throw Object.assign(
-          new Error('Já existe uma assinatura pendente ou ativa para este plano'),
-          { code: 'PAYMENT_054', statusCode: 409 }
-        )
+      const isConflict =
+        (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') ||
+        ((err as { statusCode?: number }).statusCode === 409 &&
+          (err as { code?: string }).code === 'PAYMENT_054')
+      if (isConflict) {
+        const winner = await prisma.subscription.findFirst({
+          where: {
+            userId,
+            planType: dto.planType as never,
+            status: { in: ['PENDING', 'ACTIVE'] as never[] },
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true, status: true },
+        })
+        if (winner?.status === 'PENDING') {
+          const redirectUrl = `${env.NEXT_PUBLIC_APP_URL}/planos?payment=pending&sub=${winner.id}`
+          return { redirectUrl, subscriptionId: winner.id }
+        }
+        if (winner?.status === 'ACTIVE') {
+          throw Object.assign(new Error('Você já possui este plano ativo'), {
+            code: 'ORDER_081',
+            statusCode: 409,
+          })
+        }
       }
       throw err
     }
