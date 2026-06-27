@@ -56,7 +56,12 @@ export function getGatewayByHeader(headers: Headers): IGateway | null {
   if (headers.get('x-signature')) {
     return getGateway(GatewayType.MERCADO_PAGO)
   }
-  if (headers.get('x-pagseguro-signature')) {
+  // PagBank/PagSeguro `/orders`: header canonico de autenticidade da notificacao
+  // e `x-authenticity-token` (SHA-256 `{token}-{payload}`, Item 008). O header
+  // legado `x-pagseguro-signature` (HMAC) continua roteando para PAGSEGURO, mas
+  // a escolha do esquema (e o gating por feature flag do fallback) acontece no
+  // validador (webhook-validator.ts), nao aqui.
+  if (headers.get('x-authenticity-token') || headers.get('x-pagseguro-signature')) {
     return getGateway(GatewayType.PAGSEGURO)
   }
   if (headers.get('paypal-transmission-sig')) {
@@ -71,7 +76,9 @@ export function getGatewayByHeader(headers: Headers): IGateway | null {
  */
 export function detectGatewayType(headers: Headers): GatewayType | null {
   if (headers.get('x-signature')) return GatewayType.MERCADO_PAGO
-  if (headers.get('x-pagseguro-signature')) return GatewayType.PAGSEGURO
+  // Paridade com getGatewayByHeader: PagBank `x-authenticity-token` (Item 008)
+  // + legado `x-pagseguro-signature` mapeiam ambos para PAGSEGURO.
+  if (headers.get('x-authenticity-token') || headers.get('x-pagseguro-signature')) return GatewayType.PAGSEGURO
   if (headers.get('paypal-transmission-sig')) return GatewayType.PAYPAL
   return null
 }

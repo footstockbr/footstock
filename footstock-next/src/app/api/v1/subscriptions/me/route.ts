@@ -1,9 +1,10 @@
 import { getAuthUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { ok, errors } from '@/lib/api'
+import { ok, errors, error as apiError } from '@/lib/api'
 import {
   isWithinCoolingOff,
 } from '@/lib/services/plan-logic'
+import { subscriptionService, isAutoRenewalEligible } from '@/lib/services/SubscriptionService'
 import type { SubscriptionStatus, PaymentGateway, PaymentPeriod, PlanType } from '@/types'
 import type { Prisma } from '@prisma/client'
 import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
@@ -127,8 +128,23 @@ export async function DELETE() {
 
     if (!sub) return errors.notFound('Nenhuma assinatura ativa encontrada.')
 
-    // Idempotente: se já cancelada ou em trava, retorna sucesso sem duplicar notificação
+    // Idempotente: se já cancelada ou em trava, retorna sucesso sem duplicar notificação.
+    // pause_on_lock_start: se a pausa da renovação no gateway ficou pendente
+    // (estado compensatório), reconcilia antes de declarar sucesso — sem isso um
+    // retry curto-circuitaria aqui e nunca pausaria o gateway.
     if (sub.status === 'CANCELLED' || sub.status === 'EXPIRED' || sub.status === 'CANCELLATION_LOCK') {
+      if (sub.status === 'CANCELLATION_LOCK' && isAutoRenewalEligible(sub) && sub.gatewayStatus !== 'paused') {
+        try {
+          await subscriptionService.syncGatewayAutoRenewal(sub, 'cancel')
+        } catch (gwErr) {
+          console.error('[subscriptions/me DELETE] retry cancelAutoRenewal falhou:', gwErr)
+          return apiError(
+            'PAYMENT_050',
+            'Cancelamento agendado, mas a pausa da renovação no gateway falhou. Tente novamente em instantes.',
+            502,
+          )
+        }
+      }
       return ok(serializeSubscription(sub))
     }
 
@@ -161,6 +177,22 @@ export async function DELETE() {
         bonusScheduledAt: null, // T-021: CANCELLATION_LOCK cancela bônus pendente
       },
     })
+
+    // pause_on_lock_start (G0.5): persistimos o estado local primeiro (acima) e
+    // só então reconciliamos com o gateway, pausando a renovação automática no
+    // INÍCIO do lock. No-op explícito para assinaturas não-recorrentes. Falha do
+    // gateway NÃO retorna sucesso silencioso: marca compensatório e responde com
+    // erro observável (estado local segue em CANCELLATION_LOCK, reprocessável).
+    try {
+      await subscriptionService.syncGatewayAutoRenewal(updatedSub, 'cancel')
+    } catch (gwErr) {
+      console.error('[subscriptions/me DELETE] cancelAutoRenewal falhou:', gwErr)
+      return apiError(
+        'PAYMENT_050',
+        'Cancelamento agendado, mas a pausa da renovação no gateway falhou. Tente novamente em instantes.',
+        502,
+      )
+    }
 
     // EVT-024: subscription_cancelled — track cancellation
     // Check if user had open short positions at cancellation time

@@ -4,7 +4,7 @@
 // Referência: PAYMENT_001 (HMAC inválido), PAYMENT_002 (timestamp expirado)
 // ============================================================================
 
-import { createHmac, timingSafeEqual } from 'crypto'
+import { createHash, createHmac, timingSafeEqual } from 'crypto'
 import { WEBHOOK_REPLAY_WINDOW_MS } from '@/lib/constants/payment-security'
 import { GatewayType } from './IGateway'
 import { env } from '@/lib/env'
@@ -65,12 +65,71 @@ export function validateMercadoPagoHMAC(
   }
 }
 
-// ─── PagSeguro ───────────────────────────────────────────────────────────────
+// ─── PagSeguro / PagBank ──────────────────────────────────────────────────────
 
 /**
- * Valida assinatura HMAC do PagSeguro.
- * Header: x-pagseguro-signature
- * String: rawBody completo
+ * Valida autenticidade da notificacao PagBank/PagSeguro `/orders` (Item 008 —
+ * esquema PRIMARIO, substitui o HMAC legado abaixo).
+ *
+ * Esquema oficial PagBank ("confirmar autenticidade da notificacao":
+ * https://developer.pagbank.com.br/reference/confirmar-autenticidade-da-notificacao):
+ *   x-authenticity-token == SHA-256( `${token}-${rawBody}` ) em hex.
+ *   - token   = token de notificacao PagBank (env.PAGSEGURO_NOTIFICATION_TOKEN)
+ *   - rawBody = corpo BRUTO byte-exato da requisicao (NUNCA reserializado)
+ *
+ * IMPORTANTE: NAO e HMAC. E um hash SHA-256 da concatenacao `token-payload`.
+ * O binding ao rawBody byte-exato garante que qualquer alteracao do payload
+ * invalida a assinatura. Comparacao timing-safe (PCI-DSS, anti timing attack).
+ */
+export function validatePagBankAuthenticity(
+  headers: Headers,
+  rawBody: string,
+  token: string,
+): WebhookValidationResult {
+  try {
+    const received = headers.get('x-authenticity-token') ?? ''
+    if (!received) return { valid: false, reason: 'MISSING_SIGNATURE' }
+
+    // Defense-in-depth: nunca autenticar com token vazio/branco. Sem este guard,
+    // token === '' tornaria expected = sha256(`-${rawBody}`), forjavel por quem
+    // controla o body. O dispatcher ja barra (CONFIG_MISSING), mas este primitivo
+    // exportado nao pode depender de o caller replicar o guard.
+    if (!token.trim()) return { valid: false, reason: 'CONFIG_MISSING' }
+
+    const expected    = createHash('sha256').update(`${token}-${rawBody}`, 'utf8').digest('hex')
+    const expectedBuf = Buffer.from(expected, 'utf8')
+    const receivedBuf = Buffer.from(received, 'utf8')
+
+    if (expectedBuf.length !== receivedBuf.length) {
+      // Pad para manter tempo constante mesmo com tamanho divergente.
+      timingSafeEqual(expectedBuf, Buffer.alloc(expectedBuf.length))
+      return { valid: false, reason: 'BAD_SIGNATURE' }
+    }
+
+    return timingSafeEqual(expectedBuf, receivedBuf)
+      ? { valid: true, reason: 'OK' }
+      : { valid: false, reason: 'BAD_SIGNATURE' }
+  } catch {
+    return { valid: false, reason: 'BAD_SIGNATURE' }
+  }
+}
+
+/**
+ * Fallback LEGADO do PagSeguro: HMAC do header `x-pagseguro-signature` com
+ * PAGSEGURO_WEBHOOK_SECRET. Default OFF (env.PAGSEGURO_LEGACY_HMAC_FALLBACK !==
+ * 'true'). So liga TEMPORARIAMENTE durante a migracao para o esquema PagBank
+ * x-authenticity-token; cada uso e logado (Zero Silencio) e a remocao deste
+ * caminho esta planejada apos a migracao (Item 008).
+ */
+export function isPagSeguroLegacyHmacFallbackEnabled(): boolean {
+  return env.PAGSEGURO_LEGACY_HMAC_FALLBACK === 'true'
+}
+
+/**
+ * @deprecated Esquema HMAC LEGADO do PagSeguro (header x-pagseguro-signature,
+ * HMAC-SHA256 do rawBody). Mantido apenas atras do fallback gated
+ * (isPagSeguroLegacyHmacFallbackEnabled). O caminho canonico e
+ * validatePagBankAuthenticity (x-authenticity-token). Remover apos a migracao.
  */
 export function validatePagSeguroHMAC(
   headers: Headers,
@@ -295,8 +354,12 @@ export function runWebhookSecretHealthCheck(): WebhookSecretHealth {
       varName = 'MERCADO_PAGO_WEBHOOK_SECRET'
       break
     case GatewayType.PAGSEGURO:
-      secret = env.PAGSEGURO_WEBHOOK_SECRET ?? ''
-      varName = 'PAGSEGURO_WEBHOOK_SECRET'
+      // Item 009 — a credencial canonica de autenticidade do webhook PagBank e o
+      // token de notificacao (x-authenticity-token = SHA-256(`${token}-${body}`),
+      // Item 008), NAO o HMAC legado PAGSEGURO_WEBHOOK_SECRET. O health-check de
+      // boot deve apontar o operador para a env correta.
+      secret = env.PAGSEGURO_NOTIFICATION_TOKEN ?? ''
+      varName = 'PAGSEGURO_NOTIFICATION_TOKEN'
       break
     case GatewayType.PAYPAL:
       secret = env.PAYPAL_WEBHOOK_ID ?? ''
@@ -368,16 +431,56 @@ export async function validateWebhookByGatewayDetailed(
       return validateMercadoPagoHMACDetailed(headers, rawBody, secret, dataIdFromUrl)
     }
     case GatewayType.PAGSEGURO: {
-      const secret = env.PAGSEGURO_WEBHOOK_SECRET ?? ''
-      if (!secret) {
-        emitDegradationSignal('webhook.config_missing', {
-          level: 'alert',
-          context: { gateway: GatewayType.PAGSEGURO, secret: 'PAGSEGURO_WEBHOOK_SECRET' },
-        })
-        return { valid: false, reason: 'CONFIG_MISSING' }
+      // Item 008: esquema PRIMARIO PagBank `/orders` = `x-authenticity-token`
+      // (SHA-256 `{token}-{payload}`). O HMAC legado `x-pagseguro-signature` so
+      // roda atras do feature flag de fallback (default OFF), sempre logado e
+      // com remocao planejada.
+      const hasAuthenticity = !!headers.get('x-authenticity-token')
+      const hasLegacySig    = !!headers.get('x-pagseguro-signature')
+
+      // Caminho canonico: token de notificacao PagBank.
+      if (hasAuthenticity) {
+        const token = env.PAGSEGURO_NOTIFICATION_TOKEN ?? ''
+        if (!token) {
+          emitDegradationSignal('webhook.config_missing', {
+            level: 'alert',
+            context: { gateway: GatewayType.PAGSEGURO, secret: 'PAGSEGURO_NOTIFICATION_TOKEN' },
+          })
+          return { valid: false, reason: 'CONFIG_MISSING' }
+        }
+        return validatePagBankAuthenticity(headers, rawBody, token)
       }
-      const valid = validatePagSeguroHMAC(headers, rawBody, secret)
-      return { valid, reason: valid ? 'OK' : 'BAD_SIGNATURE' }
+
+      // Fallback LEGADO (HMAC) — gated, logado, com remocao planejada.
+      if (hasLegacySig) {
+        if (!isPagSeguroLegacyHmacFallbackEnabled()) {
+          // Flag OFF: rejeitar de forma OBSERVAVEL (a rota audita REJECTED) em
+          // vez de aceitar silenciosamente um esquema obsoleto.
+          emitDegradationSignal('webhook.pagseguro_legacy_fallback_blocked', {
+            level: 'alert',
+            context: { gateway: GatewayType.PAGSEGURO, header: 'x-pagseguro-signature' },
+          })
+          return { valid: false, reason: 'BAD_SIGNATURE' }
+        }
+        const secret = env.PAGSEGURO_WEBHOOK_SECRET ?? ''
+        if (!secret) {
+          emitDegradationSignal('webhook.config_missing', {
+            level: 'alert',
+            context: { gateway: GatewayType.PAGSEGURO, secret: 'PAGSEGURO_WEBHOOK_SECRET' },
+          })
+          return { valid: false, reason: 'CONFIG_MISSING' }
+        }
+        // Uso do caminho legado: deprecacao visivel para planejar a remocao.
+        emitDegradationSignal('webhook.pagseguro_legacy_fallback_used', {
+          level: 'warn',
+          context: { gateway: GatewayType.PAGSEGURO, header: 'x-pagseguro-signature' },
+        })
+        const valid = validatePagSeguroHMAC(headers, rawBody, secret)
+        return { valid, reason: valid ? 'OK' : 'BAD_SIGNATURE' }
+      }
+
+      // Sem header de autenticidade PagBank nem assinatura legada.
+      return { valid: false, reason: 'MISSING_SIGNATURE' }
     }
     case GatewayType.PAYPAL: {
       const webhookId = env.PAYPAL_WEBHOOK_ID ?? ''

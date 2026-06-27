@@ -1,10 +1,10 @@
 /**
  * Testes unitários — MercadoPagoGateway.createSubscription (task 005)
  *
- * Contrato (redirect-based, PCI-DSS): cria `preapproval_plan` (idempotente) + `preapproval`
- * em modo redirect (sem card_token_id) e devolve `redirectUrl` (init_point),
- * `gatewaySubscriptionId` (preapproval.id), `gatewayPlanId` e `status`.
- * Ids de plano via config (MERCADO_PAGO_PREAPPROVAL_PLAN_IDS) OU criação idempotente via API.
+ * Contrato (redirect-based, PCI-DSS, planless): cria `preapproval` em modo redirect com
+ * `auto_recurring` inline (sem card_token_id, sem preapproval_plan_id) e devolve `redirectUrl`
+ * (init_point), `gatewaySubscriptionId` (preapproval.id), `gatewayPlanId` (null no planless)
+ * e `status`. Sem plano associado: nenhum `preapproval_plan` é criado/resolvido.
  * 5xx/timeout → GatewayRetryableError (retry); 4xx → GatewayError terminal 422.
  */
 
@@ -68,13 +68,14 @@ beforeEach(() => {
   ;(global.fetch as jest.Mock) = jest.fn()
 })
 
-describe('createSubscription — caminho feliz (redirect, sem card_token_id)', () => {
-  it('cria plano idempotente + preapproval e retorna ids/redirect/status', async () => {
+describe('createSubscription — caminho feliz (redirect planless, sem card_token_id)', () => {
+  it('planless: cria só preapproval e retorna gatewayPlanId null + ids/redirect/status', async () => {
     routeFetch({})
     const res = await gateway.createSubscription(baseInput())
 
     expect(res.gatewaySubscriptionId).toBe('preapp_1')
-    expect(res.gatewayPlanId).toBe('plan_created_1')
+    // Planless = sem plano associado: gatewayPlanId permanece null (contrato task 003).
+    expect(res.gatewayPlanId).toBeNull()
     expect(res.redirectUrl).toBe('https://mp/auth/preapp_1')
     expect(res.status).toBe('pending')
 
@@ -85,18 +86,27 @@ describe('createSubscription — caminho feliz (redirect, sem card_token_id)', (
     }
   })
 
-  it('usa preapproval_plan_id de config quando a planKey está presente (sem criar plano)', async () => {
+  it('planless: NÃO cria nem resolve preapproval_plan (zero chamadas a /preapproval_plan)', async () => {
+    routeFetch({})
+    await gateway.createSubscription(baseInput())
+
+    const calls = (global.fetch as jest.Mock).mock.calls
+    expect(calls.some(([u]) => String(u).includes('/preapproval_plan'))).toBe(false)
+    // Apenas o POST /preapproval (sem plano associado) é emitido.
+    expect(calls.every(([u]) => String(u).endsWith('/preapproval'))).toBe(true)
+  })
+
+  it('planless: ignora MERCADO_PAGO_PREAPPROVAL_PLAN_IDS e não chama /preapproval_plan', async () => {
+    // Mesmo com config de plano presente, o caminho planless não cria/vincula plano.
     mockEnv.MERCADO_PAGO_PREAPPROVAL_PLAN_IDS = JSON.stringify({ LENDA_monthly: 'plan_cfg_99' })
     routeFetch({
       plan: () => {
-        throw new Error('não deveria criar plano quando config tem a planKey')
+        throw new Error('planless não deve tocar /preapproval_plan')
       },
     })
     const res = await gateway.createSubscription(baseInput())
-    expect(res.gatewayPlanId).toBe('plan_cfg_99')
-    // Apenas a chamada de /preapproval deve ter ocorrido.
+    expect(res.gatewayPlanId).toBeNull()
     const calls = (global.fetch as jest.Mock).mock.calls
-    expect(calls.every(([u]) => String(u).includes('/preapproval'))).toBe(true)
     expect(calls.some(([u]) => String(u).includes('/preapproval_plan'))).toBe(false)
   })
 
@@ -143,8 +153,8 @@ describe('createSubscription — política de erros do gateway', () => {
       code: 'PAYMENT_059',
       statusCode: 422,
     })
-    // 1 chamada de plano + 1 de preapproval (sem retry no 4xx).
-    expect((global.fetch as jest.Mock).mock.calls.length).toBe(2)
+    // Planless: só a chamada de /preapproval (sem plano), e sem retry no 4xx.
+    expect((global.fetch as jest.Mock).mock.calls.length).toBe(1)
   })
 
   it('5xx persistente → GatewayRetryableError após 3 tentativas', async () => {
@@ -242,5 +252,83 @@ describe('reactivateAutoRenewal — retoma o preapproval', () => {
     ;(global.fetch as jest.Mock) = jest.fn()
     await expect(gateway.reactivateAutoRenewal('')).rejects.toMatchObject({ statusCode: 422 })
     expect((global.fetch as jest.Mock).mock.calls.length).toBe(0)
+  })
+})
+
+// ─── contrato planless redirect (task 002 — RED contra o código atual) ─────────
+// Hipótese do bug (source.md L92/153/163/294 + doc oficial MP no-associated-plan/pending):
+// createSubscription envia `preapproval_plan_id` no corpo de POST /preapproval, misturando
+// o modo "com plano associado" com o fluxo redirect/pending. O contrato correto para o
+// redirect sem plano exige `auto_recurring` INLINE e PROÍBE `preapproval_plan_id`
+// (e `card_token_id`, que dispara 422 "card_token_id is required" no /checkout).
+// Este bloco prova o bug: é VERMELHO contra o código atual (envia preapproval_plan_id,
+// não envia auto_recurring) e fica verde após o fix do item 003.
+
+/** Extrai o POST /preapproval (e não /preapproval_plan) das chamadas mockadas. */
+function findPreapprovalPost(): { url: string; init: RequestInit } {
+  const calls = (global.fetch as jest.Mock).mock.calls
+  const hit = calls.find(
+    ([u, init]) =>
+      String(u).endsWith('/preapproval') &&
+      (init as RequestInit | undefined)?.method === 'POST',
+  )
+  if (!hit) throw new Error('POST /preapproval não foi chamado')
+  return { url: String(hit[0]), init: hit[1] as RequestInit }
+}
+
+describe('createSubscription — contrato planless redirect (RED: bug preapproval_plan_id)', () => {
+  it('POST /preapproval NÃO deve conter preapproval_plan_id nem card_token_id', async () => {
+    routeFetch({})
+    await gateway.createSubscription(baseInput())
+
+    const { init } = findPreapprovalPost()
+    const body = JSON.parse(String(init.body))
+
+    // Gatilho do bug (presença = vermelho contra o código atual):
+    expect(body).not.toHaveProperty('preapproval_plan_id')
+    // Proibido no caminho redirect (presença → 422 card_token_id is required):
+    expect(body).not.toHaveProperty('card_token_id')
+  })
+
+  it('POST /preapproval deve carregar auto_recurring inline + campos obrigatórios do redirect', async () => {
+    routeFetch({})
+    await gateway.createSubscription(baseInput({ subscriptionId: 'sub_planless_1' }))
+
+    const { init } = findPreapprovalPost()
+    const body = JSON.parse(String(init.body))
+
+    // auto_recurring inline substitui o plano associado (ausente no código atual = vermelho):
+    expect(body).toHaveProperty('auto_recurring')
+    expect(body.auto_recurring).toMatchObject({
+      frequency:      1,
+      frequency_type: 'months',
+      currency_id:    'BRL',
+    })
+    expect(typeof body.auto_recurring.transaction_amount).toBe('number')
+
+    // Campos obrigatórios do contrato redirect/pending:
+    expect(body.reason).toEqual(expect.any(String))
+    expect(body.back_url).toBe('https://example.test/planos/sucesso')
+    expect(body.external_reference).toBe('sub_planless_1')
+    expect(body.payer_email).toBe('pagador@example.test')
+    expect(body.status).toBe('pending')
+  })
+
+  it('payload sanitizado + rede mockada: nenhuma chamada real ao gateway', async () => {
+    routeFetch({})
+    await gateway.createSubscription(baseInput())
+
+    // Todas as chamadas passaram pelo mock (zero rede real):
+    expect(jest.isMockFunction(global.fetch)).toBe(true)
+    const calls = (global.fetch as jest.Mock).mock.calls
+    expect(calls.length).toBeGreaterThan(0)
+    for (const [url, init] of calls) {
+      // Só hosts MP mockados; nenhum token/secret real no corpo.
+      expect(String(url)).toMatch(/^https:\/\/api\.mercadopago\.com\//)
+      const raw = String((init as RequestInit | undefined)?.body ?? '')
+      expect(raw).not.toContain('card_token_id')
+      // Placeholders, não credenciais reais (sem prefixos de token MP):
+      expect(raw).not.toMatch(/APP_USR-|APP-USR|TEST-\d{6,}/)
+    }
   })
 })

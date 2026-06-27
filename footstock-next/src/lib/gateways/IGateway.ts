@@ -60,8 +60,11 @@ export interface GatewaySubscriptionResult {
   redirectUrl:           string
   /** ID da assinatura recorrente no gateway (Subscription.gatewaySubscriptionId) */
   gatewaySubscriptionId: string
-  /** ID do plano/preço recorrente no gateway, quando aplicável (Subscription.gatewayPlanId) */
-  gatewayPlanId?:        string
+  /**
+   * ID do plano/preço recorrente no gateway, quando aplicável (Subscription.gatewayPlanId).
+   * `null` no caminho planless (sem plano associado, ex: MercadoPago redirect/pending).
+   */
+  gatewayPlanId?:        string | null
   /** Status inicial reportado pelo gateway (Subscription.gatewayStatus) */
   status?:               string
 }

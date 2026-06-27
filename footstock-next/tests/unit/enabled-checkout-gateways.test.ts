@@ -20,8 +20,11 @@ function setEnv(values: Record<string, string | undefined>) {
   Object.assign(mockEnv, values)
 }
 
+// Item 009 — PagSeguro VALID exige a credencial de habilitacao (PAGSEGURO_TOKEN,
+// FASE A) E o token de autenticidade do webhook (PAGSEGURO_NOTIFICATION_TOKEN,
+// FASE B). PAGSEGURO_WEBHOOK_SECRET (HMAC legado) nao habilita mais o gateway.
 const MP = { MERCADO_PAGO_ACCESS_TOKEN: 'tok', MERCADO_PAGO_WEBHOOK_SECRET: 'sec' }
-const PS = { PAGSEGURO_TOKEN: 'tok', PAGSEGURO_WEBHOOK_SECRET: 'sec' }
+const PS = { PAGSEGURO_TOKEN: 'tok', PAGSEGURO_NOTIFICATION_TOKEN: 'notif' }
 const PP = { PAYPAL_CLIENT_ID: 'id', PAYPAL_CLIENT_SECRET: 'sec', PAYPAL_WEBHOOK_ID: 'wh' }
 
 describe('resolveEnabledCheckoutGateways', () => {

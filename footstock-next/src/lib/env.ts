@@ -85,6 +85,19 @@ const envSchema = z.object({
   PAGSEGURO_EMAIL: z.string().email().optional(),
   PAGSEGURO_TOKEN: z.string().min(1).optional(),
   PAGSEGURO_WEBHOOK_SECRET: z.string().min(1).optional(),
+  // Item 008 — token de notificacao PagBank do esquema oficial de autenticidade
+  // do webhook `/orders`: x-authenticity-token == SHA-256(`${token}-${rawBody}`).
+  // Substitui o HMAC legado (PAGSEGURO_WEBHOOK_SECRET) como credencial canonica do
+  // webhook PagSeguro. Optional ate o PagSeguro ser reativado no seletor (gate fechado).
+  PAGSEGURO_NOTIFICATION_TOKEN: z.string().min(1).optional(),
+  // Item 008 — feature flag do fallback LEGADO HMAC (header x-pagseguro-signature).
+  // Default 'false' (OFF): o validador so aceita o esquema PagBank x-authenticity-token
+  // e REJEITA (auditado) requisicoes com a assinatura legada. 'true' reabilita o HMAC
+  // legado temporariamente (cada uso e logado, com remocao planejada) durante a migracao.
+  PAGSEGURO_LEGACY_HMAC_FALLBACK: z
+    .union([z.literal('true'), z.literal('false')])
+    .optional()
+    .default('false'),
   PAGSEGURO_SANDBOX: z.string().optional(),
   // Marketplace/seller id (ACCO_...). Carregado mas ainda nao consumido pelos
   // gateways — wiring de split/marketplace exige mudanca em pagseguro.ts.
@@ -174,8 +187,13 @@ if (_env.success && !isBuildPhase) {
       ['MERCADO_PAGO_WEBHOOK_SECRET', d.MERCADO_PAGO_WEBHOOK_SECRET],
     ],
     PAGSEGURO: [
+      // Item 009 — a credencial de webhook obrigatoria do PagSeguro e o token de
+      // autenticidade PagBank (PAGSEGURO_NOTIFICATION_TOKEN, esquema oficial do
+      // Item 008), NAO o HMAC legado PAGSEGURO_WEBHOOK_SECRET. Este ultimo so e
+      // usado atras do fallback gated PAGSEGURO_LEGACY_HMAC_FALLBACK (default OFF)
+      // e nunca prova autenticidade real, entao deixou de ser requisito de boot.
       ['PAGSEGURO_TOKEN', d.PAGSEGURO_TOKEN],
-      ['PAGSEGURO_WEBHOOK_SECRET', d.PAGSEGURO_WEBHOOK_SECRET],
+      ['PAGSEGURO_NOTIFICATION_TOKEN', d.PAGSEGURO_NOTIFICATION_TOKEN],
     ],
     PAYPAL: [
       ['PAYPAL_CLIENT_ID', d.PAYPAL_CLIENT_ID],

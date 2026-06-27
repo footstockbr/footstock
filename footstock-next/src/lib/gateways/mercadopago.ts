@@ -702,7 +702,7 @@ export class MercadoPagoGateway implements IGateway {
 
   /**
    * Cria uma assinatura recorrente real (auto-renewal) no Mercado Pago via o fluxo
-   * `preapproval_plan` + `preapproval` (task 005, D1).
+   * `preapproval` planless (redirect/pending).
    *
    * PCI-DSS: NUNCA transmite dados de cartão. O contrato IGateway é redirect-based — o MP
    * coleta o cartão na página de autorização (`init_point`). Por isso este método NÃO envia
@@ -710,10 +710,11 @@ export class MercadoPagoGateway implements IGateway {
    * autorização (alinhado ao consumidor PlanService, que persiste `gatewaySubscriptionId`/
    * `gatewayPlanId`/`gatewayStatus` e retorna o redirect ao cliente).
    *
-   * Plano (`preapproval_plan_id`): resolvido por config idempotente (NUNCA hardcoded). Lê
-   * `MERCADO_PAGO_PREAPPROVAL_PLAN_IDS` (JSON map `{PLAN_TYPE}_{period}` -> id); se a planKey
-   * estiver ausente, cria o plano via `/preapproval_plan` com `X-Idempotency-Key` derivada da
-   * planKey (reenvios reusam o mesmo plano no lado do MP).
+   * Modo planless (redirect/pending): o `POST /preapproval` carrega `auto_recurring` INLINE e
+   * NÃO envia `preapproval_plan_id` — o contrato sem plano associado do MP exige auto_recurring
+   * no corpo e rejeita (422) a mistura com `card_token_id`. Sem plano associado: nenhum
+   * `preapproval_plan` é criado ou resolvido, e o `gatewayPlanId` retornado permanece `null`
+   * (o consumidor PlanService persiste `gatewayPlanId ?? null` em `Subscription.gatewayPlanId`).
    *
    * Idempotência da assinatura: `external_reference` = `subscriptionId` interno (único por
    * tentativa usuário+plano; o PlanService já bloqueia duplicata ativa/pendente via PAYMENT_054)
@@ -741,30 +742,30 @@ export class MercadoPagoGateway implements IGateway {
 
     // auto_recurring derivado do period: monthly = 1 mês, yearly = 12 meses.
     const frequency = input.period === 'yearly' ? 12 : 1
-    const planKey = `${input.planType}_${input.period}`
 
-    // 1) Resolver preapproval_plan_id (config idempotente — nunca hardcoded).
-    const gatewayPlanId = await this.resolvePreapprovalPlanId(
-      accessToken,
-      planKey,
-      {
-        frequency,
-        transaction_amount: input.amount / 100,
-        currency_id: input.currency,
-      },
-      input.successUrl,
-      input.planType,
-    )
+    // auto_recurring inline (caminho planless redirect): o contrato sem plano associado do MP
+    // exige auto_recurring no corpo do POST /preapproval e PROÍBE preapproval_plan_id e
+    // card_token_id (este último dispara 422 "card_token_id is required" no fluxo redirect).
+    // Modo planless = SEM plano: nenhum preapproval_plan é criado/resolvido e o gatewayPlanId
+    // retornado permanece null (o consumidor PlanService persiste `gatewayPlanId ?? null`).
+    const autoRecurring = {
+      frequency,
+      frequency_type:     'months' as const,
+      transaction_amount: input.amount / 100,
+      currency_id:        input.currency,
+    }
 
-    // 2) Criar o preapproval (assinatura) em modo redirect (sem card_token_id).
+    // Criar o preapproval (assinatura) em modo redirect planless: auto_recurring inline,
+    //    sem preapproval_plan_id e sem card_token_id; back_url + status 'pending' fecham o
+    //    contrato de redirect (o cartão é coletado pelo MP na página de autorização).
     const idempotencyKey = `preapproval-${input.subscriptionId}`
     const body = JSON.stringify({
-      preapproval_plan_id: gatewayPlanId,
-      reason:              `FootStock - Plano ${input.planType}`,
-      external_reference:  input.subscriptionId,
-      payer_email:         input.userEmail,
-      back_url:            input.successUrl,
-      status:              'pending',
+      reason:             `FootStock - Plano ${input.planType}`,
+      auto_recurring:     autoRecurring,
+      external_reference: input.subscriptionId,
+      payer_email:        input.userEmail,
+      back_url:           input.successUrl,
+      status:             'pending',
     })
 
     const response = await this.mpFetchWithRetry(
@@ -810,77 +811,8 @@ export class MercadoPagoGateway implements IGateway {
     return {
       redirectUrl,
       gatewaySubscriptionId: result.id,
-      gatewayPlanId,
+      gatewayPlanId: null,
       status: result.status ?? 'pending',
-    }
-  }
-
-  /**
-   * Resolve o `preapproval_plan_id` para uma planKey. Prioriza o map de config
-   * (`MERCADO_PAGO_PREAPPROVAL_PLAN_IDS`); na ausência, cria o plano idempotentemente via
-   * `/preapproval_plan` (X-Idempotency-Key derivada da planKey). NUNCA hardcoda ids.
-   */
-  private async resolvePreapprovalPlanId(
-    accessToken: string,
-    planKey: string,
-    autoRecurring: { frequency: number; transaction_amount: number; currency_id: string },
-    backUrl: string,
-    planType: string,
-  ): Promise<string> {
-    const configured = this.readConfiguredPlanId(planKey)
-    if (configured) return configured
-
-    const response = await this.mpFetchWithRetry(
-      'https://api.mercadopago.com/preapproval_plan',
-      {
-        method: 'POST',
-        headers: {
-          Authorization:       `Bearer ${accessToken}`,
-          'Content-Type':      'application/json',
-          // Idempotência: reenvios com a mesma planKey reusam o mesmo plano no MP.
-          'X-Idempotency-Key': `preapproval-plan-${planKey}`,
-        },
-        body: JSON.stringify({
-          reason: `FootStock - Plano ${planType}`,
-          auto_recurring: {
-            frequency:           autoRecurring.frequency,
-            frequency_type:      'months',
-            transaction_amount:  autoRecurring.transaction_amount,
-            currency_id:         autoRecurring.currency_id,
-          },
-          back_url: backUrl,
-        }),
-      },
-      'preapproval_plan',
-    )
-
-    if (!response.ok) {
-      const raw = await response.text().catch(() => '')
-      throw new GatewayError(
-        `[MERCADO_PAGO] criação de preapproval_plan rejeitada HTTP ${response.status}: ${raw.slice(0, 200)}`,
-        'PAYMENT_059',
-        422,
-      )
-    }
-
-    const plan = await response.json().catch(() => ({})) as { id?: string }
-    if (!plan.id) {
-      throw new GatewayError('[MERCADO_PAGO] preapproval_plan sem id na resposta', 'PAYMENT_050', 503)
-    }
-    return plan.id
-  }
-
-  /** Lê o map JSON de config `MERCADO_PAGO_PREAPPROVAL_PLAN_IDS` e retorna o id da planKey, se houver. */
-  private readConfiguredPlanId(planKey: string): string | null {
-    const raw = env.MERCADO_PAGO_PREAPPROVAL_PLAN_IDS
-    if (!raw) return null
-    try {
-      const map = JSON.parse(raw) as Record<string, unknown>
-      const id = map[planKey]
-      return typeof id === 'string' && id.length > 0 ? id : null
-    } catch {
-      console.warn('[MERCADO_PAGO] MERCADO_PAGO_PREAPPROVAL_PLAN_IDS não é JSON válido — ignorando config')
-      return null
     }
   }
 

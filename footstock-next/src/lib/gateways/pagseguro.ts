@@ -102,6 +102,15 @@ export class PagSeguroGateway implements IGateway {
 
   // ─── validateWebhook ───────────────────────────────────────────────────────
 
+  /**
+   * @deprecated Esquema HMAC LEGADO (assina o payload com PAGSEGURO_WEBHOOK_SECRET).
+   * A autenticidade real do webhook PagBank `/orders` e validada via
+   * `x-authenticity-token` (SHA-256 `{token}-{payload}`) por
+   * `validatePagBankAuthenticity` em lib/gateways/webhook-validator.ts (Item 008),
+   * que e o caminho usado pela rota POST /api/v1/payments/webhook. Este metodo
+   * permanece apenas para compatibilidade do contrato IGateway e nao deve ser a
+   * prova primaria de autenticidade.
+   */
   validateWebhook(payload: string, signature: string, secret: string): boolean {
     try {
       if (!signature) return false

@@ -8,6 +8,7 @@ import { NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
+import { subscriptionService, isAutoRenewalEligible } from '@/lib/services/SubscriptionService'
 
 export async function PUT() {
   const auth = await getAuthUser()
@@ -53,6 +54,34 @@ export async function PUT() {
       )
     }
 
+    // pause_on_lock_start (G0.5): reativar a renovação no gateway ANTES de voltar
+    // o estado local para ACTIVE. Se o gateway não confirmar, NÃO reverter local —
+    // expõe erro observável e mantém a assinatura em CANCELLATION_LOCK (reconciliável).
+    // No-op explícito para assinaturas não-recorrentes.
+    if (isAutoRenewalEligible(sub)) {
+      try {
+        await subscriptionService.syncGatewayAutoRenewal(
+          {
+            id: sub.id,
+            gateway: sub.gateway,
+            billingMode: sub.billingMode,
+            gatewaySubscriptionId: sub.gatewaySubscriptionId,
+            gatewayStatus: sub.gatewayStatus,
+          },
+          'reactivate',
+        )
+      } catch (gwErr) {
+        console.error('[subscriptions/me/revert] reactivateAutoRenewal falhou:', gwErr)
+        return NextResponse.json(
+          {
+            error: 'REVERT_GATEWAY_FAILED',
+            message: 'Não foi possível reativar a renovação automática no gateway. Sua assinatura segue em cancelamento; tente novamente.',
+          },
+          { status: 502 },
+        )
+      }
+    }
+
     // Otimistic lock: updateMany com predicados estritos previne race condition com crons
     // Se o cron de encerramento já cancelou entre o findFirst e o update, count será 0
     const result = await prisma.subscription.updateMany({
@@ -72,6 +101,26 @@ export async function PUT() {
 
     // Race condition detectada: outro processo (cron) já processou este lock
     if (result.count === 0) {
+      // Compensação: se reativamos o gateway acima mas o local não pôde voltar a
+      // ACTIVE (cron venceu), repausar (best-effort) para não deixar renovação
+      // ativa numa assinatura já cancelada. gatewayStatus='authorized' força o
+      // cancel a sair do no-op idempotente.
+      if (isAutoRenewalEligible(sub)) {
+        await subscriptionService
+          .syncGatewayAutoRenewal(
+            {
+              id: sub.id,
+              gateway: sub.gateway,
+              billingMode: sub.billingMode,
+              gatewaySubscriptionId: sub.gatewaySubscriptionId,
+              gatewayStatus: 'authorized',
+            },
+            'cancel',
+          )
+          .catch((compErr) =>
+            console.error('[subscriptions/me/revert] compensação re-pause falhou:', compErr),
+          )
+      }
       return NextResponse.json(
         {
           error: 'REVERT_CONCURRENT_CONFLICT',

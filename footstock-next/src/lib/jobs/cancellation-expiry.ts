@@ -119,6 +119,14 @@ async function closeAllOpenPositions(userId: string, subscriptionId: string): Pr
 /**
  * Finaliza assinaturas em CANCELLATION_LOCK com prazo expirado.
  * Idempotente: usa updateMany com predicados estritos (compare-and-swap).
+ *
+ * Política de cancelamento recorrente: pause_on_lock_start (G0.5 do loop
+ * 06-26-foot-stock-pagamentos-recorrencia-pagseguro, Item 005;
+ * pending-actions/foot-stock.md DEC-G0.5). A renovação automática no gateway já
+ * foi PAUSADA no INÍCIO do lock (DELETE /api/v1/subscriptions/me, via
+ * SubscriptionService.syncGatewayAutoRenewal). Logo, este job NÃO faz 2ª chamada
+ * ao gateway na expiração — seria redundante (no-op idempotente). Ele apenas
+ * finaliza o estado local (CANCELLED) e o cleanup de posições/saldo.
  */
 export async function processCancellationExpiries(): Promise<CancellationExpiryResult> {
   const now = new Date()

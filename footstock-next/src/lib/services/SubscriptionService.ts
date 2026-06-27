@@ -11,6 +11,8 @@ import {
   type SubscriptionForLogic,
 } from './plan-logic'
 import type { PlanType } from '@/lib/enums'
+import { getGateway } from '@/lib/gateways/GatewayFactory'
+import { GatewayType } from '@/lib/gateways/IGateway'
 
 export interface CurrentSubscriptionResult {
   id: string
@@ -59,6 +61,51 @@ export interface CreateSubscriptionInput {
   amount: number // centavos Int
   startsAt: Date
   expiresAt: Date
+}
+
+// ─── Recorrencia no gateway: guarda de elegibilidade UNICA + reconciliacao ────
+// Politica de cancelamento recorrente: pause_on_lock_start (decisao G0.5 do loop
+// 06-26-foot-stock-pagamentos-recorrencia-pagseguro, Item 005;
+// pending-actions/foot-stock.md DEC-G0.5). A renovacao automatica e PAUSADA no
+// gateway no INICIO do CANCELLATION_LOCK (DELETE /api/v1/subscriptions/me) e
+// REATIVADA na reversao (PUT /api/v1/subscriptions/me/revert). O job de expiracao
+// NAO faz 2a chamada (a assinatura ja esta pausada desde o lock-start).
+
+export type AutoRenewalAction = 'cancel' | 'reactivate'
+
+/** Subset de Subscription necessario para operar a auto-renovacao no gateway. */
+export interface AutoRenewalSubscription {
+  id: string
+  gateway: string
+  billingMode: string
+  gatewaySubscriptionId: string | null
+  gatewayStatus: string | null
+}
+
+export interface AutoRenewalSyncResult {
+  /** passou na guarda invariante (billingMode='recurring' E gatewaySubscriptionId != null) */
+  eligible: boolean
+  /** realmente chamou o gateway (false em no-op idempotente ou inelegivel) */
+  called: boolean
+  /** gatewayStatus resultante persistido (ou o pre-existente em no-op) */
+  gatewayStatus: string | null
+}
+
+/**
+ * Guarda de elegibilidade UNICA (invariante) reutilizada por TODOS os pontos de
+ * chamada de auto-renovacao. So e elegivel quando billingMode === 'recurring' E
+ * gatewaySubscriptionId != null. Fora disso, no-op explicito (nunca erro).
+ */
+export function isAutoRenewalEligible(
+  sub: Pick<AutoRenewalSubscription, 'billingMode' | 'gatewaySubscriptionId'>,
+): boolean {
+  return sub.billingMode === 'recurring' && sub.gatewaySubscriptionId != null
+}
+
+const GATEWAY_TYPE_MAP: Record<string, GatewayType> = {
+  MERCADO_PAGO: GatewayType.MERCADO_PAGO,
+  PAGSEGURO:    GatewayType.PAGSEGURO,
+  PAYPAL:       GatewayType.PAYPAL,
 }
 
 export class SubscriptionService extends BaseService {
@@ -227,6 +274,69 @@ export class SubscriptionService extends BaseService {
         requiresLiquidation: false,
       },
     }
+  }
+
+  /**
+   * Reconciliacao estado local x gateway para auto-renovacao (pause_on_lock_start).
+   * Ponto de chamada UNICO reutilizado por DELETE /me (cancel) e PUT /me/revert
+   * (reactivate).
+   * - Guarda invariante (isAutoRenewalEligible): so chama o gateway quando
+   *   billingMode='recurring' E gatewaySubscriptionId != null. Fora disso, no-op
+   *   explicito (sem erro).
+   * - Idempotente: se gatewayStatus ja esta no alvo ('paused' p/ cancel,
+   *   'authorized' p/ reactivate), nao repete a chamada ao gateway.
+   * - Sem sucesso silencioso: falha do gateway grava marcador compensatorio
+   *   ('cancel_pending'/'reactivate_pending') e RELANCA o erro tipado para o
+   *   chamador responder com status de erro coerente e manter reprocessavel.
+   */
+  async syncGatewayAutoRenewal(
+    sub: AutoRenewalSubscription,
+    action: AutoRenewalAction,
+  ): Promise<AutoRenewalSyncResult> {
+    // Guarda de elegibilidade unica (no-op explicito fora dela)
+    if (!isAutoRenewalEligible(sub)) {
+      return { eligible: false, called: false, gatewayStatus: sub.gatewayStatus ?? null }
+    }
+
+    const target = action === 'cancel' ? 'paused' : 'authorized'
+
+    // Idempotencia: ja no estado-alvo -> no-op (sem 2a chamada ao gateway)
+    if (sub.gatewayStatus === target) {
+      return { eligible: true, called: false, gatewayStatus: target }
+    }
+
+    const gatewayType = GATEWAY_TYPE_MAP[sub.gateway?.toUpperCase()] ?? GatewayType.MERCADO_PAGO
+    const gateway = getGateway(gatewayType)
+    const gatewaySubscriptionId = sub.gatewaySubscriptionId as string
+
+    try {
+      if (action === 'cancel') {
+        await gateway.cancelAutoRenewal(gatewaySubscriptionId)
+      } else {
+        await gateway.reactivateAutoRenewal(gatewaySubscriptionId)
+      }
+    } catch (err) {
+      // Zero Silencio + reconciliavel: marca estado compensatorio observavel e
+      // relanca. NUNCA declarar sucesso quando o gateway nao confirmou.
+      const compensatory = action === 'cancel' ? 'cancel_pending' : 'reactivate_pending'
+      await prisma.subscription
+        .update({ where: { id: sub.id }, data: { gatewayStatus: compensatory } })
+        .catch((persistErr) =>
+          console.error(
+            '[SubscriptionService.syncGatewayAutoRenewal] falha ao gravar estado compensatorio:',
+            persistErr,
+          ),
+        )
+      throw err
+    }
+
+    // Sucesso confirmado pelo gateway -> persiste o status alvo (reconciliado)
+    await prisma.subscription.update({
+      where: { id: sub.id },
+      data: { gatewayStatus: target },
+    })
+
+    return { eligible: true, called: true, gatewayStatus: target }
   }
 
   /** Ativa subscription após confirmação de pagamento */
