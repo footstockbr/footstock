@@ -10,7 +10,7 @@
 // ============================================================================
 
 import { PriceCalculator } from '../PriceCalculator'
-import type { AssetState } from '../../types/motor.types'
+import type { AssetState, ClusterParams } from '../../types/motor.types'
 
 const stateAt = (currentPrice: number, closePrice = 100): AssetState => ({
   id: 'a', ticker: 'TST', cluster: 'A_TOP', state: 'SP',
@@ -22,8 +22,8 @@ const stateAt = (currentPrice: number, closePrice = 100): AssetState => ({
 })
 
 // acesso ao método privado para teste determinístico
-const brake = (calc: PriceCalculator, delta: number, state: AssetState): number =>
-  (calc as unknown as { _applyApproachBrake(d: number, s: AssetState): number })._applyApproachBrake(delta, state)
+const brake = (calc: PriceCalculator, delta: number, state: AssetState, params?: ClusterParams): number =>
+  (calc as unknown as { _applyApproachBrake(d: number, s: AssetState, p?: ClusterParams): number })._applyApproachBrake(delta, state, params)
 
 describe('Freio de aproximação da banda do circuit breaker', () => {
   const calc = new PriceCalculator(undefined)
@@ -59,6 +59,19 @@ describe('Freio de aproximação da banda do circuit breaker', () => {
     s.newsImpact = 5
     s.newsImpactTicks = 10
     expect(brake(calc, +1, s)).toBeCloseTo(1, 6)
+  })
+
+  test('circuitBreakerEnabled=false remove o freio de aproximacao', () => {
+    const s = stateAt(107.5)
+    expect(brake(calc, +1, s)).toBe(0)
+    expect(brake(calc, +1, s, { circuitBreakerEnabled: false } as ClusterParams)).toBe(1)
+  })
+
+  test('circuitBreakerThreshold vem do mesmo halt_trigger efetivo da SSoT', () => {
+    const s = stateAt(112)
+    const params = { circuitBreakerThreshold: 0.16 } as ClusterParams
+    // Com threshold 16%, o freio comeca em 10% e zera em 14%; a 12% fica parcial.
+    expect(brake(calc, +1, s, params)).toBeCloseTo(0.5, 6)
   })
 
   test('aplicações repetidas para fora nunca cruzam os 8% (assintota < banda)', () => {

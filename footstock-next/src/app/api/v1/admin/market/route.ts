@@ -5,6 +5,7 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { randomUUID } from 'crypto'
 import { z } from 'zod'
 import { withAdmin } from '@/app/api/middleware'
 import { redisPublisher } from '@/lib/redis'
@@ -55,6 +56,16 @@ const adminActionSchema = z.discriminatedUnion('type', [
   }),
 ])
 
+const COMMAND_STATUS_TTL_SECONDS = 300
+
+function isGlobalCommand(type: string): type is 'HALT_ALL' | 'RESUME_ALL' {
+  return type === 'HALT_ALL' || type === 'RESUME_ALL'
+}
+
+function commandStatusKey(commandId: string): string {
+  return `motor:control:status:${commandId}`
+}
+
 async function postHandler(req: NextRequest, { user }: AuthContext): Promise<NextResponse> {
   try {
     // Rate limiting: max 10 ações admin por minuto por adminId
@@ -81,6 +92,8 @@ async function postHandler(req: NextRequest, { user }: AuthContext): Promise<Nex
     }
 
     const action = validation.data
+    const commandId = randomUUID()
+    const publishedAt = new Date().toISOString()
 
     // Verificar que o ativo existe (se assetId fornecido)
     let assetCurrentPrice: number | null = null
@@ -102,7 +115,21 @@ async function postHandler(req: NextRequest, { user }: AuthContext): Promise<Nex
     const event = {
       ...action,
       adminId: user.id,
+      correlationId: commandId,
       timestamp: Date.now(),
+    }
+
+    if (isGlobalCommand(action.type)) {
+      const publishedStatus = {
+        commandId,
+        type: action.type,
+        state: 'published',
+        publishedAt,
+        adminId: user.id,
+        applied: false,
+      }
+      await redisPublisher.set(commandStatusKey(commandId), JSON.stringify(publishedStatus), 'EX', COMMAND_STATUS_TTL_SECONDS)
+      await redisPublisher.set('motor:control:last-command', JSON.stringify(publishedStatus), 'EX', COMMAND_STATUS_TTL_SECONDS)
     }
 
     await redisPublisher.publish('motor:control', JSON.stringify(event))
@@ -134,14 +161,21 @@ async function postHandler(req: NextRequest, { user }: AuthContext): Promise<Nex
           adminId: user.id,
           assetId: null,
           action: action.type,
-          details: { reason: action.reason },
+          details: { reason: action.reason, commandId, operationalState: 'published' },
         },
       })
     }
 
     return NextResponse.json({
       success: true,
-      data: { message: `Ação ${action.type} enviada ao motor`, timestamp: Date.now() },
+      data: {
+        message: `Ação ${action.type} publicada no canal do motor`,
+        commandId,
+        operationalStatus: isGlobalCommand(action.type)
+          ? { state: 'published', applied: false }
+          : null,
+        timestamp: Date.now(),
+      },
     })
   } catch (err) {
     console.error('[admin/market] Erro:', err)

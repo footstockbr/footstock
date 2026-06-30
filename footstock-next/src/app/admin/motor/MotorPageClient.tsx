@@ -27,6 +27,15 @@ interface MotorKpis {
   aggregatePnl: number
 }
 
+interface MotorOperationalStatus {
+  globalHalt?: { status?: string }
+  operational?: {
+    command?: { type?: string; state?: string; applied?: boolean } | null
+    db?: { haltAllCount?: number | null; circuitBreakerCount?: number | null; totalHalted?: number | null }
+    runtimeConfig?: { source?: string; updatedAt?: string | null; updatedBy?: string | null; degraded?: boolean }
+  }
+}
+
 async function fetchAuditLog(): Promise<AdminMarketActionLog[]> {
   const res = await fetch('/api/v1/admin/audit?limit=20', { credentials: 'include' })
   if (!res.ok) throw new Error('Failed')
@@ -36,6 +45,13 @@ async function fetchAuditLog(): Promise<AdminMarketActionLog[]> {
 
 async function fetchMotorKpis(): Promise<MotorKpis> {
   const res = await fetch('/api/v1/admin/motor/kpis', { credentials: 'include' })
+  if (!res.ok) throw new Error('Failed')
+  const { data } = await res.json()
+  return data
+}
+
+async function fetchMotorOperationalStatus(): Promise<MotorOperationalStatus> {
+  const res = await fetch('/api/v1/admin/motor/status', { credentials: 'include' })
   if (!res.ok) throw new Error('Failed')
   const { data } = await res.json()
   return data
@@ -530,6 +546,13 @@ export default function MotorPageClient({ adminRole }: MotorPageClientProps) {
     refetchInterval: 60_000,
   })
 
+  const { data: operationalStatus } = useQuery({
+    queryKey: ['motor-operational-status'],
+    queryFn: fetchMotorOperationalStatus,
+    staleTime: 15_000,
+    refetchInterval: 15_000,
+  })
+
   const pnlFormatted = kpis
     ? new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(kpis.aggregatePnl))
     : '—'
@@ -576,6 +599,20 @@ export default function MotorPageClient({ adminRole }: MotorPageClientProps) {
           className="rounded-lg border border-[rgba(246,70,93,.3)] bg-[rgba(246,70,93,.08)] px-3 py-2 text-xs text-[#F6465D]"
         >
           {haltError}
+        </div>
+      )}
+
+      {operationalStatus && (
+        <div
+          data-testid="admin-motor-operational-status"
+          className="rounded-lg border border-[rgba(240,185,11,.12)] bg-[#181A20] px-3 py-2 text-[11px] text-[#929AA5]"
+        >
+          <span className="text-[#EAECEF]">Status operacional:</span>{' '}
+          global-halt={operationalStatus.globalHalt?.status ?? 'unknown'} · comando=
+          {operationalStatus.operational?.command?.type ?? 'nenhum'}:{operationalStatus.operational?.command?.state ?? 'n/a'} · HALT_ALL DB=
+          {operationalStatus.operational?.db?.haltAllCount ?? 'n/a'} · config=
+          {operationalStatus.operational?.runtimeConfig?.source ?? 'unknown'}
+          {operationalStatus.operational?.runtimeConfig?.degraded ? ' (degradada)' : ''}
         </div>
       )}
 

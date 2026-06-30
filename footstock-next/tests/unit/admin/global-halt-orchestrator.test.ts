@@ -34,6 +34,7 @@ interface FakeState {
   globalHaltPost?: Response
   globalHaltDelete?: Response
   market?: Response
+  motorStatus?: Response
   throwOn?: string // substring da url que dispara erro de rede
 }
 
@@ -44,7 +45,27 @@ function fakeFetch(state: FakeState): { fetchFn: OrchestratorFetch; calls: Call[
     const method = (init?.method ?? 'GET').toUpperCase()
     calls.push({ url, method, body: typeof init?.body === 'string' ? init.body : null })
     if (state.throwOn && url.includes(state.throwOn)) throw new Error('network down')
-    if (url.includes('/api/v1/admin/market')) return state.market ?? res({ success: true, data: {} })
+    if (url.includes('/api/v1/admin/motor/status')) {
+      return state.motorStatus ?? res({
+        success: true,
+        data: {
+          operational: {
+            command: {
+              commandId: url.includes('resume-cmd') ? 'resume-cmd' : 'halt-cmd',
+              type: url.includes('resume-cmd') ? 'RESUME_ALL' : 'HALT_ALL',
+              state: 'applied',
+              applied: true,
+            },
+            db: { haltAllCount: url.includes('resume-cmd') ? 0 : 3 },
+          },
+        },
+      })
+    }
+    if (url.includes('/api/v1/admin/market')) {
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
+      const commandId = body.type === 'RESUME_ALL' ? 'resume-cmd' : 'halt-cmd'
+      return state.market ?? res({ success: true, data: { commandId, operationalStatus: { state: 'published', applied: false } } })
+    }
     if (url.includes('/api/v1/admin/motor/global-halt')) {
       if (method === 'DELETE') return state.globalHaltDelete ?? res({ success: true, data: { status: 'running' } })
       return state.globalHaltPost ?? res({ success: true, data: { status: 'halted' } })
@@ -99,6 +120,22 @@ describe('orchestrateGlobalHalt — Pausar B -> C (B4) e gate HALT_ALL (B5)', ()
     const { fetchFn } = fakeFetch({ market: res({ success: false }, 500) })
     const out = await orchestrateGlobalHalt('halt', VALID_REASON, fetchFn)
     expect(out.error).toMatch(/motor real não confirmou a pausa/i)
+  })
+
+  it('2xx do market sem confirmação applied do motor não é tratado como pausa real', async () => {
+    const { fetchFn } = fakeFetch({
+      motorStatus: res({
+        success: true,
+        data: {
+          operational: {
+            command: { commandId: 'halt-cmd', type: 'HALT_ALL', state: 'published', applied: false },
+            db: { haltAllCount: 0 },
+          },
+        },
+      }),
+    })
+    const out = await orchestrateGlobalHalt('halt', VALID_REASON, fetchFn)
+    expect(out.error).toMatch(/não confirmou HALT_ALL aplicado/i)
   })
 })
 

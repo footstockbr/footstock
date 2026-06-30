@@ -253,6 +253,7 @@ export function MotorCamadas() {
   const [ofiCluster, setOfiCluster] = useState<ClusterKey>('A_TOP')
   const [isSaved, setIsSaved] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   // Prevents overwriting local edits when serverConfig changes after save
   const initializedRef = useRef(false)
 
@@ -266,6 +267,7 @@ export function MotorCamadas() {
   useEffect(() => {
     if (serverConfig && !initializedRef.current) {
       setConfig(serverConfig)
+      setHasUnsavedChanges(false)
       initializedRef.current = true
     }
   }, [serverConfig])
@@ -279,6 +281,7 @@ export function MotorCamadas() {
       // Update only metadata fields — preserve any local edits made during the request
       setConfig((prev) => ({ ...prev, updatedAt: data.updatedAt, updatedBy: data.updatedBy }))
       queryClient.setQueryData(['motor-layers'], data)
+      setHasUnsavedChanges(false)
       setIsSaved(true)
       setSaveError(null)
       setTimeout(() => setIsSaved(false), 2500)
@@ -293,6 +296,7 @@ export function MotorCamadas() {
   }, [])
 
   const resetLayer = useCallback((id: LayerId) => {
+    setHasUnsavedChanges(true)
     setConfig((prev) => ({
       ...prev,
       [id]: (MOTOR_LAYERS_DEFAULTS as Record<string, unknown>)[id],
@@ -305,6 +309,7 @@ export function MotorCamadas() {
     id === 'circuitBreaker' ? config.circuitBreaker.enabled : config.layerToggles[id]
 
   const setLayerEnabled = useCallback((id: LayerId) => {
+    setHasUnsavedChanges(true)
     setConfig((prev) => {
       if (id === 'circuitBreaker') {
         return { ...prev, circuitBreaker: { ...prev.circuitBreaker, enabled: !prev.circuitBreaker.enabled } }
@@ -319,6 +324,7 @@ export function MotorCamadas() {
     key: string,
     value: number
   ) => {
+    setHasUnsavedChanges(true)
     setConfig((prev) => ({
       ...prev,
       [layer]: { ...(prev[layer] as Record<string, unknown>), [key]: value },
@@ -326,6 +332,7 @@ export function MotorCamadas() {
   }
 
   const setOUParam = (cluster: ClusterKey, key: keyof OUClusterParams, value: number) => {
+    setHasUnsavedChanges(true)
     setConfig((prev) => ({
       ...prev,
       ou: {
@@ -338,6 +345,7 @@ export function MotorCamadas() {
   }
 
   const setOFIParam = (cluster: ClusterKey, key: keyof OFIClusterParams, value: number) => {
+    setHasUnsavedChanges(true)
     setConfig((prev) => ({
       ...prev,
       ofi: {
@@ -350,6 +358,7 @@ export function MotorCamadas() {
   }
 
   const setSessionParam = (session: SessionKey, key: keyof SessionParams, value: number) => {
+    setHasUnsavedChanges(true)
     setConfig((prev) => ({
       ...prev,
       sessionManagement: {
@@ -410,6 +419,14 @@ export function MotorCamadas() {
                 Última atualização: {new Date(config.updatedAt).toLocaleString('pt-BR')}
               </p>
             )}
+            {hasUnsavedChanges && (
+              <p
+                data-testid="admin-motor-camadas-unsaved-state"
+                className="text-[10px] text-[#F0B90B] mt-1"
+              >
+                Alterações não salvas
+              </p>
+            )}
           </div>
           <Button
             data-testid="admin-motor-camadas-save-button"
@@ -419,9 +436,9 @@ export function MotorCamadas() {
             disabled={saveMutation.isPending || isSaved || garchInvalid}
             isLoading={saveMutation.isPending}
             className="shrink-0 text-[11px]"
-            title={garchInvalid ? 'GARCH inválido: α + β ≥ 1.0' : undefined}
+            title={garchInvalid ? 'GARCH inválido: α + β ≥ 1.0' : hasUnsavedChanges ? 'Salvar alterações pendentes' : undefined}
           >
-            {isSaved ? '✓ Salvo!' : '💾 Salvar Camadas'}
+            {isSaved ? '✓ Salvo!' : hasUnsavedChanges ? '💾 Salvar alterações' : '💾 Salvar Camadas'}
           </Button>
         </div>
         {saveError && (
@@ -778,15 +795,15 @@ export function MotorCamadas() {
           onClick={() => saveMutation.mutate(config)}
           disabled={saveMutation.isPending || isSaved || garchInvalid}
           isLoading={saveMutation.isPending}
-          title={garchInvalid ? 'GARCH inválido: α + β ≥ 1.0' : undefined}
+          title={garchInvalid ? 'GARCH inválido: α + β ≥ 1.0' : hasUnsavedChanges ? 'Salvar alterações pendentes' : undefined}
         >
-          {isSaved ? '✓ Camadas Salvas!' : '💾 Salvar Todas as Camadas'}
+          {isSaved ? '✓ Camadas Salvas!' : hasUnsavedChanges ? '💾 Salvar alterações' : '💾 Salvar Todas as Camadas'}
         </Button>
         <Button
           data-testid="admin-motor-camadas-reset-all-button"
           variant="secondary"
           size="md"
-          onClick={() => setConfig(FULL_DEFAULTS)}
+          onClick={() => { setHasUnsavedChanges(true); setConfig(FULL_DEFAULTS) }}
           disabled={saveMutation.isPending}
           className="shrink-0"
         >

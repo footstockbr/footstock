@@ -23,12 +23,14 @@ const incr = jest.fn(async (key: string) => {
 })
 const expire = jest.fn(async (_key: string, _seconds: number) => 1)
 const publish = jest.fn(async (_channel: string, _payload: string) => 1)
+const set = jest.fn(async (_key: string, _payload: string, _mode?: string, _ttl?: number) => 'OK')
 
 jest.mock('@/lib/redis', () => ({
   redisPublisher: {
     incr: (...a: [string]) => incr(...a),
     expire: (...a: [string, number]) => expire(...a),
     publish: (...a: [string, string]) => publish(...a),
+    set: (...a: [string, string, string?, number?]) => set(...a),
   },
 }))
 
@@ -53,6 +55,7 @@ beforeEach(() => {
   incr.mockClear()
   expire.mockClear()
   publish.mockClear()
+  set.mockClear()
   auditCreate.mockClear()
 })
 
@@ -62,6 +65,8 @@ describe('admin/market — HALT_ALL / RESUME_ALL (efeito C)', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.success).toBe(true)
+    expect(body.data.commandId).toBeTruthy()
+    expect(body.data.operationalStatus).toMatchObject({ state: 'published', applied: false })
 
     expect(publish).toHaveBeenCalledTimes(1)
     const [channel, payload] = publish.mock.calls[0]
@@ -70,12 +75,26 @@ describe('admin/market — HALT_ALL / RESUME_ALL (efeito C)', () => {
     expect(event.type).toBe('HALT_ALL')
     expect(event.reason).toBe(VALID_REASON)
     expect(event.adminId).toBe(TEST_USER.id)
+    expect(event.correlationId).toBe(body.data.commandId)
+    expect(set).toHaveBeenCalledWith(
+      `motor:control:status:${body.data.commandId}`,
+      expect.stringContaining('"state":"published"'),
+      'EX',
+      300,
+    )
+    expect(set).toHaveBeenCalledWith(
+      'motor:control:last-command',
+      expect.stringContaining('"state":"published"'),
+      'EX',
+      300,
+    )
 
     // Ação global (sem assetId) é auditada na própria rota.
     expect(auditCreate).toHaveBeenCalledTimes(1)
     const auditArg = auditCreate.mock.calls[0][0]
     expect(auditArg.data.assetId).toBeNull()
     expect(auditArg.data.action).toBe('HALT_ALL')
+    expect((auditArg.data.details as { commandId?: string }).commandId).toBe(body.data.commandId)
   })
 
   it('RESUME_ALL com reason válido publica RESUME_ALL no canal control', async () => {

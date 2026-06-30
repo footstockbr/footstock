@@ -19,6 +19,8 @@ import {
   readCircuitBreakerConfig,
   writeCircuitBreakerConfig,
   MOTOR_LAYERS_REDIS_KEY,
+  CB_TRIGGER_MIN,
+  CB_TRIGGER_MAX,
 } from '@/lib/motor/circuit-breaker-config'
 import { MOTOR_LAYERS_DEFAULTS } from '@/lib/constants/motor-layers'
 
@@ -55,9 +57,17 @@ describe('circuit-breaker-config SSoT', () => {
 
   it('clampa halt_trigger em [0.01, 0.50]', async () => {
     const high = await writeCircuitBreakerConfig({ halt_trigger: 0.99 }, 'a')
-    expect(high.halt_trigger).toBe(0.5)
+    expect(high.halt_trigger).toBe(CB_TRIGGER_MAX)
     const low = await writeCircuitBreakerConfig({ halt_trigger: 0.001 }, 'a')
-    expect(low.halt_trigger).toBe(0.01)
+    expect(low.halt_trigger).toBe(CB_TRIGGER_MIN)
+  })
+
+  it('range efetivo do KPI thresholdPct permanece 1..50 quando convertido para fração', async () => {
+    const min = await writeCircuitBreakerConfig({ halt_trigger: 1 / 100 }, 'a')
+    expect(min.halt_trigger).toBe(0.01)
+
+    const max = await writeCircuitBreakerConfig({ halt_trigger: 50 / 100 }, 'a')
+    expect(max.halt_trigger).toBe(0.5)
   })
 
   it('blob legado sem `enabled` resolve enabled=true ao ler', async () => {

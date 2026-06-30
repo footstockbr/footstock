@@ -1,7 +1,7 @@
 // ============================================================================
 // FootStock — Admin: Global Halt do Motor de Negociações
-// POST   /api/v1/admin/motor/global-halt → pausa motor inteiro
-// DELETE /api/v1/admin/motor/global-halt → retoma motor
+// POST   /api/v1/admin/motor/global-halt → bloqueia novas ordens/read-only
+// DELETE /api/v1/admin/motor/global-halt → remove bloqueio read-only
 // GET    /api/v1/admin/motor/global-halt → status do halt
 // Recurso: motor:control — disponível para SUPER_ADMIN e ADMINISTRADOR
 // ============================================================================
@@ -12,7 +12,7 @@ import { redisPublisher as redis } from '@/lib/redis'
 
 const GLOBAL_HALT_KEY = 'motor:global-halt'
 
-/** POST /api/v1/admin/motor/global-halt — Pausar motor inteiro */
+/** POST /api/v1/admin/motor/global-halt — Bloqueio read-only de novas ordens */
 async function haltHandler(req: NextRequest, { user }: AuthContext): Promise<NextResponse> {
   const timestamp = new Date().toISOString()
   await redis.set(GLOBAL_HALT_KEY, JSON.stringify({ haltedAt: timestamp, haltedBy: user.id }))
@@ -22,12 +22,13 @@ async function haltHandler(req: NextRequest, { user }: AuthContext): Promise<Nex
     data: {
       status: 'halted',
       haltedAt: timestamp,
-      message: 'Motor pausado. Todos os ativos suspensos.',
+      mode: 'read-only',
+      message: 'Novas ordens bloqueadas em modo read-only. Freeze de preço exige HALT_ALL aplicado pelo serviço motor.',
     },
   })
 }
 
-/** DELETE /api/v1/admin/motor/global-halt — Retomar motor */
+/** DELETE /api/v1/admin/motor/global-halt — Remove bloqueio read-only */
 async function resumeHandler(_req: NextRequest, _ctx: AuthContext): Promise<NextResponse> {
   await redis.del(GLOBAL_HALT_KEY)
 
@@ -36,7 +37,8 @@ async function resumeHandler(_req: NextRequest, _ctx: AuthContext): Promise<Next
     data: {
       status: 'running',
       resumedAt: new Date().toISOString(),
-      message: 'Motor retomado. Negociação reativada.',
+      mode: 'read-write',
+      message: 'Bloqueio read-only removido. Retomada de preço depende de RESUME_ALL aplicado pelo serviço motor.',
     },
   })
 }
@@ -51,6 +53,10 @@ async function statusHandler(_req: NextRequest, _ctx: AuthContext): Promise<Next
     data: {
       status: isHalted ? 'halted' : 'running',
       halt: isHalted ? JSON.parse(haltData!) : null,
+      mode: isHalted ? 'read-only' : 'read-write',
+      message: isHalted
+        ? 'Global halt está bloqueando novas ordens; isto não prova freeze de preço sem HALT_ALL aplicado.'
+        : 'Global halt ausente; novas ordens não estão bloqueadas por esta flag.',
     },
   })
 }

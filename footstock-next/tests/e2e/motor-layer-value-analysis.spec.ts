@@ -101,6 +101,7 @@ test.describe('Admin: camadas do motor integradas com análise de valor', () => 
     patchedConfig.velocityCap.max_per_tick = 0.011
     patchedConfig.circuitBreaker.halt_trigger = 0.066
     patchedConfig.circuitBreaker.halt_duration_s = 121
+    patchedConfig.circuitBreaker.enabled = false
     patchedConfig.sessionManagement.sessions.PRE_OPENING.vol_multiplier = 0.44
     patchedConfig.sessionManagement.sessions.TRADING.vol_multiplier = 1.14
     patchedConfig.sessionManagement.sessions.CLOSING_CALL.vol_multiplier = 0.24
@@ -112,6 +113,12 @@ test.describe('Admin: camadas do motor integradas com análise de valor', () => 
       expect(savedConfig.updatedAt).toBeTruthy()
       expect(savedConfig.ou.clusters.A_TOP.theta).toBe(0.31)
       expect(savedConfig.sessionManagement.sessions.CLOSED.vol_multiplier).toBe(0)
+      expect(savedConfig.circuitBreaker.enabled).toBe(false)
+
+      const reloadedConfig = await getMotorLayers(request, cookie)
+      expect(reloadedConfig.ou.clusters.A_TOP.spread_base).toBe(0.0019)
+      expect(reloadedConfig.circuitBreaker.halt_trigger).toBe(0.066)
+      expect(reloadedConfig.sessionManagement.sessions.TRADING.vol_multiplier).toBe(1.14)
 
       const analysisResponse = await request.get(
         `/api/v1/admin/value-analysis?ticker=${TEST_TICKER}&days=${ANALYSIS_DAYS}`,
@@ -212,6 +219,54 @@ test.describe('Admin: camadas do motor integradas com análise de valor', () => 
       await uiContext.close()
     } finally {
       await patchMotorLayers(request, cookie, originalConfig)
+    }
+  })
+
+  test('API rejeita GARCH invalido antes de chegar ao runtime', async ({ request }) => {
+    const cookie = await login(request)
+    const originalConfig = await getMotorLayers(request, cookie)
+    const invalidConfig = JSON.parse(JSON.stringify(originalConfig)) as MotorLayersConfig
+    invalidConfig.garch.alpha = 0.5
+    invalidConfig.garch.beta = 0.5
+
+    const response = await request.patch('/api/v1/admin/motor/layers', {
+      headers: { cookie },
+      data: invalidConfig,
+    })
+    expect(response.status()).toBe(400)
+    const body = await response.json()
+    expect(body.success).toBe(false)
+    expect(body.error.message).toContain('alpha + beta')
+  })
+
+  test('UI da aba Camadas usa enabled-toggle e exige salvar para persistir', async ({ browser, request }) => {
+    const cookie = await login(request)
+    const originalConfig = await getMotorLayers(request, cookie)
+
+    const uiContext = await browser.newContext({
+      baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000',
+    })
+    await applyLoginCookiesToContext(uiContext, cookie)
+    const page = await uiContext.newPage()
+
+    try {
+      await page.goto('/admin/motor')
+      await expect(page.locator('[data-testid="admin-motor-camadas"]')).toBeVisible({ timeout: 20_000 })
+      await expect(page.locator('[data-testid="admin-motor-camadas-tuning-note"]')).toContainText('Não pausa o motor')
+      await page.locator('[data-testid="admin-motor-layer-ou-toggle"]').click()
+      const enabledToggle = page.locator('[data-testid="admin-motor-layer-ou-enabled-toggle"]')
+      await expect(enabledToggle).toHaveAttribute('role', 'switch')
+
+      await enabledToggle.click()
+      await expect(page.locator('[data-testid="admin-motor-camadas-unsaved-state"]')).toBeVisible()
+      const withoutSave = await getMotorLayers(request, cookie)
+      expect(withoutSave.layerToggles.ou).toBe(originalConfig.layerToggles.ou)
+
+      await page.locator('[data-testid="admin-motor-camadas-save-button"]').click()
+      await expect(page.locator('[data-testid="admin-motor-camadas-unsaved-state"]')).toHaveCount(0)
+    } finally {
+      await patchMotorLayers(request, cookie, originalConfig)
+      await uiContext.close()
     }
   })
 })

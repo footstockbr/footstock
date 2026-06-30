@@ -239,66 +239,44 @@ test.describe('T-004: Circuit Breaker — TIER 1', () => {
     expect([200, 201]).toContain(globalHaltRes.status())
 
     try {
-      // --- Opcao 1: flag persistida de halt global ---
-      // O global halt persiste `motor:global-halt` no Redis. A flag canonica e
-      // exposta por GET /api/v1/admin/motor/global-halt (data.status === 'halted'),
-      // que e a fonte real da flag persistida (motor/status nao a carrega).
-      const haltStatusRes = await request.get('/api/v1/admin/motor/global-halt', {
+      const marketRes = await request.post('/api/v1/admin/market', {
+        data: { type: 'HALT_ALL', reason: 'Teste E2E CB-06b HALT_ALL aplicado pelo motor' },
         headers: { cookie: adminCookie },
       })
+      expect(marketRes.status()).toBe(200)
+      const marketBody = await marketRes.json()
+      const commandId = marketBody?.data?.commandId
+      expect(commandId).toBeTruthy()
 
-      let persistedFlag = false
-      let haltPayload: { status?: string; halt?: unknown } | null = null
-      if (haltStatusRes.status() === 200) {
-        const body = await haltStatusRes.json()
-        haltPayload = body?.data ?? null
-        persistedFlag = haltPayload?.status === 'halted'
-      }
-
-      if (persistedFlag) {
-        testInfo.annotations.push({
-          type: 'cb-06b-evidence',
-          description: 'opcao-1: flag persistida de halt global (GET motor/global-halt)',
+      let appliedStatus: any = null
+      for (let i = 0; i < 20; i++) {
+        const statusRes = await request.get(`/api/v1/admin/motor/status?commandId=${commandId}`, {
+          headers: { cookie: adminCookie },
         })
-        // Evidencia real: status 'halted' + registro halt persistido com os campos
-        // gravados pelo POST (haltedAt/haltedBy). Exigir a forma do registro evita
-        // aceitar um `halt` truthy generico como prova (persistencia real do comando).
-        expect(haltPayload?.status).toBe('halted')
-        expect(haltPayload?.halt).toBeTruthy()
-        expect((haltPayload?.halt as { haltedAt?: unknown })?.haltedAt).toBeTruthy()
-        return // ENCERRAR (nao tentar opcao 2 nem 3)
+        expect(statusRes.status()).toBe(200)
+        const statusBody = await statusRes.json()
+        const command = statusBody?.data?.operational?.command
+        if (command?.state === 'applied' && command?.applied === true) {
+          appliedStatus = statusBody.data
+          break
+        }
+        await new Promise((r) => setTimeout(r, 1000))
       }
 
-      // --- Opcao 2: bloqueio real de ordem (padrao CB-02) ---
-      const userLoginRes = await request.post('/api/v1/auth/login', {
-        data: { email: USERS.craque.email, password: USERS.craque.password },
-      })
-      const orderRes = await request.post('/api/v1/orders', {
-        data: { ticker: TEST_TICKER, side: 'BUY', type: 'MARKET', quantity: 1 },
-        headers: { cookie: userLoginRes.headers()['set-cookie'] ?? '' },
-      })
-
-      const orderRouteMissing = orderRes.status() === 404 || orderRes.status() === 405
-      if (!orderRouteMissing) {
+      if (!appliedStatus) {
         testInfo.annotations.push({
-          type: 'cb-06b-evidence',
-          description: 'opcao-2: POST /orders bloqueado durante global halt',
+          type: 'blocked',
+          description: 'HALT_ALL publicado, mas sem evidencia de consumo/aplicacao pelo servico motor',
         })
-        // Ordem deve ser rejeitada (nao aceita 201) e sem erro de servidor (500).
-        // Parity completa com CB-02 (linhas 84-85): exigir corpo de erro
-        // estruturado (success:false) para nao aceitar 401/403/CSRF/validacao
-        // como falsa prova de halt.
-        expect(orderRes.status()).not.toBe(201)
-        expect(orderRes.status()).not.toBe(500)
-        const orderBody = await orderRes.json()
-        expect(orderBody.success).toBe(false)
-        return // ENCERRAR
       }
+      expect(appliedStatus).toBeTruthy()
+      expect(appliedStatus.globalHalt.status).toBe('halted')
+      expect(appliedStatus.operational.command.type).toBe('HALT_ALL')
+      expect(appliedStatus.operational.db.haltAllCount).toBeGreaterThan(0)
 
-      // --- Opcao 3: invariancia de preco (fallback final) ---
       testInfo.annotations.push({
         type: 'cb-06b-evidence',
-        description: 'opcao-3: invariancia de preco (5 amostras a 200ms) — /orders ausente',
+        description: 'global-halt + HALT_ALL applied + DB haltReason=HALT_ALL + invariancia de preco',
       })
       const prices: Array<number | string | null> = []
       for (let i = 0; i < 5; i++) {
@@ -313,6 +291,10 @@ test.describe('T-004: Circuit Breaker — TIER 1', () => {
         expect(prices[i]).toBe(prices[0])
       }
     } finally {
+      await request.post('/api/v1/admin/market', {
+        data: { type: 'RESUME_ALL', reason: 'Teste E2E CB-06b retomada apos validacao' },
+        headers: { cookie: adminCookie },
+      }).catch(() => null)
       // Reset explicito do global halt via endpoint real (DELETE existe e faz
       // redis.del('motor:global-halt')); releaseAllHalts() depende de rota dev
       // ausente e e no-op silencioso, logo nao limparia o global halt.

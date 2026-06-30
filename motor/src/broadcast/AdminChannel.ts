@@ -13,10 +13,12 @@ import { logger } from '../utils/logger'
 
 export class AdminChannel {
   private subscriber: Redis
+  private commandRedis: Redis | null
   private engine: MarketEngine
 
-  constructor(subscriber: Redis, engine: MarketEngine) {
+  constructor(subscriber: Redis, engine: MarketEngine, commandRedis?: Redis) {
     this.subscriber = subscriber
+    this.commandRedis = commandRedis ?? null
     this.engine = engine
   }
 
@@ -116,10 +118,13 @@ export class AdminChannel {
         // Caminho duravel: engine.haltAll persiste no DB (DB-first) antes de mutar
         // memoria; a pausa sobrevive a restart. Em falha, log explicito (Zero
         // Silencio) e nenhuma pausa fantasma so-em-memoria.
+        await this.recordCommandStatus(event, 'consumed')
         try {
           const halted = await this.engine.haltAll()
+          await this.recordCommandStatus(event, 'applied', { count: halted })
           logger.warn(`[admin-channel] HALT_ALL recebido — ${halted} ativos pausados (persistido)`)
         } catch (err) {
+          await this.recordCommandStatus(event, 'failed', { error: (err as Error).message })
           logger.error(`[admin-channel] HALT_ALL falhou ao persistir: ${(err as Error).message}`)
         }
         break
@@ -127,16 +132,52 @@ export class AdminChannel {
       case 'RESUME_ALL': {
         // engine.resumeAll retoma apenas halts de admin (haltReason='HALT_ALL'),
         // preservando suspensoes de CIRCUIT_BREAKER. Persistencia DB-first.
+        await this.recordCommandStatus(event, 'consumed')
         try {
           const resumed = await this.engine.resumeAll()
+          await this.recordCommandStatus(event, 'applied', { count: resumed })
           logger.info(`[admin-channel] RESUME_ALL recebido — ${resumed} ativos retomados (persistido)`)
         } catch (err) {
+          await this.recordCommandStatus(event, 'failed', { error: (err as Error).message })
           logger.error(`[admin-channel] RESUME_ALL falhou ao persistir: ${(err as Error).message}`)
         }
         break
       }
       default:
         logger.warn(`[admin-channel] Tipo de ação desconhecido: ${event.type}`)
+    }
+  }
+
+  private async recordCommandStatus(
+    event: MotorControlEvent,
+    state: 'consumed' | 'applied' | 'failed',
+    extra: { count?: number; error?: string } = {},
+  ): Promise<void> {
+    if ((event.type !== 'HALT_ALL' && event.type !== 'RESUME_ALL') || !event.correlationId || !this.commandRedis) {
+      return
+    }
+
+    const now = new Date().toISOString()
+    const status = {
+      commandId: event.correlationId,
+      type: event.type,
+      state,
+      adminId: event.adminId,
+      consumedAt: state === 'consumed' ? now : undefined,
+      appliedAt: state === 'applied' ? now : undefined,
+      failedAt: state === 'failed' ? now : undefined,
+      applied: state === 'applied',
+      success: state === 'applied',
+      count: extra.count,
+      error: extra.error,
+    }
+
+    try {
+      const payload = JSON.stringify(status)
+      await this.commandRedis.set(`motor:control:status:${event.correlationId}`, payload, 'EX', 300)
+      await this.commandRedis.set('motor:control:last-command', payload, 'EX', 300)
+    } catch (err) {
+      logger.warn(`[admin-channel] Falha ao registrar status do comando ${event.correlationId}: ${(err as Error).message}`)
     }
   }
 

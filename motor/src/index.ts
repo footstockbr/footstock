@@ -178,7 +178,7 @@ async function main() {
     // Canal de controle admin — garante que funciona mesmo após blue-green deploy
     if (!adminChannel) {
       adminSubscriber = RedisClientService.createSubscriber()
-      adminChannel = new AdminChannel(adminSubscriber, engine)
+      adminChannel = new AdminChannel(adminSubscriber, engine, redis)
       await adminChannel.start()
       logger.info('[motor] AdminChannel iniciado')
     }

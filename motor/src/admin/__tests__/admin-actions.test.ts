@@ -2,6 +2,7 @@
  * @jest-environment node
  */
 import { AdminMarketActions } from '../AdminMarketActions'
+import { AdminChannel } from '../../broadcast/AdminChannel'
 import type { AdminAction } from '../../types/motor.types'
 
 const mockEngine = {
@@ -203,5 +204,74 @@ describe('AdminMarketActions', () => {
     const result = await actions.handle(action)
     expect(result.success).toBe(false)
     expect(mockEngine.adjustPrice).not.toHaveBeenCalled()
+  })
+})
+
+describe('AdminChannel — confirmação operacional de comandos globais', () => {
+  const subscriber = {
+    subscribe: jest.fn(),
+    unsubscribe: jest.fn(),
+    on: jest.fn(),
+  }
+  const commandRedis = {
+    set: jest.fn().mockResolvedValue('OK'),
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockEngine.haltAll.mockResolvedValue(5)
+    mockEngine.resumeAll.mockResolvedValue(3)
+  })
+
+  test('HALT_ALL registra consumed e applied com correlationId', async () => {
+    const channel = new AdminChannel(subscriber as any, mockEngine as any, commandRedis as any)
+    const event = {
+      type: 'HALT_ALL',
+      adminId: 'admin_001',
+      reason: 'Paralisacao operacional planejada',
+      correlationId: 'cmd-halt-1',
+    }
+
+    await (channel as any).handleControlMessage(JSON.stringify(event))
+
+    expect(mockEngine.haltAll).toHaveBeenCalled()
+    const statusWrites = commandRedis.set.mock.calls.filter(([key]) => key === 'motor:control:status:cmd-halt-1')
+    expect(statusWrites).toHaveLength(2)
+    expect(JSON.parse(statusWrites[0][1]).state).toBe('consumed')
+    const applied = JSON.parse(statusWrites[1][1])
+    expect(applied).toMatchObject({
+      commandId: 'cmd-halt-1',
+      type: 'HALT_ALL',
+      state: 'applied',
+      applied: true,
+      success: true,
+      count: 5,
+    })
+  })
+
+  test('RESUME_ALL registra failed quando engine falha', async () => {
+    mockEngine.resumeAll.mockRejectedValueOnce(new Error('db offline'))
+    const channel = new AdminChannel(subscriber as any, mockEngine as any, commandRedis as any)
+    const event = {
+      type: 'RESUME_ALL',
+      adminId: 'admin_001',
+      reason: 'Retomada operacional planejada',
+      correlationId: 'cmd-resume-1',
+    }
+
+    await (channel as any).handleControlMessage(JSON.stringify(event))
+
+    const statusWrites = commandRedis.set.mock.calls.filter(([key]) => key === 'motor:control:status:cmd-resume-1')
+    expect(statusWrites).toHaveLength(2)
+    expect(JSON.parse(statusWrites[0][1]).state).toBe('consumed')
+    const failed = JSON.parse(statusWrites[1][1])
+    expect(failed).toMatchObject({
+      commandId: 'cmd-resume-1',
+      type: 'RESUME_ALL',
+      state: 'failed',
+      applied: false,
+      success: false,
+      error: 'db offline',
+    })
   })
 })

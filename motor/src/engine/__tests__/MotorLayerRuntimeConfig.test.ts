@@ -45,7 +45,7 @@ function buildAdminConfig() {
       spot_cap: 0.033,
     },
     velocityCap: { max_per_tick: 0.0123 },
-    circuitBreaker: { halt_trigger: 0.065, halt_duration_s: 123 },
+    circuitBreaker: { enabled: false, halt_trigger: 0.065, halt_duration_s: 123 },
     sessionManagement: {
       sessions: {
         PRE_OPENING: { vol_multiplier: 0.45 },
@@ -57,6 +57,17 @@ function buildAdminConfig() {
     },
     updatedAt: '2026-06-05T12:00:00.000Z',
     updatedBy: 'admin-e2e',
+    layerToggles: {
+      ou: true,
+      fundamentalReversion: false,
+      garch: true,
+      ofi: true,
+      kylesLambda: true,
+      supplyScaling: true,
+      pressureQueue: true,
+      velocityCap: true,
+      sessionManagement: true,
+    },
   }
 }
 
@@ -80,6 +91,7 @@ describe('MotorLayerRuntimeConfigService', () => {
 
     expect(redis.get).toHaveBeenCalledWith(MOTOR_LAYERS_CONFIG_REDIS_KEY)
     expect(runtime.source).toBe('redis')
+    expect(runtime.diagnostics).toEqual([])
     expect(runtime.updatedAt).toBe(adminConfig.updatedAt)
     expect(runtime.updatedBy).toBe(adminConfig.updatedBy)
     expect(runtime.haltDurationMs).toBe(123_000)
@@ -106,6 +118,9 @@ describe('MotorLayerRuntimeConfigService', () => {
     expect(aTop.pressureAbsorptionTicks).toBe(88)
     expect(aTop.pressureSpotCap).toBe(0.033)
     expect(aTop.circuitBreakerThreshold).toBe(0.065)
+    expect(aTop.circuitBreakerEnabled).toBe(false)
+    expect(aTop.layersEnabled?.fundamentalReversion).toBe(false)
+    expect(aTop.layersEnabled?.ou).toBe(true)
   })
 
   test('usa defaults quando Redis não tem configuração válida', async () => {
@@ -114,10 +129,96 @@ describe('MotorLayerRuntimeConfigService', () => {
     const runtime = await service.getConfig()
 
     expect(runtime.source).toBe('defaults')
+    expect(runtime.diagnostics).toContain('missing_cluster_config:A_TOP')
     expect(runtime.updatedAt).toBeNull()
     expect(runtime.updatedBy).toBeNull()
     expect(runtime.clusterParams.A_TOP).toMatchObject(CLUSTER_PARAMS.A_TOP)
     expect(runtime.sessionMultipliers.CLOSED).toBe(0)
     expect(runtime.haltDurationMs).toBe(300_000)
+  })
+
+  test('cache de 10s evita releitura imediata do Redis', async () => {
+    const { redis, service } = serviceWith(JSON.stringify(buildAdminConfig()))
+
+    await service.getConfig()
+    await service.getConfig()
+
+    expect(redis.get).toHaveBeenCalledTimes(1)
+  })
+
+  test('layerToggles ausente mantém compatibilidade: todas as camadas ligadas', async () => {
+    const adminConfig = buildAdminConfig()
+    delete (adminConfig as { layerToggles?: unknown }).layerToggles
+    const { service } = serviceWith(JSON.stringify(adminConfig))
+
+    const runtime = await service.getConfig()
+
+    expect(runtime.source).toBe('redis')
+    expect(runtime.diagnostics).toEqual([])
+    expect(runtime.clusterParams.A_TOP.layersEnabled).toMatchObject({
+      ou: true,
+      fundamentalReversion: true,
+      garch: true,
+      ofi: true,
+      kylesLambda: true,
+      supplyScaling: true,
+      pressureQueue: true,
+      velocityCap: true,
+      sessionManagement: true,
+    })
+  })
+
+  test('layerToggles não booleano e camada desconhecida viram diagnóstico sem desligar silenciosamente', async () => {
+    const adminConfig = buildAdminConfig()
+    ;(adminConfig.layerToggles as Record<string, unknown>).ou = 'false'
+    ;(adminConfig.layerToggles as Record<string, unknown>).camadaInventada = false
+    const { service } = serviceWith(JSON.stringify(adminConfig))
+
+    const runtime = await service.getConfig()
+
+    expect(runtime.source).toBe('redis')
+    expect(runtime.diagnostics).toContain('layer_toggle_non_boolean:ou')
+    expect(runtime.diagnostics).toContain('layer_toggle_unknown:camadaInventada')
+    expect(runtime.clusterParams.A_TOP.layersEnabled?.ou).toBe(true)
+  })
+
+  test('blob parcial degrada para defaults com diagnóstico observável', async () => {
+    const adminConfig = buildAdminConfig()
+    delete (adminConfig as { ofi?: unknown }).ofi
+    const { service } = serviceWith(JSON.stringify(adminConfig))
+
+    const runtime = await service.getConfig()
+
+    expect(runtime.source).toBe('defaults')
+    expect(runtime.diagnostics).toContain('missing_cluster_config:A_TOP')
+  })
+
+  test('garch alpha + beta >= 1 não entra como configuração runtime normal', async () => {
+    const adminConfig = buildAdminConfig()
+    adminConfig.garch.alpha = 0.4
+    adminConfig.garch.beta = 0.6
+    const { service } = serviceWith(JSON.stringify(adminConfig))
+
+    const runtime = await service.getConfig()
+
+    expect(runtime.source).toBe('defaults')
+    expect(runtime.diagnostics).toContain('garch_alpha_beta_not_stationary')
+    expect(runtime.clusterParams.A_TOP.garchAlpha).toBe(CLUSTER_PARAMS.A_TOP.garchAlpha)
+  })
+
+  test('sessionManagement off neutraliza ranges de vol_multiplier em 1', async () => {
+    const adminConfig = buildAdminConfig()
+    adminConfig.layerToggles.sessionManagement = false
+    const { service } = serviceWith(JSON.stringify(adminConfig))
+
+    const runtime = await service.getConfig()
+
+    expect(runtime.sessionMultipliers).toMatchObject({
+      PRE_OPENING: 1,
+      TRADING: 1,
+      CLOSING_CALL: 1,
+      AFTER_MARKET: 1,
+      CLOSED: 1,
+    })
   })
 })

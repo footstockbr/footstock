@@ -13,6 +13,17 @@ export const MOTOR_LAYERS_CONFIG_REDIS_KEY = 'motor:layers:config:v1'
 const CACHE_TTL_MS = 10_000
 const CLUSTERS: AssetCluster[] = ['A_TOP', 'A_MID', 'A_SMALL', 'B_LIQUID', 'B_ILLIQ']
 const SESSION_TYPES: SessionType[] = ['PRE_OPENING', 'TRADING', 'CLOSING_CALL', 'AFTER_MARKET', 'CLOSED']
+export const CANONICAL_LAYER_TOGGLE_KEYS = [
+  'ou',
+  'fundamentalReversion',
+  'garch',
+  'ofi',
+  'kylesLambda',
+  'supplyScaling',
+  'pressureQueue',
+  'velocityCap',
+  'sessionManagement',
+] as const
 
 type AdminMotorLayersConfig = {
   ou: { clusters: Record<AssetCluster, { sigma: number; theta: number; spread_base: number }> }
@@ -34,9 +45,15 @@ export type RuntimeMotorLayerConfig = {
   source: 'redis' | 'defaults'
   updatedAt: string | null
   updatedBy: string | null
+  diagnostics: string[]
   clusterParams: Record<AssetCluster, ClusterParams>
   sessionMultipliers: Record<SessionType, number>
   haltDurationMs: number
+}
+
+type ParsedConfig = {
+  config: AdminMotorLayersConfig | null
+  diagnostics: string[]
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -54,28 +71,31 @@ function defaultSessionMultipliers(): Record<SessionType, number> {
   return out
 }
 
-function defaultRuntimeConfig(): RuntimeMotorLayerConfig {
+function defaultRuntimeConfig(diagnostics: string[] = []): RuntimeMotorLayerConfig {
   return {
     source: 'defaults',
     updatedAt: null,
     updatedBy: null,
+    diagnostics,
     clusterParams: { ...CLUSTER_PARAMS },
     sessionMultipliers: defaultSessionMultipliers(),
     haltDurationMs: 300_000,
   }
 }
 
-function parseConfig(raw: string | null): AdminMotorLayersConfig | null {
-  if (!raw) return null
+function parseConfig(raw: string | null): ParsedConfig {
+  if (!raw) return { config: null, diagnostics: ['redis_config_missing'] }
   try {
     const parsed = JSON.parse(raw) as AdminMotorLayersConfig
 
     for (const cluster of CLUSTERS) {
       const ou = parsed.ou?.clusters?.[cluster]
       const ofi = parsed.ofi?.clusters?.[cluster]
-      if (!ou || !ofi) return null
-      if (!isFiniteNumber(ou.sigma) || !isFiniteNumber(ou.theta) || !isFiniteNumber(ou.spread_base)) return null
-      if (!isFiniteNumber(ofi.rho)) return null
+      if (!ou || !ofi) return { config: null, diagnostics: [`missing_cluster_config:${cluster}`] }
+      if (!isFiniteNumber(ou.sigma) || !isFiniteNumber(ou.theta) || !isFiniteNumber(ou.spread_base)) {
+        return { config: null, diagnostics: [`invalid_ou_cluster_config:${cluster}`] }
+      }
+      if (!isFiniteNumber(ofi.rho)) return { config: null, diagnostics: [`invalid_ofi_cluster_config:${cluster}`] }
     }
 
     const requiredNumbers = [
@@ -93,20 +113,60 @@ function parseConfig(raw: string | null): AdminMotorLayersConfig | null {
       parsed.circuitBreaker?.halt_trigger,
       parsed.circuitBreaker?.halt_duration_s,
     ]
-    if (requiredNumbers.some((value) => !isFiniteNumber(value))) return null
-
-    for (const session of SESSION_TYPES) {
-      if (!isFiniteNumber(parsed.sessionManagement?.sessions?.[session]?.vol_multiplier)) return null
+    if (requiredNumbers.some((value) => !isFiniteNumber(value))) {
+      return { config: null, diagnostics: ['required_number_invalid_or_missing'] }
     }
 
-    return parsed
+    if (parsed.garch.alpha + parsed.garch.beta >= 1) {
+      return { config: null, diagnostics: ['garch_alpha_beta_not_stationary'] }
+    }
+
+    for (const session of SESSION_TYPES) {
+      if (!isFiniteNumber(parsed.sessionManagement?.sessions?.[session]?.vol_multiplier)) {
+        return { config: null, diagnostics: [`invalid_session_multiplier:${session}`] }
+      }
+    }
+
+    return { config: parsed, diagnostics: [] }
   } catch {
-    return null
+    return { config: null, diagnostics: ['json_parse_failed'] }
   }
 }
 
-function toRuntimeConfig(config: AdminMotorLayersConfig | null): RuntimeMotorLayerConfig {
-  if (!config) return defaultRuntimeConfig()
+function normalizeLayerToggles(raw: AdminMotorLayersConfig['layerToggles']): {
+  values: Record<(typeof CANONICAL_LAYER_TOGGLE_KEYS)[number], boolean>
+  diagnostics: string[]
+} {
+  const diagnostics: string[] = []
+  const values = {} as Record<(typeof CANONICAL_LAYER_TOGGLE_KEYS)[number], boolean>
+  const rawRecord = raw ?? {}
+  const allowed = new Set<string>(CANONICAL_LAYER_TOGGLE_KEYS)
+
+  for (const key of CANONICAL_LAYER_TOGGLE_KEYS) {
+    const value = rawRecord[key]
+    if (value === undefined) {
+      values[key] = true
+    } else if (typeof value === 'boolean') {
+      values[key] = value
+    } else {
+      values[key] = true
+      diagnostics.push(`layer_toggle_non_boolean:${key}`)
+    }
+  }
+
+  for (const key of Object.keys(rawRecord)) {
+    if (!allowed.has(key)) diagnostics.push(`layer_toggle_unknown:${key}`)
+  }
+
+  return { values, diagnostics }
+}
+
+function toRuntimeConfig(parsed: ParsedConfig): RuntimeMotorLayerConfig {
+  const { config } = parsed
+  if (!config) return defaultRuntimeConfig(parsed.diagnostics)
+
+  const normalizedToggles = normalizeLayerToggles(config.layerToggles)
+  const diagnostics = [...parsed.diagnostics, ...normalizedToggles.diagnostics]
 
   const clusterParams = {} as Record<AssetCluster, ClusterParams>
   for (const cluster of CLUSTERS) {
@@ -133,14 +193,14 @@ function toRuntimeConfig(config: AdminMotorLayersConfig | null): RuntimeMotorLay
       circuitBreakerThreshold: clamp(config.circuitBreaker.halt_trigger, 0.01, 0.50),
       // enabled ausente (blob legado) => true: o halt automatico só desliga com toggle explícito.
       circuitBreakerEnabled: config.circuitBreaker.enabled ?? true,
-      // Toggle por camada (default tudo ligado quando ausente — blob legado).
-      layersEnabled: config.layerToggles ?? {},
+      // Toggle por camada normalizado: ausente => ligado; valor inválido => ligado + diagnóstico.
+      layersEnabled: normalizedToggles.values,
     }
   }
 
   // Camada sessionManagement desligada (toggle) => multiplicador neutro 1 em todas as sessões
   // (volatilidade constante, sem escala por sessão de mercado).
-  const sessionEnabled = config.layerToggles?.sessionManagement !== false
+  const sessionEnabled = normalizedToggles.values.sessionManagement !== false
   const sessionMultipliers = {} as Record<SessionType, number>
   for (const session of SESSION_TYPES) {
     sessionMultipliers[session] = sessionEnabled
@@ -152,6 +212,7 @@ function toRuntimeConfig(config: AdminMotorLayersConfig | null): RuntimeMotorLay
     source: 'redis',
     updatedAt: config.updatedAt ?? null,
     updatedBy: config.updatedBy ?? null,
+    diagnostics,
     clusterParams,
     sessionMultipliers,
     haltDurationMs: Math.floor(clamp(config.circuitBreaker.halt_duration_s, 10, 3600)) * 1000,
