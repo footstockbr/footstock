@@ -24,7 +24,11 @@ export class AdminChannel {
     await this.subscriber.subscribe(REDIS_CHANNELS.MOTOR_CONTROL, REDIS_CHANNELS.NEWS_INJECT)
     this.subscriber.on('message', (channel, message) => {
       if (channel === REDIS_CHANNELS.MOTOR_CONTROL) {
-        this.handleControlMessage(message)
+        // handleControlMessage e async (HALT_ALL/RESUME_ALL persistem no DB); o
+        // callback do subscriber e sync, entao descartamos a promise explicitamente.
+        // Erros sao tratados internamente (try/catch por acao) para evitar rejeicao
+        // nao capturada.
+        void this.handleControlMessage(message)
       } else if (channel === REDIS_CHANNELS.NEWS_INJECT) {
         this.handleNewsInject(message)
       }
@@ -36,7 +40,7 @@ export class AdminChannel {
     await this.subscriber.unsubscribe(REDIS_CHANNELS.MOTOR_CONTROL, REDIS_CHANNELS.NEWS_INJECT)
   }
 
-  private handleControlMessage(message: string): void {
+  private async handleControlMessage(message: string): Promise<void> {
     let event: MotorControlEvent
     try {
       event = JSON.parse(message) as MotorControlEvent
@@ -109,13 +113,26 @@ export class AdminChannel {
         break
       }
       case 'HALT_ALL': {
-        const halted = this.engine.haltAll()
-        logger.warn(`[admin-channel] HALT_ALL recebido — ${halted} ativos pausados`)
+        // Caminho duravel: engine.haltAll persiste no DB (DB-first) antes de mutar
+        // memoria; a pausa sobrevive a restart. Em falha, log explicito (Zero
+        // Silencio) e nenhuma pausa fantasma so-em-memoria.
+        try {
+          const halted = await this.engine.haltAll()
+          logger.warn(`[admin-channel] HALT_ALL recebido — ${halted} ativos pausados (persistido)`)
+        } catch (err) {
+          logger.error(`[admin-channel] HALT_ALL falhou ao persistir: ${(err as Error).message}`)
+        }
         break
       }
       case 'RESUME_ALL': {
-        const resumed = this.engine.resumeAll()
-        logger.info(`[admin-channel] RESUME_ALL recebido — ${resumed} ativos retomados`)
+        // engine.resumeAll retoma apenas halts de admin (haltReason='HALT_ALL'),
+        // preservando suspensoes de CIRCUIT_BREAKER. Persistencia DB-first.
+        try {
+          const resumed = await this.engine.resumeAll()
+          logger.info(`[admin-channel] RESUME_ALL recebido — ${resumed} ativos retomados (persistido)`)
+        } catch (err) {
+          logger.error(`[admin-channel] RESUME_ALL falhou ao persistir: ${(err as Error).message}`)
+        }
         break
       }
       default:

@@ -399,7 +399,11 @@ export function MotorCamadas() {
           <div>
             <h2 className="text-sm font-semibold text-[#EAECEF]">Camadas do Motor</h2>
             <p className="text-[11px] text-[#929AA5] mt-0.5">
-              10 camadas configuráveis. Alterações aplicam-se ao próximo ciclo de negociação.
+              10 camadas configuráveis (tuning). Alterações aplicam-se ao próximo ciclo de negociação.
+            </p>
+            <p data-testid="admin-motor-camadas-tuning-note" className="text-[10px] text-[#929AA5] mt-1">
+              Ajustar ou desligar uma camada apenas afina o comportamento do motor. Não pausa o motor nem
+              bloqueia ordens: para isso use o botão Pausar no topo da página.
             </p>
             {config.updatedAt && (
               <p className="text-[10px] text-[#52585F] mt-1">

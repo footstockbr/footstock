@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withAdmin, type AuthContext } from '@/app/api/middleware'
 import { redisPublisher as redis } from '@/lib/redis'
-import { MOTOR_LAYERS_DEFAULTS } from '@/lib/constants/motor-layers'
+import { MOTOR_LAYERS_DEFAULTS, MOTOR_LAYER_TOGGLE_KEYS } from '@/lib/constants/motor-layers'
 import type { MotorLayersConfig } from '@/lib/types/admin'
 
 const REDIS_KEY = 'motor:layers:config:v1'
@@ -122,19 +122,41 @@ const layersSchema = z.object({
 // ─── Redis helpers ────────────────────────────────────────────────────────────
 
 async function getStoredConfig(): Promise<MotorLayersConfig | null> {
+  // Leitura de blob JA PERSISTIDO. Defesa retrocompativel: nenhuma falha aqui derruba o
+  // motor (cai para defaults no GET), mas tambem nao ha `catch {}` silencioso (Gate 4 do
+  // source = zero silencio): toda falha emite log tecnico.
+  let raw: string | null
   try {
-    const raw = await redis.get(REDIS_KEY)
-    if (!raw) return null
-    const json = JSON.parse(raw)
-    const parsed = layersSchema.safeParse(json)
-    if (!parsed.success) return null
-    return {
-      ...parsed.data,
-      updatedAt: json.updatedAt ?? null,
-      updatedBy: json.updatedBy ?? null,
-    }
-  } catch {
+    raw = await redis.get(REDIS_KEY)
+  } catch (err) {
+    console.error('[motor/layers] Redis indisponivel ao ler config persistida; usando defaults:', err)
     return null
+  }
+  if (!raw) return null
+
+  let json: unknown
+  try {
+    json = JSON.parse(raw)
+  } catch (err) {
+    console.error('[motor/layers] blob persistido com JSON malformado; usando defaults:', err)
+    return null
+  }
+
+  const parsed = layersSchema.safeParse(json)
+  if (!parsed.success) {
+    // Blob persistido fora do schema atual nao quebra o tick; cai para defaults com log.
+    console.warn(
+      '[motor/layers] blob persistido fora do schema atual; usando defaults:',
+      parsed.error.issues[0]?.message ?? 'schema mismatch',
+    )
+    return null
+  }
+
+  const obj = json as { updatedAt?: unknown; updatedBy?: unknown }
+  return {
+    ...parsed.data,
+    updatedAt: typeof obj.updatedAt === 'string' ? obj.updatedAt : null,
+    updatedBy: typeof obj.updatedBy === 'string' ? obj.updatedBy : null,
   }
 }
 
@@ -171,8 +193,36 @@ async function patchHandler(req: NextRequest, { user }: AuthContext): Promise<Ne
     )
   }
 
+  // Contrato (Task 007): camada DESCONHECIDA no payload de ENTRADA e rejeitada com erro
+  // explicito, nunca normalizada silenciosamente. zod `.object()` apenas faz strip de chaves
+  // extras (silencioso), entao a deteccao e explicita aqui contra a fonte unica de camadas
+  // (motor-layers.ts > MOTOR_LAYER_TOGGLE_KEYS). Valor nao-booleano em chave conhecida ja e
+  // pego pelo `z.boolean()` do schema abaixo.
+  if (body && typeof body === 'object' && 'layerToggles' in body) {
+    const lt = (body as { layerToggles?: unknown }).layerToggles
+    if (lt && typeof lt === 'object' && !Array.isArray(lt)) {
+      const known = new Set<string>(MOTOR_LAYER_TOGGLE_KEYS)
+      const unknownKeys = Object.keys(lt as Record<string, unknown>).filter((k) => !known.has(k))
+      if (unknownKeys.length > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: 'VAL_001',
+              message: `Camada desconhecida em layerToggles: ${unknownKeys.join(', ')}`,
+              details: { field: 'layerToggles', unknownKeys, allowedKeys: MOTOR_LAYER_TOGGLE_KEYS },
+            },
+          },
+          { status: 400 }
+        )
+      }
+    }
+  }
+
   const parsed = layersSchema.safeParse(body)
   if (!parsed.success) {
+    // Erro de contrato: identifica a chave/valor invalido no corpo (sem silencio). 400 =
+    // payload mal-formado contra o contrato canonico de camadas.
     return NextResponse.json(
       {
         success: false,
@@ -182,7 +232,7 @@ async function patchHandler(req: NextRequest, { user }: AuthContext): Promise<Ne
           details: parsed.error.flatten(),
         },
       },
-      { status: 422 }
+      { status: 400 }
     )
   }
 

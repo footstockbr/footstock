@@ -1,4 +1,4 @@
-import type { MotorLayersConfig } from '@/lib/types/admin'
+import type { MotorLayersConfig, MotorLayerToggleKey } from '@/lib/types/admin'
 
 export const MOTOR_LAYERS_DEFAULTS: Omit<MotorLayersConfig, 'updatedAt' | 'updatedBy'> = {
   ou: {
@@ -48,4 +48,44 @@ export const MOTOR_LAYERS_DEFAULTS: Omit<MotorLayersConfig, 'updatedAt' | 'updat
     velocityCap:          true,
     sessionManagement:    true,
   },
+}
+
+// ─── Contrato de layerToggles (Task 007: preservar compatibilidade) ──────────
+//
+// `motor-layers.ts` e a FONTE UNICA do contrato de camadas. A rota admin e o motor
+// consomem as chaves canonicas e a normalizacao daqui, sem redefinir o conjunto de
+// camadas em outro lugar (evita drift). `layerToggles` e configuracao ADITIVA/LEGADA:
+// blobs antigos sem o campo continuam validos (default = todas habilitadas) e o estado
+// de PAUSA nunca e derivado deste mapa (pausa vive em controle separado: motor:global-halt
+// + isPaused/asset.isHalted).
+
+/**
+ * Chaves canonicas dos toggles de camada, derivadas do proprio default acima para que
+ * adicionar/remover uma camada no default propague aqui sem drift. Consumido pela rota
+ * admin (rejeicao de camada desconhecida no payload de ENTRADA) e por qualquer consumidor
+ * que precise do conjunto autoritativo de camadas.
+ */
+export const MOTOR_LAYER_TOGGLE_KEYS = Object.keys(
+  MOTOR_LAYERS_DEFAULTS.layerToggles,
+) as MotorLayerToggleKey[]
+
+/**
+ * Normaliza um mapa parcial/ausente de `layerToggles` para a forma canonica completa.
+ * - Ausente (undefined/null): retorna o default (todas as camadas habilitadas).
+ * - Parcial: preenche as chaves faltantes com o default por camada (true); nao falha.
+ * Nunca deriva estado de pausa a partir de `layerToggles`. Chaves desconhecidas sao
+ * ignoradas aqui apenas como defesa retrocompativel contra blobs JA PERSISTIDOS ou objetos
+ * internos inesperados; a rejeicao de camada desconhecida no payload de ENTRADA e
+ * responsabilidade da rota admin (400 + erro de contrato), nao desta normalizacao.
+ */
+export function normalizeLayerToggles(
+  partial?: Partial<Record<MotorLayerToggleKey, boolean>> | null,
+): Record<MotorLayerToggleKey, boolean> {
+  const out = { ...MOTOR_LAYERS_DEFAULTS.layerToggles }
+  if (!partial || typeof partial !== 'object') return out
+  for (const key of MOTOR_LAYER_TOGGLE_KEYS) {
+    const v = partial[key]
+    if (typeof v === 'boolean') out[key] = v
+  }
+  return out
 }

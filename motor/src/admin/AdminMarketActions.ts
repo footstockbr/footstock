@@ -118,23 +118,28 @@ export class AdminMarketActions {
   }
 
   private async handleHaltAll(action: AdminAction): Promise<{ success: boolean; message: string }> {
-    const count = this.engine.haltAll()
-    await this.prisma.asset.updateMany({
-      where: { isHalted: false },
-      data: { isHalted: true, haltReason: 'HALT_ALL', haltedUntil: null },
-    })
-    await this.auditLogger.log(action)
-    return { success: true, message: `HALT_ALL: ${count} ativos pausados` }
+    // Persistencia duravel + mutacao de memoria centralizadas em engine.haltAll
+    // (DB-first, Task 003). Em falha de persistencia o engine re-lanca e a acao
+    // retorna success=false sem pausa fantasma so-em-memoria.
+    try {
+      const count = await this.engine.haltAll()
+      await this.auditLogger.log(action)
+      return { success: true, message: `HALT_ALL: ${count} ativos pausados` }
+    } catch (err) {
+      return { success: false, message: `HALT_ALL falhou ao persistir: ${(err as Error).message}` }
+    }
   }
 
   private async handleResumeAll(action: AdminAction): Promise<{ success: boolean; message: string }> {
-    await this.prisma.asset.updateMany({
-      where: { isHalted: true },
-      data: { isHalted: false, haltReason: null, haltedUntil: null },
-    })
-    const count = this.engine.resumeAll()
-    await this.auditLogger.log(action)
-    return { success: true, message: `RESUME_ALL: ${count} ativos retomados` }
+    // engine.resumeAll retoma APENAS halts de admin (haltReason='HALT_ALL'),
+    // preservando suspensoes de CIRCUIT_BREAKER. Persistencia DB-first interna.
+    try {
+      const count = await this.engine.resumeAll()
+      await this.auditLogger.log(action)
+      return { success: true, message: `RESUME_ALL: ${count} ativos retomados` }
+    } catch (err) {
+      return { success: false, message: `RESUME_ALL falhou ao persistir: ${(err as Error).message}` }
+    }
   }
 
   private async handleForceCircuitBreaker(action: AdminAction): Promise<{ success: boolean; message: string }> {

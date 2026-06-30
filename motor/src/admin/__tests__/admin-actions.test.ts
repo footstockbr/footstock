@@ -9,8 +9,10 @@ const mockEngine = {
   resumeAsset: jest.fn(),
   injectNewsImpact: jest.fn(),
   adjustPrice: jest.fn(),
-  haltAll: jest.fn().mockReturnValue(5),
-  resumeAll: jest.fn().mockReturnValue(3),
+  // Task 003: haltAll/resumeAll agora sao async e fazem a persistencia DB-first
+  // internamente (caminho duravel centralizado no engine).
+  haltAll: jest.fn().mockResolvedValue(5),
+  resumeAll: jest.fn().mockResolvedValue(3),
 }
 
 const mockLogger = {
@@ -125,7 +127,7 @@ describe('AdminMarketActions', () => {
     expect(mockEngine.pauseAsset).not.toHaveBeenCalled()
   })
 
-  test('HALT_ALL chama engine.haltAll, persiste DB e retorna contagem', async () => {
+  test('HALT_ALL delega a engine.haltAll (persistencia DB-first interna) e retorna contagem', async () => {
     const action: AdminAction = {
       type: 'HALT_ALL',
       assetId: undefined,
@@ -135,20 +137,17 @@ describe('AdminMarketActions', () => {
       timestamp: Date.now(),
     }
 
-    mockPrisma.asset.updateMany.mockResolvedValue({ count: 5 })
-
     const result = await actions.handle(action)
     expect(result.success).toBe(true)
     expect(result.message).toContain('5')
     expect(mockEngine.haltAll).toHaveBeenCalled()
-    expect(mockPrisma.asset.updateMany).toHaveBeenCalledWith({
-      where: { isHalted: false },
-      data: { isHalted: true, haltReason: 'HALT_ALL', haltedUntil: null },
-    })
+    // Task 003: a persistencia agora vive em engine.haltAll (DB-first); o handler
+    // nao chama updateMany diretamente (evita double-write).
+    expect(mockPrisma.asset.updateMany).not.toHaveBeenCalled()
     expect(mockLogger.log).toHaveBeenCalledWith(action)
   })
 
-  test('RESUME_ALL persiste DB antes de retomar engine e retorna contagem', async () => {
+  test('RESUME_ALL delega a engine.resumeAll (retoma so admin, CB preservado) e retorna contagem', async () => {
     const action: AdminAction = {
       type: 'RESUME_ALL',
       assetId: undefined,
@@ -158,16 +157,12 @@ describe('AdminMarketActions', () => {
       timestamp: Date.now(),
     }
 
-    mockPrisma.asset.updateMany.mockResolvedValue({ count: 3 })
-
     const result = await actions.handle(action)
     expect(result.success).toBe(true)
     expect(result.message).toContain('3')
-    expect(mockPrisma.asset.updateMany).toHaveBeenCalledWith({
-      where: { isHalted: true },
-      data: { isHalted: false, haltReason: null, haltedUntil: null },
-    })
     expect(mockEngine.resumeAll).toHaveBeenCalled()
+    expect(mockPrisma.asset.updateMany).not.toHaveBeenCalled()
+    expect(mockLogger.log).toHaveBeenCalledWith(action)
   })
 
   test('ADJUST_PRICE chama engine.adjustPrice com preço correto', async () => {

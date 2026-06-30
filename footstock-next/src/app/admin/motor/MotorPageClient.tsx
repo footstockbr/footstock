@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AdminBreadcrumb } from '@/components/admin/AdminBreadcrumb'
 import { MotorStateCard } from '@/components/admin/MotorStateCard'
@@ -11,6 +11,14 @@ import { MotorCamadas } from '@/components/admin/MotorCamadas'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { hasAdminRole } from '@/lib/utils/admin-roles'
+import {
+  type GlobalHaltFlow,
+  expectedToken,
+  normalizeReason,
+  validateGlobalHaltConfirm,
+  REASON_MAX,
+} from '@/lib/utils/global-halt-confirm'
+import { orchestrateGlobalHalt } from '@/lib/admin/global-halt-orchestrator'
 import type { AdminMarketActionLog } from '@/lib/types/admin'
 import type { AdminRole } from '@/types'
 
@@ -271,6 +279,142 @@ function AuditLog() {
   )
 }
 
+// Diálogo de confirmação digitada para pausar/retomar o motor inteiro. Barreira
+// canônica única: token incorreto ou motivo inválido APENAS exibem erro e bloqueiam
+// o submit (diálogo permanece aberto); o cancelamento ocorre só ao fechar/cancelar.
+// Digitar errado nunca dispara B/C nem cancela sozinho.
+interface GlobalHaltConfirmDialogProps {
+  flow: GlobalHaltFlow
+  token: string
+  reason: string
+  onTokenChange: (value: string) => void
+  onReasonChange: (value: string) => void
+  onCancel: () => void
+  onConfirm: (reason: string) => void
+}
+
+function GlobalHaltConfirmDialog({
+  flow,
+  token,
+  reason,
+  onTokenChange,
+  onReasonChange,
+  onCancel,
+  onConfirm,
+}: GlobalHaltConfirmDialogProps) {
+  const isResuming = flow === 'resume'
+  const word = expectedToken(flow)
+  const validation = validateGlobalHaltConfirm(flow, token, reason)
+  const reasonLen = normalizeReason(reason).length
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    // Submit bloqueado quando inválido: nenhum efeito colateral, diálogo segue aberto.
+    if (!validation.canSubmit) return
+    onConfirm(normalizeReason(reason))
+  }
+
+  return (
+    <div
+      data-testid="admin-motor-confirm-overlay"
+      role="presentation"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={onCancel}
+    >
+      <form
+        data-testid="admin-motor-confirm-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="admin-motor-confirm-title"
+        className="w-full max-w-md space-y-4 rounded-xl border border-[rgba(240,185,11,.2)] bg-[#1E2329] p-5"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={handleSubmit}
+      >
+        <div>
+          <h2 id="admin-motor-confirm-title" className="text-sm font-semibold text-[#EAECEF]">
+            {isResuming ? 'Confirmar retomada do motor' : 'Confirmar pausa do motor'}
+          </h2>
+          <p className="mt-1 text-xs text-[#929AA5]">
+            {isResuming
+              ? 'Retomar libera novas ordens e reativa o motor de TODOS os ativos (suspensões por circuit breaker são preservadas).'
+              : 'Pausar congela o motor inteiro: TODOS os ativos são suspensos e novas ordens ficam bloqueadas imediatamente. Não é o mesmo que ajustar camadas.'}
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="admin-motor-confirm-token" className="block text-[10px] uppercase tracking-wide text-[#929AA5]">
+            Digite <span className="font-mono font-semibold text-[#F0B90B]">{word}</span> para confirmar
+          </label>
+          <input
+            id="admin-motor-confirm-token"
+            data-testid="admin-motor-confirm-token-input"
+            type="text"
+            autoComplete="off"
+            value={token}
+            onChange={(e) => onTokenChange(e.target.value)}
+            aria-invalid={validation.tokenError !== null}
+            className="w-full rounded border border-[rgba(240,185,11,.2)] bg-[#0B0E11] px-3 py-2 text-sm text-[#EAECEF] focus:border-[#F0B90B] focus:outline-none"
+          />
+          {validation.tokenError && (
+            <p data-testid="admin-motor-confirm-token-error" className="text-[10px] text-[#F6465D]">
+              {validation.tokenError}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="admin-motor-confirm-reason" className="block text-[10px] uppercase tracking-wide text-[#929AA5]">
+            Motivo (auditável, 10 a {REASON_MAX} caracteres)
+          </label>
+          <textarea
+            id="admin-motor-confirm-reason"
+            data-testid="admin-motor-confirm-reason-input"
+            value={reason}
+            onChange={(e) => onReasonChange(e.target.value)}
+            rows={3}
+            maxLength={REASON_MAX}
+            aria-invalid={validation.reasonError !== null}
+            className="w-full resize-none rounded border border-[rgba(240,185,11,.2)] bg-[#0B0E11] px-3 py-2 text-sm text-[#EAECEF] focus:border-[#F0B90B] focus:outline-none"
+          />
+          <div className="flex items-center justify-between">
+            {validation.reasonError ? (
+              <p data-testid="admin-motor-confirm-reason-error" className="text-[10px] text-[#F6465D]">
+                {validation.reasonError}
+              </p>
+            ) : (
+              <span />
+            )}
+            <span className="text-[9px] text-[#5E6673]">{reasonLen}/{REASON_MAX}</span>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <button
+            type="button"
+            data-testid="admin-motor-confirm-cancel"
+            onClick={onCancel}
+            className="rounded px-3 py-1.5 text-[11px] font-semibold border border-[rgba(240,185,11,.2)] text-[#929AA5] transition-colors hover:text-[#EAECEF]"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            data-testid="admin-motor-confirm-submit"
+            disabled={!validation.canSubmit}
+            className="rounded px-3 py-1.5 text-[11px] font-semibold transition-opacity disabled:opacity-40"
+            style={isResuming
+              ? { background: 'rgba(46,189,133,.15)', color: '#2EBD85', border: '1px solid rgba(46,189,133,.3)' }
+              : { background: 'rgba(246,70,93,.15)', color: '#F6465D', border: '1px solid rgba(246,70,93,.3)' }
+            }
+          >
+            {isResuming ? 'Retomar motor' : 'Pausar motor'}
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
 interface MotorPageClientProps {
   adminRole: AdminRole
 }
@@ -280,8 +424,21 @@ export default function MotorPageClient({ adminRole }: MotorPageClientProps) {
   const canHalt = hasAdminRole(adminRole, 'MODERADOR')
   const canGlobalHalt = hasAdminRole(adminRole, 'ADMINISTRADOR')
 
+  const queryClient = useQueryClient()
   const [motorHalted, setMotorHalted] = useState(false)
   const [haltLoading, setHaltLoading] = useState(false)
+  // Zero Silêncio / Zero Estados Indefinidos: a orquestração nunca falha calada.
+  const [haltError, setHaltError] = useState<string | null>(null)
+  // RESUME_ALL preserva suspensões de circuit breaker — a UI sinaliza quando o
+  // motor segue pausado mesmo após Retomar (não pode afirmar "voltou").
+  const [cbPreservedWarning, setCbPreservedWarning] = useState(false)
+
+  // Barreira de confirmação digitada (substitui o window.confirm simples). Enquanto
+  // confirmFlow != null o diálogo está aberto; só ao confirmar com token + motivo
+  // válidos a orquestração B/C dispara. Fechar/cancelar encerra sem efeito colateral.
+  const [confirmFlow, setConfirmFlow] = useState<GlobalHaltFlow | null>(null)
+  const [confirmToken, setConfirmToken] = useState('')
+  const [confirmReason, setConfirmReason] = useState('')
 
   useEffect(() => {
     if (!canGlobalHalt) return
@@ -291,21 +448,76 @@ export default function MotorPageClient({ adminRole }: MotorPageClientProps) {
       .catch(() => {})
   }, [canGlobalHalt])
 
-  const handleGlobalHalt = async () => {
-    const msg = motorHalted
-      ? 'Retomar o motor de mercado? As negociações serão reativadas imediatamente.'
-      : 'Pausar o motor de mercado? TODOS os ativos serão suspensos imediatamente.'
-    if (!window.confirm(msg)) return
-
-    setHaltLoading(true)
+  // Reconcilia o efeito B (bloqueio de ordens) + rótulo/estilo do botão a partir da
+  // fonte canônica (GET global-halt). NUNCA inverte motorHalted às cegas: o estado
+  // exibido vem sempre do backend, refletindo o que de fato persistiu.
+  const reconcileHaltState = async () => {
     try {
-      const res = await fetch('/api/v1/admin/motor/global-halt', {
-        method: motorHalted ? 'DELETE' : 'POST',
-        credentials: 'include',
-      })
-      if (res.ok) setMotorHalted(!motorHalted)
+      const r = await fetch('/api/v1/admin/motor/global-halt', { credentials: 'include' })
+      // Nao rebaixar para "running" a partir de uma leitura nao confirmada: se o GET
+      // falhar (4xx/5xx ou success!=true), preserva o ultimo estado conhecido em vez
+      // de afirmar um estado fantasma. O proximo GET (mount/refresh) reconcilia.
+      if (!r.ok) return
+      const body = await r.json().catch(() => null)
+      if (body?.success !== true) return
+      setMotorHalted(body.data?.status === 'halted')
     } catch {
-      /* silently fail — status unchanged */
+      /* reconciliação best-effort; o próximo GET (mount/refresh) corrige */
+    }
+  }
+
+  // Abre o diálogo de confirmação digitada. Não dispara nenhum efeito colateral:
+  // só ao confirmar com token + motivo válidos a orquestração B/C roda.
+  const openGlobalHaltConfirm = () => {
+    if (haltLoading) return
+    setConfirmFlow(motorHalted ? 'resume' : 'halt')
+    setConfirmToken('')
+    setConfirmReason('')
+    setHaltError(null)
+    setCbPreservedWarning(false)
+  }
+
+  // Cancelamento: fecha o diálogo sem qualquer efeito colateral (B/C não disparam).
+  const cancelGlobalHaltConfirm = () => {
+    setConfirmFlow(null)
+    setConfirmToken('')
+    setConfirmReason('')
+  }
+
+  // Orquestra os DOIS efeitos canônicos numa única ação, em ordem fixa, usando o
+  // motivo digitado pelo operador (auditável; chega na rota e na trilha de audit
+  // existente). Pausar = B (bloquear ordens) -> C (HALT_ALL no motor real).
+  // Retomar = C (RESUME_ALL) -> B (liberar ordens), para nunca abrir janela em que
+  // ordens entrem com o motor ainda em transição. Falha parcial = fail-loud +
+  // reconciliação via GET global-halt (sem estado fantasma na UI).
+  const runGlobalHalt = async (flow: GlobalHaltFlow, reason: string) => {
+    setConfirmFlow(null)
+    setHaltLoading(true)
+    setHaltError(null)
+    setCbPreservedWarning(false)
+
+    try {
+      // Sequencia de rede + decisao B/C extraida para modulo puro (testavel sem DOM).
+      // O estado da UI (erro, reconciliacao, CB preservado) permanece aqui.
+      const outcome = await orchestrateGlobalHalt(flow, reason, fetch)
+      if (outcome.error) setHaltError(outcome.error)
+
+      // Reconcilia o botao a partir da fonte canonica (GET global-halt) em TODOS os
+      // caminhos — sucesso ou falha parcial — sem estado fantasma na UI.
+      await reconcileHaltState()
+
+      if (outcome.checkCbPreserved) {
+        // RESUME_ALL limpa apenas halts de admin (haltReason='HALT_ALL'); ativos em
+        // CIRCUIT_BREAKER seguem isPaused. A UI não pode mentir dizendo que o motor
+        // voltou — sinaliza o CB preservado lendo a fonte canônica dos KPIs.
+        try {
+          await queryClient.invalidateQueries({ queryKey: ['motor-kpis'] })
+          const freshKpis = await fetchMotorKpis()
+          if ((freshKpis.circuitBreakers ?? 0) > 0) setCbPreservedWarning(true)
+        } catch {
+          /* best-effort; o KPI card já reflete o estado de CB de forma independente */
+        }
+      }
     } finally {
       setHaltLoading(false)
     }
@@ -337,8 +549,11 @@ export default function MotorPageClient({ adminRole }: MotorPageClientProps) {
         {canGlobalHalt && (
           <button
             data-testid="admin-motor-pause-button"
-            onClick={handleGlobalHalt}
+            onClick={openGlobalHaltConfirm}
             disabled={haltLoading}
+            title={motorHalted
+              ? 'Retomar o motor: libera novas ordens e reativa os ativos (suspensões por circuit breaker são preservadas)'
+              : 'Pausar o motor: congela todos os ativos e bloqueia novas ordens (não confunda com ajustar camadas)'}
             className="px-2.5 py-1 rounded text-[11px] font-semibold border transition-all whitespace-nowrap disabled:opacity-50"
             style={motorHalted
               ? { background: 'rgba(46,189,133,.1)', color: '#2EBD85', borderColor: 'rgba(46,189,133,.3)' }
@@ -349,6 +564,45 @@ export default function MotorPageClient({ adminRole }: MotorPageClientProps) {
           </button>
         )}
       </div>
+
+      {/* Zero Silêncio: falha de orquestração nunca fica calada. Identificador
+          canônico único: admin-motor-pause-error. Ciclo de vida do erro: a falha
+          o exibe; uma nova tentativa de pausa/retomada limpa o erro anterior no
+          início (openGlobalHaltConfirm + runGlobalHalt); o sucesso o remove. */}
+      {haltError && (
+        <div
+          data-testid="admin-motor-pause-error"
+          role="alert"
+          className="rounded-lg border border-[rgba(246,70,93,.3)] bg-[rgba(246,70,93,.08)] px-3 py-2 text-xs text-[#F6465D]"
+        >
+          {haltError}
+        </div>
+      )}
+
+      {/* Barreira de confirmação digitada: token do fluxo (PAUSAR/RETOMAR) + motivo
+          (10..500) antes de qualquer efeito colateral (Zero Silêncio / Zero Assumido) */}
+      {confirmFlow && (
+        <GlobalHaltConfirmDialog
+          flow={confirmFlow}
+          token={confirmToken}
+          reason={confirmReason}
+          onTokenChange={setConfirmToken}
+          onReasonChange={setConfirmReason}
+          onCancel={cancelGlobalHaltConfirm}
+          onConfirm={(reason) => runGlobalHalt(confirmFlow, reason)}
+        />
+      )}
+
+      {/* Sucesso parcial (Retomar com CB ativo): ordens liberadas, motor ainda pausado */}
+      {cbPreservedWarning && (
+        <div
+          data-testid="admin-motor-cb-preserved-warning"
+          role="status"
+          className="rounded-lg border border-[rgba(240,185,11,.3)] bg-[rgba(240,185,11,.08)] px-3 py-2 text-xs text-[#F0B90B]"
+        >
+          Ordens reativadas; o motor segue pausado por circuit breaker em um ou mais ativos.
+        </div>
+      )}
 
       {/* KPIs — dados reais */}
       <div data-testid="admin-motor-kpis" className="grid grid-cols-1 sm:grid-cols-2 gap-3">

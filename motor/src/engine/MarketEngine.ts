@@ -1205,7 +1205,21 @@ export class MarketEngine {
     state.closePrice = newPrice  // Reset âncora para evitar circuit breaker imediato
   }
 
-  haltAll(): number {
+  async haltAll(): Promise<number> {
+    // Caminho duravel DB-first (Task 003): persistir ANTES de mutar memoria. Se a
+    // persistencia falhar, NAO altera state (evita pausa fantasma so-em-memoria) e
+    // re-lanca para o caller logar (Zero Silencio). Idempotente: where isHalted=false
+    // ignora ativos ja suspensos (preserva halts de CIRCUIT_BREAKER e HALT_ASSET).
+    try {
+      await this.prisma.asset.updateMany({
+        where: { isHalted: false },
+        data: { isHalted: true, haltReason: 'HALT_ALL', haltedUntil: null },
+      })
+    } catch (err) {
+      logger.error(`[engine] HALT_ALL: falha ao persistir, memoria intacta: ${(err as Error).message}`)
+      throw err
+    }
+
     let count = 0
     for (const state of this.assetStates.values()) {
       if (!state.isPaused) {
@@ -1215,21 +1229,35 @@ export class MarketEngine {
         count++
       }
     }
-    logger.warn(`[engine] HALT_ALL: ${count} ativos pausados`)
+    logger.warn(`[engine] HALT_ALL: ${count} ativos pausados (DB + memoria)`)
     return count
   }
 
-  resumeAll(): number {
+  async resumeAll(): Promise<number> {
+    // Caminho duravel DB-first (Task 003): retoma APENAS halts de admin
+    // (haltReason='HALT_ALL'). Suspensoes de CIRCUIT_BREAKER NUNCA sao limpas por um
+    // resume operacional (CB e protecao automatica de risco). Persistir antes da
+    // memoria; em falha, manter state e re-lancar (Zero Silencio).
+    try {
+      await this.prisma.asset.updateMany({
+        where: { haltReason: 'HALT_ALL' },
+        data: { isHalted: false, haltReason: null, haltedUntil: null },
+      })
+    } catch (err) {
+      logger.error(`[engine] RESUME_ALL: falha ao persistir, memoria intacta: ${(err as Error).message}`)
+      throw err
+    }
+
     let count = 0
     for (const state of this.assetStates.values()) {
-      if (state.isPaused) {
+      if (state.isPaused && state.haltReason === 'HALT_ALL') {
         state.isPaused = false
         state.haltReason = null
         state.haltResumeAt = null
         count++
       }
     }
-    logger.info(`[engine] RESUME_ALL: ${count} ativos retomados`)
+    logger.info(`[engine] RESUME_ALL: ${count} ativos retomados (DB + memoria)`)
     return count
   }
 
