@@ -83,6 +83,13 @@ export async function GET() {
     const command = safeJson<{ type?: string; state?: string; applied?: boolean; commandId?: string }>(commandRaw)
     const l1l7 = ['ou', 'fundamentalReversion', 'garch', 'ofi', 'kylesLambda', 'supplyScaling', 'pressureQueue']
     const allMainLayersOff = !!layers?.layerToggles && l1l7.every((key) => layers.layerToggles?.[key] === false)
+    const pressureQueueOff = layers?.layerToggles?.pressureQueue === false
+    const residualSources = [
+      ...(!pressureQueueOff ? ['L7_5_Nudge'] : []),
+      'L7_9_AgentImpact',
+      'L10_Correlation',
+      'ajuste admin',
+    ]
     const hasAppliedHaltAll = command?.type === 'HALT_ALL' && command.state === 'applied' && command.applied === true
     const latestAuditAction = latestGlobalAudit?.action ?? null
     const versionMismatch =
@@ -128,7 +135,7 @@ export async function GET() {
         [
           `all_l1_l7_off=${allMainLayersOff}`,
           `halt_all_applied=${hasAppliedHaltAll}`,
-          'Fontes residuais esperadas: L7_5_Nudge, L7_9_AgentImpact, L10_Correlation, ajuste admin.',
+          `Fontes residuais esperadas: ${residualSources.join(', ')}.`,
         ],
       ),
     }

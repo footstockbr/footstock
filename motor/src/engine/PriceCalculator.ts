@@ -160,7 +160,17 @@ export class PriceCalculator {
     // Posicionado entre L7 e L8: opera no totalDelta acumulado de L1-L7 antes do cap.
     // Quando o candidato (rounded) iguala o preco atual, incrementa contador de inatividade;
     // ao atingir NUDGE_TICKS, injeta ±NUDGE_DELTA na direcao de fairValue para destravar UX.
-    const nudgeDelta = this._applyNudge(state, totalDelta)
+    // O nudge fica sob o toggle de Pressure Queue: L7 desligada tambem desliga L7.5.
+    const nudgeEnabled = layersEnabled?.pressureQueue !== false
+    const nudgeDelta = nudgeEnabled ? this._applyNudge(state, totalDelta) : 0
+    if (!nudgeEnabled) {
+      state.ticksSinceLastChange = 0
+      layerResults.push({
+        layer: 'L7_5_Nudge',
+        deltaPrice: 0,
+        metadata: { disabled: 1, controlledBy: 'pressureQueue' },
+      })
+    }
     if (nudgeDelta !== 0) {
       totalDelta += nudgeDelta
       layerResults.push({

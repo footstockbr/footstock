@@ -653,7 +653,7 @@ export function MotorCamadas() {
       <LayerCard
         badge="L7"
         name="Pressure Queue"
-        description="Fila de pressão cumulativa: spread se alarga e preço spot é capturado quando pressão excede limite"
+        description="Fila de pressão cumulativa: alarga spread, captura spot sob pressão e controla o nudge L7.5 de baixa atividade (±FS$0,01)"
         color="#F1C04E"
         expanded={!!expanded.pressureQueue}
         onToggle={() => toggle('pressureQueue')}

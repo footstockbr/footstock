@@ -96,13 +96,31 @@ describe('PriceCalculator fontes residuais fora dos toggles L1-L7', () => {
     expect(result.newPrice).toBeGreaterThan(100)
   })
 
-  test('camadas off nao sao kill switch: nudge pronto move preco por L7_5_Nudge', () => {
+  test('pressureQueue=false desliga L7_5_Nudge e limpa contador oculto', () => {
     const state = baseState({ fairValue: 101, ticksSinceLastChange: NUDGE_TICKS - 1 })
     const result = new PriceCalculator().calculate(state, baseParams(), 0)
     const nudge = result.layerResults.find((entry) => entry.layer === 'L7_5_Nudge')
 
     expect(nudge).toBeDefined()
+    expect(nudge?.deltaPrice).toBe(0)
+    expect(nudge?.metadata?.disabled).toBe(1)
+    expect(nudge?.metadata?.controlledBy).toBe('pressureQueue')
+    expect(state.ticksSinceLastChange).toBe(0)
+    expect(result.newPrice).toBe(100)
+  })
+
+  test('pressureQueue=true preserva L7_5_Nudge mesmo com L1-L6 desligadas', () => {
+    const state = baseState({ fairValue: 101, ticksSinceLastChange: NUDGE_TICKS - 1 })
+    const result = new PriceCalculator().calculate(
+      state,
+      baseParams({ layersEnabled: { ...ALL_MAIN_LAYERS_OFF, pressureQueue: true } }),
+      0,
+    )
+    const nudge = result.layerResults.find((entry) => entry.layer === 'L7_5_Nudge')
+
+    expect(nudge).toBeDefined()
     expect(nudge?.deltaPrice).toBeGreaterThan(0)
+    expect(state.ticksSinceLastChange).toBe(0)
     expect(result.newPrice).toBeGreaterThan(100)
   })
 
