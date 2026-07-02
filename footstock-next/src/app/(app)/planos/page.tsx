@@ -13,7 +13,7 @@ import { ROUTES } from "@/lib/constants/routes";
 import { getAuthUser } from "@/lib/auth";
 import { PlanCTAButton } from "@/components/payments/PlanCTAButton";
 import { PlanRevalidateOnSuccess } from "@/components/payments/PlanRevalidateOnSuccess";
-import { resolveEnabledCheckoutGateways } from "@/lib/payments/enabled-gateways.server";
+import { resolveOfferedCheckoutGateways } from "@/lib/payments/enabled-gateways.server";
 
 export const metadata: Metadata = {
   title: "Planos — FootStock",
@@ -128,7 +128,9 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
   // Gateways efetivamente habilitados (credenciais presentes), resolvidos
   // server-side e repassados aos CTAs para o seletor de pagamento nao oferecer
   // gateway quebrado nem flashear carregamento.
-  const enabledGateways = resolveEnabledCheckoutGateways();
+  // Só gateways com recorrência real (planos são assinaturas) — exclui os que só fazem
+  // pagamento único, evitando oferecer PayPal/PagSeguro one-time para um produto recorrente.
+  const enabledGateways = resolveOfferedCheckoutGateways();
   const { payment } = await searchParams;
   const paymentSucceeded = payment === "success";
 
@@ -228,8 +230,8 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                 </div>
               )}
 
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
+              <div className="flex items-start justify-between gap-2 md:flex-col lg:flex-row mb-4">
+                <div className="flex items-center gap-3 min-w-0">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                     plan.type === PlanType.LENDA
                       ? "bg-[rgba(240,185,11,.2)]"
@@ -246,7 +248,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                     <p className="text-xs text-[#929AA5]">{plan.description}</p>
                   </div>
                 </div>
-                <div className="text-right">
+                <div className="text-right md:text-left lg:text-right shrink-0">
                   <span className="text-xl font-bold font-mono text-[#EAECEF]">{plan.price}</span>
                   {plan.period && (
                     <span className="text-xs text-[#929AA5]">{plan.period}</span>

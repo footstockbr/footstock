@@ -251,3 +251,36 @@ export function resolveEnabledCheckoutGateways(): CheckoutGateway[] {
 
   return ALL_CHECKOUT_GATEWAYS.filter((g) => states[g] === 'VALID')
 }
+
+// ─── Gate de capacidade de recorrencia ───────────────────────────────────────
+//
+// Os planos sao produtos RECORRENTES ("/mes", "Cancele quando quiser"). Um gateway
+// so pode ser OFERECIDO no checkout de plano se realmente cria uma assinatura
+// recorrente (createSubscription implementado). Gateways cujo createSubscription
+// lanca "nao implementado" caem no fluxo de PAGAMENTO UNICO — cobram o cliente
+// UMA vez para algo vendido como assinatura (bug de recorrencia observado no PayPal:
+// pagina de debito/credito "conclua esta compra"). Enquanto a assinatura recorrente
+// desses gateways nao existir, eles NAO aparecem no seletor.
+//
+// Estado atual (fonte: src/lib/gateways/*.ts):
+//   - MERCADO_PAGO: createSubscription implementado (preapproval)      -> capaz
+//   - PAGSEGURO:    createSubscription lanca "nao implementado"        -> NAO capaz
+//   - PAYPAL:       createSubscription lanca "nao implementado"        -> NAO capaz
+//
+// Ao implementar PayPal/PagSeguro Subscriptions, adicionar o gateway aqui.
+export const RECURRING_CAPABLE_GATEWAYS: readonly CheckoutGateway[] = ['MERCADO_PAGO']
+
+/** true sse o gateway cria assinatura recorrente real (createSubscription implementado). */
+export function isRecurringCapableGateway(gateway: CheckoutGateway): boolean {
+  return RECURRING_CAPABLE_GATEWAYS.includes(gateway)
+}
+
+/**
+ * Gateways efetivamente OFERECIDOS no checkout de plano: os que passam o gate de
+ * credenciais (resolveEnabledCheckoutGateways) E sao capazes de recorrencia real.
+ * Este e o conjunto que as UIs de assinatura devem consumir (nao o de credenciais),
+ * para nunca oferecer um gateway que so faz pagamento unico a um produto recorrente.
+ */
+export function resolveOfferedCheckoutGateways(): CheckoutGateway[] {
+  return resolveEnabledCheckoutGateways().filter(isRecurringCapableGateway)
+}

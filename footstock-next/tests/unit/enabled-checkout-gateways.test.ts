@@ -12,7 +12,9 @@ jest.mock('@/lib/env', () => ({
 
 import {
   resolveEnabledCheckoutGateways,
+  resolveOfferedCheckoutGateways,
   isCheckoutGatewayConfigured,
+  isRecurringCapableGateway,
 } from '@/lib/payments/enabled-gateways.server'
 
 function setEnv(values: Record<string, string | undefined>) {
@@ -52,5 +54,30 @@ describe('resolveEnabledCheckoutGateways', () => {
   it('trata credencial vazia/espacos como ausente', () => {
     setEnv({ PAGSEGURO_TOKEN: '   ', PAGSEGURO_WEBHOOK_SECRET: 'sec' })
     expect(isCheckoutGatewayConfigured('PAGSEGURO')).toBe(false)
+  })
+})
+
+// ── Gate de capacidade de recorrência (planos são produtos recorrentes) ──────
+// PayPal e PagSeguro só fazem pagamento único (createSubscription não implementado),
+// então NÃO podem ser oferecidos no checkout de plano mesmo com credenciais válidas.
+describe('resolveOfferedCheckoutGateways (gate de recorrência)', () => {
+  it('oferece só o Mercado Pago mesmo com os 3 gateways com credenciais válidas', () => {
+    setEnv({ ...MP, ...PS, ...PP })
+    // credencial-gate enxerga os 3...
+    expect(resolveEnabledCheckoutGateways()).toEqual(['MERCADO_PAGO', 'PAGSEGURO', 'PAYPAL'])
+    // ...mas o checkout de plano só oferece os capazes de recorrência real.
+    expect(resolveOfferedCheckoutGateways()).toEqual(['MERCADO_PAGO'])
+  })
+
+  it('retorna [] quando o único gateway configurado não é recorrente (PayPal)', () => {
+    setEnv({ ...PP })
+    expect(resolveEnabledCheckoutGateways()).toEqual(['PAYPAL'])
+    expect(resolveOfferedCheckoutGateways()).toEqual([])
+  })
+
+  it('isRecurringCapableGateway: só MERCADO_PAGO é capaz hoje', () => {
+    expect(isRecurringCapableGateway('MERCADO_PAGO')).toBe(true)
+    expect(isRecurringCapableGateway('PAGSEGURO')).toBe(false)
+    expect(isRecurringCapableGateway('PAYPAL')).toBe(false)
   })
 })

@@ -152,7 +152,9 @@ export function NativeSelect({
         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
         style={{ colorScheme: 'dark', backgroundColor: '#1E2329', color: '#EAECEF' }}
       >
-        {placeholder && <option value="">{placeholder}</option>}
+        {/* Placeholder: disabled+hidden — aparece como texto do trigger quando vazio,
+            mas NÃO entra na lista de opções selecionáveis do dropdown. */}
+        {placeholder && <option value="" disabled hidden>{placeholder}</option>}
         {options.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
