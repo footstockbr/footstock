@@ -4,6 +4,7 @@ import { getAuthUser } from '@/lib/auth'
 import { created, error, errors } from '@/lib/api'
 import { planService } from '@/lib/services/PlanService'
 import { getCheckoutRateLimit } from '@/lib/ratelimit'
+import { isRecurringCapableGateway } from '@/lib/payments/enabled-gateways.server'
 
 const CheckoutSchema = z.object({
   planType: z.enum(['CRAQUE', 'LENDA']),
@@ -25,6 +26,15 @@ export async function POST(request: NextRequest) {
     if (!parsed.success) return errors.validation()
 
     const { planType, gateway, period } = parsed.data
+
+    // Hardening server-side do gate de checkout: só aceitar gateways CAPAZES de recorrência real.
+    // Planos são produtos recorrentes; um gateway que só faz pagamento único (PayPal/PagSeguro,
+    // createSubscription não implementado) burlaria o gate da UI via POST direto e cobraria uma
+    // vez por uma assinatura. Checagem de CAPACIDADE (env-independente) — credenciais/oferta são
+    // validadas downstream (createCheckout). Fecha o bypass do gate no boundary do servidor.
+    if (!isRecurringCapableGateway(gateway)) {
+      return error('PAYMENT_GATEWAY_NOT_OFFERED', 'Forma de pagamento indisponível para assinatura.', 422)
+    }
 
     const result = await planService.createCheckout(auth.user.id, {
       planType: planType as 'CRAQUE' | 'LENDA',

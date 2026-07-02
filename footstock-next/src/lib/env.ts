@@ -113,6 +113,12 @@ const envSchema = z.object({
   PAYPAL_CLIENT_SECRET: z.string().min(1).optional(),
   PAYPAL_WEBHOOK_ID: z.string().min(1).optional(),
   PAYPAL_SANDBOX: z.string().optional(),
+  // Assinatura recorrente PayPal (Billing Subscriptions): mapa JSON de billing plan IDs
+  // por `{PLANO}_{periodo}` (ex.: '{"CRAQUE_monthly":"P-XXX","LENDA_monthly":"P-YYY"}').
+  // Os planos são criados uma vez no PayPal (catalog product + billing plan) e o PREÇO de
+  // cada plano DEVE bater com PLAN_AMOUNTS_CENTS (o webhook rejeita valor divergente).
+  // Opcional: sem ele, createSubscription do PayPal falha com PAYMENT_010 (config ausente).
+  PAYPAL_PLAN_IDS: z.string().optional(),
   // Merchant/account id (Payer ID). Carregado mas ainda nao consumido pelos
   // gateways — wiring de marketplace/partner exige mudanca em paypal.ts.
   PAYPAL_MERCHANT_ID: z.string().min(1).optional(),

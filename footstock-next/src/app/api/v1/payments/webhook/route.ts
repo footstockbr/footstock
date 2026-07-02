@@ -587,14 +587,16 @@ export async function POST(request: NextRequest) {
         )
       }
     } else if (event.eventType === 'SUBSCRIPTION_RENEWED') {
-      // task-007: ciclo recorrente cobrado com sucesso (subscription_authorized_payment aprovado).
-      // Registrar o Payment PAID (caixa real do ciclo — Zero Silêncio) e estender a vigência.
-      // NÃO reusa applyPaymentConfirmedEffects: aquele caminho dispara comissão de afiliado +
-      // bônus PLAN_UPGRADED (efeitos de PRIMEIRA compra) que não se aplicam a uma renovação.
-      // Idempotente: Payment.upsert por gatewayTransactionId + dedup ACCEPTED do passo 5b (INV-2).
+      // task-007: uma cobrança de ciclo recorrente foi aprovada. DUAS semânticas por estado:
+      //  - assinatura ainda PENDING = 1ª cobrança = ATIVAÇÃO. DEVE ativar entitlement via
+      //    upgradeUser (User.planType — a fonte de acesso; sem isto o usuário paga e fica sem
+      //    acesso) + efeitos de 1ª compra, e definir o 1º período a partir de AGORA (não estender
+      //    a vigência pré-alocada now+período, que dobraria o acesso).
+      //  - assinatura já ACTIVE = RENOVAÇÃO. Só estende a vigência + Payment PAID, sem bônus/
+      //    comissão de 1ª compra. Idempotente por gatewayTransactionId + dedup ACCEPTED (INV-2).
       const renewedSub = await prisma.subscription.findUnique({
         where: { id: event.subscriptionId },
-        select: { userId: true, planType: true, period: true, gateway: true, expiresAt: true },
+        select: { userId: true, planType: true, period: true, gateway: true, expiresAt: true, status: true, amount: true },
       })
 
       if (!renewedSub) {
@@ -631,44 +633,128 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ received: true }, { status: 200 })
       }
 
-      // Estende a vigência em um período a partir do fim do ciclo atual (ou de agora, se já venceu).
-      const renewalBase =
-        renewedSub.expiresAt && renewedSub.expiresAt.getTime() > Date.now()
-          ? new Date(renewedSub.expiresAt)
-          : new Date()
-      const newExpiresAt = addSubscriptionPeriod(renewalBase, renewedSub.period)
+      // ── 1ª cobrança (assinatura PENDING) = ATIVAÇÃO recorrente ────────────────────
+      if (renewedSub.status === 'PENDING') {
+        // Validar plano pagável + valor ANTES do efeito financeiro (mesma proteção do PAYMENT_CONFIRMED).
+        if (!isPaidPlan(renewedSub.planType)) {
+          console.error(
+            `[webhook][ALERT] SUBSCRIPTION_RENEWED inicial com planType não-pagável — NÃO ativado. ` +
+            `subscriptionId=${event.subscriptionId} planType=${String(renewedSub.planType)}`
+          )
+          await webhookAuditService.logWebhook({
+            gateway: gatewayEnum, eventType: event.eventType,
+            transactionId: event.transactionId, subscriptionId: event.subscriptionId,
+            status: 'REJECTED', hmacValid: true, ipAddress: originalIp,
+            errorMessage: `planType inválido/não-pagável (ciclo inicial): ${String(renewedSub.planType)}`,
+          })
+          return NextResponse.json({ received: true }, { status: 200 })
+        }
+        const amountMatch = Math.abs(Math.round(Number(event.amount)) - Number(renewedSub.amount)) <= 1
+        if (!amountMatch) {
+          console.error(
+            `[webhook][ALERT] SUBSCRIPTION_RENEWED inicial com valor divergente — subscriptionId=${event.subscriptionId} ` +
+            `subscription.amount=${renewedSub.amount} webhook.amount=${event.amount}`
+          )
+          await webhookAuditService.logWebhook({
+            gateway: gatewayEnum, eventType: event.eventType,
+            transactionId: event.transactionId, subscriptionId: event.subscriptionId,
+            status: 'REJECTED', hmacValid: true, ipAddress: originalIp,
+            errorMessage: `Valor divergente (ciclo inicial): esperado=${renewedSub.amount} recebido=${event.amount}`,
+          })
+          return NextResponse.json({ received: true }, { status: 200 })
+        }
+        const validPlanType = renewedSub.planType
 
-      await prisma.subscription.update({
-        where: { id: event.subscriptionId },
-        data: {
-          status: 'ACTIVE',
-          gatewayStatus: 'authorized',
-          currentPeriodStart: new Date(),
-          currentPeriodEnd: newExpiresAt,
-          expiresAt: newExpiresAt,
-        },
-      })
+        // Ativa entitlement: seta User.planType (acesso) + status ACTIVE + bônus.
+        const upgradeResult = await planService.upgradeUser(
+          renewedSub.userId, event.subscriptionId, event.transactionId
+        )
+        if (upgradeResult === 'NOT_ACTIVATABLE') {
+          // Assinatura foi para estado terminal em paralelo: registrar captura órfã (nunca perder caixa).
+          const settlement = await settleOrphanCapture({
+            userId: renewedSub.userId,
+            subscriptionId: event.subscriptionId,
+            planType: validPlanType,
+            amountCents: Number(event.amount),
+            gateway: gatewayEnum,
+            gatewayTransactionId: event.transactionId,
+          })
+          console.error(
+            `[webhook][ALERT] SUBSCRIPTION_RENEWED inicial em assinatura não-ativável — plano NÃO ativado. ` +
+            `payment=${settlement.paymentStatus} refunded=${settlement.refunded} subscriptionId=${event.subscriptionId}`
+          )
+          await webhookAuditService.logWebhook({
+            gateway: gatewayEnum, eventType: event.eventType,
+            transactionId: event.transactionId, subscriptionId: event.subscriptionId,
+            status: 'REJECTED', hmacValid: true, ipAddress: originalIp,
+            errorMessage: `Assinatura não-ativável no ciclo inicial — Payment ${settlement.paymentStatus} (${settlement.reason})`,
+          })
+          return NextResponse.json({ received: true }, { status: 200 })
+        }
 
-      await prisma.payment.upsert({
-        where: { gatewayTransactionId: event.transactionId },
-        update: { status: 'PAID', processedAt: new Date() },
-        create: {
+        // Efeitos de 1ª compra (Payment PAID + comissão de afiliado + analytics). Idempotente
+        // por gatewayTransactionId. Mesma função reusada pela reconciliação server-side.
+        await planService.applyPaymentConfirmedEffects({
+          userId: renewedSub.userId,
           subscriptionId: event.subscriptionId,
-          amount: event.amount,
+          amountCents: Number(event.amount),
           gateway: gatewayEnum,
           gatewayTransactionId: event.transactionId,
-          status: 'PAID',
-          userId: renewedSub.userId,
-          processedAt: new Date(),
-        },
-      })
+          planType: validPlanType,
+        })
 
-      // Analytics best-effort: renovação (não é primeira compra).
-      mixpanelServer.trackPaymentCompleted(renewedSub.userId, {
-        plan: renewedSub.planType as 'CRAQUE' | 'LENDA',
-        gateway: gatewayType,
-        is_first_payment: false,
-      })
+        // Vigência do 1º período a partir de AGORA (não estende a pré-alocada -> sem duplicar acesso).
+        const firstPeriodEnd = addSubscriptionPeriod(new Date(), renewedSub.period)
+        await prisma.subscription.update({
+          where: { id: event.subscriptionId },
+          data: {
+            gatewayStatus: 'authorized',
+            currentPeriodStart: new Date(),
+            currentPeriodEnd: firstPeriodEnd,
+            expiresAt: firstPeriodEnd,
+          },
+        })
+      } else {
+        // ── Renovação de ciclo (assinatura já ACTIVE) ───────────────────────────────
+        // Estende a vigência em um período a partir do fim do ciclo atual (ou de agora, se já venceu).
+        const renewalBase =
+          renewedSub.expiresAt && renewedSub.expiresAt.getTime() > Date.now()
+            ? new Date(renewedSub.expiresAt)
+            : new Date()
+        const newExpiresAt = addSubscriptionPeriod(renewalBase, renewedSub.period)
+
+        await prisma.subscription.update({
+          where: { id: event.subscriptionId },
+          data: {
+            status: 'ACTIVE',
+            gatewayStatus: 'authorized',
+            currentPeriodStart: new Date(),
+            currentPeriodEnd: newExpiresAt,
+            expiresAt: newExpiresAt,
+          },
+        })
+
+        await prisma.payment.upsert({
+          where: { gatewayTransactionId: event.transactionId },
+          update: { status: 'PAID', processedAt: new Date() },
+          create: {
+            subscriptionId: event.subscriptionId,
+            amount: event.amount,
+            gateway: gatewayEnum,
+            gatewayTransactionId: event.transactionId,
+            status: 'PAID',
+            userId: renewedSub.userId,
+            processedAt: new Date(),
+          },
+        })
+
+        // Analytics best-effort: renovação (não é primeira compra).
+        mixpanelServer.trackPaymentCompleted(renewedSub.userId, {
+          plan: renewedSub.planType as 'CRAQUE' | 'LENDA',
+          gateway: gatewayType,
+          is_first_payment: false,
+        })
+      }
     } else if (event.eventType === 'SUBSCRIPTION_PAYMENT_FAILED') {
       // task-007: falha de cobrança no ciclo recorrente. Registrar Payment FAILED (idempotente) +
       // marcar gatewayStatus para a task 008 reconciliar/dunning. NÃO expira a assinatura aqui: o
