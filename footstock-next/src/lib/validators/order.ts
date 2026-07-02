@@ -28,14 +28,13 @@ export const CreateOrderSchema = z
       message: 'Lado da operação inválido. Use BUY ou SELL.',
     }),
 
+    // Quantidade livre (cota a cota): inteiro positivo, mínimo 1 cota.
+    // A antiga regra de lote (múltiplo de 100) foi removida em 2026-07-02.
     quantity: z
       .number({ message: 'quantity deve ser um número inteiro positivo.' })
       .int('quantity deve ser um número inteiro.')
       .positive('quantity deve ser maior que zero.')
-      .min(100, 'quantity mínimo é 100.')
-      .refine((quantity) => quantity % 100 === 0, {
-        message: 'quantity deve ser múltiplo de 100.',
-      }),
+      .min(1, 'quantity mínimo é 1.'),
 
     price: z.number().positive('price deve ser maior que zero.').optional(),
 

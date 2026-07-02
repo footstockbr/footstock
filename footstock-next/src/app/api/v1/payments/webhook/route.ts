@@ -8,6 +8,7 @@ import { getWebhookRateLimit } from '@/lib/ratelimit'
 import { normalizeIp } from '@/middleware/rateLimit'
 import { planService } from '@/lib/services/PlanService'
 import { webhookAuditService } from '@/lib/services/WebhookAuditService'
+import { claimWebhook, markWebhookProcessed } from '@/lib/services/webhook-idempotency'
 import type { SubscriptionGateway } from '@prisma/client'
 import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
 import { liquidateRestrictedPositions } from '@/lib/services/forced-liquidation'
@@ -192,6 +193,33 @@ export async function POST(request: NextRequest) {
       })
       return NextResponse.json({ received: true }, { status: 200 })
     }
+  }
+
+  // 5c. PA-WH-01 — claim atômico de idempotência (opt-in via WEBHOOK_ATOMIC_CLAIM; default OFF).
+  // Fecha a janela de concorrência do dedup por findFirst acima: dois webhooks idênticos
+  // simultâneos disputam a mesma linha unique — só um prossegue, o outro é DUPLICATE/IN_PROGRESS.
+  // Requer a migration M065 aplicada. Os efeitos financeiros já são idempotentes por
+  // gatewayTransactionId; este claim é defesa em profundidade contra reprocessamento concorrente.
+  let webhookClaimId: string | null = null
+  if (env.WEBHOOK_ATOMIC_CLAIM === 'true' && event.transactionId) {
+    const claim = await claimWebhook(gatewayEnum, event.eventType, event.transactionId)
+    if (claim.outcome === 'DUPLICATE') {
+      await webhookAuditService.logWebhook({
+        gateway: gatewayEnum, eventType: event.eventType,
+        transactionId: event.transactionId, subscriptionId: event.subscriptionId,
+        status: 'DUPLICATE', hmacValid: true, ipAddress: originalIp,
+      })
+      return NextResponse.json({ received: true }, { status: 200 })
+    }
+    if (claim.outcome === 'IN_PROGRESS') {
+      // Outro processamento do MESMO evento está em curso (lease ativo). 503 para o provedor
+      // reenviar depois — NÃO 200, que sinalizaria "não reenviar" e poderia perder o efeito.
+      return NextResponse.json(
+        { error: { code: 'WEBHOOK_IN_PROGRESS', message: 'Processamento em andamento — reenviar.' } },
+        { status: 503 }
+      )
+    }
+    webhookClaimId = claim.id
   }
 
   // 6. Processar evento por tipo. O ACCEPTED só é gravado APÓS os efeitos financeiros
@@ -750,6 +778,10 @@ export async function POST(request: NextRequest) {
       { status: 503 }
     )
   }
+
+  // PA-WH-01: efeitos concluídos → fechar a claim atômica (PROCESSED) antes do ACCEPTED, para
+  // que um replay concorrente/posterior seja resolvido como DUPLICATE já no claim (5c).
+  if (webhookClaimId) await markWebhookProcessed(webhookClaimId)
 
   // Sucesso: efeitos financeiros concluídos. Gravar ACCEPTED agora (e não antes) garante que
   // só um processamento de fato concluído bloqueie reenvios futuros como DUPLICATE.

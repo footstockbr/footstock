@@ -676,6 +676,25 @@ model WebhookAuditLog {
   @@map("webhook_audit_logs")
 }
 
+/// PA-WH-01 — claim atômico de idempotência de webhook (opt-in via WEBHOOK_ATOMIC_CLAIM).
+/// Fecha a janela de concorrência do dedup por findFirst em webhook_audit_logs: dois webhooks
+/// idênticos simultâneos disputam a MESMA linha unique (gateway,eventType,transactionId); só um
+/// vence o create (o outro recebe P2002 e é resolvido por estado). Lease de 60s re-reivindica
+/// claims PROCESSING abandonadas por um processamento que morreu antes de concluir.
+model WebhookIdempotency {
+  id            String              @id @default(cuid())
+  gateway       SubscriptionGateway
+  eventType     String              @map("event_type")
+  transactionId String              @map("transaction_id")
+  status        String              @default("PROCESSING") // PROCESSING | PROCESSED | FAILED
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+
+  @@unique([gateway, eventType, transactionId])
+  @@index([status, updatedAt])
+  @@map("webhook_idempotency")
+}
+
 model News {
   id          String         @id @default(cuid())
   title       String

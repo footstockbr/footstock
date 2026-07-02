@@ -104,7 +104,7 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
   const isLenda = hasAccess('LENDA')
 
   const [orderType, setOrderType] = useState(allowedTypes[0])
-  const [quantity, setQuantity] = useState('100')
+  const [quantity, setQuantity] = useState('1')
   const [price, setPrice] = useState('')
   const [stopLossPrice, setStopLossPrice] = useState('')
   const [takeProfitPrice, setTakeProfitPrice] = useState('')
@@ -166,8 +166,8 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
     const errs: Record<string, string> = {}
     const qty = Number(quantity)
 
-    if (!qty || qty < 100 || !Number.isInteger(qty) || qty % 100 !== 0) {
-      errs.quantity = 'Quantidade deve ser múltiplo de 100 (mínimo 100).'
+    if (!qty || qty < 1 || !Number.isInteger(qty)) {
+      errs.quantity = 'Quantidade deve ser um número inteiro de no mínimo 1 cota.'
     }
 
     if (orderType === 'LIMIT') {
@@ -360,49 +360,73 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
         ))}
       </div>
 
-      {/* Quantity — lote de 100 com botoes +/- */}
+      {/* Quantity — cota livre com atalhos -100 / -10 / +10 / +100 */}
       <div className="flex flex-col gap-1">
         <label htmlFor="order-quantity" className="text-sm text-[#EAECEF] font-medium flex items-center gap-1">
-          Quantidade (lotes de 100)
-          <InfoTip text="Ações são negociadas em lotes de 100. Mínimo: 100 ações." />
+          Quantidade (cotas)
+          <InfoTip text="Informe a quantidade de cotas. Mínimo: 1. Use os atalhos para ajustar rapidamente." />
         </label>
-        <div className="flex items-center gap-0">
+        <div
+          role="group"
+          aria-label="Ajustar quantidade"
+          className="grid grid-cols-4 gap-2 min-[380px]:grid-cols-[2.75rem_2.75rem_minmax(72px,1fr)_2.75rem_2.75rem]"
+        >
           <button
             type="button"
             data-testid="order-quantity-minus"
-            disabled={Number(quantity) <= 100}
-            onClick={() => setQuantity(String(Math.max(100, Number(quantity) - 100)))}
-            className="h-11 w-11 flex items-center justify-center rounded-l-md border border-r-0 border-[rgba(240,185,11,.18)] bg-[rgba(240,185,11,.04)] text-[#EAECEF] text-lg font-bold hover:bg-[rgba(240,185,11,.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            aria-label="Diminuir quantidade"
+            disabled={Number(quantity) <= 1}
+            onClick={() => setQuantity(String(Math.max(1, Number(quantity) - 100)))}
+            className="h-11 flex items-center justify-center rounded-md border border-[rgba(240,185,11,.18)] bg-[rgba(240,185,11,.04)] text-[#EAECEF] text-sm font-bold hover:bg-[rgba(240,185,11,.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors min-[380px]:col-start-1 min-[380px]:row-start-1"
+            aria-label="Diminuir 100 cotas"
           >
-            -
+            -100
+          </button>
+          <button
+            type="button"
+            data-testid="order-quantity-step-10-down"
+            disabled={Number(quantity) <= 1}
+            onClick={() => setQuantity(String(Math.max(1, Number(quantity) - 10)))}
+            className="h-11 flex items-center justify-center rounded-md border border-[rgba(240,185,11,.18)] bg-[rgba(240,185,11,.04)] text-[#EAECEF] text-sm font-bold hover:bg-[rgba(240,185,11,.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors min-[380px]:col-start-2 min-[380px]:row-start-1"
+            aria-label="Diminuir 10 cotas"
+          >
+            -10
           </button>
           <input
             id="order-quantity"
             data-testid="order-quantity-input"
             type="number"
-            min={100}
-            step={100}
+            min={1}
+            step={1}
+            inputMode="numeric"
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
             onBlur={() => {
               const val = Number(quantity)
-              if (!val || val < 100) setQuantity('100')
-              else if (val % 100 !== 0) setQuantity(String(Math.round(val / 100) * 100))
+              if (!val || val < 1) setQuantity('1')
+              else if (!Number.isInteger(val)) setQuantity(String(Math.max(1, Math.floor(val))))
             }}
-            className="h-11 flex-1 min-w-0 border-y border-[rgba(240,185,11,.18)] bg-[rgba(240,185,11,.04)] text-[#EAECEF] text-sm text-center font-mono px-2 focus:outline-none focus:border-[rgba(240,185,11,.5)] focus:ring-2 focus:ring-[rgba(240,185,11,.15)] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            className="h-11 col-span-4 min-w-0 rounded-md border border-[rgba(240,185,11,.18)] bg-[rgba(240,185,11,.04)] text-[#EAECEF] text-sm text-center font-mono px-2 focus:outline-none focus:border-[rgba(240,185,11,.5)] focus:ring-2 focus:ring-[rgba(240,185,11,.15)] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none min-[380px]:col-span-1 min-[380px]:col-start-3 min-[380px]:row-start-1"
             required
             aria-invalid={!!errors.quantity}
             aria-describedby={errors.quantity ? 'order-quantity-error' : undefined}
           />
           <button
             type="button"
-            data-testid="order-quantity-plus"
-            onClick={() => setQuantity(String(Number(quantity) + 100))}
-            className="h-11 w-11 flex items-center justify-center rounded-r-md border border-l-0 border-[rgba(240,185,11,.18)] bg-[rgba(240,185,11,.04)] text-[#EAECEF] text-lg font-bold hover:bg-[rgba(240,185,11,.1)] transition-colors"
-            aria-label="Aumentar quantidade"
+            data-testid="order-quantity-step-10-up"
+            onClick={() => setQuantity(String(Math.max(1, Number(quantity)) + 10))}
+            className="h-11 flex items-center justify-center rounded-md border border-[rgba(240,185,11,.18)] bg-[rgba(240,185,11,.04)] text-[#EAECEF] text-sm font-bold hover:bg-[rgba(240,185,11,.1)] transition-colors min-[380px]:col-start-4 min-[380px]:row-start-1"
+            aria-label="Aumentar 10 cotas"
           >
-            +
+            +10
+          </button>
+          <button
+            type="button"
+            data-testid="order-quantity-plus"
+            onClick={() => setQuantity(String(Math.max(1, Number(quantity)) + 100))}
+            className="h-11 flex items-center justify-center rounded-md border border-[rgba(240,185,11,.18)] bg-[rgba(240,185,11,.04)] text-[#EAECEF] text-sm font-bold hover:bg-[rgba(240,185,11,.1)] transition-colors min-[380px]:col-start-5 min-[380px]:row-start-1"
+            aria-label="Aumentar 100 cotas"
+          >
+            +100
           </button>
         </div>
         {errors.quantity && (

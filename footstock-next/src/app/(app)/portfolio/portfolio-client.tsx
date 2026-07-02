@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Briefcase, TrendingDown, TrendingUp } from "lucide-react";
+import { Briefcase } from "lucide-react";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -153,19 +154,35 @@ export function PortfolioClient() {
                   return (
                     <div
                       key={pos.ticker}
-                      className="bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.18)] p-4 flex items-center justify-between"
+                      className={cn(
+                        "relative flex items-center justify-between bg-[#1E2329] rounded-lg border border-[rgba(240,185,11,.18)] p-4 transition-all duration-150",
+                        "hover:border-[rgba(240,185,11,.35)] hover:bg-[rgba(240,185,11,.04)] active:scale-[0.99]",
+                        "focus-within:ring-2 focus-within:ring-[#F0B90B] focus-within:ring-offset-2 focus-within:ring-offset-[#0B0E11]",
+                      )}
                     >
-                      <div className="flex-1">
+                      {/* Stretched link — cobre o card inteiro sem aninhar controles focáveis dentro da âncora */}
+                      <Link
+                        href={ROUTES.MERCADO_DETALHE(pos.ticker)}
+                        data-testid="portfolio-position-card"
+                        aria-label={`Abrir ${pos.ticker} no mercado`}
+                        className="absolute inset-0 rounded-lg focus:outline-none"
+                      />
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-sm font-bold text-[#EAECEF]">{pos.ticker}</span>
-                          <span className="text-xs text-[#929AA5]">{pos.name}</span>
+                          <span className="text-sm font-mono font-bold text-[#EAECEF]">{pos.ticker}</span>
+                          <span className="text-xs text-[#929AA5] truncate">{pos.name}</span>
                         </div>
                         <div className="flex items-center gap-3 text-xs text-[#929AA5]">
                           <span>{pos.quantity} cotas</span>
-                          <span className="inline-flex items-center gap-0.5">PM: {formatFS(pos.avgPrice)} <GlossaryInfoIcon fieldKey="margem" size={11} /></span>
+                          <span className="inline-flex items-center gap-0.5">PM: {formatFS(pos.avgPrice)}{" "}
+                            {/* z-10 mantém o ícone acima do stretched link para permanecer clicável sem navegar */}
+                            <span className="relative z-10 inline-flex">
+                              <GlossaryInfoIcon fieldKey="margem" size={11} />
+                            </span>
+                          </span>
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="relative z-10 text-right shrink-0 pointer-events-none">
                         <p className="text-sm font-bold font-mono text-[#EAECEF]">
                           {formatFS(currentValue)}
                         </p>
@@ -173,7 +190,7 @@ export function PortfolioClient() {
                           "text-xs font-mono",
                           isPositive ? "text-[#2EBD85]" : "text-[#F6465D]",
                         )}>
-                          {isPositive ? "+" : ""}{formatFS(positionPnl)} ({formatPct(positionPnlPct)})
+                          {isPositive ? "▲ +" : "▼ "}{formatFS(positionPnl)} ({formatPct(positionPnlPct)})
                         </p>
                       </div>
                     </div>

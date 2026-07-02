@@ -63,7 +63,7 @@ const PLANS = [
     description: "Para traders sérios",
     badge: "Mais popular",
     features: [
-      "Saldo inicial FS$ 5.000",
+      "Saldo FS$ 5.000 (bônus de FS$ 3.000 creditado em 7 dias)",
       "Ordens a mercado (5/dia)",
       "Ordens Limitada & Agendada",
       "Cotações com 30 min de delay",
@@ -93,7 +93,7 @@ const PLANS = [
     description: "Experiência completa",
     badge: "Premium",
     features: [
-      "Saldo inicial FS$ 25.000",
+      "Saldo FS$ 25.000 (bônus de FS$ 23.000 creditado em 7 dias)",
       "Ordens ilimitadas por dia",
       "Cotações em tempo real",
       "Taxa operacional: 0,25%",

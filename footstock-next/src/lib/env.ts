@@ -82,6 +82,13 @@ const envSchema = z.object({
     .union([z.literal('true'), z.literal('false')])
     .optional()
     .default('false'),
+  // PA-WH-01 — claim atômico de idempotência do webhook (opt-in). 'true' fecha a janela de
+  // concorrência do dedup por findFirst; requer a migration M065 (tabela webhook_idempotency)
+  // aplicada ANTES de habilitar. Default 'false' (comportamento atual, sem mudança).
+  WEBHOOK_ATOMIC_CLAIM: z
+    .union([z.literal('true'), z.literal('false')])
+    .optional()
+    .default('false'),
   PAGSEGURO_EMAIL: z.string().email().optional(),
   PAGSEGURO_TOKEN: z.string().min(1).optional(),
   PAGSEGURO_WEBHOOK_SECRET: z.string().min(1).optional(),

@@ -62,8 +62,8 @@ test.describe('Smoke Tests — Produção', () => {
     // Navegar para detalhe de ativo (Flamengo como referência)
     await page.goto('/ativo/fla')
     await page.locator('[data-testid="buy-button"]').click({ timeout: 10_000 })
-    await page.locator('[data-testid="order-quantity"]').fill('1')
-    await page.locator('[data-testid="confirm-order"]').click()
+    await page.locator('[data-testid="order-quantity-input"]').fill('1')
+    await page.locator('[data-testid="order-submit"]').click()
     await expect(
       page.locator('[data-testid="order-success-toast"], [data-testid="toast-success"]')
     ).toBeVisible({ timeout: 10_000 })
