@@ -83,6 +83,8 @@ describe('PriceAttribution', () => {
       orderFlowSnapshot: {
         openBuyQty: 100,
         openSellQty: 10,
+        totalOpenBuyQty: 100,
+        totalOpenSellQty: 10,
         marketBuyQty: 0,
         marketSellQty: 0,
         orderCount: 2,

@@ -218,8 +218,14 @@ export interface ActiveNewsImpact {
 }
 
 export interface OrderFlowSnapshot {
+  // openBuy/SellQty: ordens abertas NEAR-TOUCH (dentro da banda de proximidade) — alimentam o
+  // OFI (L4) e o impacto de fluxo (L5). Liquidez passiva longe do mercado NÃO entra aqui.
   openBuyQty: number
   openSellQty: number
+  // totalOpenBuy/SellQty: TODA a profundidade em repouso (não-MARKET, sem banda) — para o
+  // bookPressure (métrica de profundidade do book), que deve refletir o book inteiro.
+  totalOpenBuyQty: number
+  totalOpenSellQty: number
   marketBuyQty: number
   marketSellQty: number
   orderCount: number

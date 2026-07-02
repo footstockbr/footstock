@@ -732,10 +732,16 @@ export class MarketEngine {
         state.highPrice = Math.max(state.highPrice, finalPrice)
         state.lowPrice = Math.min(state.lowPrice, finalPrice)
         // T2.1 — volume 24h acumula APENAS fluxo EXECUTADO (fills casados neste tick).
-        // O book pendente (pendingBuy+pendingSell) é "book pressure", métrica SEPARADA
-        // exposta em state.bookPressure; somá-lo a state.volume inflava o 24h com ordens
-        // que talvez nunca executem. L5 (KyleLambda) ainda lê os campos pending direto.
-        state.bookPressure = state.pendingBuyVolume + state.pendingSellVolume
+        // O book pendente é "book pressure", métrica SEPARADA exposta em state.bookPressure;
+        // somá-lo a state.volume inflava o 24h com ordens que talvez nunca executem.
+        // IMPORTANTE: pendingBuy/SellVolume são NEAR-TOUCH (filtrados por proximidade) — corretos
+        // para L4 (OFI) e L5 (KyleLambda), que são IMPACTO DE FLUXO e não devem contar liquidez
+        // passiva longe do mercado. Mas o bookPressure é PROFUNDIDADE do book e deve refletir TODO
+        // o repouso: usa os totais não-filtrados do snapshot (fallback ao pending quando ausente).
+        state.bookPressure = orderFlowSnapshot
+          ? orderFlowSnapshot.totalOpenBuyQty + orderFlowSnapshot.totalOpenSellQty
+            + orderFlowSnapshot.marketBuyQty + orderFlowSnapshot.marketSellQty
+          : state.pendingBuyVolume + state.pendingSellVolume
         state.volume = Math.min(state.volume + executedVolume, MAX_DAILY_VOLUME)
 
         const tick = buildMotorTick(state, finalPrice, sessionType)

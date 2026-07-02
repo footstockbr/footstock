@@ -50,8 +50,18 @@ describe('OrderFlowSnapshotService', () => {
     const service = new OrderFlowSnapshotService(prisma as never)
     const result = await service.explain(['asset-1'], new Date('2026-06-06T12:00:00.000Z'))
 
-    expect(OrderFlowSnapshotService.explainSql()).toContain('GROUP BY asset_id')
-    expect(OrderFlowSnapshotService.explainSql()).toContain('asset_id = ANY($1::text[])')
+    expect(OrderFlowSnapshotService.explainSql()).toContain('GROUP BY o.asset_id')
+    expect(OrderFlowSnapshotService.explainSql()).toContain('o.asset_id = ANY($1::text[])')
     expect(result.usesExpectedIndex).toBe(true)
+  })
+
+  it('OFI só conta ordem aberta NEAR-TOUCH: exclui LIMIT longe do mercado (banda de proximidade)', () => {
+    const sql = OrderFlowSnapshotService.explainSql()
+    // BUY aberta só entra se price >= current_price*(1-banda); SELL se price <= current_price*(1+banda).
+    expect(sql).toContain("o.side = 'BUY' AND o.type <> 'MARKET' AND o.price >= a.current_price * (1 - 0.15)")
+    expect(sql).toContain("o.side = 'SELL' AND o.type <> 'MARKET' AND o.price <= a.current_price * (1 + 0.15)")
+    // MARKET (agressivo) segue sempre contando, sem banda.
+    expect(sql).toContain("o.side = 'BUY' AND o.type = 'MARKET' THEN o.quantity")
+    expect(sql).toContain('JOIN assets a ON a.id = o.asset_id')
   })
 })

@@ -6,6 +6,8 @@ type SnapshotRow = {
   asset_id: string
   open_buy_qty: bigint | number | null
   open_sell_qty: bigint | number | null
+  total_open_buy_qty: bigint | number | null
+  total_open_sell_qty: bigint | number | null
   market_buy_qty: bigint | number | null
   market_sell_qty: bigint | number | null
   order_count: bigint | number | null
@@ -22,10 +24,21 @@ function toNumber(value: bigint | number | null | undefined): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
 
+// OFI = pressão DIRECIONAL (fluxo agressivo/near-touch), não liquidez passiva em repouso.
+// Uma ordem LIMIT longe do mercado (ex.: buy 60% abaixo do preço) é liquidez passiva que NUNCA
+// executa naquele preço — contá-la como fluxo de compra congela o OFI no teto (+1) e dispara um
+// pump artificial (bug COX3, 2026-07-02). Por isso ordens abertas (não-MARKET) só entram no OFI
+// quando estão DENTRO desta banda de proximidade do preço atual; fora dela são ignoradas no OFI
+// (continuam no book como liquidez, e no bookPressure — métrica separada de profundidade).
+// MARKET (agressivo) sempre conta. Ver L4_OrderFlowImbalance.
+const OFI_OPEN_PROXIMITY_BAND = 0.15 // 15%
+
 function emptySnapshot(snapshotTakenAt: string, source: OrderFlowSnapshot['orderSnapshotSource'], flags: QualityFlag[]): OrderFlowSnapshot {
   return {
     openBuyQty: 0,
     openSellQty: 0,
+    totalOpenBuyQty: 0,
+    totalOpenSellQty: 0,
     marketBuyQty: 0,
     marketSellQty: 0,
     orderCount: 0,
@@ -58,24 +71,32 @@ export class OrderFlowSnapshotService {
     }
 
     try {
+      // Ordem aberta (não-MARKET) só conta como OFI quando NEAR-TOUCH: BUY com price >=
+      // current_price*(1-band); SELL com price <= current_price*(1+band). Fora da banda = passiva
+      // (não entra no OFI). MARKET sempre conta. A liquidez em repouso continua no book/bookPressure.
       const rows = await this.prisma.$queryRaw<SnapshotRow[]>`
         SELECT
-          asset_id,
-          COALESCE(SUM(CASE WHEN side = 'BUY' AND type <> 'MARKET' THEN quantity ELSE 0 END), 0)::bigint AS open_buy_qty,
-          COALESCE(SUM(CASE WHEN side = 'SELL' AND type <> 'MARKET' THEN quantity ELSE 0 END), 0)::bigint AS open_sell_qty,
-          COALESCE(SUM(CASE WHEN side = 'BUY' AND type = 'MARKET' THEN quantity ELSE 0 END), 0)::bigint AS market_buy_qty,
-          COALESCE(SUM(CASE WHEN side = 'SELL' AND type = 'MARKET' THEN quantity ELSE 0 END), 0)::bigint AS market_sell_qty,
+          o.asset_id,
+          COALESCE(SUM(CASE WHEN o.side = 'BUY'  AND o.type <> 'MARKET'
+            AND o.price >= a.current_price * (1 - ${OFI_OPEN_PROXIMITY_BAND}) THEN o.quantity ELSE 0 END), 0)::bigint AS open_buy_qty,
+          COALESCE(SUM(CASE WHEN o.side = 'SELL' AND o.type <> 'MARKET'
+            AND o.price <= a.current_price * (1 + ${OFI_OPEN_PROXIMITY_BAND}) THEN o.quantity ELSE 0 END), 0)::bigint AS open_sell_qty,
+          COALESCE(SUM(CASE WHEN o.side = 'BUY'  AND o.type <> 'MARKET' THEN o.quantity ELSE 0 END), 0)::bigint AS total_open_buy_qty,
+          COALESCE(SUM(CASE WHEN o.side = 'SELL' AND o.type <> 'MARKET' THEN o.quantity ELSE 0 END), 0)::bigint AS total_open_sell_qty,
+          COALESCE(SUM(CASE WHEN o.side = 'BUY'  AND o.type = 'MARKET' THEN o.quantity ELSE 0 END), 0)::bigint AS market_buy_qty,
+          COALESCE(SUM(CASE WHEN o.side = 'SELL' AND o.type = 'MARKET' THEN o.quantity ELSE 0 END), 0)::bigint AS market_sell_qty,
           COUNT(*)::bigint AS order_count,
-          ARRAY_AGG(id ORDER BY created_at ASC) FILTER (WHERE id IS NOT NULL) AS top_order_ids
-        FROM orders
-        WHERE asset_id = ANY(${assetIds}::text[])
-          AND status IN ('OPEN', 'PARTIAL')
-          AND type IN ('MARKET', 'LIMIT', 'OCO')
-          AND quantity > 0
-          AND created_at <= ${tickStartedAt}
-          AND (expires_at IS NULL OR expires_at > ${tickStartedAt})
-          AND (price IS NULL OR price > 0)
-        GROUP BY asset_id
+          ARRAY_AGG(o.id ORDER BY o.created_at ASC) FILTER (WHERE o.id IS NOT NULL) AS top_order_ids
+        FROM orders o
+        JOIN assets a ON a.id = o.asset_id
+        WHERE o.asset_id = ANY(${assetIds}::text[])
+          AND o.status IN ('OPEN', 'PARTIAL')
+          AND o.type IN ('MARKET', 'LIMIT', 'OCO')
+          AND o.quantity > 0
+          AND o.created_at <= ${tickStartedAt}
+          AND (o.expires_at IS NULL OR o.expires_at > ${tickStartedAt})
+          AND (o.price IS NULL OR o.price > 0)
+        GROUP BY o.asset_id
       `
 
       for (const row of rows) {
@@ -83,6 +104,8 @@ export class OrderFlowSnapshotService {
         out.set(row.asset_id, {
           openBuyQty: toNumber(row.open_buy_qty),
           openSellQty: toNumber(row.open_sell_qty),
+          totalOpenBuyQty: toNumber(row.total_open_buy_qty),
+          totalOpenSellQty: toNumber(row.total_open_sell_qty),
           marketBuyQty: toNumber(row.market_buy_qty),
           marketSellQty: toNumber(row.market_sell_qty),
           orderCount: toNumber(row.order_count),
@@ -112,20 +135,23 @@ export class OrderFlowSnapshotService {
   }
 
   static explainSql(): string {
+    const band = OFI_OPEN_PROXIMITY_BAND
     return [
       'EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)',
-      'SELECT asset_id,',
-      "COALESCE(SUM(CASE WHEN side = 'BUY' AND type <> 'MARKET' THEN quantity ELSE 0 END), 0)::bigint AS open_buy_qty,",
-      "COALESCE(SUM(CASE WHEN side = 'SELL' AND type <> 'MARKET' THEN quantity ELSE 0 END), 0)::bigint AS open_sell_qty,",
-      "COALESCE(SUM(CASE WHEN side = 'BUY' AND type = 'MARKET' THEN quantity ELSE 0 END), 0)::bigint AS market_buy_qty,",
-      "COALESCE(SUM(CASE WHEN side = 'SELL' AND type = 'MARKET' THEN quantity ELSE 0 END), 0)::bigint AS market_sell_qty,",
+      'SELECT o.asset_id,',
+      `COALESCE(SUM(CASE WHEN o.side = 'BUY' AND o.type <> 'MARKET' AND o.price >= a.current_price * (1 - ${band}) THEN o.quantity ELSE 0 END), 0)::bigint AS open_buy_qty,`,
+      `COALESCE(SUM(CASE WHEN o.side = 'SELL' AND o.type <> 'MARKET' AND o.price <= a.current_price * (1 + ${band}) THEN o.quantity ELSE 0 END), 0)::bigint AS open_sell_qty,`,
+      "COALESCE(SUM(CASE WHEN o.side = 'BUY' AND o.type <> 'MARKET' THEN o.quantity ELSE 0 END), 0)::bigint AS total_open_buy_qty,",
+      "COALESCE(SUM(CASE WHEN o.side = 'SELL' AND o.type <> 'MARKET' THEN o.quantity ELSE 0 END), 0)::bigint AS total_open_sell_qty,",
+      "COALESCE(SUM(CASE WHEN o.side = 'BUY' AND o.type = 'MARKET' THEN o.quantity ELSE 0 END), 0)::bigint AS market_buy_qty,",
+      "COALESCE(SUM(CASE WHEN o.side = 'SELL' AND o.type = 'MARKET' THEN o.quantity ELSE 0 END), 0)::bigint AS market_sell_qty,",
       'COUNT(*)::bigint AS order_count',
-      'FROM orders',
-      "WHERE asset_id = ANY($1::text[]) AND status IN ('OPEN', 'PARTIAL')",
-      "AND type IN ('MARKET', 'LIMIT', 'OCO') AND quantity > 0",
-      'AND created_at <= $2 AND (expires_at IS NULL OR expires_at > $2)',
-      'AND (price IS NULL OR price > 0)',
-      'GROUP BY asset_id',
+      'FROM orders o JOIN assets a ON a.id = o.asset_id',
+      "WHERE o.asset_id = ANY($1::text[]) AND o.status IN ('OPEN', 'PARTIAL')",
+      "AND o.type IN ('MARKET', 'LIMIT', 'OCO') AND o.quantity > 0",
+      'AND o.created_at <= $2 AND (o.expires_at IS NULL OR o.expires_at > $2)',
+      'AND (o.price IS NULL OR o.price > 0)',
+      'GROUP BY o.asset_id',
     ].join(' ')
   }
 
