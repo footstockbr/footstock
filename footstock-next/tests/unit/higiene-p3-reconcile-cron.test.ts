@@ -28,8 +28,12 @@ jest.mock('@/lib/services/PlanService', () => ({
 }))
 
 const searchApprovedMock = jest.fn()
+const subStatusMock = jest.fn()
 jest.mock('@/lib/gateways/GatewayFactory', () => ({
-  getGateway: jest.fn(() => ({ searchApprovedPaymentByExternalReference: searchApprovedMock })),
+  getGateway: jest.fn(() => ({
+    searchApprovedPaymentByExternalReference: searchApprovedMock,
+    getSubscriptionStatus: (...a: unknown[]) => subStatusMock(...a),
+  })),
 }))
 
 import { GET, isWithinReconcileWindow } from '@/app/api/cron/reconcile-payments/route'
@@ -50,6 +54,8 @@ beforeEach(() => {
   ;(env as { RECONCILE_WINDOW_UTC?: string }).RECONCILE_WINDOW_UTC = undefined
   findManyMock.mockResolvedValue([])
   searchApprovedMock.mockResolvedValue(null)
+  // Alerta de PENDING autorizado (incidente 2026-07-03): default = preapproval nao-autorizado.
+  subStatusMock.mockResolvedValue({ status: 'pending' })
   reconcileMock.mockResolvedValue({ ok: true, action: 'ACTIVATED', subscriptionId: 's', userId: 'u' })
   // item 4b: sweep de renovação de ciclo pago — benigno por default (não interfere no sweep PENDING).
   renewalMock.mockResolvedValue({ ok: true, action: 'NO_APPROVED_PAYMENT', subscriptionId: 's' })
@@ -153,5 +159,90 @@ describe('ST005 — NOT_ACTIVATABLE não infla success=false', () => {
     expect(body.failed).toBe(1)
     expect(body.notActivatable).toBe(0)
     expect(body.success).toBe(false)
+  })
+})
+
+// ─── Alerta PENDING autorizado (incidente 2026-07-03) ────────────────────────────
+// Preapproval `authorized` no MP (cliente cobrado) sem pagamento reconciliavel por
+// external_reference = blind spot residual do sweep. O cron ALERTA (observabilidade)
+// sem derrubar success — a investigacao e humana.
+describe('Alerta — PENDING 15+ min com preapproval authorized sem payment', () => {
+  const OLD = new Date(Date.now() - 30 * 60 * 1000) // 30 min atras
+  const FRESH = new Date(Date.now() - 2 * 60 * 1000) // 2 min atras
+  const recurringSub = (id: string, createdAt: Date) => ({
+    id,
+    createdAt,
+    billingMode: 'recurring',
+    gatewaySubscriptionId: `pre-${id}`,
+  })
+
+  it('happy: recorrente antiga + authorized + sem payment => alerta, success permanece true', async () => {
+    findManyMock.mockResolvedValueOnce([recurringSub('sub-alert', OLD)]).mockResolvedValueOnce([])
+    searchApprovedMock.mockResolvedValue(null)
+    subStatusMock.mockResolvedValue({ status: 'authorized' })
+
+    const res = await GET(cronRequest({ auth: AUTH }))
+    const body = await res.json()
+    expect(subStatusMock).toHaveBeenCalledWith('pre-sub-alert')
+    expect(body.pendingAuthorizedAlerts).toBe(1)
+    expect(body.pendingAuthorizedSubscriptionIds).toEqual(['sub-alert'])
+    expect(body.noApprovedPayment).toBe(1)
+    expect(body.success).toBe(true)
+  })
+
+  it('sad: sub recente (< 15 min) nao consulta o gateway nem alerta (checkout em andamento)', async () => {
+    findManyMock.mockResolvedValueOnce([recurringSub('sub-fresh', FRESH)]).mockResolvedValueOnce([])
+    searchApprovedMock.mockResolvedValue(null)
+
+    const res = await GET(cronRequest({ auth: AUTH }))
+    const body = await res.json()
+    expect(subStatusMock).not.toHaveBeenCalled()
+    expect(body.pendingAuthorizedAlerts).toBe(0)
+  })
+
+  it('sad: preapproval nao-authorized (pending) nao alerta', async () => {
+    findManyMock.mockResolvedValueOnce([recurringSub('sub-pend', OLD)]).mockResolvedValueOnce([])
+    searchApprovedMock.mockResolvedValue(null)
+    subStatusMock.mockResolvedValue({ status: 'pending' })
+
+    const res = await GET(cronRequest({ auth: AUTH }))
+    const body = await res.json()
+    expect(body.pendingAuthorizedAlerts).toBe(0)
+  })
+
+  it('sad: falha na consulta de status do gateway NAO derruba o sweep (best-effort)', async () => {
+    findManyMock.mockResolvedValueOnce([recurringSub('sub-gwerr', OLD)]).mockResolvedValueOnce([])
+    searchApprovedMock.mockResolvedValue(null)
+    subStatusMock.mockRejectedValue(new Error('MP 500'))
+
+    const res = await GET(cronRequest({ auth: AUTH }))
+    const body = await res.json()
+    expect(body.pendingAuthorizedAlerts).toBe(0)
+    expect(body.failed).toBe(0)
+    expect(body.success).toBe(true)
+  })
+
+  it('sad: one-time (nao recorrente) sem payment nao consulta status', async () => {
+    findManyMock
+      .mockResolvedValueOnce([{ id: 'sub-onetime', createdAt: OLD, billingMode: 'one_time', gatewaySubscriptionId: null }])
+      .mockResolvedValueOnce([])
+    searchApprovedMock.mockResolvedValue(null)
+
+    const res = await GET(cronRequest({ auth: AUTH }))
+    const body = await res.json()
+    expect(subStatusMock).not.toHaveBeenCalled()
+    expect(body.pendingAuthorizedAlerts).toBe(0)
+  })
+
+  it('happy: payment encontrado segue para reconcile sem alerta (caminho normal)', async () => {
+    findManyMock.mockResolvedValueOnce([recurringSub('sub-ok', OLD)]).mockResolvedValueOnce([])
+    searchApprovedMock.mockResolvedValue('pay-ok')
+    reconcileMock.mockResolvedValue({ ok: true, action: 'ACTIVATED', subscriptionId: 'sub-ok', userId: 'u' })
+
+    const res = await GET(cronRequest({ auth: AUTH }))
+    const body = await res.json()
+    expect(subStatusMock).not.toHaveBeenCalled()
+    expect(body.activated).toBe(1)
+    expect(body.pendingAuthorizedAlerts).toBe(0)
   })
 })

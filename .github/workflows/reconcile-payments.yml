@@ -1,0 +1,53 @@
+name: Reconcile Payments (cron)
+
+# Defesa em profundidade da recorrencia (incidente 2026-07-03): o Mercado Pago pode
+# nao entregar webhook (config de dashboard ausente/errada, indisponibilidade, WAF).
+# Este cron chama GET /api/cron/reconcile-payments, que varre subscriptions
+# PENDING/PAST_DUE + recorrentes lapsadas e reconcilia pagamentos aprovados
+# direto na API do MP (idempotente por gatewayTransactionId).
+#
+# Cadencia */5: limita a janela "pagou mas nao ativou" a ~5-10 min (schedules do
+# GitHub podem atrasar alguns minutos sob carga — tolerado; a alternativa Railway
+# cron exigiria service dedicado). workflow_dispatch permite disparo manual.
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: reconcile-payments
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    name: Reconciliar pagamentos MP
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Chamar endpoint de reconciliacao
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "::error::secret CRON_SECRET ausente no repositorio"
+            exit 1
+          fi
+          response=$(curl -fsS --max-time 120 \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "https://www.footstock.com.br/api/cron/reconcile-payments?limit=50")
+          echo "${response}"
+          # Falha visivel quando o sweep reporta success:false (failures[] preenchido).
+          echo "${response}" | jq -e '.success == true' > /dev/null || {
+            echo "::error::reconcile-payments retornou success=false"
+            exit 1
+          }
+          # Alerta ACIONAVEL (review codex 2026-07-03): subscription paga sem ativacao e
+          # incidente financeiro — job vermelho (GitHub notifica o owner), nao warning de log.
+          alerts=$(echo "${response}" | jq -r '.pendingAuthorizedAlerts // 0')
+          if [ "${alerts}" != "0" ]; then
+            echo "::error::${alerts} subscription(s) PENDING com preapproval authorized sem pagamento reconciliavel — possivel cobranca sem ativacao, investigar (ids em pendingAuthorizedSubscriptionIds)"
+            exit 1
+          fi

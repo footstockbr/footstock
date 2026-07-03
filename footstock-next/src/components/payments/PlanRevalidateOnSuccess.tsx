@@ -7,6 +7,11 @@ import { mutate } from 'swr'
 interface PlanRevalidateOnSuccessProps {
   /** true quando a URL e /planos?payment=success (retorno do gateway). */
   active: boolean
+  /**
+   * Ancora da assinatura quando a rota e path-based (/planos/sucesso/[subId]).
+   * Quando ausente, cai no query param legado ?sub= (rota /planos/sucesso?sub=).
+   */
+  subId?: string
 }
 
 const POLL_INTERVAL_MS = 2_500
@@ -24,7 +29,7 @@ const JOGADOR          = 'JOGADOR'
  * Fix: polling via /api/v1/subscriptions/me usando o sub= da URL como âncora.
  * Quando sub virar ACTIVE, invalida o cache SWR e força re-render do Server Component.
  */
-export function PlanRevalidateOnSuccess({ active }: PlanRevalidateOnSuccessProps) {
+export function PlanRevalidateOnSuccess({ active, subId: subIdProp }: PlanRevalidateOnSuccessProps) {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const handled      = useRef(false)
@@ -34,7 +39,7 @@ export function PlanRevalidateOnSuccess({ active }: PlanRevalidateOnSuccessProps
     if (!active || handled.current) return
     handled.current = true
 
-    const subId    = searchParams.get('sub')
+    const subId    = subIdProp ?? searchParams.get('sub')
     let attempts   = 0
 
     async function poll() {

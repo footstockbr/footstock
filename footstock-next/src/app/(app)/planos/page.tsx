@@ -14,6 +14,7 @@ import { getAuthUser } from "@/lib/auth";
 import { PlanCTAButton } from "@/components/payments/PlanCTAButton";
 import { PlanRevalidateOnSuccess } from "@/components/payments/PlanRevalidateOnSuccess";
 import { resolveOfferedCheckoutGateways } from "@/lib/payments/enabled-gateways.server";
+import { normalizeGatewayReturnParam } from "@/lib/payments/gateway-return-params";
 
 export const metadata: Metadata = {
   title: "Planos — FootStock",
@@ -131,7 +132,11 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
   // Só gateways com recorrência real (planos são assinaturas) — exclui os que só fazem
   // pagamento único, evitando oferecer PayPal/PagSeguro one-time para um produto recorrente.
   const enabledGateways = resolveOfferedCheckoutGateways();
-  const { payment } = await searchParams;
+  const { payment: rawPayment } = await searchParams;
+  // Gateways anexam parametros proprios a back_url de forma imprevisivel (incidente
+  // 2026-07-03: MP anexou `?preapproval_id=...` malformando o ultimo param). Normalizar
+  // antes de comparar — senao `payment=failed?collection_id=...` perde o banner (Zero Silencio).
+  const payment = normalizeGatewayReturnParam(rawPayment);
   const paymentSucceeded = payment === "success";
 
   // task-017: retorno do gateway nunca pode ser silencioso (Zero Silencio).

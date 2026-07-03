@@ -357,7 +357,7 @@ export class PlanService extends BaseService {
           subscriptionId: subscription.id,
           userId,
           userEmail:   dto.userEmail ?? user?.email ?? '',
-          ...buildGatewayReturnUrls(appUrl, subscription.id, dto.planType),
+          ...buildGatewayReturnUrls(appUrl, subscription.id),
         }
         const subResult = await gateway.createSubscription(subInput)
         // Persistir identidade recorrente do gateway + billingMode (schema M061 / task 002).
@@ -411,7 +411,7 @@ export class PlanService extends BaseService {
         subscriptionId: subscription.id,
         userId,
         userEmail:   dto.userEmail ?? user?.email ?? '',
-        ...buildGatewayReturnUrls(appUrl, subscription.id, dto.planType),
+        ...buildGatewayReturnUrls(appUrl, subscription.id),
       }
       const result = await gateway.createCheckout(input)
       redirectUrl = result.redirectUrl

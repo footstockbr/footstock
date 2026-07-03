@@ -133,7 +133,7 @@ export class DunningService {
             subscriptionId: sub.id,
             userId:        sub.userId,
             userEmail:     user?.email ?? '',
-            ...buildGatewayReturnUrls(appUrl, sub.id, String(sub.planType)),
+            ...buildGatewayReturnUrls(appUrl, sub.id),
           })
           checkoutUrl = checkoutResult.redirectUrl
         } catch (err) {

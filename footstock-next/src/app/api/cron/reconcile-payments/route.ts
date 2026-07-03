@@ -14,6 +14,11 @@ import { planService } from '@/lib/services/PlanService'
 import { getGateway } from '@/lib/gateways/GatewayFactory'
 import { GatewayType } from '@/lib/gateways/IGateway'
 
+// Idade minima de uma subscription PENDING para o alerta de "preapproval authorized sem
+// pagamento reconciliavel" (incidente 2026-07-03). Abaixo disso e checkout em andamento
+// normal (o pagador ainda esta na pagina do MP) — alertar seria ruido.
+const PENDING_AUTHORIZED_ALERT_AGE_MS = 15 * 60 * 1000
+
 // ST004 — Janela de execução do cron. spec no formato "startHour-endHour" (UTC, start
 // inclusivo, end exclusivo, 0..24). Ausente/vazio/malformado => sempre permitido (sem
 // mudança de comportamento). start==end => janela vazia (nunca permitido). Suporta janela
@@ -72,11 +77,14 @@ export async function GET(req: NextRequest) {
       },
       orderBy: { createdAt: 'desc' },
       take: limit,
-      select: { id: true },
+      // createdAt/billingMode/gatewaySubscriptionId alimentam o alerta de PENDING
+      // autorizado (incidente 2026-07-03) — ver PENDING_AUTHORIZED_ALERT_AGE_MS abaixo.
+      select: { id: true, createdAt: true, billingMode: true, gatewaySubscriptionId: true },
     })
 
     const gw = getGateway(GatewayType.MERCADO_PAGO) as unknown as {
       searchApprovedPaymentByExternalReference(ref: string): Promise<string | null>
+      getSubscriptionStatus?(gatewaySubscriptionId: string): Promise<{ status: string | null }>
     }
 
     let activated = 0
@@ -87,6 +95,10 @@ export async function GET(req: NextRequest) {
     // derrubava `success` para false, mascarando o sucesso real do sweep.
     let notActivatable = 0
     const failures: Array<{ subscriptionId: string; reason: string }> = []
+    // Alerta do incidente 2026-07-03: preapproval `authorized` no MP (cliente COBRADO) sem
+    // pagamento reconciliável por external_reference — blind spot residual do sweep. Não é
+    // falha do cron (success permanece true); é sinal para investigação humana.
+    const pendingAuthorizedAlerts: string[] = []
 
     // Sequencial de proposito: limita o ritmo de chamadas ao MP (1 search por subscription).
     for (const sub of pendings) {
@@ -95,6 +107,28 @@ export async function GET(req: NextRequest) {
         if (!paymentId) {
           // Sem pagamento aprovado para esta subscription (intencao de checkout abandonada): ok.
           noApprovedPayment++
+          // Blind spot: recorrente com preapproval AUTORIZADO ha 15+ min e nenhum payment
+          // encontravel — cliente pode ter sido cobrado sem ativacao. Best-effort: falha na
+          // consulta ao gateway NAO derruba o sweep (o alerta e observabilidade, nao efeito).
+          const isAlertCandidate =
+            sub.billingMode === 'recurring' &&
+            !!sub.gatewaySubscriptionId &&
+            Date.now() - sub.createdAt.getTime() >= PENDING_AUTHORIZED_ALERT_AGE_MS
+          if (isAlertCandidate && typeof gw.getSubscriptionStatus === 'function') {
+            try {
+              const { status } = await gw.getSubscriptionStatus(sub.gatewaySubscriptionId as string)
+              if (status === 'authorized') {
+                pendingAuthorizedAlerts.push(sub.id)
+                console.error(
+                  `[cron/reconcile-payments][ALERT] subscription ${sub.id} PENDING ha 15+ min com ` +
+                  `preapproval ${sub.gatewaySubscriptionId} AUTHORIZED no MP e nenhum pagamento ` +
+                  `aprovado encontravel por external_reference — possivel cobranca sem ativacao, investigar.`
+                )
+              }
+            } catch {
+              // Consulta de status e best-effort; indisponibilidade do MP nao vira falha do sweep.
+            }
+          }
           continue
         }
         const result = await planService.reconcileApprovedPayment(GatewayType.MERCADO_PAGO, paymentId)
@@ -165,6 +199,8 @@ export async function GET(req: NextRequest) {
       renewalAlready,
       renewalSkipped,
       renewalSkipReasons,
+      pendingAuthorizedAlerts: pendingAuthorizedAlerts.length,
+      pendingAuthorizedSubscriptionIds: pendingAuthorizedAlerts.slice(0, 20),
       failed: failures.length,
       failures: failures.slice(0, 20),
       processedAt: new Date().toISOString(),

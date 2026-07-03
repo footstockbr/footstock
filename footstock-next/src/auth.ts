@@ -67,6 +67,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.planType = (token.planType ?? null) as PlanType | null
         session.user.userType = (token.userType ?? '') as string
         session.user.favoriteClub = (token.favoriteClub ?? null) as string | null
+
+        // token.planType e congelado no login (o callback jwt so roda no sign-in) — um
+        // upgrade/downgrade de plano NAO se refletia na session ate re-login, e consumidores
+        // que confiam nela (ex.: /api/v1/motor/token) operavam com plano velho (incidente
+        // 2026-07-03). Ler FRESH do DB por request; fail-open ao valor do token em erro de
+        // DB (session degradada-stale e melhor que session quebrada).
+        if (token.id) {
+          try {
+            const fresh = await prisma.user.findUnique({
+              where: { id: token.id as string },
+              select: { planType: true },
+            })
+            if (fresh) {
+              session.user.planType = (fresh.planType ?? null) as PlanType | null
+            }
+          } catch {
+            // mantém o planType do token (stale) — nunca derrubar a session por isso
+          }
+        }
       }
       return session
     },
