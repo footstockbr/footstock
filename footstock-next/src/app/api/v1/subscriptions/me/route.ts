@@ -5,6 +5,8 @@ import {
   isWithinCoolingOff,
 } from '@/lib/services/plan-logic'
 import { subscriptionService, isAutoRenewalEligible } from '@/lib/services/SubscriptionService'
+import { countRestrictedPositions } from '@/lib/services/forced-liquidation'
+import { resolveRefundRemedy } from '@/lib/services/refund-remedy'
 import type { SubscriptionStatus, PaymentGateway, PaymentPeriod, PlanType } from '@/types'
 import type { Prisma } from '@prisma/client'
 import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
@@ -105,14 +107,71 @@ export async function GET() {
       return errors.notFound('Nenhuma assinatura ativa encontrada.')
     }
 
-    return ok(serializeSubscription(sub))
+    const serialized = serializeSubscription(sub)
+
+    // M067 — dados da tela de arrependimento (CDC 49): só quando a sub é REFUNDÁVEL
+    // (mesmo conjunto de status da rota POST /me/refund; PENDING de upgrade em andamento
+    // pode calcular isEligibleForRefund mas não é alvo do refund self-service).
+    let refund: Record<string, unknown> | null = null
+    const refundableStatus = ['ACTIVE', 'CANCELLATION_LOCK', 'PAST_DUE', 'TRIAL', 'TRIALING']
+    if (serialized.isEligibleForRefund && refundableStatus.includes(sub.status)) {
+      // Fail-open: o enrichment do arrependimento NUNCA derruba o GET /me — sem ele o
+      // modal cai no fluxo clássico (agendado) e o direito continua exercível via retry.
+      try {
+        const [lastPaid, restrictedPositionsCount, remedy] = await Promise.all([
+          prisma.payment.findFirst({
+            where: { subscriptionId: sub.id, status: 'PAID' },
+            orderBy: { createdAt: 'desc' },
+            select: { amount: true, refundedAmountCents: true },
+          }),
+          countRestrictedPositions(auth.user.id),
+          resolveRefundRemedy(prisma, sub),
+        ])
+        refund = {
+          deadlineAt: new Date(sub.startsAt.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          amountCents: lastPaid ? lastPaid.amount - lastPaid.refundedAmountCents : 0,
+          restrictedPositionsCount,
+          outcome:
+            remedy.kind === 'RESTORE_PREVIOUS'
+              ? {
+                  kind: remedy.kind,
+                  restoredPlanType: remedy.priorPlanType,
+                  restoredUntil: remedy.priorExpiresAt.toISOString(),
+                  fsToRevert: remedy.fsToRevert,
+                }
+              : { kind: remedy.kind },
+        }
+      } catch (refundEnrichErr) {
+        console.error('[subscriptions/me GET] enrichment de arrependimento falhou (fail-open):', refundEnrichErr)
+      }
+    }
+
+    return ok({ ...serialized, refund })
   } catch {
     return errors.server()
   }
 }
 
 // DELETE /api/v1/subscriptions/me — cancelar assinatura
-export async function DELETE() {
+// M067-F7 (prova de consentimento, CDC 6º VIII): quando o modal OFERECEU o reembolso
+// (janela de 7 dias) e o usuário ESCOLHEU "cancelar só a renovação", o client envia um
+// body opcional com o snapshot exibido — persistido em upgradeProrationMeta.cancelConsent
+// (best-effort, nunca bloqueia o cancelamento).
+export async function DELETE(request: Request) {
+  let cancelConsent: Record<string, unknown> | null = null
+  try {
+    const body = await request.json()
+    if (body && typeof body === 'object' && body.refundOffered === true) {
+      cancelConsent = {
+        refundOffered: true,
+        choice: 'CANCEL_AT_PERIOD_END_NO_REFUND',
+        snapshot: body.snapshot ?? null,
+        recordedAt: new Date().toISOString(),
+      }
+    }
+  } catch {
+    // body ausente/inválido: cancelamento segue normal, sem prova extra
+  }
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()
 
@@ -219,6 +278,22 @@ export async function DELETE() {
     }).catch((err) => {
       console.error('[subscriptions/me DELETE] Erro ao criar notificação de cancelamento:', err)
     })
+
+    // M067-F7: prova de consentimento — refund foi OFERTADO e o usuário escolheu o agendado.
+    if (cancelConsent) {
+      const existingMeta =
+        updatedSub.upgradeProrationMeta && typeof updatedSub.upgradeProrationMeta === 'object'
+          ? (updatedSub.upgradeProrationMeta as Record<string, unknown>)
+          : {}
+      await prisma.subscription
+        .update({
+          where: { id: updatedSub.id },
+          data: { upgradeProrationMeta: { ...existingMeta, cancelConsent } as never },
+        })
+        .catch((err) =>
+          console.error('[subscriptions/me DELETE] falha ao persistir consent (não-bloqueante):', err)
+        )
+    }
 
     // T-021: cancelamento de renovação também remove bônus pendente de ativação.
     if (hasPendingBonus && pendingBonusAmount) {

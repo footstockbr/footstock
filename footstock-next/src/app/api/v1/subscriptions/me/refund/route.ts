@@ -7,6 +7,7 @@ import { GatewayRetryableError, GatewayType } from '@/lib/gateways/IGateway'
 import type { PlanType } from '@/types'
 import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
 import { liquidateRestrictedPositions } from '@/lib/services/forced-liquidation'
+import { resolveRefundRemedy, applyRestorePreviousRemedy } from '@/lib/services/refund-remedy'
 
 const REFUND_CONFIRMED_STATUSES = new Set(['approved', 'refunded', 'succeeded', 'success', 'completed'])
 
@@ -133,8 +134,13 @@ export async function POST() {
       console.warn(`[subscriptions/me/refund] subscription ${sub.id} sem Payment PAID — downgrade sem estorno de gateway`)
     }
 
-    // Estorno confirmado (ou nada a estornar): efetiva cancelamento + downgrade em transação.
-    const { subscription: updatedSub, stateChanged } = await prisma.$transaction(async (tx) => {
+    // M067 — remédio por tipo de contratação (CDC 49, review codex): contratação inicial
+    // => JOGADOR + reset 2000; UPGRADE => restaura o plano anterior até o vencimento pago
+    // e reverte compensações de migração (nunca reset — ganhos legítimos ficam).
+    const remedy = await resolveRefundRemedy(prisma, sub, now)
+
+    // Estorno confirmado (ou nada a estornar): efetiva cancelamento + remédio em transação.
+    const { subscription: updatedSub, stateChanged, fsReverted } = await prisma.$transaction(async (tx) => {
       if (payment) {
         const paymentUpdate = await tx.payment.updateMany({
           where: { id: payment.id, status: 'PAID' },
@@ -142,7 +148,7 @@ export async function POST() {
         })
         if (paymentUpdate.count === 0) {
           const currentSub = await tx.subscription.findUniqueOrThrow({ where: { id: sub.id } })
-          return { subscription: currentSub, stateChanged: false }
+          return { subscription: currentSub, stateChanged: false, fsReverted: 0 }
         }
       }
 
@@ -164,16 +170,35 @@ export async function POST() {
 
       if (subUpdate.count === 0) {
         const currentSub = await tx.subscription.findUniqueOrThrow({ where: { id: sub.id } })
-        return { subscription: currentSub, stateChanged: false }
+        return { subscription: currentSub, stateChanged: false, fsReverted: 0 }
       }
 
-      await tx.user.update({
-        where: { id: auth.user.id },
-        data: { planType: 'JOGADOR', fsBalance: 2000 },
+      // Review codex M067-F6: comissão de afiliado do pagamento ESTORNADO é anulada AQUI,
+      // no caminho síncrono (não esperar o webhook REFUND_COMPLETED, que pode atrasar/faltar
+      // — ele já era idempotente e vira eco). Apenas PENDING; PAID segue política vigente.
+      await tx.affiliateTransaction.updateMany({
+        where: { subscriptionId: sub.id, status: 'PENDING' },
+        data: { status: 'VOIDED' },
       })
 
+      let fsRevertedTx = 0
+      if (remedy.kind === 'RESTORE_PREVIOUS') {
+        // M067: arrependimento de UPGRADE — plano anterior restaurado, compensações de
+        // migração revertidas (clamp 0), fsBalance NUNCA resetado.
+        const applied = await applyRestorePreviousRemedy(tx, {
+          userId: auth.user.id,
+          remedy,
+        })
+        fsRevertedTx = applied.fsReverted
+      } else {
+        await tx.user.update({
+          where: { id: auth.user.id },
+          data: { planType: 'JOGADOR', fsBalance: 2000 },
+        })
+      }
+
       const currentSub = await tx.subscription.findUniqueOrThrow({ where: { id: sub.id } })
-      return { subscription: currentSub, stateChanged: true }
+      return { subscription: currentSub, stateChanged: true, fsReverted: fsRevertedTx }
     })
 
     if (stateChanged) {
@@ -183,7 +208,8 @@ export async function POST() {
 
       mixpanelServer.trackSubscriptionCancelled(auth.user.id, {
         plan: sub.planType as PlanType,
-        cancellation_reason: 'cooling_off_refund',
+        cancellation_reason:
+          remedy.kind === 'RESTORE_PREVIOUS' ? 'cooling_off_refund_upgrade' : 'cooling_off_refund',
         within_trial: true,
         had_open_shorts: openShortCount > 0,
       })
@@ -192,16 +218,29 @@ export async function POST() {
         ? ` ${liquidation.liquidated} posição(ões) restrita(s) (short, alavancada ou OCO) foram encerradas automaticamente, pois são incompatíveis com o plano Jogador.`
         : ''
 
+      const refundNote = refundOutcome?.alreadyRefunded
+        ? 'Seu plano foi cancelado. O estorno já havia sido processado anteriormente.'
+        : payment
+          ? 'O estorno foi confirmado pelo Mercado Pago. O valor retorna em até 7 dias úteis pelo mesmo meio de pagamento.'
+          : 'Seu plano foi cancelado.'
+      const remedyNote =
+        remedy.kind === 'RESTORE_PREVIOUS'
+          ? ` Seu plano ${remedy.priorPlanType === 'LENDA' ? 'Lenda' : 'Craque'} anterior foi restaurado até ${remedy.priorExpiresAt.toLocaleDateString('pt-BR')}${
+              fsReverted > 0
+                ? ` e FS$ ${fsReverted.toLocaleString('pt-BR')} de créditos de migração foram revertidos`
+                : ''
+            }.`
+          : ''
+
       await prisma.notification.create({
         data: {
           userId: auth.user.id,
           type: 'PLAN_CANCEL_ALERT',
-          title: 'Cancelamento e reembolso confirmados',
-          body: (refundOutcome?.alreadyRefunded
-            ? 'Seu plano foi cancelado. O estorno já havia sido processado anteriormente.'
-            : payment
-              ? 'Seu plano foi cancelado e o estorno foi confirmado pelo Mercado Pago. O valor retorna em até 7 dias úteis pelo mesmo meio de pagamento.'
-              : 'Seu plano foi cancelado.') + liquidationNote,
+          title:
+            remedy.kind === 'RESTORE_PREVIOUS'
+              ? 'Arrependimento do upgrade confirmado'
+              : 'Cancelamento e reembolso confirmados',
+          body: refundNote + remedyNote + (remedy.kind === 'RESTORE_PREVIOUS' ? '' : liquidationNote),
           isRead: false,
         },
       }).catch((err) => {
@@ -221,6 +260,15 @@ export async function POST() {
       refund: refundOutcome
         ? { processed: true, refundId: refundOutcome.refundId, alreadyRefunded: refundOutcome.alreadyRefunded }
         : { processed: false, reason: 'no_paid_payment' },
+      remedy:
+        remedy.kind === 'RESTORE_PREVIOUS'
+          ? {
+              kind: remedy.kind,
+              restoredPlanType: remedy.priorPlanType,
+              restoredUntil: remedy.priorExpiresAt.toISOString(),
+              fsReverted,
+            }
+          : { kind: remedy.kind },
       liquidation: { positionsClosed: liquidation.liquidated, restrictedRemaining: liquidation.remaining },
     })
   } catch (err) {

@@ -29,6 +29,11 @@ jest.mock('@/lib/prisma', () => ({
     payment: {
       findUnique: jest.fn(),
       create: jest.fn(),
+      // M067: enrichment de arrependimento do GET /me
+      findFirst: jest.fn().mockResolvedValue(null),
+    },
+    paymentRefund: {
+      findUnique: jest.fn().mockResolvedValue(null),
     },
     order: {
       findMany: jest.fn(),
@@ -37,6 +42,8 @@ jest.mock('@/lib/prisma', () => ({
     position: {
       findMany: jest.fn(),
       deleteMany: jest.fn(),
+      // M067: countRestrictedPositions (enrichment do GET /me)
+      count: jest.fn().mockResolvedValue(0),
     },
     $transaction: jest.fn(),
   },
