@@ -57,6 +57,10 @@ export type AnalyticsEvents = {
   asset_detail_viewed: { asset_ticker: string; asset_serie: 'A' | 'B'; plan: UserPlan }
   asset_comparison_used: { primary_ticker: string; comparison_count: 2 | 3 | 4; plan: UserPlan }
   plan_upgrade_clicked: { origin: string; current_plan: UserPlan }
+  // M066 — funil de disclosure do upgrade pago->pago (estudo upgrade-pricing 2026-07-03)
+  upgrade_view: { plan_selected: 'CRAQUE' | 'LENDA'; current_plan: UserPlan; compensation: string }
+  upgrade_confirm: { plan_selected: 'CRAQUE' | 'LENDA'; current_plan: UserPlan; compensation: string }
+  upgrade_abandon: { plan_selected: 'CRAQUE' | 'LENDA'; current_plan: UserPlan }
   plan_selected: { plan_selected: 'CRAQUE' | 'LENDA'; billing_cycle: 'monthly'; current_plan: UserPlan }
   payment_gateway_selected: { gateway: 'MERCADO_PAGO' | 'PAGSEGURO' | 'PAYPAL'; plan: UserPlan }
   payment_completed: { plan: 'CRAQUE' | 'LENDA'; gateway: string; is_first_payment: boolean }

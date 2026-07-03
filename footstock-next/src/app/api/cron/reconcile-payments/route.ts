@@ -13,6 +13,7 @@ import { prisma } from '@/lib/prisma'
 import { planService } from '@/lib/services/PlanService'
 import { getGateway } from '@/lib/gateways/GatewayFactory'
 import { GatewayType } from '@/lib/gateways/IGateway'
+import { sweepPendingUpgradeProrationRefunds } from '@/lib/services/upgrade-proration'
 
 // Idade minima de uma subscription PENDING para o alerta de "preapproval authorized sem
 // pagamento reconciliavel" (incidente 2026-07-03). Abaixo disso e checkout em andamento
@@ -187,6 +188,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // M066: re-tentativa de estornos pró-rata pendentes (FAILED_RETRYABLE + REQUESTED órfãos
+    // de 10+ min). Best-effort: falha aqui não derruba o sweep principal.
+    let prorationSweep = { scanned: 0, succeeded: 0, retryable: 0, unsupported: 0 }
+    try {
+      prorationSweep = await sweepPendingUpgradeProrationRefunds(20)
+    } catch (sweepErr) {
+      console.error('[cron/reconcile-payments][ALERT] sweep de estornos pró-rata falhou:', sweepErr)
+    }
+
     return NextResponse.json({
       success: failures.length === 0,
       pendingScanned: pendings.length,
@@ -199,6 +209,7 @@ export async function GET(req: NextRequest) {
       renewalAlready,
       renewalSkipped,
       renewalSkipReasons,
+      prorationRefundSweep: prorationSweep,
       pendingAuthorizedAlerts: pendingAuthorizedAlerts.length,
       pendingAuthorizedSubscriptionIds: pendingAuthorizedAlerts.slice(0, 20),
       failed: failures.length,

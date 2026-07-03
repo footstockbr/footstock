@@ -10,6 +10,15 @@ const CheckoutSchema = z.object({
   planType: z.enum(['CRAQUE', 'LENDA']),
   gateway: z.enum(['MERCADO_PAGO', 'PAGSEGURO', 'PAYPAL']),
   period: z.enum(['MONTHLY', 'YEARLY']),
+  // M066 — consent log da tela de disclosure do upgrade (opcional; só faz sentido quando o
+  // usuário JÁ tem plano pago e está trocando). Snapshot limitado: prova documental, não input
+  // de cálculo — os valores reais são SEMPRE recomputados server-side.
+  upgradeConsent: z
+    .object({
+      shownAt: z.string().min(1).max(64),
+      snapshot: z.record(z.string(), z.unknown()).optional(),
+    })
+    .optional(),
 })
 
 // POST /api/v1/payments/checkout
@@ -25,7 +34,7 @@ export async function POST(request: NextRequest) {
     const parsed = CheckoutSchema.safeParse(body)
     if (!parsed.success) return errors.validation()
 
-    const { planType, gateway, period } = parsed.data
+    const { planType, gateway, period, upgradeConsent } = parsed.data
 
     // Hardening server-side do gate de checkout: só aceitar gateways CAPAZES de recorrência real.
     // Planos são produtos recorrentes; um gateway que só faz pagamento único (PayPal/PagSeguro,
@@ -41,6 +50,7 @@ export async function POST(request: NextRequest) {
       gateway,
       period: period.toLowerCase() as 'monthly' | 'yearly',
       userEmail: auth.user.email,
+      upgradeConsent,
     })
 
     return created({

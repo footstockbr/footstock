@@ -11,8 +11,18 @@ import {
   calcSubscriptionAmount,
   isWithinCoolingOff,
   calcUpgradeBonusAmount,
+  calcProRataResidualCents,
+  residualToFsCredit,
+  UPGRADE_PRORATION_FS_MULTIPLIER,
   type SubscriptionForLogic,
 } from './plan-logic'
+import {
+  createUpgradeProrationRefundOutbox,
+  executeUpgradeProrationRefund,
+  isUpgradeProrationRefundEnabled,
+  upgradeProrationRefundFloorCents,
+  type UpgradeProrationRefundIntent,
+} from './upgrade-proration'
 import { throwPaymentError } from '@/lib/errors/payment-errors'
 import { notificationService } from '@/lib/notifications'
 import { PLAN_HIERARCHY, type PlanType } from '@/lib/enums'
@@ -40,6 +50,10 @@ export interface CheckoutDTO {
   // PULA a chamada /checkout/preferences do gateway (que geraria preference + merchant_order
   // orfaos). redirectUrl volta como string vazia nesse caso (o caminho Pix nao a consome).
   skipGatewayCheckout?: boolean
+  // M066 — consent log da tela de disclosure do upgrade (CDC 6º III/31 + Dec. 7.962/2013):
+  // snapshot do que foi EXIBIDO ao usuário antes do clique. Persistido em
+  // Subscription.upgradeProrationMeta.consent; fundido com a memória de cálculo na ativação.
+  upgradeConsent?: { shownAt: string; snapshot?: Record<string, unknown> }
 }
 
 export interface CheckoutResult {
@@ -173,6 +187,58 @@ export class PlanService extends BaseService {
         code: 'ORDER_081',
         statusCode: 409,
       })
+    }
+
+    // M066 — guard anti-ciclagem (estudo upgrade-pricing 2026-07-03): 1 mudança de plano por
+    // CICLO. Sem isto, ciclagem up/down repetida farmaria o crédito pró-rata multiplicado
+    // (FS$ 1.2x/1.3x). Guard POR CICLO, nunca one-time-ever (lição da classe de lockouts com
+    // guards one-time): detecta que a sub ACTIVE atual nasceu de uma troca (previousPlanType)
+    // dentro do ciclo corrente (startsAt >= cycleStart). Após a RENOVAÇÃO (currentPeriodStart
+    // avança além do startsAt), a troca volta a ser permitida automaticamente.
+    let activeCurrentForUpgrade: {
+      previousPlanType: unknown
+      startsAt: Date
+      expiresAt: Date | null
+      currentPeriodStart: Date | null
+      currentPeriodEnd: Date | null
+      amount: number
+    } | null = null
+    if (effectiveCurrentPlan !== 'JOGADOR' && dto.planType !== effectiveCurrentPlan) {
+      const activeCurrent = await prisma.subscription.findFirst({
+        where: { userId, status: 'ACTIVE', planType: effectiveCurrentPlan as never },
+        select: {
+          previousPlanType: true,
+          startsAt: true,
+          expiresAt: true,
+          currentPeriodStart: true,
+          currentPeriodEnd: true,
+          amount: true,
+        },
+      })
+      activeCurrentForUpgrade = activeCurrent
+      if (activeCurrent?.previousPlanType) {
+        const nowGuard = new Date()
+        const cycleStart = activeCurrent.currentPeriodStart ?? activeCurrent.startsAt
+        const cycleEnd = activeCurrent.currentPeriodEnd ?? activeCurrent.expiresAt
+        const changedThisCycle =
+          cycleStart != null &&
+          cycleEnd != null &&
+          nowGuard < cycleEnd &&
+          activeCurrent.startsAt >= cycleStart
+        if (changedThisCycle) {
+          const nextChange = cycleEnd.toLocaleDateString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+          })
+          throw Object.assign(
+            new Error(
+              `Você pode alterar seu plano 1 vez por ciclo. Próxima troca disponível em ${nextChange}.`
+            ),
+            { code: 'PAYMENT_PLAN_CHANGE_LIMIT', statusCode: 429 }
+          )
+        }
+      }
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -331,6 +397,53 @@ export class PlanService extends BaseService {
     // FU-023-5: no caminho Pix a rota faz POST /v1/payments direto e nao consome redirectUrl.
     // Pular a preferencia do gateway (/checkout/preferences) evita preference + merchant_order
     // orfaos. Cartao/redirect continuam criando a preferencia normalmente.
+
+    // M066 — consent log do upgrade (CDC 6º III/31 + Dec. 7.962/2013): snapshot do que a
+    // tela de disclosure EXIBIU antes do clique, gravado na Subscription recém-criada.
+    // Fundido com a memória de cálculo do pró-rata na ativação (upgradeUser). Best-effort:
+    // falha aqui não bloqueia o checkout (o consent é prova documental, não gate).
+    if (dto.upgradeConsent && effectiveCurrentPlan !== 'JOGADOR' && dto.planType !== effectiveCurrentPlan) {
+      await prisma.subscription
+        .update({
+          where: { id: subscription.id },
+          data: {
+            upgradeProrationMeta: {
+              consent: {
+                shownAt: dto.upgradeConsent.shownAt,
+                // Evidência auxiliar: o que o CLIENT diz ter exibido.
+                clientSnapshot: dto.upgradeConsent.snapshot ?? null,
+                // Prova primária (review codex F7): recomputado SERVER-SIDE no ato do checkout —
+                // nunca confiar no payload do client como memória de cálculo.
+                serverSnapshot: {
+                  currentPlan: effectiveCurrentPlan,
+                  targetPlan: dto.planType,
+                  amountDueTodayCents: amount,
+                  residualCents: activeCurrentForUpgrade
+                    ? calcProRataResidualCents({
+                        amountCents: activeCurrentForUpgrade.amount,
+                        windowStart:
+                          activeCurrentForUpgrade.currentPeriodStart ?? activeCurrentForUpgrade.startsAt,
+                        windowEnd:
+                          activeCurrentForUpgrade.currentPeriodEnd ??
+                          activeCurrentForUpgrade.expiresAt ??
+                          activeCurrentForUpgrade.startsAt,
+                        now: new Date(),
+                      })
+                    : 0,
+                },
+                recordedAt: new Date().toISOString(),
+              },
+            } as never,
+          },
+        })
+        .catch((consentErr) =>
+          console.error(
+            '[createCheckout] falha ao persistir consent log do upgrade (não-bloqueante):',
+            consentErr
+          )
+        )
+    }
+
     if (dto.skipGatewayCheckout) {
       return { redirectUrl: '', subscriptionId: subscription.id }
     }
@@ -552,6 +665,19 @@ export class PlanService extends BaseService {
     // Preapprovals recorrentes das assinaturas anteriores SUPERSEDED por este upgrade — coletados
     // dentro da tx, cancelados TERMINALMENTE no gateway APÓS o commit (gateway I/O nunca dentro da tx).
     const priorRecurringToCancel: Array<{ gateway: SubscriptionGateway; gatewaySubscriptionId: string }> = []
+    // M066 (upgrade pró-rata): intents de estorno parcial coletados na tx e executados PÓS-commit
+    // via ledger (upgrade-proration.ts) — gateway I/O nunca dentro da tx; falha nunca bloqueia a
+    // ativação já paga. Quando o estorno não se aplica (flag off / abaixo do piso / sem payment
+    // PAID), a compensação vira crédito FS$ 1.2x somado ao bônus T+7 (Fase 1).
+    // F1 (outbox): ids do ledger criados DENTRO da tx; execução pós-commit por id.
+    const prorationRefundLedgerIds: string[] = []
+    // F4: o crédito FS$ do pró-rata é compensação (não bônus de retenção) — creditado
+    // IMEDIATAMENTE na ativação, nunca no bonusAmount T+7 cancelável.
+    let immediateProrationFs = 0
+    const prorationEntries: Array<Record<string, unknown>> = []
+    const nowProration = new Date()
+    const refundPathEnabled = isUpgradeProrationRefundEnabled()
+    const refundFloorCents = upgradeProrationRefundFloorCents()
 
     await prisma.$transaction(async (tx) => {
       // Assinaturas abertas anteriores deste usuário (qualquer plano), exceto a que está sendo ativada.
@@ -570,6 +696,13 @@ export class PlanService extends BaseService {
           billingMode: true,
           gateway: true,
           gatewaySubscriptionId: true,
+          // M066: janela real do ciclo + valor pagos alimentam o pró-rata do tempo não usado.
+          amount: true,
+          planType: true,
+          startsAt: true,
+          expiresAt: true,
+          currentPeriodStart: true,
+          currentPeriodEnd: true,
         },
       })
 
@@ -578,6 +711,85 @@ export class PlanService extends BaseService {
         // senão o auto-renew do plano trocado continua cobrando (double-charge / captura órfã).
         if (prior.billingMode === 'recurring' && prior.gatewaySubscriptionId) {
           priorRecurringToCancel.push({ gateway: prior.gateway, gatewaySubscriptionId: prior.gatewaySubscriptionId })
+        }
+
+        // M066 — pró-rata do tempo não usado do plano antigo (estudo 2026-07-03).
+        // Janela REAL do ciclo corrente (currentPeriod* quando existem; startsAt/expiresAt no
+        // 1º ciclo ou pós-reconcile). Ceil a favor do usuário (calcProRataResidualCents).
+        const windowStart = prior.currentPeriodStart ?? prior.startsAt
+        const windowEnd = prior.currentPeriodEnd ?? prior.expiresAt
+        const residualCents =
+          prior.amount > 0 && windowStart && windowEnd
+            ? calcProRataResidualCents({
+                amountCents: prior.amount,
+                windowStart,
+                windowEnd,
+                now: nowProration,
+              })
+            : 0
+        if (residualCents > 0) {
+          // Estorno em dinheiro (Fase 2) exige: flag ligada + residual acima do piso + um
+          // Payment PAID rastreável da assinatura antiga. Qualquer condição ausente => FS$.
+          let refundIntent: UpgradeProrationRefundIntent | null = null
+          if (refundPathEnabled && residualCents >= refundFloorCents) {
+            const lastPaid = await tx.payment.findFirst({
+              where: { subscriptionId: prior.id, status: { in: ['PAID', 'PARTIALLY_REFUNDED'] as never[] } },
+              orderBy: { createdAt: 'desc' },
+              select: { id: true, gatewayTransactionId: true, amount: true, refundedAmountCents: true },
+            })
+            // Nunca estornar além do que resta no pagamento (estornos anteriores acumulam).
+            const refundable = lastPaid ? lastPaid.amount - lastPaid.refundedAmountCents : 0
+            if (lastPaid && refundable >= residualCents) {
+              refundIntent = {
+                newSubscriptionId: subscriptionId,
+                userId,
+                priorSubscriptionId: prior.id,
+                priorAmountCents: prior.amount,
+                paymentDbId: lastPaid.id,
+                gatewayPaymentId: lastPaid.gatewayTransactionId,
+                gateway: String(prior.gateway),
+                residualCents,
+              }
+            }
+          }
+
+          if (refundIntent) {
+            // OUTBOX durável (review codex F1): REQUESTED nasce NA MESMA tx do upgrade — crash
+            // pós-commit deixa órfão recuperável pelo sweep, nunca promessa sem rastro.
+            const ledgerId = await createUpgradeProrationRefundOutbox(
+              tx as never,
+              refundIntent
+            )
+            prorationRefundLedgerIds.push(ledgerId)
+            prorationEntries.push({
+              priorSubscriptionId: prior.id,
+              priorPlanType: prior.planType,
+              priorAmountCents: prior.amount,
+              windowStart: windowStart?.toISOString() ?? null,
+              windowEnd: windowEnd?.toISOString() ?? null,
+              residualCents,
+              compensation: 'PARTIAL_REFUND',
+              refundPaymentId: refundIntent.gatewayPaymentId,
+            })
+          } else {
+            // Fase 1: crédito FS$ (residual × 1.2) IMEDIATO (review codex F4: compensação de
+            // valor pago não pode morrer com o cancelamento do bônus T+7 — bonus-credit só
+            // credita status ACTIVE). Copy: "bônus promocional de migração" (nunca "reembolso").
+            const fsCredit = residualToFsCredit(residualCents, UPGRADE_PRORATION_FS_MULTIPLIER)
+            immediateProrationFs = Math.round((immediateProrationFs + fsCredit) * 100) / 100
+            prorationEntries.push({
+              priorSubscriptionId: prior.id,
+              priorPlanType: prior.planType,
+              priorAmountCents: prior.amount,
+              windowStart: windowStart?.toISOString() ?? null,
+              windowEnd: windowEnd?.toISOString() ?? null,
+              residualCents,
+              compensation: 'FS_CREDIT',
+              fsMultiplier: UPGRADE_PRORATION_FS_MULTIPLIER,
+              fsCredit,
+              creditedImmediately: true,
+            })
+          }
         }
         // Preservar bônus pendente (agendado e ainda não creditado): rolar para a nova assinatura.
         // bonus-credit só credita status=ACTIVE, então sem isto o bônus da assinatura anterior
@@ -607,6 +819,25 @@ export class PlanService extends BaseService {
       }
 
       const hasBonusToScheduleTx = scheduledBonusAmount > 0
+      // M066: memória de cálculo do pró-rata + consent log da tela de upgrade (gravado pelo
+      // checkout em upgradeProrationMeta.consent) fundidos num único JSON — prova documental
+      // (CDC art. 6º VIII: fornecedor demonstra o que informou e como calculou).
+      const existingMeta =
+        subscription.upgradeProrationMeta && typeof subscription.upgradeProrationMeta === 'object'
+          ? (subscription.upgradeProrationMeta as Record<string, unknown>)
+          : {}
+      const prorationMeta =
+        prorationEntries.length > 0 || Object.keys(existingMeta).length > 0
+          ? {
+              ...existingMeta,
+              proration: {
+                computedAt: nowProration.toISOString(),
+                refundPathEnabled,
+                refundFloorCents,
+                entries: prorationEntries,
+              },
+            }
+          : undefined
       // Revalidação de status DENTRO da transação (fecha corrida ativação x refund/cancelamento).
       // O status lido fora da tx pode ter mudado: um refund concorrente que setou CANCELLED
       // seria sobrescrito de volta a ACTIVE por um where:{id} cego. O guard notIn garante
@@ -622,6 +853,7 @@ export class PlanService extends BaseService {
           previousPlanType: isUpgrade ? effectivePreviousPlanType as never : null, // G-02
           bonusScheduledAt: hasBonusToScheduleTx ? bonusScheduleDate : null,
           bonusAmount:      hasBonusToScheduleTx ? scheduledBonusAmount : null,
+          ...(prorationMeta !== undefined ? { upgradeProrationMeta: prorationMeta as never } : {}),
         },
       })
       if (activated.count !== 1) {
@@ -637,6 +869,34 @@ export class PlanService extends BaseService {
         where: { id: userId },
         data:  { planType: subscription.planType },
       })
+      // F4: crédito FS$ do pró-rata IMEDIATO, com extrato (mesmo shape do bonus-credit).
+      if (immediateProrationFs > 0) {
+        const userBalanceRow = await tx.user.findUnique({
+          where: { id: userId },
+          select: { fsBalance: true },
+        })
+        const balanceBefore = userBalanceRow ? Number(userBalanceRow.fsBalance) : 0
+        await tx.user.update({
+          where: { id: userId },
+          data: { fsBalance: { increment: immediateProrationFs } },
+        })
+        await tx.transaction.create({
+          data: {
+            userId,
+            financialType: 'BONUS',
+            totalAmount: immediateProrationFs,
+            fsAmount: immediateProrationFs,
+            balanceBefore,
+            balanceAfter: balanceBefore + immediateProrationFs,
+            assetId: null,
+            type: null,
+            side: null,
+            quantity: null,
+            price: null,
+            fee: null,
+          } as never,
+        })
+      }
       // #5 CRÍTICO: religar o usuário suspenso por LAPSO DE EXPIRAÇÃO ao ativar um pagamento.
       // Sem isto, um assinante que caiu para status=SUSPENDED (subscription-expiry) e depois PAGOU
       // ficava SUSPENDED para sempre (sem login) mesmo com a assinatura ACTIVE. Escopo estrito em
@@ -662,6 +922,32 @@ export class PlanService extends BaseService {
           cancelErr,
         )
       }
+    }
+
+    // M066 (Fase 2): estornos do outbox executados AGORA (gateway -> consolidação síncrona).
+    // executeUpgradeProrationRefund NUNCA lança; crash aqui deixa REQUESTED órfão que o sweep
+    // do reconcile-cron completa (F1). Repetição é inócua (idempotency key + effects gate).
+    for (const ledgerId of prorationRefundLedgerIds) {
+      await executeUpgradeProrationRefund(ledgerId)
+    }
+
+    // F4: notificação do crédito FS$ imediato (best-effort, pós-commit).
+    if (immediateProrationFs > 0) {
+      await prisma.notification
+        .create({
+          data: {
+            userId,
+            type: 'UPGRADE_PRORATION_REFUND',
+            title: 'Bônus promocional de migração',
+            body:
+              `Creditamos FS$ ${immediateProrationFs.toLocaleString('pt-BR')} na sua conta ` +
+              `referentes aos dias não usados do seu plano anterior (1,2× o valor).`,
+            isRead: false,
+          },
+        })
+        .catch((err) =>
+          console.error('[PlanService.upgradeUser] Erro ao notificar crédito pró-rata (não-bloqueante):', err)
+        )
     }
 
     const hasBonusToSchedule = scheduledBonusAmount > 0

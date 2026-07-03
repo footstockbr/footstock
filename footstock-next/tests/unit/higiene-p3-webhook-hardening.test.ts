@@ -22,6 +22,9 @@ jest.mock('@/lib/prisma', () => ({
     payment: { upsert: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn() },
     user: { findUnique: jest.fn(), update: jest.fn() },
     webhookAuditLog: { findFirst: jest.fn() },
+    // M066: o eco de estorno parcial consulta o ledger ANTES da política externa —
+    // null = sem refund nosso esperado (semântica de estorno EXTERNO destes testes).
+    paymentRefund: { findFirst: jest.fn().mockResolvedValue(null), updateMany: jest.fn() },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     $transaction: jest.fn(async (fn: any) => fn({ subscription: { update: jest.fn() }, user: { update: jest.fn() } })),
   },

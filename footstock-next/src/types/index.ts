@@ -86,6 +86,7 @@ export type NotificationType =
   | 'BONUS_CREDITED'
   | 'BONUS_SCHEDULED'              // T-021: bônus agendado em T+7
   | 'BONUS_CANCELLED'              // T-021: bônus cancelado (CDC Art. 49)
+  | 'UPGRADE_PRORATION_REFUND'     // M066: estorno/bônus do tempo não usado em upgrade
   | 'LEAGUE_RESULT'
   | 'ADMIN_BROADCAST'
   | 'CANCELLATION_LOCK_ACTIVE'

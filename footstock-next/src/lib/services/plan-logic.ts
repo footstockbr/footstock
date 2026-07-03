@@ -54,6 +54,41 @@ export function calcUpgradeBonusAmount(fromPlan: PlanType, toPlan: PlanType): nu
   return Math.max(0, diff)
 }
 
+// ─── 3c. calcProRataResidualCents (M066 — upgrade pró-rata) ──────────────────
+/**
+ * Valor residual (em centavos) do tempo NÃO usado de um ciclo pago, calculado sobre a
+ * janela REAL do período (currentPeriodStart/End quando existem; fallback startsAt/expiresAt).
+ * Arredonda com Math.ceil A FAVOR do usuário e nunca excede o valor pago do ciclo.
+ * Retorna 0 para janela inválida/expirada (windowEnd <= windowStart ou now >= windowEnd).
+ */
+export function calcProRataResidualCents(params: {
+  amountCents: number
+  windowStart: Date
+  windowEnd: Date
+  now: Date
+}): number {
+  const { amountCents, windowStart, windowEnd, now } = params
+  if (!Number.isFinite(amountCents) || amountCents <= 0) return 0
+  const totalMs = windowEnd.getTime() - windowStart.getTime()
+  if (totalMs <= 0) return 0
+  const remainingMs = Math.min(Math.max(windowEnd.getTime() - now.getTime(), 0), totalMs)
+  if (remainingMs <= 0) return 0
+  return Math.min(amountCents, Math.ceil((amountCents * remainingMs) / totalMs))
+}
+
+// Multiplicadores da compensação FS$ do upgrade (convenção 1 FS$ = R$1, mesma da comissão
+// de afiliado). Copy SEMPRE "bônus promocional de migração" — nunca "reembolso/devolução"
+// (expectativa de equivalência monetária + Lei 12.865/2013). Valores revisáveis por decisão
+// de produto; o 1.3x do fallback compensa a falha do estorno em dinheiro (MP 3024).
+export const UPGRADE_PRORATION_FS_MULTIPLIER = 1.2
+export const UPGRADE_PRORATION_FALLBACK_FS_MULTIPLIER = 1.3
+
+/** Converte residual em centavos para crédito FS$ (2 casas), aplicando o multiplicador. */
+export function residualToFsCredit(residualCents: number, multiplier: number): number {
+  if (!Number.isFinite(residualCents) || residualCents <= 0) return 0
+  return Math.round(residualCents * multiplier) / 100
+}
+
 // ─── 4. calcSubscriptionAmount ──────────────────────────────────────────────
 /**
  * Valor da assinatura em centavos BRL (Int — PCI-DSS).

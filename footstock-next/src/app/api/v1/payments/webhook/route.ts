@@ -13,6 +13,7 @@ import type { SubscriptionGateway } from '@prisma/client'
 import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
 import { liquidateRestrictedPositions } from '@/lib/services/forced-liquidation'
 import { isPaidPlan } from '@/lib/enums'
+import { consolidateExpectedRefund } from '@/lib/services/upgrade-proration'
 
 // POST /api/v1/payments/webhook
 // Público — autenticado por HMAC-SHA256 (sem Bearer token)
@@ -427,6 +428,37 @@ export async function POST(request: NextRequest) {
         })
       }
     } else if (event.eventType === 'REFUND_COMPLETED') {
+      // M066 — eco de estorno parcial NOSSO (ledger upgrade-proration, review codex): um
+      // REFUND_COMPLETED cujo pagamento tem PaymentRefund `expected` em aberto/consolidado é
+      // a confirmação do estorno que NÓS iniciamos. Confirmar no ledger e SAIR sem efeitos —
+      // não rebaixar plano, não anular comissões (a consolidação financeira aconteceu no
+      // retorno SÍNCRONO do gateway; o crash-gap entre gateway-OK e consolidação é coberto
+      // aqui de forma idempotente). Janela conhecida e aceita: um refund EXTERNO total que
+      // chegue enquanto o parcial esperado está aberto é tratado como eco; o evento seguinte
+      // do gateway (ledger já WEBHOOK_CONFIRMED, sem match) cai na política externa normal.
+      if (event.transactionId) {
+        const expectedRefund = await prisma.paymentRefund.findFirst({
+          where: {
+            gatewayPaymentId: event.transactionId,
+            expected: true,
+            status: { in: ['REQUESTED', 'SUCCEEDED'] },
+          },
+          orderBy: { createdAt: 'desc' },
+        })
+        if (expectedRefund) {
+          // Consolidação ÚNICA (review codex F2): o webhook NÃO tem lógica financeira própria —
+          // chama a mesma função do executor síncrono; o gate effectsAppliedAt garante
+          // exatamente-uma-vez (o crash-gap entre gateway-OK e consolidação é coberto aqui).
+          await consolidateExpectedRefund(expectedRefund.id, { toStatus: 'WEBHOOK_CONFIRMED' })
+          await webhookAuditService.logWebhook({
+            gateway: gatewayEnum, eventType: event.eventType,
+            transactionId: event.transactionId, subscriptionId: event.subscriptionId,
+            status: 'ACCEPTED', hmacValid: true, ipAddress: originalIp,
+          })
+          return NextResponse.json({ received: true }, { status: 200 })
+        }
+      }
+
       // ST008 — early-return idempotente: se já existe um Payment REFUNDED para esta
       // transação, o estorno já foi processado. A dedup do passo 5b só pega quando houve
       // ACCEPTED prévio; uma reentrega do provedor após a tx commitar mas antes do ACCEPTED

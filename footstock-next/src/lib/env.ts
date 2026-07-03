@@ -89,6 +89,15 @@ const envSchema = z.object({
     .union([z.literal('true'), z.literal('false')])
     .optional()
     .default('false'),
+  // M066 (Fase 2 do estudo upgrade-pricing): estorno parcial pró-rata em upgrade de plano.
+  // Default 'false' (Fase 1: compensação em FS$ 1.2x). Ligar SOMENTE após canário em prod
+  // (gate da virada de preço real). Piso em centavos: abaixo dele a compensação fica em FS$
+  // mesmo com a flag ligada (refund de centavos é ruído operacional).
+  UPGRADE_PRORATION_REFUND_ENABLED: z
+    .union([z.literal('true'), z.literal('false')])
+    .optional()
+    .default('false'),
+  UPGRADE_PRORATION_REFUND_FLOOR_CENTS: z.string().regex(/^\d+$/).optional().default('200'),
   PAGSEGURO_EMAIL: z.string().email().optional(),
   PAGSEGURO_TOKEN: z.string().min(1).optional(),
   PAGSEGURO_WEBHOOK_SECRET: z.string().min(1).optional(),

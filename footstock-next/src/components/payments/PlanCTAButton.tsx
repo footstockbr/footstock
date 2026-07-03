@@ -24,6 +24,32 @@ const TIER_ORDER: Record<string, number> = {
   'LENDA': 2,
 }
 
+// M066 — shape do GET /api/v1/payments/upgrade-preview (disclosure do upgrade pago->pago).
+interface UpgradePreview {
+  currentPlan: string
+  targetPlan: string
+  amountDueTodayCents: number
+  residualCents: number
+  compensation: 'NONE' | 'FS_CREDIT' | 'PARTIAL_REFUND'
+  fsCredit: number
+  bonusDifferentialFs: number
+  bonusCreditDate: string
+  nextChargeDate: string
+  generatedAt: string
+}
+
+function formatBRL(cents: number): string {
+  return `R$ ${(cents / 100).toFixed(2).replace('.', ',')}`
+}
+
+function formatDatePtBR(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  } catch {
+    return iso
+  }
+}
+
 interface PlanCTAButtonProps {
   planType: PlanType
   label: string
@@ -66,6 +92,9 @@ export function PlanCTAButton({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState<string | null>(null)
+  // M066 (Fase 1a): painel de disclosure do upgrade pago->pago. null = fechado;
+  // 'loading' = buscando preview; objeto = preview server-side exibido aguardando confirmação.
+  const [preview, setPreview] = useState<UpgradePreview | 'loading' | null>(null)
   const inFlightRef = useRef(false)
   const { track } = useAnalytics()
   const { plan: guardPlan } = usePlanGuard()
@@ -82,6 +111,11 @@ export function PlanCTAButton({
 
   // EVT-019 + checkout: o antigo botao de confirmacao do modal agora e o proprio
   // botao do card. Faz o tier guard, resolve o gateway e chama o checkout.
+  // M066: quando o usuário JÁ tem plano pago (upgrade pago->pago), o primeiro clique abre o
+  // painel de DISCLOSURE (3 linhas canônicas: o que ganha / quanto paga hoje / destino do
+  // saldo + próxima cobrança — CDC 6º III/31) e o checkout só dispara na confirmação, que
+  // envia o snapshot exibido como upgradeConsent (prova documental). Assinatura nova
+  // (JOGADOR->pago) segue direta como antes: não há saldo antigo a divulgar.
   async function handleUpgradeClick() {
     if (inFlightRef.current) return
 
@@ -99,6 +133,37 @@ export function PlanCTAButton({
     if (!gateway) {
       setPending(null)
       setError(NO_GATEWAY_MESSAGE)
+      return
+    }
+
+    // Upgrade pago->pago sem disclosure exibida ainda: buscar preview e mostrar o painel.
+    const isPaidToPaid = currentPlan === 'CRAQUE' || currentPlan === 'LENDA'
+    if (isPaidToPaid && (preview === null || preview === 'loading')) {
+      if (preview === 'loading') return
+      setError(null)
+      setPending(null)
+      setPreview('loading')
+      try {
+        const res = await fetch(
+          `/api/v1/payments/upgrade-preview?plan=${planType}&period=${defaultPeriod}`,
+          { credentials: 'include' }
+        )
+        const json = await res.json()
+        if (!res.ok || !json?.data) {
+          setPreview(null)
+          setError(resolveBlockMessage(json?.error?.code, json?.error?.message))
+          return
+        }
+        setPreview(json.data as UpgradePreview)
+        track('upgrade_view', {
+          plan_selected: planType,
+          current_plan: currentPlan,
+          compensation: (json.data as UpgradePreview).compensation,
+        })
+      } catch {
+        setPreview(null)
+        setError('Erro ao carregar os detalhes do upgrade. Tente novamente.')
+      }
       return
     }
 
@@ -124,11 +189,29 @@ export function PlanCTAButton({
       current_plan: currentPlan,
     })
 
+    // M066: confirmação pós-disclosure — snapshot exibido vira consent (recomputado no server).
+    const consent =
+      typeof preview === 'object' && preview !== null
+        ? { shownAt: preview.generatedAt, snapshot: preview as unknown as Record<string, unknown> }
+        : undefined
+    if (consent) {
+      track('upgrade_confirm', {
+        plan_selected: planType,
+        current_plan: currentPlan,
+        compensation: (preview as UpgradePreview).compensation,
+      })
+    }
+
     try {
       const res = await fetch('/api/v1/payments/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planType, gateway, period: defaultPeriod }),
+        body: JSON.stringify({
+          planType,
+          gateway,
+          period: defaultPeriod,
+          ...(consent ? { upgradeConsent: consent } : {}),
+        }),
       })
 
       const json = await res.json()
@@ -176,20 +259,77 @@ export function PlanCTAButton({
     }
   }
 
+  const previewData = typeof preview === 'object' && preview !== null ? preview : null
+  const previewLoading = preview === 'loading'
+
+  function handleCancelDisclosure() {
+    track('upgrade_abandon', { plan_selected: planType, current_plan: currentPlan })
+    setPreview(null)
+  }
+
   return (
     <div className="flex flex-col gap-2">
+      {/* M066 — painel de disclosure do upgrade (3 linhas canônicas + próxima cobrança).
+          Renderizado ANTES da confirmação; o snapshot exibido segue no checkout como consent. */}
+      {previewData && (
+        <div
+          data-testid="upgrade-disclosure-panel"
+          className="rounded-lg border border-[rgba(240,185,11,.3)] bg-[rgba(240,185,11,.06)] p-3 text-left text-xs text-[#C0C4CE] flex flex-col gap-1.5"
+        >
+          <p>
+            <span className="font-semibold text-[#EAECEF]">Você ganha agora:</span>{' '}
+            recursos do plano {previewData.targetPlan === 'LENDA' ? 'Lenda' : 'Craque'} + FS${' '}
+            {previewData.bonusDifferentialFs.toLocaleString('pt-BR')} de bônus em{' '}
+            {formatDatePtBR(previewData.bonusCreditDate)}.
+          </p>
+          <p>
+            <span className="font-semibold text-[#EAECEF]">Você paga hoje:</span>{' '}
+            {formatBRL(previewData.amountDueTodayCents)}.
+          </p>
+          <p data-testid="upgrade-disclosure-compensation">
+            <span className="font-semibold text-[#EAECEF]">Dias não usados do plano atual:</span>{' '}
+            {previewData.compensation === 'PARTIAL_REFUND' &&
+              `serão estornados (${formatBRL(previewData.residualCents)}) no seu meio de pagamento em até 7 dias úteis.`}
+            {previewData.compensation === 'FS_CREDIT' &&
+              `viram FS$ ${previewData.fsCredit.toLocaleString('pt-BR')} de bônus promocional de migração, creditados na ativação do novo plano.`}
+            {previewData.compensation === 'NONE' && 'não há saldo de dias a compensar.'}
+          </p>
+          <p className="text-[#929AA5]">
+            Próxima cobrança: {formatBRL(previewData.amountDueTodayCents)} em{' '}
+            {formatDatePtBR(previewData.nextChargeDate)}. Cancele quando quiser.
+          </p>
+        </div>
+      )}
+
       <Button
         type="button"
         variant="plan"
         size="md"
         fullWidth
         onClick={handleUpgradeClick}
-        disabled={loading || gatewaysResolving || noGatewayAvailable}
+        disabled={loading || previewLoading || gatewaysResolving || noGatewayAvailable}
         className={className}
         {...props}
       >
-        {loading ? 'Abrindo pagamento...' : label}
+        {loading
+          ? 'Abrindo pagamento...'
+          : previewLoading
+            ? 'Carregando detalhes...'
+            : previewData
+              ? 'Confirmar upgrade'
+              : label}
       </Button>
+
+      {previewData && !loading && (
+        <button
+          type="button"
+          data-testid="upgrade-disclosure-cancel"
+          onClick={handleCancelDisclosure}
+          className="text-xs text-[#929AA5] hover:text-[#C0C4CE] underline underline-offset-2"
+        >
+          Cancelar
+        </button>
+      )}
 
       {noGatewayAvailable && (
         <p
