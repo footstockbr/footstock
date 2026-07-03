@@ -41,7 +41,7 @@ export const PENDING_PAYMENT_MESSAGE =
 export const NO_GATEWAY_MESSAGE =
   'Pagamento temporariamente indisponível. Tente novamente em alguns minutos.'
 
-function resolveBlockMessage(code: string | undefined, fallback: string | undefined): string {
+export function resolveBlockMessage(code: string | undefined, fallback: string | undefined): string {
   if (code && CHECKOUT_BLOCK_MESSAGES[code]) return CHECKOUT_BLOCK_MESSAGES[code]
   return fallback ?? 'Não foi possível iniciar o pagamento. Tente novamente.'
 }
