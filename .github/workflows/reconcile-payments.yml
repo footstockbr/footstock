@@ -6,13 +6,14 @@ name: Reconcile Payments (cron)
 # PENDING/PAST_DUE + recorrentes lapsadas e reconcilia pagamentos aprovados
 # direto na API do MP (idempotente por gatewayTransactionId).
 #
-# Cadencia */5: limita a janela "pagou mas nao ativou" a ~5-10 min (schedules do
-# GitHub podem atrasar alguns minutos sob carga — tolerado; a alternativa Railway
-# cron exigiria service dedicado). workflow_dispatch permite disparo manual.
+# PRIMARIO: service Railway `reconcile-cron` (*/5, alpine+curl, restart NEVER) —
+# o schedule do GitHub para crons frequentes provou-se atrasado/nao-confiavel
+# (nenhum disparo em 1h+ apos criacao, 2026-07-03). Este workflow e o BACKUP:
+# varredura diaria PROFUNDA (days=30, limit=200) + workflow_dispatch manual.
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '17 3 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -37,7 +38,7 @@ jobs:
           fi
           response=$(curl -fsS --max-time 120 \
             -H "Authorization: Bearer ${CRON_SECRET}" \
-            "https://www.footstock.com.br/api/cron/reconcile-payments?limit=50")
+            "https://www.footstock.com.br/api/cron/reconcile-payments?limit=200&days=30")
           echo "${response}"
           # Falha visivel quando o sweep reporta success:false (failures[] preenchido).
           echo "${response}" | jq -e '.success == true' > /dev/null || {
