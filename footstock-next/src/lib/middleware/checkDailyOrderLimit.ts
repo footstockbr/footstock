@@ -144,6 +144,19 @@ export async function reserveDailyOrderLimit(
     }
   }
 
+  // SCHEDULED NÃO consome a quota diária: a contagem canônica (_getDailyCount usa type != SCHEDULED)
+  // exclui ordens agendadas. Reservar aqui criaria uma ASSIMETRIA — a ordem agendada gastaria a cota
+  // do dia de criação e poderia bloquear as ordens imediatas do usuário sem nunca aparecer no
+  // contador de leitura. Não incrementar mantém a reserva simétrica com a contagem.
+  if (orderType === 'SCHEDULED') {
+    const used = await _getDailyCount(userId, now)
+    return {
+      block: null,
+      info: { limit, used, remaining: Math.max(0, limit - used), resetAt },
+      reserved: false,
+    }
+  }
+
   const dateStr = todayInBRT(now)
   const redisKey = `order:daily:${userId}:${dateStr}`
   const ttl = secondsUntilMidnightBRT(now)

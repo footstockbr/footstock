@@ -450,10 +450,28 @@ export async function POST(request: NextRequest) {
 
       const refundedSub = await prisma.subscription.findUnique({
         where: { id: event.subscriptionId },
-        select: { userId: true, planType: true, cancelledAt: true },
+        select: { userId: true, planType: true, cancelledAt: true, billingMode: true, gateway: true, gatewaySubscriptionId: true },
       })
 
       if (refundedSub) {
+        // BLOCKER (cobrança-fantasma): um refund/chargeback EXTERNO (dashboard do MP, chargeback)
+        // chega por este webhook SEM ter passado pelo cancelamento do preapproval que a rota /refund
+        // faz. Se a sub é recorrente, o preapproval segue 'authorized' no MP e RE-COBRA todo ciclo
+        // numa conta já rebaixada. Neutralizar TERMINALMENTE aqui (best-effort + [ALERT]: o estorno
+        // externo já é irreversível — não bloquear o processamento do webhook).
+        if (refundedSub.billingMode === 'recurring' && refundedSub.gatewaySubscriptionId) {
+          try {
+            await getGateway(refundedSub.gateway as unknown as GatewayType)
+              .cancelSubscriptionTerminal(refundedSub.gatewaySubscriptionId)
+          } catch (cancelErr) {
+            console.error(
+              `[webhook][ALERT] REFUND_COMPLETED — falha ao cancelar preapproval ${refundedSub.gatewaySubscriptionId} ` +
+              `(gateway ${refundedSub.gateway}) da sub ${event.subscriptionId} — RISCO de cobrança recorrente pós-refund; cancelar manual:`,
+              cancelErr,
+            )
+          }
+        }
+
         // C6 (task-009): só rebaixar para JOGADOR se a subscription reembolsada for de
         // fato a vigente do usuário. Um refund tardio de um plano antigo (ex.: CRAQUE) não
         // pode derrubar um plano superior já ativo (ex.: LENDA).
@@ -715,45 +733,64 @@ export async function POST(request: NextRequest) {
           },
         })
       } else {
-        // ── Renovação de ciclo (assinatura já ACTIVE) ───────────────────────────────
-        // Estende a vigência em um período a partir do fim do ciclo atual (ou de agora, se já venceu).
-        const renewalBase =
-          renewedSub.expiresAt && renewedSub.expiresAt.getTime() > Date.now()
-            ? new Date(renewedSub.expiresAt)
-            : new Date()
-        const newExpiresAt = addSubscriptionPeriod(renewalBase, renewedSub.period)
+        // ── Renovação de ciclo ───────────────────────────────────────────────────────
+        // Valida VALOR antes de renovar (mesma proteção do ciclo inicial e do cron): um
+        // SUBSCRIPTION_RENEWED aprovado mas com valor divergente NÃO estende vigência nem registra
+        // Payment — evita honrar/creditar uma cobrança de valor errado.
+        const renewAmountMatch = Math.abs(Math.round(Number(event.amount)) - Number(renewedSub.amount)) <= 1
+        if (!renewAmountMatch) {
+          console.error(
+            `[webhook][ALERT] SUBSCRIPTION_RENEWED com valor divergente — NÃO renovado. ` +
+            `subscriptionId=${event.subscriptionId} subscription.amount=${renewedSub.amount} webhook.amount=${event.amount}`
+          )
+          await webhookAuditService.logWebhook({
+            gateway: gatewayEnum, eventType: event.eventType,
+            transactionId: event.transactionId, subscriptionId: event.subscriptionId,
+            status: 'REJECTED', hmacValid: true, ipAddress: originalIp,
+            errorMessage: `Valor divergente (renovação): esperado=${renewedSub.amount} recebido=${event.amount}`,
+          })
+          return NextResponse.json({ received: true }, { status: 200 })
+        }
 
-        await prisma.subscription.update({
-          where: { id: event.subscriptionId },
-          data: {
-            status: 'ACTIVE',
-            gatewayStatus: 'authorized',
-            currentPeriodStart: new Date(),
-            currentPeriodEnd: newExpiresAt,
-            expiresAt: newExpiresAt,
-          },
+        // Ponto ÚNICO compartilhado com o cron (applyRenewalCycle): reivindica o pagamento via
+        // Payment.create único (serializa webhook x cron x replay — SEM dupla extensão), recalcula a
+        // vigência FRESCA na transação, estende com CAS anti-ressurreição (notIn CANCELLED/
+        // CANCELLATION_LOCK) e religa o assinante SUSPENDED. RACE_CANCELLED (sub cancelada na corrida)
+        // e a renovação espúria para sub cancelada caem no mesmo tratamento de captura órfã.
+        const renewalOutcome = await planService.applyRenewalCycle({
+          subscriptionId: event.subscriptionId,
+          userId: renewedSub.userId,
+          paymentId: event.transactionId,
+          amountCents: Number(event.amount),
+          gateway: gatewayEnum,
+          period: renewedSub.period,
         })
 
-        await prisma.payment.upsert({
-          where: { gatewayTransactionId: event.transactionId },
-          update: { status: 'PAID', processedAt: new Date() },
-          create: {
-            subscriptionId: event.subscriptionId,
-            amount: event.amount,
-            gateway: gatewayEnum,
-            gatewayTransactionId: event.transactionId,
-            status: 'PAID',
-            userId: renewedSub.userId,
-            processedAt: new Date(),
-          },
-        })
+        if (renewalOutcome === 'RACE_CANCELLED') {
+          // Renovação para assinatura cancelada pelo usuário: NÃO ressuscitar. O gateway pode ter
+          // capturado o valor -> [ALERT] para conciliação/estorno manual; audita e sai 200.
+          console.error(
+            `[webhook][ALERT] SUBSCRIPTION_RENEWED para assinatura CANCELADA — NÃO ressuscitada ` +
+            `(possível captura órfã, conciliar/estornar). subscriptionId=${event.subscriptionId} status=${String(renewedSub.status)}`
+          )
+          await webhookAuditService.logWebhook({
+            gateway: gatewayEnum, eventType: event.eventType,
+            transactionId: event.transactionId, subscriptionId: event.subscriptionId,
+            status: 'REJECTED', hmacValid: true, ipAddress: originalIp,
+            errorMessage: `Renovação de assinatura cancelada (${String(renewedSub.status)}) — não ressuscitada`,
+          })
+          return NextResponse.json({ received: true }, { status: 200 })
+        }
 
-        // Analytics best-effort: renovação (não é primeira compra).
-        mixpanelServer.trackPaymentCompleted(renewedSub.userId, {
-          plan: renewedSub.planType as 'CRAQUE' | 'LENDA',
-          gateway: gatewayType,
-          is_first_payment: false,
-        })
+        // RENEWED (aplicou agora) ou ALREADY_RECONCILED (cron/replay já aplicou — idempotente).
+        // Analytics best-effort só quando ESTE caminho aplicou de fato (evita duplicar no replay).
+        if (renewalOutcome === 'RENEWED') {
+          mixpanelServer.trackPaymentCompleted(renewedSub.userId, {
+            plan: renewedSub.planType as 'CRAQUE' | 'LENDA',
+            gateway: gatewayType,
+            is_first_payment: false,
+          })
+        }
       }
     } else if (event.eventType === 'SUBSCRIPTION_PAYMENT_FAILED') {
       // task-007: falha de cobrança no ciclo recorrente. Registrar Payment FAILED (idempotente) +

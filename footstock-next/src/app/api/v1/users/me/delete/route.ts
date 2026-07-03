@@ -40,6 +40,16 @@ export async function DELETE(request: NextRequest) {
       // Sem assinatura ativa — não bloquear exclusão
     }
 
+    // LGPD: neutralizar TERMINALMENTE qualquer preapproval recorrente no gateway ANTES de anonimizar.
+    // cancelSubscription só marca o lock local (e o gateway fica pausado, reversível) — um preapproval
+    // pausado poderia ser retomado e cobrar uma conta anonimizada (cobrança-fantasma). Best-effort:
+    // já loga [ALERT] em falha; não bloquear o direito ao esquecimento.
+    try {
+      await subscriptionService.terminateGatewaySubscriptions(auth.user.id)
+    } catch {
+      // best-effort — falhas por assinatura já foram logadas com [ALERT] dentro do método
+    }
+
     // Anonimizar dados conforme LGPD Art. 18
     const result = await deleteAccount(auth.user.id, reason)
 

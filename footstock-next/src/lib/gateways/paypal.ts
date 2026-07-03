@@ -542,6 +542,24 @@ export class PayPalGateway implements IGateway {
     }
   }
 
+  async cancelSubscriptionTerminal(gatewaySubscriptionId: string): Promise<void> {
+    if (!gatewaySubscriptionId) return
+    // Cancelamento TERMINAL (irreversível) via POST /cancel — distinto do /suspend reversível de
+    // cancelAutoRenewal. Usado no supersede de checkout abandonado / exclusão de conta.
+    const accessToken = await this.getAccessToken()
+    const res = await fetch(`${this.apiBase}/v1/billing/subscriptions/${gatewaySubscriptionId}/cancel`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Checkout abandonado / supersede (FootStock)' }),
+      signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
+    })
+    // 204 = cancelada; 404/422 (já cancelada/terminal) são idempotentes -> no-op.
+    if (!res.ok && res.status !== 422 && res.status !== 404) {
+      const body = await res.text().catch(() => '')
+      throw new GatewayError(`[PAYPAL] cancelSubscriptionTerminal HTTP ${res.status}: ${body.substring(0, 160)}`, 'PAYMENT_050', 503)
+    }
+  }
+
   async refundPayment(gatewayTransactionId: string): Promise<import('./IGateway').RefundResult> {
     // Integração de estorno PayPal pendente. Falha terminal explícita para que o
     // chamador NÃO rebaixe o plano achando que estornou.

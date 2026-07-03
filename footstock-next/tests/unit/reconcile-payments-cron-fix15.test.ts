@@ -19,8 +19,12 @@ jest.mock('@/lib/prisma', () => ({
 }))
 
 const reconcileMock = jest.fn()
+const renewalMock = jest.fn()
 jest.mock('@/lib/services/PlanService', () => ({
-  planService: { reconcileApprovedPayment: (...a: unknown[]) => reconcileMock(...a) },
+  planService: {
+    reconcileApprovedPayment: (...a: unknown[]) => reconcileMock(...a),
+    reconcileRenewalPayment: (...a: unknown[]) => renewalMock(...a),
+  },
 }))
 
 const searchApprovedMock = jest.fn()
@@ -44,6 +48,8 @@ beforeEach(() => {
   findManyMock.mockResolvedValue([])
   searchApprovedMock.mockResolvedValue(null)
   reconcileMock.mockResolvedValue({ ok: true, action: 'ACTIVATED', subscriptionId: 's', userId: 'u' })
+  // item 4b: sweep de renovação — benigno por default (não polui os buckets do sweep de PENDING).
+  renewalMock.mockResolvedValue({ ok: true, action: 'NO_APPROVED_PAYMENT', subscriptionId: 's' })
 })
 
 describe('FIX-15 — cron reconcile-payments: auth', () => {

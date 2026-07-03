@@ -79,3 +79,51 @@ describe('FIX-08 — refund self-service bloqueia sem liquidar', () => {
     expect(mockLiquidate).toHaveBeenCalledWith('user-lenda', 'sub-1', 'REFUND_COOLING_OFF')
   })
 })
+
+/**
+ * #3 CRÍTICO (cobrança-fantasma): refund de assinatura RECORRENTE precisa cancelar TERMINALMENTE o
+ * preapproval no gateway antes de estornar/rebaixar — senão a renovação segue cobrando uma conta
+ * já rebaixada para JOGADOR. Fail-closed: se o gateway não confirmar o cancelamento, o refund aborta.
+ */
+describe('#3 refund — cancela preapproval recorrente (anti cobrança-fantasma)', () => {
+  function setRecurringSub() {
+    const { prisma } = require('@/lib/prisma')
+    prisma.subscription.findFirst.mockResolvedValue({
+      id: 'sub-r', planType: 'CRAQUE', status: 'ACTIVE', amount: 100,
+      startsAt: new Date(), expiresAt: new Date(Date.now() + 30 * 86_400_000),
+      cancelledAt: null, cancellationLockExpiresAt: null,
+      billingMode: 'recurring', gateway: 'MERCADO_PAGO', gatewaySubscriptionId: 'preapp-r',
+    })
+    mockLiquidate.mockResolvedValue({ found: 0, liquidated: 0, failed: 0, remaining: 0, cleared: true })
+  }
+
+  it('fail-closed: preapproval não cancelado → NÃO estorna nem rebaixa (não rebaixa com cobrança viva)', async () => {
+    setRecurringSub()
+    const { prisma } = require('@/lib/prisma')
+    const cancelTerminal = jest.fn().mockRejectedValue(new Error('gateway down'))
+    mockGetGateway.mockReturnValue({ cancelSubscriptionTerminal: cancelTerminal, refundPayment: jest.fn() })
+
+    const res = await callRefund()
+
+    expect(cancelTerminal).toHaveBeenCalledWith('preapp-r')
+    expect(res.status).toBe(500) // errors.server — aborta antes de estornar/rebaixar
+    expect(prisma.payment.findFirst).not.toHaveBeenCalled()
+    expect(prisma.$transaction).not.toHaveBeenCalled()
+  })
+
+  it('cancela o preapproval ANTES de olhar o pagamento (ordem: matar cobrança recorrente primeiro)', async () => {
+    setRecurringSub()
+    const { prisma } = require('@/lib/prisma')
+    const cancelTerminal = jest.fn().mockResolvedValue(undefined)
+    mockGetGateway.mockReturnValue({ cancelSubscriptionTerminal: cancelTerminal, refundPayment: jest.fn() })
+    prisma.payment.findFirst.mockResolvedValue(null) // sem Payment PAID + amount>0 → bloqueia depois
+
+    await callRefund()
+
+    expect(cancelTerminal).toHaveBeenCalledWith('preapp-r')
+    // preapproval cancelado ANTES do lookup de pagamento
+    expect(cancelTerminal.mock.invocationCallOrder[0]).toBeLessThan(
+      prisma.payment.findFirst.mock.invocationCallOrder[0],
+    )
+  })
+})

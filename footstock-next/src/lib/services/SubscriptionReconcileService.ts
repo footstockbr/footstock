@@ -99,6 +99,55 @@ export class SubscriptionReconcileService {
         const statusDiverged = canonical !== sub.status
         const auditDiverged = rawStatus !== sub.gatewayStatus
 
+        // PENDING → ACTIVE exige ENTITLEMENT (User.planType + Payment), que SÓ o payment-reconcile
+        // (reconcile-payments -> reconcileApprovedPayment/upgradeUser) aplica. Um bare-flip de status
+        // aqui deixaria a sub ACTIVE SEM plano e SEM Payment: o usuário paga e fica sem entitlement, e
+        // o checkout passa a bloquear por assinatura ACTIVE (lockout). Defere a ativação de PENDING
+        // ao payment-reconcile, que ativa corretamente (upgradeUser + Payment + planType).
+        if (sub.status === 'PENDING' && canonical === 'ACTIVE') {
+          result.details.push({ subscriptionId: sub.id, action: 'SKIP_PENDING_ACTIVATION_DEFER_PAYMENT_RECONCILE' })
+          continue
+        }
+
+        // CANCELLATION_LOCK pausa o preapproval no gateway DE PROPÓSITO (janela reversível de
+        // cancelamento). Ler 'paused' (canonical SUSPENDED) é o estado CONSISTENTE do lock, NÃO uma
+        // divergência — rebaixar CANCELLATION_LOCK -> SUSPENDED perderia a janela/expiração do lock
+        // e o caminho de reversão (revert). Só reconciliamos o lock quando o gateway está TERMINAL
+        // ('cancelled' -> CANCELLED). A auditoria (gatewayStatus) ainda é refrescada.
+        if (sub.status === 'CANCELLATION_LOCK' && canonical !== 'CANCELLED') {
+          // Gateway 'authorized' (auto-renew VIVO) durante o lock = divergência PERIGOSA: o
+          // preapproval poderia COBRAR dentro da janela de cancelamento (cobrança-fantasma). O lock
+          // exige o auto-renew PAUSADO — re-pausar (best-effort) + [ALERT]. ('paused' já é consistente.)
+          if (rawStatus === 'authorized') {
+            try {
+              const gwRepause = getGateway(GatewayType.MERCADO_PAGO) as unknown as {
+                cancelAutoRenewal(id: string): Promise<void>
+              }
+              await gwRepause.cancelAutoRenewal(sub.gatewaySubscriptionId!)
+              result.details.push({ subscriptionId: sub.id, action: 'REPAUSED_CANCELLATION_LOCK_authorized' })
+            } catch (repErr) {
+              console.error(
+                `[reconcile][ALERT] CANCELLATION_LOCK ${sub.id} com gateway AUTHORIZED — re-pause falhou ` +
+                `(auto-renew vivo na janela de cancelamento, risco de cobrança):`, repErr,
+              )
+              result.details.push({ subscriptionId: sub.id, action: 'SKIP_CANCELLATION_LOCK_authorized_REPAUSE_FAILED' })
+            }
+            continue
+          }
+          if (auditDiverged) {
+            // CAS: só refresca o gatewayStatus se AINDA está em CANCELLATION_LOCK. Sem o guard de
+            // status, um reconcile atrasado poderia gravar um gatewayStatus stale ('paused') numa
+            // sub que já reverteu para ACTIVE — fazendo um cancelamento futuro tratar 'paused' como
+            // no-op e NÃO pausar um gateway realmente autorizado.
+            await prisma.subscription.updateMany({
+              where: { id: sub.id, status: 'CANCELLATION_LOCK' },
+              data: { gatewayStatus: rawStatus },
+            })
+          }
+          result.details.push({ subscriptionId: sub.id, action: `SKIP_CANCELLATION_LOCK_${rawStatus}` })
+          continue
+        }
+
         if (!statusDiverged) {
           // Status em sincronia. Atualiza so a auditoria (gatewayStatus) quando o bruto mudou.
           if (auditDiverged) {
@@ -113,15 +162,25 @@ export class SubscriptionReconcileService {
           continue
         }
 
+        // 'cancelled' no gateway = CANCEL-AT-PERIOD-END — MESMA semântica do webhook
+        // SUBSCRIPTION_CANCELLED (route). NÃO terminar a sub aqui: saltar direto para status=CANCELLED
+        // bypassaria os crons de expiração/downgrade (subscription-expiry) que resetam User.planType,
+        // encalhando o dono num tier PAGO sem assinatura viva (benefit-leak + bloqueio de
+        // re-assinatura do mesmo tier). Marca a intenção (cancelAtPeriodEnd) e deixa o lifecycle
+        // resolver no vencimento. EXCEÇÃO: CANCELLATION_LOCK + cancelled é o fim natural do lock -> terminal.
+        const applyCancelAtPeriodEnd = canonical === 'CANCELLED' && sub.status !== 'CANCELLATION_LOCK'
         // Divergencia real de status. CAS por updateMany (where inclui o status lido): se outro
         // caminho (webhook, cancelamento) mudou o estado concorrentemente, nao sobrescrevemos.
         const patch: {
-          status: string
+          status?: string
           gatewayStatus: string
           cancelledAt?: Date
-        } = { status: canonical, gatewayStatus: rawStatus }
-        if (canonical === 'CANCELLED') {
-          // Assinatura encerrada no gateway: registra o instante do cancelamento espelhado.
+          cancelAtPeriodEnd?: boolean
+        } = applyCancelAtPeriodEnd
+          ? { gatewayStatus: rawStatus, cancelAtPeriodEnd: true }
+          : { status: canonical, gatewayStatus: rawStatus }
+        if (canonical === 'CANCELLED' && !applyCancelAtPeriodEnd) {
+          // Fim natural do CANCELLATION_LOCK: registra o instante do cancelamento espelhado.
           patch.cancelledAt = now
         }
 
@@ -138,7 +197,9 @@ export class SubscriptionReconcileService {
 
         result.details.push({
           subscriptionId: sub.id,
-          action: `RECONCILED_${sub.status}_TO_${canonical}`,
+          action: applyCancelAtPeriodEnd
+            ? `RECONCILED_${sub.status}_CANCEL_AT_PERIOD_END`
+            : `RECONCILED_${sub.status}_TO_${canonical}`,
         })
         result.processed++
       } catch (err) {

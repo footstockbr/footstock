@@ -10,7 +10,6 @@ import { subscriptionService } from './SubscriptionService'
 import {
   calcSubscriptionAmount,
   isWithinCoolingOff,
-  canUpgrade,
   calcUpgradeBonusAmount,
   type SubscriptionForLogic,
 } from './plan-logic'
@@ -93,6 +92,18 @@ function calcExpiresAt(startsAt: Date, period: 'monthly' | 'yearly'): Date {
   return expires
 }
 
+/**
+ * Sentinela interno de applyRenewalCycle: a assinatura saiu do estado recuperável (CANCELLED/
+ * CANCELLATION_LOCK ou CAS count 0) durante a transação. Lançado DENTRO da $transaction para forçar
+ * ROLLBACK (não credita Payment nem estende), traduzido para 'RACE_CANCELLED' pelo chamador.
+ */
+class RenewalRaceError extends Error {
+  constructor() {
+    super('RENEWAL_RACE_CANCELLED')
+    this.name = 'RenewalRaceError'
+  }
+}
+
 export class PlanService extends BaseService {
   constructor() {
     super()
@@ -119,11 +130,21 @@ export class PlanService extends BaseService {
       })
     }
 
-    // Player sem planType (estado transitório pos-registro) trata como JOGADOR para canUpgrade.
+    // Player sem planType (estado transitório pos-registro) trata como JOGADOR.
     const effectiveCurrentPlan = (user?.planType ?? 'JOGADOR') as PlanType
-    if (user && !canUpgrade(effectiveCurrentPlan, dto.planType)) {
-      // Permite downgrade via checkout apenas se a assinatura atual está em
-      // CANCELLATION_LOCK e o destino é realmente um plano inferior.
+    // BUG CRÍTICO corrigido: o guard antigo usava `!canUpgrade(...)`, que é TRUE para o MESMO tier
+    // (canUpgrade(CRAQUE,CRAQUE)=false). Assim, RENOVAR/RE-ASSINAR o próprio plano após ele expirar
+    // (planType ainda CRAQUE/LENDA, mas SEM assinatura ACTIVE — janela de graça) caía em PAYMENT_054
+    // "não é possível fazer downgrade" (copy catastroficamente errada) e o usuário NÃO conseguia
+    // pagar para restaurar o acesso — bloqueio da venda no momento em que ele mais quer pagar.
+    // Agora bloqueamos APENAS downgrade REAL (destino estritamente INFERIOR ao plano vigente).
+    // Mesmo-tier (renovação) e upgrade seguem: existingActive (ORDER_081) + recuperação de PENDING
+    // a jusante tratam a duplicidade quando há assinatura viva.
+    const isRealDowngrade =
+      user != null && PLAN_HIERARCHY[dto.planType] < PLAN_HIERARCHY[effectiveCurrentPlan]
+    if (isRealDowngrade) {
+      // Downgrade via checkout só é permitido a partir de CANCELLATION_LOCK do plano atual
+      // para um destino realmente inferior.
       const lockedSub = await prisma.subscription.findFirst({
         where: {
           userId,
@@ -170,29 +191,78 @@ export class PlanService extends BaseService {
     const openPending = await prisma.subscription.findFirst({
       where: { userId, planType: dto.planType as never, status: 'PENDING' },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, period: true, createdAt: true, billingMode: true, gatewaySubscriptionId: true },
+      select: { id: true, period: true, createdAt: true, billingMode: true, gatewaySubscriptionId: true, gateway: true },
     })
     if (openPending) {
       const isFresh = Date.now() - openPending.createdAt.getTime() < 5 * 60 * 1000
       const samePeriod = openPending.period === (dto.period.toUpperCase() as never)
-      // PENDING recorrente que JÁ criou um preapproval real no gateway: cancelar/recriar
-      // localmente orfanaria o preapproval (cobrança-fantasma). Nunca criar um 2º.
       const holdsGatewaySub =
         openPending.billingMode === 'recurring' && openPending.gatewaySubscriptionId != null
 
-      // (a) Idempotência anti dupla-cobrança: PENDING fresco, mesmo período, SEM preapproval
-      //     real → reutiliza sem chamar o gateway de novo (double-click / retry rápido).
-      // (b) PENDING recorrente com preapproval real → reutiliza (não cria 2º, não orfana).
-      // Ambos devolvem o aviso de pendência (UX distinta do erro), não um bloqueio.
-      if ((isFresh && samePeriod && !holdsGatewaySub) || holdsGatewaySub) {
+      // (a) REUSE — PENDING FRESCO do MESMO período: o usuário pode estar concluindo a autorização
+      //     agora (double-click / retry / lag de webhook). Vale para one-time E recorrente:
+      //     reutilizar evita 2º preapproval e devolve o mesmo redirect de pendência (idempotência
+      //     anti dupla-cobrança). NÃO é bloqueio — é a mesma tentativa.
+      if (isFresh && samePeriod) {
         const redirectUrl = `${env.NEXT_PUBLIC_APP_URL}/planos?payment=pending&sub=${openPending.id}`
         return { redirectUrl, subscriptionId: openPending.id }
       }
 
-      // (c) PENDING órfão one-time (abandonado: velho OU de período diferente) → supersede e
-      //     segue para um checkout fresco. A preferência one-time abandonada no gateway expira
-      //     sozinha e NUNCA cobra sem ação do usuário, então não há preapproval a orfanar. O
-      //     guard status:'PENDING' no updateMany garante CAS (uma ativação concorrente vence).
+      // (b) SUPERSEDE — PENDING ABANDONADO (stale) OU de período diferente. O usuário NÃO concluiu
+      //     e TEM que poder tentar de novo. (BUG CRÍTICO corrigido aqui: o antigo `|| holdsGatewaySub`
+      //     reutilizava INCONDICIONALMENTE, então um PENDING recorrente abandonado — com preapproval
+      //     no gateway — bloqueava a assinatura PARA SEMPRE, matando a venda.) Recorrente com
+      //     preapproval real exige NEUTRALIZAR o preapproval no gateway ANTES de liberar o lock
+      //     único M060, senão o preapproval fica órfão e pode cobrar (cobrança-fantasma).
+      if (holdsGatewaySub && openPending.gatewaySubscriptionId) {
+        const oldGateway = getGateway(resolveGatewayType(openPending.gateway))
+
+        // Anti-double-charge: se o preapproval FOI autorizado (webhook atrasado), o usuário JÁ
+        // pagou/tem o plano — NUNCA cancelar/superseder um autorizado. Devolve o redirect de
+        // pendência (transitório: webhook/reconcile ativa em ACTIVE). Só 'authorized' bloqueia o
+        // supersede; 'pending'/'cancelled' seguem para o cancelamento terminal.
+        let gatewaySubStatus: string | null = null
+        try {
+          const q = oldGateway as unknown as { getSubscriptionStatus?: (id: string) => Promise<{ status: string | null }> }
+          gatewaySubStatus = q.getSubscriptionStatus
+            ? (await q.getSubscriptionStatus(openPending.gatewaySubscriptionId)).status
+            : null
+        } catch {
+          // FALHA transitória ao consultar o status: NÃO superseder às cegas. Se o preapproval
+          // estiver 'authorized' (já pago) e cancelássemos, geraríamos DUPLA COBRANÇA. Fail-closed:
+          // 503 retry — o usuário tenta de novo em instantes, quando o gateway responder o status.
+          throw Object.assign(
+            new Error('Não foi possível verificar sua tentativa anterior no provedor de pagamento. Tente novamente em instantes.'),
+            { code: 'PAYMENT_SUPERSEDE_RETRY', statusCode: 503 },
+          )
+        }
+        if (gatewaySubStatus === 'authorized') {
+          const redirectUrl = `${env.NEXT_PUBLIC_APP_URL}/planos?payment=pending&sub=${openPending.id}`
+          return { redirectUrl, subscriptionId: openPending.id }
+        }
+
+        // Preapproval DEFINITIVAMENTE MORTO ('cancelled' OU 'not_found'/404): não há nada vivo a
+        // cancelar — ir DIRETO ao supersede local. Sem este short-circuit, um preapproval morto faria
+        // getSubscriptionStatus/cancelSubscriptionTerminal falhar e devolver 503 em TODA tentativa,
+        // sem nunca liberar o lock único M060 = bloqueio PERMANENTE da re-assinatura (lockout).
+        if (gatewaySubStatus !== 'cancelled' && gatewaySubStatus !== 'not_found') {
+          // 'pending'/'paused'/indeterminado (preapproval possivelmente VIVO): cancelar TERMINALMENTE
+          // antes de liberar o lock (evita órfão/cobrança-fantasma). cancelSubscriptionTerminal é
+          // idempotente em 404 (cobre o TOCTOU: preapproval morre entre a checagem e o cancel). Falha
+          // real = FAIL-CLOSED 503 retry — melhor bloqueio transitório que preapproval órfão cobrando.
+          try {
+            await oldGateway.cancelSubscriptionTerminal(openPending.gatewaySubscriptionId)
+          } catch {
+            throw Object.assign(
+              new Error('Não foi possível liberar sua tentativa anterior no provedor de pagamento. Tente novamente em instantes.'),
+              { code: 'PAYMENT_SUPERSEDE_RETRY', statusCode: 503 },
+            )
+          }
+        }
+      }
+
+      // Supersede local (CAS: guard status:'PENDING' — uma ativação concorrente vence e não é
+      // sobrescrita). Libera o lock M060 e segue para um checkout fresco.
       await prisma.subscription.updateMany({
         where: { id: openPending.id, userId, status: 'PENDING' },
         data: { status: 'CANCELLED', cancelledAt: new Date() },
@@ -291,15 +361,31 @@ export class PlanService extends BaseService {
         }
         const subResult = await gateway.createSubscription(subInput)
         // Persistir identidade recorrente do gateway + billingMode (schema M061 / task 002).
-        await prisma.subscription.update({
-          where: { id: subscription.id },
-          data: {
-            billingMode:           'recurring',
-            gatewaySubscriptionId: subResult.gatewaySubscriptionId,
-            gatewayPlanId:         subResult.gatewayPlanId ?? null,
-            gatewayStatus:         subResult.status ?? null,
-          },
-        })
+        // Se a persistência falhar APÓS o preapproval já ter sido criado no gateway, ele fica
+        // ÓRFÃO (existe no gateway, sem espelho local — holdsGatewaySub seria falso e o supersede
+        // futuro só cancelaria localmente, deixando o preapproval vivo e cobrável). Compensar
+        // cancelando-o TERMINALMENTE antes de propagar o erro (best-effort + [ALERT]).
+        try {
+          await prisma.subscription.update({
+            where: { id: subscription.id },
+            data: {
+              billingMode:           'recurring',
+              gatewaySubscriptionId: subResult.gatewaySubscriptionId,
+              gatewayPlanId:         subResult.gatewayPlanId ?? null,
+              gatewayStatus:         subResult.status ?? null,
+            },
+          })
+        } catch (persistErr) {
+          try {
+            await gateway.cancelSubscriptionTerminal(subResult.gatewaySubscriptionId)
+          } catch (compErr) {
+            console.error(
+              `[ALERT][createCheckout] preapproval ${subResult.gatewaySubscriptionId} criado no gateway ` +
+              `mas NÃO persistido E NÃO cancelado — ÓRFÃO (cancelar manualmente):`, compErr,
+            )
+          }
+          throw persistErr
+        }
         return { redirectUrl: subResult.redirectUrl, subscriptionId: subscription.id }
       } catch (err) {
         // Mesma politica do one-time (FU-023-4): propagar code/statusCode ORIGINAL do gateway
@@ -463,6 +549,9 @@ export class PlanService extends BaseService {
     // Estes valores são preenchidos dentro da transação (leitura consistente).
     let scheduledBonusAmount = upgradeBonusAmount
     let bonusScheduleDate = sevenDaysFromNow
+    // Preapprovals recorrentes das assinaturas anteriores SUPERSEDED por este upgrade — coletados
+    // dentro da tx, cancelados TERMINALMENTE no gateway APÓS o commit (gateway I/O nunca dentro da tx).
+    const priorRecurringToCancel: Array<{ gateway: SubscriptionGateway; gatewaySubscriptionId: string }> = []
 
     await prisma.$transaction(async (tx) => {
       // Assinaturas abertas anteriores deste usuário (qualquer plano), exceto a que está sendo ativada.
@@ -478,10 +567,18 @@ export class PlanService extends BaseService {
           bonusAmount: true,
           bonusScheduledAt: true,
           bonusCreditedAt: true,
+          billingMode: true,
+          gateway: true,
+          gatewaySubscriptionId: true,
         },
       })
 
       for (const prior of priorOpen) {
+        // Preapproval recorrente anterior: registrar para cancelamento TERMINAL no gateway pós-tx —
+        // senão o auto-renew do plano trocado continua cobrando (double-charge / captura órfã).
+        if (prior.billingMode === 'recurring' && prior.gatewaySubscriptionId) {
+          priorRecurringToCancel.push({ gateway: prior.gateway, gatewaySubscriptionId: prior.gatewaySubscriptionId })
+        }
         // Preservar bônus pendente (agendado e ainda não creditado): rolar para a nova assinatura.
         // bonus-credit só credita status=ACTIVE, então sem isto o bônus da assinatura anterior
         // seria perdido (ex.: upgrade CRAQUE->LENDA cairia de 23000 para 20000).
@@ -540,7 +637,32 @@ export class PlanService extends BaseService {
         where: { id: userId },
         data:  { planType: subscription.planType },
       })
+      // #5 CRÍTICO: religar o usuário suspenso por LAPSO DE EXPIRAÇÃO ao ativar um pagamento.
+      // Sem isto, um assinante que caiu para status=SUSPENDED (subscription-expiry) e depois PAGOU
+      // ficava SUSPENDED para sempre (sem login) mesmo com a assinatura ACTIVE. Escopo estrito em
+      // status:'SUSPENDED' — NÃO toca BANNED (ban admin) nem nenhum outro estado.
+      await tx.user.updateMany({
+        where: { id: userId, status: 'SUSPENDED' },
+        data:  { status: 'ACTIVE' },
+      })
     })
+
+    // Neutralizar TERMINALMENTE os preapprovals recorrentes anteriores superseded por este upgrade
+    // (gateway I/O FORA da tx, só após o commit da ativação). Sem isto, o auto-renew do plano trocado
+    // continua cobrando (double-charge). Best-effort + [ALERT]: não bloquear a ativação já paga; uma
+    // cobrança residual do preapproval antigo é barrada pelo guard anti-ressurreição (applyRenewalCycle
+    // -> RACE_CANCELLED, pois a sub anterior já está CANCELLED) e fica sinalizada para conciliação.
+    for (const old of priorRecurringToCancel) {
+      try {
+        await getGateway(resolveGatewayType(old.gateway)).cancelSubscriptionTerminal(old.gatewaySubscriptionId)
+      } catch (cancelErr) {
+        console.error(
+          `[PlanService.upgradeUser][ALERT] falha ao cancelar preapproval anterior ${old.gatewaySubscriptionId} ` +
+          `(gateway ${old.gateway}) no upgrade do user ${userId} — RISCO de cobrança do plano trocado; cancelar manual:`,
+          cancelErr,
+        )
+      }
+    }
 
     const hasBonusToSchedule = scheduledBonusAmount > 0
 
@@ -673,6 +795,163 @@ export class PlanService extends BaseService {
       action: upgradeResult === 'ALREADY_ACTIVE' ? 'ALREADY_ACTIVE' : 'ACTIVATED',
       subscriptionId,
       userId: subscription.userId,
+    }
+  }
+
+  /** Avança uma data em um período (MONTHLY -> +1 mês, YEARLY -> +1 ano). Espelha o webhook. */
+  private addSubscriptionPeriod(from: Date, period: 'MONTHLY' | 'YEARLY'): Date {
+    const d = new Date(from)
+    if (period === 'YEARLY') d.setFullYear(d.getFullYear() + 1)
+    else d.setMonth(d.getMonth() + 1)
+    return d
+  }
+
+  /**
+   * Reconciliação de CICLO PAGO recorrente (item 4b): recupera uma RENOVAÇÃO cujo webhook
+   * SUBSCRIPTION_RENEWED se perdeu — sem isto, um assinante que pagou pode expirar/suspender porque
+   * o expiresAt local nunca foi estendido. Difere de reconcileApprovedPayment (que ATIVA via
+   * upgradeUser e devolve NOT_ACTIVATABLE para EXPIRED/SUSPENDED): aqui ESTENDEMOS a vigência
+   * espelhando o handler de renovação.
+   *
+   * MONEY-SAFE: só estende com um pagamento APROVADO real no gateway (searchApprovedPayment +
+   * getPaymentDetails: approved + live_mode + valor bate), NUNCA pelo status do preapproval.
+   * IDEMPOTENTE: a renovação é reivindicada via Payment.create (unique gatewayTransactionId) numa
+   * transação — um caminho concorrente (webhook OU outra rodada do cron) colide em P2002 e vira
+   * ALREADY_RECONCILED, sem dupla extensão. NUNCA ressuscita cancelamento do usuário (guard notIn
+   * CANCELLED/CANCELLATION_LOCK, igual ao webhook).
+   */
+  async reconcileRenewalPayment(
+    gateway: GatewayType,
+    subscriptionId: string,
+  ): Promise<
+    | { ok: true; action: 'RENEWED' | 'ALREADY_RECONCILED' | 'NO_APPROVED_PAYMENT'; subscriptionId: string }
+    | { ok: false; reason: string; detail?: string }
+  > {
+    if (gateway !== GatewayType.MERCADO_PAGO) {
+      return { ok: false, reason: 'GATEWAY_NOT_SUPPORTED', detail: String(gateway) }
+    }
+
+    const sub = await prisma.subscription.findUnique({
+      where: { id: subscriptionId },
+      select: {
+        userId: true, amount: true, gateway: true, period: true,
+        status: true, expiresAt: true, billingMode: true, gatewaySubscriptionId: true,
+      },
+    })
+    if (!sub) return { ok: false, reason: 'SUBSCRIPTION_NOT_FOUND', detail: subscriptionId }
+    if (String(sub.gateway) !== 'MERCADO_PAGO') return { ok: false, reason: 'GATEWAY_MISMATCH', detail: String(sub.gateway) }
+    if (sub.billingMode !== 'recurring' || !sub.gatewaySubscriptionId) return { ok: false, reason: 'NOT_RECURRING' }
+    // Só recupera lapso — NUNCA ressuscita cancelamento do usuário nem ativa PENDING (é outro caminho).
+    if (['CANCELLED', 'CANCELLATION_LOCK', 'PENDING'].includes(String(sub.status))) {
+      return { ok: false, reason: 'NOT_RECOVERABLE', detail: String(sub.status) }
+    }
+
+    const gw = getGateway(gateway) as unknown as {
+      searchApprovedPaymentByExternalReference(ref: string): Promise<string | null>
+      getPaymentDetails(id: string): Promise<{ status?: string; externalReference?: string; amount?: number; liveMode?: boolean } | null>
+    }
+
+    // Pagamento APROVADO real no MP para esta assinatura (external_reference = subscriptionId).
+    const paymentId = await gw.searchApprovedPaymentByExternalReference(subscriptionId)
+    if (!paymentId) return { ok: true, action: 'NO_APPROVED_PAYMENT', subscriptionId }
+
+    const details = await gw.getPaymentDetails(paymentId)
+    if (!details) return { ok: false, reason: 'PAYMENT_STATUS_UNRESOLVED' }
+    // Recovery sem usuário no loop: exige confirmação POSITIVA de produção (não só "não é teste").
+    if (details.liveMode !== true) return { ok: false, reason: 'TEST_PAYMENT', detail: `live_mode=${String(details.liveMode)}` }
+    if (details.status !== 'approved') return { ok: false, reason: 'PAYMENT_NOT_APPROVED', detail: details.status ?? 'desconhecido' }
+    if ((details.externalReference ?? '') !== subscriptionId) {
+      return { ok: false, reason: 'EXTERNAL_REFERENCE_MISMATCH', detail: details.externalReference ?? '' }
+    }
+    const paidCents = details.amount ? Math.round(details.amount * 100) : 0
+    if (Math.abs(paidCents - Number(sub.amount)) > 1) {
+      return { ok: false, reason: 'AMOUNT_MISMATCH', detail: `pago=${paidCents} esperado=${Number(sub.amount)}` }
+    }
+
+    // Extensão ATÔMICA + money-safe, COMPARTILHADA com o webhook (serializa webhook x cron x replay
+    // via Payment.create único — sem dupla extensão) e base recalculada FRESCA dentro da transação.
+    const outcome = await this.applyRenewalCycle({
+      subscriptionId,
+      userId: sub.userId,
+      paymentId,
+      amountCents: paidCents,
+      gateway: sub.gateway,
+      period: sub.period as 'MONTHLY' | 'YEARLY',
+    })
+    if (outcome === 'ALREADY_RECONCILED') return { ok: true, action: 'ALREADY_RECONCILED', subscriptionId }
+    if (outcome === 'RACE_CANCELLED') return { ok: false, reason: 'RACE_CANCELLED', detail: subscriptionId }
+
+    console.warn(`[reconcileRenewalPayment] renovação recuperada (webhook perdido): sub=${subscriptionId} payment=${paymentId}`)
+    return { ok: true, action: 'RENEWED', subscriptionId }
+  }
+
+  /**
+   * Aplica UM ciclo de renovação de forma ATÔMICA e IDEMPOTENTE — ponto único compartilhado pelo
+   * webhook SUBSCRIPTION_RENEWED e pela reconciliação server-side (reconcileRenewalPayment).
+   *
+   * Serialização (fix double-extension): a renovação é reivindicada por `Payment.create` (unique
+   * gatewayTransactionId). Quem cria o Payment estende; qualquer caminho concorrente (webhook OU
+   * cron OU replay) colide em P2002 e retorna ALREADY_RECONCILED — NUNCA há duas extensões para o
+   * mesmo pagamento. A base de vigência é relida FRESCA dentro da transação (nunca estende a partir
+   * de um expiresAt já estendido por outro caminho). Se a assinatura sair do estado recuperável
+   * entre a leitura e a escrita (CANCELLED/CANCELLATION_LOCK, ou CAS count 0), a transação faz
+   * ROLLBACK (RACE_CANCELLED): não registra Payment nem estende nem religa — evita ressuscitar
+   * cancelamento e evita creditar um Payment que não honramos.
+   */
+  async applyRenewalCycle(params: {
+    subscriptionId: string
+    userId: string
+    paymentId: string
+    amountCents: number
+    gateway: SubscriptionGateway
+    period: 'MONTHLY' | 'YEARLY'
+  }): Promise<'RENEWED' | 'ALREADY_RECONCILED' | 'RACE_CANCELLED'> {
+    const { subscriptionId, userId, paymentId, amountCents, gateway, period } = params
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.payment.create({
+          data: {
+            subscriptionId,
+            userId,
+            amount: amountCents,
+            gateway,
+            gatewayTransactionId: paymentId,
+            status: 'PAID',
+            processedAt: new Date(),
+          },
+        })
+        // Base FRESCA dentro da tx: nunca estende a partir de uma vigência já estendida por outro caminho.
+        const fresh = await tx.subscription.findUnique({
+          where: { id: subscriptionId },
+          select: { status: true, expiresAt: true },
+        })
+        if (!fresh || fresh.status === 'CANCELLED' || fresh.status === 'CANCELLATION_LOCK') {
+          throw new RenewalRaceError() // rollback: não credita Payment nem estende sub cancelada
+        }
+        const base = fresh.expiresAt && fresh.expiresAt.getTime() > Date.now() ? new Date(fresh.expiresAt) : new Date()
+        const newExpiresAt = this.addSubscriptionPeriod(base, period)
+        const upd = await tx.subscription.updateMany({
+          where: { id: subscriptionId, status: { notIn: ['CANCELLED', 'CANCELLATION_LOCK'] as never[] } },
+          data: {
+            status: 'ACTIVE',
+            gatewayStatus: 'authorized',
+            currentPeriodStart: new Date(),
+            currentPeriodEnd: newExpiresAt,
+            expiresAt: newExpiresAt,
+          },
+        })
+        if (upd.count === 0) throw new RenewalRaceError() // corrida: sub saiu do estado recuperável
+        // Religa o assinante suspenso por lapso (escopo estrito SUSPENDED, não toca BANNED).
+        await tx.user.updateMany({
+          where: { id: userId, status: 'SUSPENDED' },
+          data: { status: 'ACTIVE' },
+        })
+      })
+      return 'RENEWED'
+    } catch (err) {
+      if ((err as { code?: string }).code === 'P2002') return 'ALREADY_RECONCILED'
+      if (err instanceof RenewalRaceError) return 'RACE_CANCELLED'
+      throw err
     }
   }
 

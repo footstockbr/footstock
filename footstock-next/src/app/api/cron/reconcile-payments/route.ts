@@ -112,6 +112,47 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // ── item 4b: reconciliação de CICLO PAGO (renovação com webhook SUBSCRIPTION_RENEWED perdido) ──
+    // Assinaturas recorrentes que LAPSARAM (expiresAt no passado) cujo gateway pode ter cobrado um
+    // novo ciclo sem o webhook chegar — sem isto o assinante pagante expira/suspende. Escaneia por
+    // expiresAt recente (NÃO por createdAt: numa renovação a sub é antiga). reconcileRenewalPayment
+    // só estende com pagamento APROVADO real (money-safe) e é idempotente (P2002 -> already).
+    const now = new Date()
+    const lapsedRecurring = await prisma.subscription.findMany({
+      where: {
+        billingMode: 'recurring',
+        gateway: 'MERCADO_PAGO',
+        gatewaySubscriptionId: { not: null },
+        status: { in: ['ACTIVE', 'EXPIRED', 'SUSPENDED', 'PAST_DUE'] },
+        expiresAt: { lt: now, gte: since },
+      },
+      orderBy: { expiresAt: 'desc' },
+      take: limit,
+      select: { id: true },
+    })
+
+    let renewed = 0
+    let renewalAlready = 0
+    let renewalSkipped = 0
+    const renewalSkipReasons: Record<string, number> = {}
+    for (const sub of lapsedRecurring) {
+      try {
+        const r = await planService.reconcileRenewalPayment(GatewayType.MERCADO_PAGO, sub.id)
+        if (r.ok) {
+          if (r.action === 'RENEWED') renewed++
+          else if (r.action === 'ALREADY_RECONCILED') renewalAlready++
+          else renewalSkipped++ // NO_APPROVED_PAYMENT (não renovou de fato — esperado)
+        } else {
+          // Skips esperados (PAYMENT_NOT_APPROVED = tentativa de renovação falhou; etc): NÃO derruba o
+          // cron. Anomalias reais (AMOUNT_MISMATCH) ficam contabilizadas por motivo para observabilidade.
+          renewalSkipped++
+          renewalSkipReasons[r.reason] = (renewalSkipReasons[r.reason] ?? 0) + 1
+        }
+      } catch (err) {
+        failures.push({ subscriptionId: `renewal:${sub.id}`, reason: err instanceof Error ? err.message : String(err) })
+      }
+    }
+
     return NextResponse.json({
       success: failures.length === 0,
       pendingScanned: pendings.length,
@@ -119,6 +160,11 @@ export async function GET(req: NextRequest) {
       alreadyActive,
       noApprovedPayment,
       notActivatable,
+      lapsedRecurringScanned: lapsedRecurring.length,
+      renewed,
+      renewalAlready,
+      renewalSkipped,
+      renewalSkipReasons,
       failed: failures.length,
       failures: failures.slice(0, 20),
       processedAt: new Date().toISOString(),

@@ -65,6 +65,29 @@ export async function POST() {
       )
     }
 
+    // #3 CRÍTICO (cobrança-fantasma): cancelar TERMINALMENTE o preapproval recorrente ANTES de
+    // estornar/rebaixar. O refund rebaixa o usuário para JOGADOR, mas sem cancelar o preapproval no
+    // gateway a renovação continua cobrando uma conta já rebaixada. Fail-closed: se o gateway não
+    // confirmar o cancelamento, ABORTA o refund (plano e pagamento permanecem intactos — nada de
+    // rebaixar sem antes matar a cobrança recorrente). Cancelamento terminal é idempotente.
+    const holdsRecurringPreapproval =
+      sub.billingMode === 'recurring' && sub.gatewaySubscriptionId != null
+    if (holdsRecurringPreapproval) {
+      try {
+        await getGateway(sub.gateway as unknown as GatewayType)
+          .cancelSubscriptionTerminal(sub.gatewaySubscriptionId as string)
+      } catch (cancelErr) {
+        console.error(
+          `[subscriptions/me/refund] cancelamento do preapproval falhou — refund ABORTADO ` +
+          `(sub=${sub.id}, preapproval=${sub.gatewaySubscriptionId}):`, cancelErr,
+        )
+        return errors.server(
+          'Não foi possível cancelar a renovação automática no provedor de pagamento. ' +
+          'Seu plano e seu pagamento permanecem inalterados; tente novamente em instantes ou contate o suporte.',
+        )
+      }
+    }
+
     // Localiza o pagamento PAID mais recente desta assinatura — é o que será estornado.
     const payment = await prisma.payment.findFirst({
       where: { subscriptionId: sub.id, status: 'PAID' },

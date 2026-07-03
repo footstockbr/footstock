@@ -277,6 +277,41 @@ export class SubscriptionService extends BaseService {
   }
 
   /**
+   * Cancela TERMINALMENTE (irreversível) o preapproval no gateway de TODAS as assinaturas
+   * recorrentes do usuário. Usado na EXCLUSÃO DE CONTA (LGPD): pausar (cancelAutoRenewal) NÃO basta
+   * — um preapproval só pausado pode ser retomado e cobrar uma conta ANONIMIZADA (cobrança-fantasma).
+   * Best-effort: uma falha de gateway NÃO bloqueia a exclusão (direito ao esquecimento), mas emite
+   * [ALERT] observável (com o gatewaySubscriptionId) para cancelamento manual pelo operador.
+   */
+  async terminateGatewaySubscriptions(userId: string): Promise<void> {
+    // SEM filtro de status de propósito: o status LOCAL não reflete o estado do preapproval no
+    // gateway. Uma sub CANCELLED/EXPIRED localmente pode ter o preapproval apenas PAUSADO
+    // (o cron T+7d de CANCELLATION_LOCK marca CANCELLED local mas NÃO cancela no gateway) —
+    // pausado é RESUMÍVEL e cobraria uma conta anonimizada. Cancelamento terminal é idempotente
+    // (404 -> no-op), então varrer todas as recorrentes com preapproval é seguro e completo.
+    const subs = await prisma.subscription.findMany({
+      where: {
+        userId,
+        billingMode: 'recurring',
+        gatewaySubscriptionId: { not: null },
+      },
+      select: { id: true, gateway: true, gatewaySubscriptionId: true },
+    })
+    for (const sub of subs) {
+      const gatewayType = GATEWAY_TYPE_MAP[String(sub.gateway).toUpperCase()] ?? GatewayType.MERCADO_PAGO
+      try {
+        await getGateway(gatewayType).cancelSubscriptionTerminal(sub.gatewaySubscriptionId as string)
+      } catch (err) {
+        console.error(
+          `[ALERT][terminateGatewaySubscriptions] falha ao cancelar preapproval ${sub.gatewaySubscriptionId} ` +
+          `(gateway ${sub.gateway}) do usuário ${userId} — RISCO de cobrança em conta anonimizada; ` +
+          `cancelar manualmente no painel do gateway:`, err,
+        )
+      }
+    }
+  }
+
+  /**
    * Reconciliacao estado local x gateway para auto-renovacao (pause_on_lock_start).
    * Ponto de chamada UNICO reutilizado por DELETE /me (cancel) e PUT /me/revert
    * (reactivate).

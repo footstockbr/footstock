@@ -206,6 +206,12 @@ export class PagSeguroGateway implements IGateway {
     console.warn(`[PAGSEGURO] cancelAutoRenewal stub — integração pendente. subscriptionId: ${gatewaySubscriptionId}`)
   }
 
+  async cancelSubscriptionTerminal(gatewaySubscriptionId: string): Promise<void> {
+    // No-op seguro: recorrência do PagSeguro não implementada (createSubscription lança), então
+    // nenhum preapproval PagSeguro existe para cancelar. Não lança (nada a neutralizar).
+    console.warn(`[PAGSEGURO] cancelSubscriptionTerminal no-op — recorrência não implementada. subscriptionId: ${gatewaySubscriptionId}`)
+  }
+
   async reactivateAutoRenewal(gatewaySubscriptionId: string): Promise<void> {
     console.warn(`[PAGSEGURO] reactivateAutoRenewal stub — integração pendente. subscriptionId: ${gatewaySubscriptionId}`)
   }

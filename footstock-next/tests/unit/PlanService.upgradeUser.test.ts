@@ -14,7 +14,7 @@ jest.mock('@/lib/prisma', () => {
     update: jest.fn(),
     updateMany: jest.fn().mockResolvedValue({ count: 1 }),
   }
-  const user = { findUnique: jest.fn(), update: jest.fn() }
+  const user = { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 0 }) }
   const notification = { create: jest.fn().mockResolvedValue({}) }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const prisma: any = { subscription, user, notification }
@@ -170,5 +170,42 @@ describe('PlanService.upgradeUser — R3', () => {
     expect(entityIds).toEqual(['pay-CICLO-1', 'pay-CICLO-2'])
     // duas chaves distintas => a confirmação da renovação não é silenciada por dedupe
     expect(new Set(entityIds).size).toBe(2)
+  })
+
+  it('#5 CRÍTICO: religa usuário suspenso por lapso — usr.updateMany SUSPENDED→ACTIVE ao ativar', async () => {
+    sub.findUnique.mockResolvedValue({
+      id: 'new', userId: 'u1', planType: 'CRAQUE', status: 'PENDING', amount: 100,
+    })
+    usr.findUnique.mockResolvedValue({ planType: 'JOGADOR', adminRole: null })
+    sub.findMany.mockResolvedValue([])
+    sub.updateMany.mockResolvedValue({ count: 1 })
+
+    await planService.upgradeUser('u1', 'new')
+
+    // reset ESCOPADO em SUSPENDED (não toca BANNED nem outros estados). Sem isto o assinante
+    // suspenso por lapso pagava e continuava sem login.
+    expect(usr.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'u1', status: 'SUSPENDED' },
+      data: { status: 'ACTIVE' },
+    }))
+  })
+
+  it('upgrade recorrente: cancela TERMINALMENTE o preapproval da assinatura ANTERIOR no gateway (anti double-charge)', async () => {
+    const cancelTerminal = jest.fn().mockResolvedValue(undefined)
+    const { getGateway } = require('@/lib/gateways/GatewayFactory')
+    getGateway.mockReturnValue({ cancelSubscriptionTerminal: cancelTerminal })
+    sub.findUnique.mockResolvedValue({ id: 'new', userId: 'u1', planType: 'LENDA', status: 'PENDING', amount: 9990 })
+    usr.findUnique.mockResolvedValue({ planType: 'CRAQUE', adminRole: null })
+    // assinatura CRAQUE anterior RECORRENTE (preapproval vivo no gateway) sendo superseded pelo upgrade
+    sub.findMany.mockResolvedValue([
+      { id: 'old', status: 'ACTIVE', bonusAmount: null, bonusScheduledAt: null, bonusCreditedAt: null,
+        billingMode: 'recurring', gateway: 'MERCADO_PAGO', gatewaySubscriptionId: 'preapp-old' },
+    ])
+    sub.updateMany.mockResolvedValue({ count: 1 })
+
+    await planService.upgradeUser('u1', 'new')
+
+    // Sem isto, o auto-renew do CRAQUE continuaria cobrando após o upgrade para LENDA.
+    expect(cancelTerminal).toHaveBeenCalledWith('preapp-old')
   })
 })

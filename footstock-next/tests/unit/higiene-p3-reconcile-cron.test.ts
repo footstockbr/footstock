@@ -19,8 +19,12 @@ jest.mock('@/lib/prisma', () => ({
 }))
 
 const reconcileMock = jest.fn()
+const renewalMock = jest.fn()
 jest.mock('@/lib/services/PlanService', () => ({
-  planService: { reconcileApprovedPayment: (...a: unknown[]) => reconcileMock(...a) },
+  planService: {
+    reconcileApprovedPayment: (...a: unknown[]) => reconcileMock(...a),
+    reconcileRenewalPayment: (...a: unknown[]) => renewalMock(...a),
+  },
 }))
 
 const searchApprovedMock = jest.fn()
@@ -47,16 +51,21 @@ beforeEach(() => {
   findManyMock.mockResolvedValue([])
   searchApprovedMock.mockResolvedValue(null)
   reconcileMock.mockResolvedValue({ ok: true, action: 'ACTIVATED', subscriptionId: 's', userId: 'u' })
+  // item 4b: sweep de renovação de ciclo pago — benigno por default (não interfere no sweep PENDING).
+  renewalMock.mockResolvedValue({ ok: true, action: 'NO_APPROVED_PAYMENT', subscriptionId: 's' })
 })
 
 // ─── ST001: varredura cobre PAST_DUE ────────────────────────────────────────────
 describe('ST001 — reconcile cobre PAST_DUE', () => {
   it('happy: varre PENDING + PAST_DUE de MERCADO_PAGO', async () => {
     await GET(cronRequest({ auth: AUTH }))
-    expect(findManyMock).toHaveBeenCalledTimes(1)
+    // 2 findMany: [0] sweep PENDING/PAST_DUE (ativação) + [1] sweep recorrente lapsado (item 4b renovação).
+    expect(findManyMock).toHaveBeenCalledTimes(2)
     const arg = findManyMock.mock.calls[0][0] as { where: { status: { in: string[] }; gateway: string } }
     expect(arg.where.status.in).toEqual(expect.arrayContaining(['PENDING', 'PAST_DUE']))
     expect(arg.where.gateway).toBe('MERCADO_PAGO')
+    const renewalArg = findManyMock.mock.calls[1][0] as { where: { billingMode: string; status: { in: string[] } } }
+    expect(renewalArg.where.billingMode).toBe('recurring')
   })
 
   it('sad: subscription PAST_DUE com pagamento approved é reconciliada (reativada)', async () => {
@@ -115,7 +124,8 @@ describe('ST004 — janela do cron (rota)', () => {
     const res = await GET(cronRequest({ auth: AUTH }))
     const body = await res.json()
     expect(body.skipped).toBeUndefined()
-    expect(findManyMock).toHaveBeenCalledTimes(1)
+    // 2 sweeps: PENDING/PAST_DUE + recorrente lapsado (item 4b).
+    expect(findManyMock).toHaveBeenCalledTimes(2)
   })
 })
 

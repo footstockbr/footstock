@@ -22,11 +22,17 @@ jest.mock('@/lib/prisma', () => ({
     payment: { upsert: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn() },
     user: { findUnique: jest.fn(), update: jest.fn() },
     webhookAuditLog: { findFirst: jest.fn() },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    $transaction: jest.fn(async (fn: any) => fn({ subscription: { update: jest.fn() }, user: { update: jest.fn() } })),
   },
 }))
 
 const mockParseWebhookEvent = jest.fn()
-const mockGateway = { parseWebhookEvent: mockParseWebhookEvent, refundPayment: jest.fn() }
+const mockGateway = {
+  parseWebhookEvent: mockParseWebhookEvent,
+  refundPayment: jest.fn(),
+  cancelSubscriptionTerminal: jest.fn().mockResolvedValue(undefined),
+}
 jest.mock('@/lib/gateways/GatewayFactory', () => ({
   getGatewayByHeader: jest.fn(() => mockGateway),
   detectGatewayType: jest.fn(() => 'MERCADO_PAGO'),
@@ -127,6 +133,42 @@ describe('ST003 — dedup de múltiplos PIX approved', () => {
     expect(res.status).toBe(200)
     expect(upgradeUserMock).not.toHaveBeenCalled()
     expect(logWebhookMock).toHaveBeenCalledWith(expect.objectContaining({ status: 'DUPLICATE' }))
+  })
+})
+
+// ─── BLOCKER: REFUND_COMPLETED cancela preapproval recorrente ────────────────
+describe('REFUND_COMPLETED — cancela preapproval recorrente (anti cobrança-fantasma no refund externo)', () => {
+  it('refund/chargeback EXTERNO de sub RECORRENTE → cancelSubscriptionTerminal no preapproval', async () => {
+    const { prisma } = require('@/lib/prisma')
+    mockParseWebhookEvent.mockResolvedValue(REFUND_EVENT)
+    pay.findUnique.mockResolvedValue(null) // não já REFUNDED (não dispara early-return ST008)
+    sub.findUnique.mockResolvedValue({
+      userId: 'u1', planType: 'CRAQUE', cancelledAt: null,
+      billingMode: 'recurring', gateway: 'MERCADO_PAGO', gatewaySubscriptionId: 'preapp-r',
+    })
+    prisma.user.findUnique.mockResolvedValue({ planType: 'LENDA' }) // tier maior → não rebaixa; só cancela a sub
+    sub.findMany.mockResolvedValue([])
+
+    await POST(webhookRequest('tx-refund'))
+
+    // Sem isto, o preapproval do plano reembolsado seguiria 'authorized' e RE-COBRARIA todo ciclo.
+    expect(mockGateway.cancelSubscriptionTerminal).toHaveBeenCalledWith('preapp-r')
+  })
+
+  it('refund de sub NÃO-recorrente (one-time) → NÃO chama cancelSubscriptionTerminal', async () => {
+    const { prisma } = require('@/lib/prisma')
+    mockParseWebhookEvent.mockResolvedValue(REFUND_EVENT)
+    pay.findUnique.mockResolvedValue(null)
+    sub.findUnique.mockResolvedValue({
+      userId: 'u1', planType: 'CRAQUE', cancelledAt: null,
+      billingMode: 'one_time', gateway: 'MERCADO_PAGO', gatewaySubscriptionId: null,
+    })
+    prisma.user.findUnique.mockResolvedValue({ planType: 'LENDA' })
+    sub.findMany.mockResolvedValue([])
+
+    await POST(webhookRequest('tx-refund'))
+
+    expect(mockGateway.cancelSubscriptionTerminal).not.toHaveBeenCalled()
   })
 })
 

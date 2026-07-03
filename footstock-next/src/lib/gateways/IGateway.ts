@@ -166,6 +166,17 @@ export interface IGateway {
   reactivateAutoRenewal(gatewaySubscriptionId: string): Promise<void>
 
   /**
+   * Cancela TERMINALMENTE (irreversível) a assinatura recorrente no gateway. Distinto de
+   * cancelAutoRenewal, que é uma PAUSA REVERSÍVEL (CANCELLATION_LOCK). Usado quando a assinatura
+   * NUNCA será retomada: (a) o usuário ABANDONOU um checkout e recomeça (supersede) — um preapproval
+   * apenas pausado poderia ser retomado e cobrar (cobrança-fantasma), então tem que ser cancelado
+   * de fato; (b) exclusão de conta. DEVE lançar erro (retryable/terminal) em falha real para o
+   * chamador poder falhar-fechado — NUNCA silenciar (deixar um preapproval vivo é risco financeiro).
+   * @throws GatewayError/GatewayRetryableError quando o cancelamento no gateway falha.
+   */
+  cancelSubscriptionTerminal(gatewaySubscriptionId: string): Promise<void>
+
+  /**
    * Estorna (refund) um pagamento no gateway.
    * @param gatewayTransactionId — ID do pagamento no gateway (Payment.gatewayTransactionId)
    * @param amountCents — opcional: estorno parcial em centavos. Omitir = estorno total.

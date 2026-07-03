@@ -16,7 +16,12 @@ jest.mock('@/lib/env', () => ({
 
 jest.mock('@/lib/prisma', () => ({
   prisma: {
-    subscription: { findUnique: jest.fn(), update: jest.fn().mockResolvedValue({}) },
+    subscription: {
+      findUnique: jest.fn(),
+      update: jest.fn().mockResolvedValue({}),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
+    user: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
     payment: { upsert: jest.fn() },
     webhookAuditLog: { findFirst: jest.fn() },
   },
@@ -42,6 +47,7 @@ jest.mock('@/lib/services/PlanService', () => ({
   planService: {
     upgradeUser: jest.fn(),
     applyPaymentConfirmedEffects: jest.fn().mockResolvedValue(undefined),
+    applyRenewalCycle: jest.fn().mockResolvedValue('RENEWED'),
   },
 }))
 jest.mock('@/lib/services/WebhookAuditService', () => ({
@@ -77,7 +83,13 @@ function auditStatuses() {
   return (webhookAuditService.logWebhook as jest.Mock).mock.calls.map((c) => c[0].status)
 }
 
-beforeEach(() => jest.clearAllMocks())
+beforeEach(() => {
+  jest.clearAllMocks()
+  // clearAllMocks limpa chamadas mas NÃO a implementação — reafirma os defaults por teste.
+  const { planService } = require('@/lib/services/PlanService')
+  planService.applyRenewalCycle.mockResolvedValue('RENEWED')
+  planService.applyPaymentConfirmedEffects.mockResolvedValue(undefined)
+})
 
 describe('SUBSCRIPTION_RENEWED — ativação (PENDING) vs renovação (ACTIVE)', () => {
   it('1ª cobrança (PENDING) ATIVA: upgradeUser + applyPaymentConfirmedEffects + 1º período de agora', async () => {
@@ -108,7 +120,7 @@ describe('SUBSCRIPTION_RENEWED — ativação (PENDING) vs renovação (ACTIVE)'
     expect(auditStatuses()).toContain('ACCEPTED')
   })
 
-  it('cobrança de renovação (ACTIVE) NÃO chama upgradeUser: só estende + Payment PAID', async () => {
+  it('cobrança de renovação (ACTIVE) NÃO chama upgradeUser: delega a applyRenewalCycle + analytics', async () => {
     const { prisma } = require('@/lib/prisma')
     const { planService } = require('@/lib/services/PlanService')
     const { mixpanelServer } = require('@/lib/services/analytics/MixpanelServerService')
@@ -118,21 +130,77 @@ describe('SUBSCRIPTION_RENEWED — ativação (PENDING) vs renovação (ACTIVE)'
       userId: 'user-1', planType: 'CRAQUE', period: 'MONTHLY', gateway: 'MERCADO_PAGO',
       expiresAt: new Date(Date.now() + 5 * 24 * 3600 * 1000), status: 'ACTIVE', amount: 100,
     })
-    prisma.payment.upsert.mockResolvedValue({ id: 'pay-1' })
 
     const res = await callWebhook()
 
     expect(res.status).toBe(200)
     expect(planService.upgradeUser).not.toHaveBeenCalled()
     expect(planService.applyPaymentConfirmedEffects).not.toHaveBeenCalled()
-    expect(prisma.payment.upsert).toHaveBeenCalledTimes(1)
-    const upd = prisma.subscription.update.mock.calls[0][0]
-    expect(upd.data.status).toBe('ACTIVE')
+    // Renovação via ponto único applyRenewalCycle (claim atômico serializa webhook x cron, extende + religa).
+    expect(planService.applyRenewalCycle).toHaveBeenCalledWith(
+      expect.objectContaining({ subscriptionId: 'sub-1', userId: 'user-1', paymentId: 'pay-cycle-1', amountCents: 100, period: 'MONTHLY' }),
+    )
     expect(mixpanelServer.trackPaymentCompleted).toHaveBeenCalledWith(
       'user-1',
       expect.objectContaining({ is_first_payment: false }),
     )
     expect(auditStatuses()).toContain('ACCEPTED')
+  })
+
+  it('#5 CRÍTICO: renovação delega a applyRenewalCycle (que religa SUSPENDED e estende) com params corretos', async () => {
+    const { prisma } = require('@/lib/prisma')
+    const { planService } = require('@/lib/services/PlanService')
+    mockParseWebhookEvent.mockResolvedValue(RENEW_EVENT)
+    prisma.webhookAuditLog.findFirst.mockResolvedValue(null)
+    prisma.subscription.findUnique.mockResolvedValue({
+      userId: 'user-1', planType: 'CRAQUE', period: 'MONTHLY', gateway: 'MERCADO_PAGO',
+      expiresAt: new Date(Date.now() + 5 * 24 * 3600 * 1000), status: 'ACTIVE', amount: 100,
+    })
+
+    const res = await callWebhook()
+
+    expect(res.status).toBe(200)
+    // O religar SUSPENDED→ACTIVE mora dentro de applyRenewalCycle (coberto em reconcile-renewal-payment.test).
+    // Aqui garantimos que a renovação de ciclo REALMENTE roteia pelo ponto único (senão o suspenso ficava preso).
+    expect(planService.applyRenewalCycle).toHaveBeenCalledWith(
+      expect.objectContaining({ subscriptionId: 'sub-1', userId: 'user-1', period: 'MONTHLY' }),
+    )
+  })
+
+  it('#8: renovação ATRASADA para assinatura CANCELADA NÃO ressuscita (RACE_CANCELLED → REJECTED, sem analytics)', async () => {
+    const { prisma } = require('@/lib/prisma')
+    const { planService } = require('@/lib/services/PlanService')
+    const { mixpanelServer } = require('@/lib/services/analytics/MixpanelServerService')
+    mockParseWebhookEvent.mockResolvedValue(RENEW_EVENT)
+    prisma.webhookAuditLog.findFirst.mockResolvedValue(null)
+    prisma.subscription.findUnique.mockResolvedValue({
+      userId: 'user-1', planType: 'CRAQUE', period: 'MONTHLY', gateway: 'MERCADO_PAGO',
+      expiresAt: new Date(Date.now() - 5 * 24 * 3600 * 1000), status: 'CANCELLED', amount: 100,
+    })
+    planService.applyRenewalCycle.mockResolvedValue('RACE_CANCELLED') // sub cancelada → rollback, não ressuscita
+
+    const res = await callWebhook()
+
+    expect(res.status).toBe(200)
+    expect(mixpanelServer.trackPaymentCompleted).not.toHaveBeenCalled() // não conta renovação de cancelada
+    expect(auditStatuses()).toContain('REJECTED')
+  })
+
+  it('renovação (ACTIVE) com VALOR DIVERGENTE é REJEITADA sem estender (não credita valor errado)', async () => {
+    const { prisma } = require('@/lib/prisma')
+    const { planService } = require('@/lib/services/PlanService')
+    mockParseWebhookEvent.mockResolvedValue({ ...RENEW_EVENT, amount: 999 }) // != subscription.amount 100
+    prisma.webhookAuditLog.findFirst.mockResolvedValue(null)
+    prisma.subscription.findUnique.mockResolvedValue({
+      userId: 'user-1', planType: 'CRAQUE', period: 'MONTHLY', gateway: 'MERCADO_PAGO',
+      expiresAt: new Date(Date.now() + 5 * 24 * 3600 * 1000), status: 'ACTIVE', amount: 100,
+    })
+
+    const res = await callWebhook()
+
+    expect(res.status).toBe(200)
+    expect(planService.applyRenewalCycle).not.toHaveBeenCalled() // nem chega a renovar
+    expect(auditStatuses()).toContain('REJECTED')
   })
 
   it('ativação (PENDING) com valor divergente é REJEITADA sem ativar (não paga sem conferir valor)', async () => {

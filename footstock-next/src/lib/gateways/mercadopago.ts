@@ -586,6 +586,12 @@ export class MercadoPagoGateway implements IGateway {
       { method: 'GET', headers: { Authorization: `Bearer ${accessToken}` } },
       `preapproval ${preapprovalId}`,
     )
+    if (response.status === 404) {
+      // Preapproval NÃO existe mais no MP (removido/expirado/nunca criado). Estado DEFINITIVO, não
+      // transitório: sinaliza 'not_found' para o chamador tratar como MORTO (nada vivo a cancelar),
+      // em vez de retry infinito → evita 503 eterno no supersede (lockout permanente da re-assinatura).
+      return { status: 'not_found', externalReference: undefined, amount: undefined }
+    }
     if (!response.ok) {
       throw new GatewayRetryableError(
         `[MERCADO_PAGO] preapproval ${preapprovalId}: HTTP ${response.status} — indeterminado (retry)`,
@@ -883,6 +889,22 @@ export class MercadoPagoGateway implements IGateway {
   }
 
   /**
+   * Cancela TERMINALMENTE o preapproval no MP: PUT `/preapproval/{id}` com `status: 'cancelled'`
+   * (irreversível). Distinto de cancelAutoRenewal ('paused', reversível). Usado no supersede de
+   * checkout abandonado e na exclusão de conta — um preapproval só pausado poderia ser retomado
+   * e cobrar. Idempotente: 404 (inexistente) é tratado como já-cancelado (no-op), não erro.
+   */
+  async cancelSubscriptionTerminal(gatewaySubscriptionId: string): Promise<void> {
+    try {
+      await this.setPreapprovalStatus(gatewaySubscriptionId, 'cancelled', 'cancelSubscriptionTerminal')
+    } catch (err) {
+      // 404 = preapproval não existe mais no MP -> já não há o que cobrar (idempotente).
+      if ((err as { code?: string }).code === 'PAYMENT_080') return
+      throw err
+    }
+  }
+
+  /**
    * Aplica uma transição de status (`paused`/`authorized`) ao preapproval do MP, com a mesma
    * política de erros do `createSubscription`: 4xx terminal vira GatewayError 422 (não retentar);
    * 5xx/timeout vira GatewayRetryableError após retries (dentro de `mpFetchWithRetry`); 404 vira
@@ -891,7 +913,7 @@ export class MercadoPagoGateway implements IGateway {
    */
   private async setPreapprovalStatus(
     gatewaySubscriptionId: string,
-    status: 'paused' | 'authorized',
+    status: 'paused' | 'authorized' | 'cancelled',
     label: string,
   ): Promise<void> {
     if (!gatewaySubscriptionId) {

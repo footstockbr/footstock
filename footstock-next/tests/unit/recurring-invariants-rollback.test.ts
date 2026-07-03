@@ -295,7 +295,7 @@ describe('Reconciliação por polling — corrige divergência, indeterminado nu
     expect(where.gateway).toBe('MERCADO_PAGO')
   })
 
-  it('status divergente real (authorized→cancelled) é reconciliado via CAS', async () => {
+  it('status divergente real (authorized→cancelled em sub ACTIVE) → cancel-at-period-end (webhook-aligned, não terminal) via CAS', async () => {
     mockSubFindMany.mockResolvedValue([recurringSub({ status: 'ACTIVE' })])
     mockGetSubscriptionStatus.mockResolvedValue({ status: 'cancelled' })
     mockSubUpdateMany.mockResolvedValue({ count: 1 })
@@ -303,7 +303,13 @@ describe('Reconciliação por polling — corrige divergência, indeterminado nu
     const res = await new SubscriptionReconcileService().reconcile()
 
     expect(mockSubUpdateMany).toHaveBeenCalledTimes(1)
-    expect(res.details[0].action).toBe('RECONCILED_ACTIVE_TO_CANCELLED')
+    // Alinhado ao webhook SUBSCRIPTION_CANCELLED: marca a intenção (cancelAtPeriodEnd) e NÃO salta
+    // para terminal CANCELLED — saltar encalharia User.planType num tier pago sem assinatura viva
+    // (os crons de expiração fazem o downgrade no vencimento).
+    const patch = mockSubUpdateMany.mock.calls[0][0].data
+    expect(patch.cancelAtPeriodEnd).toBe(true)
+    expect(patch.status).toBeUndefined()
+    expect(res.details[0].action).toBe('RECONCILED_ACTIVE_CANCEL_AT_PERIOD_END')
     expect(res.processed).toBe(1)
   })
 

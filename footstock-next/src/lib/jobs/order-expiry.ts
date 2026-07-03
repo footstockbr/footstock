@@ -23,7 +23,10 @@ export async function processExpiredOrders(): Promise<ExpiryResult> {
 
   const expiredOrders = await prisma.order.findMany({
     where: {
-      status: ORDER_STATUS.OPEN,
+      // #2: incluir PARTIAL — ordens parcialmente executadas que estagnam também precisam expirar
+      // aos 30 dias (PARTIAL->EXPIRED é transição válida). Sem isto, elas nunca expiram e seguem
+      // comprometendo saldo/quantidade nos guards de capacidade, sem alívio automático.
+      status: { in: [ORDER_STATUS.OPEN, ORDER_STATUS.PARTIAL] },
       type: { in: ['LIMIT', 'OCO', 'SCHEDULED'] },
       createdAt: { lt: expiryDate },
     },
@@ -48,7 +51,7 @@ export async function processExpiredOrders(): Promise<ExpiryResult> {
         // Expirar ambas as pernas do par OCO na mesma transaction
         await prisma.$transaction(async (tx) => {
           await tx.order.updateMany({
-            where: { groupId: order.groupId!, status: ORDER_STATUS.OPEN },
+            where: { groupId: order.groupId!, status: { in: [ORDER_STATUS.OPEN, ORDER_STATUS.PARTIAL] } },
             data: { status: 'EXPIRED' },
           })
         })

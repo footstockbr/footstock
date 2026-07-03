@@ -17,7 +17,7 @@ jest.mock('@/lib/prisma', () => {
     update: jest.fn(),
     updateMany: jest.fn().mockResolvedValue({ count: 1 }),
   }
-  const user = { findUnique: jest.fn(), update: jest.fn() }
+  const user = { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 0 }) }
   const notification = { create: jest.fn().mockResolvedValue({}) }
   const prisma: Record<string, unknown> & {
     $transaction?: (arg: unknown) => Promise<unknown>
