@@ -54,7 +54,7 @@ export async function GET() {
     for (let w = 3; w >= 0; w--) {
       const wStart = weekStart(w)
       const wEnd = weekStart(w - 1)
-      const weekLabel = `Sem ${4 - w} (${wStart.toLocaleDateString('pt-BR', { month: 'short', day: 'numeric' })})`
+      const weekLabel = `Sem ${4 - w} (${wStart.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', month: 'short', day: 'numeric' })})`
 
       const cohortUsers = Array.from(firstOrderByUser.entries())
         .filter(([, d]) => d >= wStart && d < wEnd)

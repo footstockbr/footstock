@@ -39,14 +39,14 @@ export function formatPercent(value: number | null | undefined): string {
  * Ex: "2026-04-09T..." → "09/04/26"
  */
 export function formatDateShort(iso: string): string {
-  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+  return new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: '2-digit' })
 }
 
 /**
  * Formata data ISO para pt-BR longo: 09 de abril de 2026
  */
 export function formatDateLong(date: Date | string): string {
-  return new Date(date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+  return new Date(date).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'long', year: 'numeric' })
 }
 
 /**
@@ -54,6 +54,7 @@ export function formatDateLong(date: Date | string): string {
  */
 export function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleDateString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
     day: '2-digit', month: '2-digit', year: '2-digit',
     hour: '2-digit', minute: '2-digit',
   })

@@ -115,7 +115,7 @@ Link peticionamento: https://www.gov.br/anpd/peticionamento
         await resend.emails.send({
           from: `Sistema FootStock <${from}>`,
           to: 'privacy@footstock.com.br',
-          subject: `[URGENTE] Incidente de Segurança — prazo ANPD ${deadlineAt.toLocaleDateString('pt-BR')}`,
+          subject: `[URGENTE] Incidente de Segurança — prazo ANPD ${deadlineAt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`,
           text: report,
         })
         emailSent = true

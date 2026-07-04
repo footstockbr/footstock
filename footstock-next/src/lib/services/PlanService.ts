@@ -227,6 +227,7 @@ export class PlanService extends BaseService {
           activeCurrent.startsAt >= cycleStart
         if (changedThisCycle) {
           const nextChange = cycleEnd.toLocaleDateString('pt-BR', {
+            timeZone: 'America/Sao_Paulo',
             day: '2-digit',
             month: '2-digit',
             year: 'numeric',
@@ -972,6 +973,7 @@ export class PlanService extends BaseService {
     // Notificação de bônus agendado — quando há bônus a creditar (diferencial + pendente preservado)
     if (hasBonusToSchedule) {
       const bonusDate = bonusScheduleDate.toLocaleDateString('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
         day: '2-digit', month: 'short', year: 'numeric',
       })
       await prisma.notification.create({

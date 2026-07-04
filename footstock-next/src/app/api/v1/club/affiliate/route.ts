@@ -68,7 +68,7 @@ export async function GET(): Promise<NextResponse> {
 
     const royalties: RoyaltyEntry[] = transactions.map((t) => ({
       id: t.id,
-      period: t.createdAt.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }),
+      period: t.createdAt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', month: 'short', year: 'numeric' }),
       amount: Number(t.amount),
       status: t.status === PAYMENT_STATUS.PAID ? 'PAGO' as const : 'PENDENTE' as const,
     }))

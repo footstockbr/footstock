@@ -272,7 +272,7 @@ export async function DELETE(request: Request) {
         userId: auth.user.id,
         type: 'CANCELLATION_LOCK_ACTIVE',
         title: 'Cancelamento agendado',
-        body: `Seu plano permanece ativo até ${lockExpiresAt.toLocaleDateString('pt-BR')}. A renovação foi cancelada e você pode reverter este processo até lá.`,
+        body: `Seu plano permanece ativo até ${lockExpiresAt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}. A renovação foi cancelada e você pode reverter este processo até lá.`,
         isRead: false,
       },
     }).catch((err) => {

@@ -225,7 +225,7 @@ export async function POST() {
           : 'Seu plano foi cancelado.'
       const remedyNote =
         remedy.kind === 'RESTORE_PREVIOUS'
-          ? ` Seu plano ${remedy.priorPlanType === 'LENDA' ? 'Lenda' : 'Craque'} anterior foi restaurado até ${remedy.priorExpiresAt.toLocaleDateString('pt-BR')}${
+          ? ` Seu plano ${remedy.priorPlanType === 'LENDA' ? 'Lenda' : 'Craque'} anterior foi restaurado até ${remedy.priorExpiresAt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}${
               fsReverted > 0
                 ? ` e FS$ ${fsReverted.toLocaleString('pt-BR')} de créditos de migração foram revertidos`
                 : ''

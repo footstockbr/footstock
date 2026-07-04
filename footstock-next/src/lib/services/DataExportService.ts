@@ -133,7 +133,7 @@ async function sendExportEmail(to: string, downloadUrl: string, expiresAt: Date)
   const { Resend } = await import('resend')
   const resend = new Resend(apiKey)
   const from = process.env.RESEND_FROM_EMAIL ?? 'noreply@footstock.app'
-  const expiresStr = expiresAt.toLocaleDateString('pt-BR')
+  const expiresStr = expiresAt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
 
   await resend.emails.send({
     from: `FootStock <${from}>`,
@@ -197,7 +197,7 @@ class DataExportService {
         userId: job.userId,
         type: 'LGPD_EXPORT_READY',
         title: 'Exportação de dados pronta',
-        body: `Seus dados pessoais estão disponíveis para download até ${expiresAt.toLocaleDateString('pt-BR')}. Verifique seu email.`,
+        body: `Seus dados pessoais estão disponíveis para download até ${expiresAt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}. Verifique seu email.`,
         metadata: { downloadUrl, expiresAt: expiresAt.toISOString() },
       })
 
