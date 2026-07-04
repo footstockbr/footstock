@@ -158,7 +158,7 @@ export default async function ClubDesempenhoPage() {
               return (
                 <div key={i} className="grid grid-cols-5 text-xs border-t border-[#2B3139] pt-1">
                   <span className="text-[#929AA5] font-mono text-[10px]">
-                    {h.timestamp.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                    {h.timestamp.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' })}
                   </span>
                   <span className={`text-right ${dayPositive ? 'text-[#4ade80]' : 'text-[#F6465D]'}`}>
                     {formatFS(open)}
@@ -196,7 +196,7 @@ export default async function ClubDesempenhoPage() {
                 <span className="text-[#929AA5]">{formatFS(Number(o.executedPrice ?? 0))}</span>
                 <span className="text-[#4B5563] font-mono">
                   {o.executedAt
-                    ? o.executedAt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+                    ? o.executedAt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' })
                     : '—'}
                 </span>
               </div>

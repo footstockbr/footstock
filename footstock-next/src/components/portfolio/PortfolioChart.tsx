@@ -34,10 +34,10 @@ const REFETCH_INTERVAL: Record<Period, number> = {
 function formatAxisDate(date: string, period: Period): string {
   const d = new Date(date)
   if (period === '1H' || period === '12H' || period === '24H') {
-    return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    return d.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })
   }
   if (period === '1Y' || period === 'ALL') {
-    return d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
+    return d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', month: 'short', year: '2-digit' })
   }
   return `${d.getDate()}/${d.getMonth() + 1}`
 }

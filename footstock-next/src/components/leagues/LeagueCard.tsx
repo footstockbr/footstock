@@ -114,7 +114,7 @@ export function LeagueCard({ league, isMember, currentUserId: _currentUserId, on
           {DURATION_LABELS[league.duration] ?? league.duration}
         </span>
         {league.endsAt && (
-          <span>Até {new Date(league.endsAt).toLocaleDateString('pt-BR')}</span>
+          <span>Até {new Date(league.endsAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</span>
         )}
       </div>
 

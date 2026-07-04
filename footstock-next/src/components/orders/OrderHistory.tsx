@@ -163,7 +163,7 @@ export function OrderHistory() {
                 <div className="flex items-center gap-3 mt-0.5 text-xs text-[#929AA5]">
                   <span>Qtd: {order.quantity}</span>
                   {order.price && <span>FS$ {Number(order.price).toFixed(2)}</span>}
-                  <span>{new Date(order.createdAt).toLocaleDateString('pt-BR')}</span>
+                  <span>{new Date(order.createdAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</span>
                 </div>
               </div>
 

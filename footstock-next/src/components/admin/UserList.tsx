@@ -248,7 +248,7 @@ export function UserList({ currentAdminRole }: { currentAdminRole?: string | nul
                         {user.adminRole ?? '—'}
                       </td>
                       <td className="py-3 px-4 text-xs text-[#929AA5]">
-                        {new Date(user.createdAt).toLocaleDateString('pt-BR')}
+                        {new Date(user.createdAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
                       </td>
                       <td className="py-3 px-4 text-right">
                         <UserActions

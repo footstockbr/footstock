@@ -324,7 +324,7 @@ export default function AdminLigasProPage() {
                     <p className="text-xs text-amber-500 mt-0.5">Alavancagem 2x habilitada</p>
                   )}
                   <p className="text-xs text-gray-600 mt-0.5">
-                    {new Date(l.startsAt).toLocaleDateString('pt-BR')} — {new Date(l.endsAt).toLocaleDateString('pt-BR')}
+                    {new Date(l.startsAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} — {new Date(l.endsAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
                   </p>
                 </div>
               </li>

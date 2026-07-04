@@ -153,7 +153,7 @@ export default async function AfiliadoDetailPage({ params }: { params: Promise<{
                 {affiliate.transactions.map(tx => (
                   <tr key={tx.id} className="border-b border-[rgba(240,185,11,.04)]">
                     <td className="py-2.5 text-[#EAECEF]">
-                      {new Date(tx.createdAt).toLocaleDateString('pt-BR')}
+                      {new Date(tx.createdAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
                     </td>
                     <td className="py-2.5 text-[#929AA5]">{tx.transactionType}</td>
                     <td className="py-2.5 text-right font-mono text-[#4ade80]">
@@ -165,7 +165,7 @@ export default async function AfiliadoDetailPage({ params }: { params: Promise<{
                       </span>
                     </td>
                     <td className="py-2.5 text-right text-[#929AA5]">
-                      {tx.paidAt ? new Date(tx.paidAt).toLocaleDateString('pt-BR') : '—'}
+                      {tx.paidAt ? new Date(tx.paidAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—'}
                     </td>
                   </tr>
                 ))}

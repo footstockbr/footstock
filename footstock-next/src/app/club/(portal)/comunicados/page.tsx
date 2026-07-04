@@ -54,7 +54,7 @@ export default async function ClubComunicadosPage() {
 
   const formatDate = (d: Date | null) => {
     if (!d) return '—'
-    return d.toLocaleDateString('pt-BR', {
+    return d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo',
       day: '2-digit',
       month: 'long',
       year: 'numeric',

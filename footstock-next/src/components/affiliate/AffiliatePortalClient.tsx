@@ -399,7 +399,7 @@ export function AffiliatePortalClient({ affiliateCode, affiliateType, commission
           >
             <div className="flex flex-col gap-0.5">
               <span className="text-xs text-[#EAECEF]">
-                {new Date(conv.date).toLocaleDateString('pt-BR')}
+                {new Date(conv.date).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
               </span>
               <span className="text-xs text-[#7D8694]">
                 Plano {conv.planType}

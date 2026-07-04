@@ -33,7 +33,7 @@ export function TrophyCard({ trophyType, leagueName, awardedAt, leagueStart, lea
   const meta = TROPHY_META[trophyType]
   const awarded = new Date(awardedAt)
   const period = leagueStart && leagueEnd
-    ? `${new Date(leagueStart).toLocaleDateString('pt-BR')} — ${new Date(leagueEnd).toLocaleDateString('pt-BR')}`
+    ? `${new Date(leagueStart).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} — ${new Date(leagueEnd).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`
     : null
 
   return (
@@ -57,7 +57,7 @@ export function TrophyCard({ trophyType, leagueName, awardedAt, leagueStart, lea
         </div>
         <p className="text-sm font-semibold text-[#EAECEF] truncate mt-0.5">{leagueName}</p>
         <p className="text-xs text-gray-500 mt-0.5">
-          Conquistado em {awarded.toLocaleDateString('pt-BR')}
+          Conquistado em {awarded.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
         </p>
         {period && (
           <p className="text-xs text-gray-600 mt-0.5">{period}</p>

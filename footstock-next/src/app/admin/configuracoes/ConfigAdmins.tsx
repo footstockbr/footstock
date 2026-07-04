@@ -258,7 +258,7 @@ function AdminRow({ admin, currentAdminId, onRoleChange, onDeactivate, isMutatin
         </span>
       </td>
       <td className="py-3 px-3 text-[11px] text-[#929AA5]">
-        {new Date(admin.createdAt).toLocaleDateString('pt-BR')}
+        {new Date(admin.createdAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
       </td>
       <td className="py-3 px-3">
         <div className="flex items-center gap-1">

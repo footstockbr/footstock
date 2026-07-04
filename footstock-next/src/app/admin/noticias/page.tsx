@@ -36,8 +36,8 @@ const isExternalSource = (item: NewsItem): boolean => {
 
 const formatDateTime = (dateStr: string): string => {
   const date = new Date(dateStr)
-  const dateFormatted = date.toLocaleDateString('pt-BR')
-  const timeFormatted = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  const dateFormatted = date.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+  const timeFormatted = date.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })
   return `${dateFormatted} ${timeFormatted}`
 }
 

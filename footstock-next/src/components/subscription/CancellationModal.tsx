@@ -276,7 +276,7 @@ export function CancellationModal({ isOpen, onClose, planType, isEligibleForRefu
                 <p>
                   Seu cancelamento foi registrado. Você mantém o plano {planName} até{' '}
                   {lockInfo?.cancellationEffectiveAt
-                    ? new Date(lockInfo.cancellationEffectiveAt).toLocaleDateString('pt-BR', {
+                    ? new Date(lockInfo.cancellationEffectiveAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo',
                         day: '2-digit',
                         month: 'short',
                         year: 'numeric',

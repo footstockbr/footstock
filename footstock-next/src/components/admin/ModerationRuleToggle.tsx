@@ -53,7 +53,7 @@ export function ModerationRuleToggle({ rule, onToggle }: ModerationRuleTogglePro
   }
 
   const label = RULE_LABELS[rule.name] ?? rule.name
-  const updatedAt = new Intl.DateTimeFormat('pt-BR', {
+  const updatedAt = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo',
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',

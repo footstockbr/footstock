@@ -111,7 +111,7 @@ export function MRRDashboard({
                 formatter={(value) => [formatBRL(Number(value)), 'Receita']}
                 labelFormatter={(label) => {
                   const d = new Date(String(label))
-                  return d.toLocaleDateString('pt-BR')
+                  return d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
                 }}
               />
               <Line
