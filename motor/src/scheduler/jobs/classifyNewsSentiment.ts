@@ -10,5 +10,5 @@ import { cronProxy } from '../cronProxy'
 export async function classifyNewsSentimentJob(): Promise<void> {
   // failOnBodyErrors:false — falhas transitorias de LLM (timeout/parse) sao toleradas e
   // re-tentadas na proxima rodada; nao devem marcar o scheduler como vermelho.
-  await cronProxy('classify-news-sentiment', { failOnBodyErrors: false })
+  await cronProxy('classify-news-sentiment', { failOnBodyErrors: false, timeoutMs: 300_000 })
 }

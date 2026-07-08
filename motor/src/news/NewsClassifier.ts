@@ -17,7 +17,7 @@ import { logger } from '../utils/logger'
 import { newsQueue, type RawNewsItem } from './NewsQueue'
 import type { NewsPublisher } from './NewsPublisher'
 import { buildAliasIndex, resolveFromIndex, type AliasIndex } from './ticker-fallback'
-import { aiClientOptions, resolveModel } from './ai-provider'
+import { aiClientOptions, getAIProvider, resolveModel } from './ai-provider'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -44,6 +44,14 @@ const CLASSIFICATION_FALLBACK: ClassifiedNews = {
 // Resolvido pelo provider ativo (AI_PROVIDER): claude-sonnet-4-6 no Anthropic,
 // kimi-for-coding (ou KIMI_MODEL) no Kimi. Ver ./ai-provider.ts.
 const MODEL = resolveModel('claude-sonnet-4-6')
+
+function resolveMaxTokens(): number {
+  const raw = Number.parseInt(process.env.NEWS_CLASSIFIER_MAX_TOKENS ?? '', 10)
+  if (Number.isFinite(raw) && raw > 0) return raw
+  return getAIProvider() === 'kimi' ? 512 : 150
+}
+
+const MAX_TOKENS = resolveMaxTokens()
 
 // Mínimo cacheável do Anthropic para Sonnet. Prefixos abaixo disso fazem o
 // cache_control ser IGNORADO silenciosamente (sem erro, sem cache, custo cheio).
@@ -327,7 +335,7 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
     if (this.promptFormat === 'legacy') {
       return {
         model: MODEL,
-        max_tokens: 150,
+        max_tokens: MAX_TOKENS,
         messages: [{ role: 'user', content: this.buildLegacyPrompt(item) }],
       }
     }
@@ -350,7 +358,7 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
 
     return {
       model: MODEL,
-      max_tokens: 150,
+      max_tokens: MAX_TOKENS,
       messages: [
         {
           role: 'user',
@@ -392,7 +400,15 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
         { signal: controller.signal as AbortSignal }
       )
 
-      const text = response.content[0]?.type === 'text' ? response.content[0].text : ''
+      const textBlock = response.content.find((block) => block.type === 'text')
+      const text = textBlock?.type === 'text' ? textBlock.text : ''
+      if (!textBlock) {
+        const blockTypes = response.content.map((block) => block.type).join(',') || 'none'
+        logger.warn(
+          `[NewsClassifier] Resposta sem bloco text; aplicando fallback ` +
+          `(stop_reason=${response.stop_reason ?? 'n/a'}, blocks=${blockTypes})`
+        )
+      }
 
       let parseValid = true
       let result: ClassifiedNews

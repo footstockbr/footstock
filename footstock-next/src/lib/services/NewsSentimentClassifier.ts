@@ -9,13 +9,21 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import type { TextBlock } from '@anthropic-ai/sdk/resources/messages/messages'
-import { aiClientOptions, hasAIKey, resolveModel } from '@/lib/services/ai-provider'
+import { aiClientOptions, getAIProvider, hasAIKey, resolveModel } from '@/lib/services/ai-provider'
 
 export type NewsSentiment = 'BULLISH' | 'BEARISH' | 'NEUTRAL'
 
 // Sentimento e tarefa simples -> modelo barato/rapido. Override via env (ex.: claude-sonnet-4-5).
 // Resolvido pelo provider ativo (AI_PROVIDER): no Kimi mapeia para kimi-for-coding/KIMI_MODEL.
 const MODEL = resolveModel(process.env.NEWS_SENTIMENT_MODEL ?? 'claude-haiku-4-5-20251001')
+
+function resolveMaxTokens(): number {
+  const raw = Number.parseInt(process.env.NEWS_SENTIMENT_MAX_TOKENS ?? '', 10)
+  if (Number.isFinite(raw) && raw > 0) return raw
+  return getAIProvider() === 'kimi' ? 256 : 16
+}
+
+const MAX_TOKENS = resolveMaxTokens()
 
 const SYSTEM_PROMPT = `Voce classifica o SENTIMENTO de uma noticia de futebol brasileiro para um app que simula uma "bolsa de valores" de clubes. O sentimento reflete se a noticia tende a VALORIZAR ou DESVALORIZAR o(s) clube(s) citado(s).
 
@@ -73,13 +81,20 @@ export async function classifyNewsSentiment(
     const res = await anthropic.messages.create(
       {
         model: MODEL,
-        max_tokens: 8,
+        max_tokens: MAX_TOKENS,
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: userPrompt }],
       },
       { timeout: 20_000 },
     )
     const textBlock = res.content.find((b): b is TextBlock => b.type === 'text')
+    if (!textBlock) {
+      const blockTypes = res.content.map((b) => b.type).join(',') || 'none'
+      console.warn(
+        `[NewsSentimentClassifier] resposta sem bloco text ` +
+        `(stop_reason=${res.stop_reason ?? 'n/a'}, blocks=${blockTypes})`,
+      )
+    }
     creditCircuitOpenUntil = 0 // sucesso fecha o circuito
     return parseSentiment(textBlock?.text ?? '')
   } catch (err) {

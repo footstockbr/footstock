@@ -238,7 +238,7 @@ describe('NewsClassifier', () => {
     expect(result.relevance).toBeGreaterThanOrEqual(0)
   })
 
-  test('[EDGE — content type !== text] ternário retorna string vazia → fallback', async () => {
+  test('[EDGE — content sem bloco text] retorna string vazia e aplica fallback', async () => {
     // Sonnet retorna bloco do tipo 'tool_use' em vez de 'text'
     mockCreate.mockResolvedValue({
       content: [{ type: 'tool_use', input: {} }],
@@ -248,6 +248,20 @@ describe('NewsClassifier', () => {
     // text vira '' → JSON.parse('') lança SyntaxError → fallback
     expect(result.ticker).toBe('')
     expect(result.sentiment).toBe(0)
+  })
+
+  test('[SUCCESS - Kimi thinking block] usa primeiro bloco text mesmo quando nao e o indice 0', async () => {
+    mockCreate.mockResolvedValue({
+      content: [
+        { type: 'thinking', thinking: 'raciocinio omitido' },
+        { type: 'text', text: JSON.stringify({ ticker: 'URU3', sentiment: 0.8, impactCategory: 'RESULTADO_ESPORTIVO', relevance: 0.9 }) },
+      ],
+    })
+
+    const result = await classifier.classify(makeRawItem())
+    expect(result.ticker).toBe('URU3')
+    expect(result.sentiment).toBe(0.8)
+    expect(result.relevance).toBe(0.9)
   })
 
   test('[EDGE — campos JSON com tipos incorretos] usa valores padrão', async () => {
