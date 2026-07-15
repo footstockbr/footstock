@@ -21,6 +21,7 @@ import {
 import { orchestrateGlobalHalt } from '@/lib/admin/global-halt-orchestrator'
 import type { AdminMarketActionLog } from '@/lib/types/admin'
 import type { AdminRole } from '@/types'
+import { FairValueResetControl } from './FairValueResetControl'
 
 interface MotorKpis {
   circuitBreakers: number
@@ -642,7 +643,13 @@ export default function MotorPageClient({ adminRole }: MotorPageClientProps) {
       )}
 
       {/* KPIs — dados reais */}
-      <div data-testid="admin-motor-kpis" className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div
+        data-testid="admin-motor-kpis"
+        className={cn(
+          'grid grid-cols-1 sm:grid-cols-2 gap-3',
+          adminRole === 'SUPER_ADMIN' ? 'lg:grid-cols-3' : 'lg:grid-cols-2'
+        )}
+      >
         <div data-testid="admin-motor-kpi-pnl" className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
           <div className="text-[10px] text-[#929AA5] uppercase tracking-wide mb-1">P&L Agregado</div>
           {kpisLoading ? (
@@ -687,6 +694,8 @@ export default function MotorPageClient({ adminRole }: MotorPageClientProps) {
             </div>
           )}
         </div>
+
+        <FairValueResetControl adminRole={adminRole} />
       </div>
 
       {/* Tabs */}

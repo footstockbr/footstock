@@ -67,6 +67,40 @@ interface EditForm {
   players: string
 }
 
+interface ClubFairValueResetResult {
+  assetsUpdated: number
+  changes: Array<{
+    ticker: string
+    newPrice: number
+    fairValue: number
+  }>
+}
+
+export async function resetClubPriceToFairValue(
+  ticker: string,
+  fetcher: typeof fetch = fetch
+): Promise<ClubFairValueResetResult> {
+  const response = await fetcher('/api/v1/admin/assets/reset-prices', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ticker,
+      onlyFloored: false,
+      variationPct: 0,
+    }),
+  })
+
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new Error(
+      payload?.error?.message ?? `Não foi possível resetar o preço de ${ticker}.`
+    )
+  }
+
+  return payload.data as ClubFairValueResetResult
+}
+
 const DIVISION_LABELS: Record<string, string> = {
   SERIE_A: 'Série A',
   SERIE_B: 'Série B',
@@ -107,6 +141,11 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
   const [editForm, setEditForm] = useState<EditForm | null>(null)
   const [loadingEdit, setLoadingEdit] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [resettingFairValue, setResettingFairValue] = useState(false)
+  const [fairValueResetFeedback, setFairValueResetFeedback] = useState<{
+    type: 'success' | 'error'
+    message: string
+  } | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({})
 
   // ---------------------------------------------------------------------------
@@ -115,6 +154,7 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
   const openEditModal = useCallback(async (ticker: string) => {
     setEditingTicker(ticker)
     setLoadingEdit(true)
+    setFairValueResetFeedback(null)
     setFieldErrors({})
     try {
       const res = await fetch(`/api/v1/admin/assets/${ticker}`, { credentials: 'include' })
@@ -155,8 +195,44 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
   const closeModal = useCallback(() => {
     setEditingTicker(null)
     setEditForm(null)
+    setFairValueResetFeedback(null)
     setFieldErrors({})
   }, [])
+
+  // ---------------------------------------------------------------------------
+  // Reset individual: preço atual/fechamento volta ao fairValue deste ticker.
+  // O endpoint também publica ADJUST_PRICE para o motor não reverter o reset.
+  // ---------------------------------------------------------------------------
+  const resetFairValue = useCallback(async () => {
+    if (!editingTicker || resettingFairValue) return
+
+    setResettingFairValue(true)
+    setFairValueResetFeedback(null)
+    try {
+      const result = await resetClubPriceToFairValue(editingTicker)
+      const change = result.changes[0]
+
+      if (!change) {
+        throw new Error(`Nenhum fair value válido foi encontrado para ${editingTicker}.`)
+      }
+
+      setFairValueResetFeedback({
+        type: 'success',
+        message: `Preço de ${change.ticker} resetado para FS$ ${change.newPrice.toLocaleString('pt-BR', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}.`,
+      })
+      router.refresh()
+    } catch (error) {
+      setFairValueResetFeedback({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Erro ao resetar o preço do clube.',
+      })
+    } finally {
+      setResettingFairValue(false)
+    }
+  }, [editingTicker, resettingFairValue, router])
 
   // ---------------------------------------------------------------------------
   // Salvar edições via PATCH
@@ -525,19 +601,62 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
                 {/* Valor Inicial (Fair Value) */}
                 <div style={formGroupStyle}>
                   <label style={labelStyle}>Valor Inicial / Fair Value (FS$)</label>
-                  <input
-                    style={inputStyle}
-                    type="number"
-                    step="0.01"
-                    min={0.01}
-                    value={editForm.fairValue}
-                    onChange={(e) => set('fairValue', e.target.value)}
-                    placeholder="Valor em FS$"
-                    data-testid="modal-clube-fair-value-input"
-                  />
+                  <div
+                    data-testid="modal-clube-fair-value-row"
+                    style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px' }}
+                  >
+                    <input
+                      style={inputStyle}
+                      type="number"
+                      step="0.01"
+                      min={0.01}
+                      value={editForm.fairValue}
+                      onChange={(e) => set('fairValue', e.target.value)}
+                      placeholder="Valor em FS$"
+                      data-testid="modal-clube-fair-value-input"
+                    />
+                    <button
+                      type="button"
+                      onClick={resetFairValue}
+                      disabled={resettingFairValue || saving}
+                      data-testid="modal-clube-fair-value-reset-button"
+                      title={`Resetar o preço de ${editingTicker} para o fair value salvo`}
+                      style={{
+                        width: '100%',
+                        border: '1px solid rgba(246,70,93,.35)',
+                        borderRadius: '6px',
+                        background: 'rgba(246,70,93,.1)',
+                        color: '#F6465D',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: resettingFairValue || saving ? 'not-allowed' : 'pointer',
+                        opacity: resettingFairValue || saving ? 0.55 : 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '5px',
+                      }}
+                    >
+                      {resettingFairValue && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      reset
+                    </button>
+                  </div>
                   {fieldErrors.fairValue && (
                     <p style={{ fontSize: '11px', color: '#F6465D', marginTop: '3px' }}>
                       {fieldErrors.fairValue[0]}
+                    </p>
+                  )}
+                  {fairValueResetFeedback && (
+                    <p
+                      role={fairValueResetFeedback.type === 'error' ? 'alert' : 'status'}
+                      data-testid={`modal-clube-fair-value-reset-${fairValueResetFeedback.type}`}
+                      style={{
+                        fontSize: '11px',
+                        color: fairValueResetFeedback.type === 'error' ? '#F6465D' : '#2EBD85',
+                        marginTop: '5px',
+                      }}
+                    >
+                      {fairValueResetFeedback.message}
                     </p>
                   )}
                 </div>

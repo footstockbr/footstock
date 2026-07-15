@@ -5,6 +5,7 @@
 //
 // Body (opcional):
 //   { "dryRun": true }             — simula sem gravar
+//   { "ticker": "URU3" }           — restringe o reset a um único ativo
 //   { "onlyFloored": true }        — atualiza apenas ativos com preco <= floorThreshold
 //   { "floorThreshold": 1.5 }      — threshold de floor (default: 1.5)
 //   { "variationPct": 0 }          — variacao aleatoria 0-10% (default: 5%)
@@ -43,6 +44,9 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => ({}))
   const dryRun        = body?.dryRun        === true
+  const ticker = typeof body?.ticker === 'string'
+    ? body.ticker.trim().toUpperCase()
+    : null
   const onlyFloored   = body?.onlyFloored   === true
   const floorThreshold = typeof body?.floorThreshold === 'number'
     ? body.floorThreshold
@@ -51,11 +55,16 @@ export async function POST(request: NextRequest) {
     ? Math.max(0, Math.min(20, body.variationPct))
     : 5
 
+  if (body?.ticker !== undefined && !ticker) {
+    return errors.validation('Ticker inválido para reset de preço.')
+  }
+
   try {
-    // Lê todos os ativos ativos com fairValue do DB — fonte canônica
+    // Reset global: ativos ativos. Reset individual: ticker selecionado, mesmo inativo.
+    // Em ambos os casos, fairValue persistido no DB é a fonte canônica.
     const assets = await prisma.asset.findMany({
       where: {
-        isActive: true,
+        ...(ticker ? { ticker } : { isActive: true }),
         ...(onlyFloored ? { currentPrice: { lte: floorThreshold } } : {}),
       },
       select: {
@@ -114,9 +123,10 @@ export async function POST(request: NextRequest) {
               currentPrice: change.newPrice,
               // openPrice NAO alterado: pertence ao motor (evita divergência de %)
               closePrice:   change.newPrice,
-              isHalted:     false,
-              haltReason:   null,
-              haltedUntil:  null,
+              // Reset individual altera apenas o preço; não pode liberar um halt.
+              ...(ticker
+                ? {}
+                : { isHalted: false, haltReason: null, haltedUntil: null }),
               marketCap:    change.newMarketCap,
               // fairValue NAO e alterado — e o anchor canonico do DB
             },
@@ -163,10 +173,13 @@ export async function POST(request: NextRequest) {
           action:  'RESET_PRICES',
           reason:  onlyFloored
             ? `Reset de ${changes.length} ativos floored (<= ${floorThreshold}) para fairValue +/- ${variationPct}%`
-            : `Reset de ${changes.length} ativos para fairValue +/- ${variationPct}%`,
+            : ticker
+              ? `Reset de ${ticker} para fairValue +/- ${variationPct}%`
+              : `Reset de ${changes.length} ativos para fairValue +/- ${variationPct}%`,
           details: {
             assetsUpdated:     changes.length,
             motorEventsSent:   motorEvents.length,
+            ticker,
             onlyFloored,
             floorThreshold,
             variationPct,
@@ -179,6 +192,7 @@ export async function POST(request: NextRequest) {
 
     return ok({
       dryRun,
+      ticker,
       onlyFloored,
       floorThreshold,
       variationPct,
