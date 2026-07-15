@@ -11,6 +11,7 @@
 import { Loader2, Minus, Pencil, TrendingDown, TrendingUp, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
+import { toast } from 'sonner'
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -101,6 +102,13 @@ export async function resetClubPriceToFairValue(
   return payload.data as ClubFairValueResetResult
 }
 
+export function clubPriceResetSuccessMessage(ticker: string, newPrice: number): string {
+  return `Preço de ${ticker} resetado para FS$ ${newPrice.toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}.`
+}
+
 const DIVISION_LABELS: Record<string, string> = {
   SERIE_A: 'Série A',
   SERIE_B: 'Série B',
@@ -142,10 +150,7 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
   const [loadingEdit, setLoadingEdit] = useState(false)
   const [saving, setSaving] = useState(false)
   const [resettingFairValue, setResettingFairValue] = useState(false)
-  const [fairValueResetFeedback, setFairValueResetFeedback] = useState<{
-    type: 'success' | 'error'
-    message: string
-  } | null>(null)
+  const [fairValueResetError, setFairValueResetError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({})
 
   // ---------------------------------------------------------------------------
@@ -154,7 +159,7 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
   const openEditModal = useCallback(async (ticker: string) => {
     setEditingTicker(ticker)
     setLoadingEdit(true)
-    setFairValueResetFeedback(null)
+    setFairValueResetError(null)
     setFieldErrors({})
     try {
       const res = await fetch(`/api/v1/admin/assets/${ticker}`, { credentials: 'include' })
@@ -195,7 +200,7 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
   const closeModal = useCallback(() => {
     setEditingTicker(null)
     setEditForm(null)
-    setFairValueResetFeedback(null)
+    setFairValueResetError(null)
     setFieldErrors({})
   }, [])
 
@@ -207,7 +212,7 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
     if (!editingTicker || resettingFairValue) return
 
     setResettingFairValue(true)
-    setFairValueResetFeedback(null)
+    setFairValueResetError(null)
     try {
       const result = await resetClubPriceToFairValue(editingTicker)
       const change = result.changes[0]
@@ -216,19 +221,14 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
         throw new Error(`Nenhum fair value válido foi encontrado para ${editingTicker}.`)
       }
 
-      setFairValueResetFeedback({
-        type: 'success',
-        message: `Preço de ${change.ticker} resetado para FS$ ${change.newPrice.toLocaleString('pt-BR', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })}.`,
+      toast.success(clubPriceResetSuccessMessage(change.ticker, change.newPrice), {
+        duration: 3000,
       })
       router.refresh()
     } catch (error) {
-      setFairValueResetFeedback({
-        type: 'error',
-        message: error instanceof Error ? error.message : 'Erro ao resetar o preço do clube.',
-      })
+      setFairValueResetError(
+        error instanceof Error ? error.message : 'Erro ao resetar o preço do clube.'
+      )
     } finally {
       setResettingFairValue(false)
     }
@@ -603,7 +603,7 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
                   <label style={labelStyle}>Valor Inicial / Fair Value (FS$)</label>
                   <div
                     data-testid="modal-clube-fair-value-row"
-                    style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px' }}
+                    style={{ display: 'grid', gridTemplateColumns: '3fr 1fr', gap: '8px' }}
                   >
                     <input
                       style={inputStyle}
@@ -646,17 +646,17 @@ export default function AdminClubesClient({ initialAssets }: { initialAssets: As
                       {fieldErrors.fairValue[0]}
                     </p>
                   )}
-                  {fairValueResetFeedback && (
+                  {fairValueResetError && (
                     <p
-                      role={fairValueResetFeedback.type === 'error' ? 'alert' : 'status'}
-                      data-testid={`modal-clube-fair-value-reset-${fairValueResetFeedback.type}`}
+                      role="alert"
+                      data-testid="modal-clube-fair-value-reset-error"
                       style={{
                         fontSize: '11px',
-                        color: fairValueResetFeedback.type === 'error' ? '#F6465D' : '#2EBD85',
+                        color: '#F6465D',
                         marginTop: '5px',
                       }}
                     >
-                      {fairValueResetFeedback.message}
+                      {fairValueResetError}
                     </p>
                   )}
                 </div>

@@ -1,4 +1,7 @@
-import { resetClubPriceToFairValue } from '@/app/admin/clubes/AdminClubesClient'
+import {
+  clubPriceResetSuccessMessage,
+  resetClubPriceToFairValue,
+} from '@/app/admin/clubes/AdminClubesClient'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -42,15 +45,23 @@ describe('resetClubPriceToFairValue', () => {
     ).rejects.toThrow('Acesso negado.')
   })
 
-  test('mantém input e botão reset na proporção 2:1 dentro do modal', () => {
+  test('formata a confirmação do reset individual para exibição em toast', () => {
+    expect(clubPriceResetSuccessMessage('URU3', 40)).toBe(
+      'Preço de URU3 resetado para FS$ 40,00.'
+    )
+  })
+
+  test('mantém input e botão reset na proporção 3:1 dentro do modal', () => {
     const source = readFileSync(
       join(process.cwd(), 'src/app/admin/clubes/AdminClubesClient.tsx'),
       'utf8'
     )
 
     expect(source).toContain('data-testid="modal-clube-fair-value-row"')
-    expect(source).toContain("gridTemplateColumns: '2fr 1fr'")
+    expect(source).toContain("gridTemplateColumns: '3fr 1fr'")
     expect(source).toContain('data-testid="modal-clube-fair-value-reset-button"')
     expect(source).toContain("                      reset\n                    </button>")
+    expect(source).toContain('toast.success(clubPriceResetSuccessMessage')
+    expect(source).not.toContain('modal-clube-fair-value-reset-success')
   })
 })

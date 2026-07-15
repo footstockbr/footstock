@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
   FAIR_VALUE_RESET_CONFIRMATION,
   FairValueResetControl,
+  fairValueResetSuccessMessage,
   resetPricesToFairValue,
 } from '@/app/admin/motor/FairValueResetControl'
 
@@ -32,7 +33,13 @@ describe('FairValueResetControl', () => {
 
   test('mantém a mensagem de confirmação solicitada', () => {
     expect(FAIR_VALUE_RESET_CONFIRMATION).toBe(
-      'esta ação irá levaar todos os preço para o original, deseja continuar?'
+      'Esta ação irá levar todos os preços para os valores originais. Deseja continuar?'
+    )
+  })
+
+  test('formata o feedback de sucesso exibido no toast', () => {
+    expect(fairValueResetSuccessMessage(40)).toBe(
+      '40 ações restauradas para o fair value.'
     )
   })
 })

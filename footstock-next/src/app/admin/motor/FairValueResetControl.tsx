@@ -1,10 +1,11 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import type { AdminRole } from '@/types'
 
 export const FAIR_VALUE_RESET_CONFIRMATION =
-  'esta ação irá levaar todos os preço para o original, deseja continuar?'
+  'Esta ação irá levar todos os preços para os valores originais. Deseja continuar?'
 
 interface FairValueResetResult {
   assetsUpdated: number
@@ -12,6 +13,10 @@ interface FairValueResetResult {
 
 interface FairValueResetControlProps {
   adminRole: AdminRole
+}
+
+export function fairValueResetSuccessMessage(assetsUpdated: number): string {
+  return `${assetsUpdated} ações restauradas para o fair value.`
 }
 
 export async function resetPricesToFairValue(
@@ -41,11 +46,12 @@ function SuperAdminFairValueResetControl() {
   const queryClient = useQueryClient()
   const mutation = useMutation({
     mutationFn: () => resetPricesToFairValue(),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['admin-assets'] })
       queryClient.invalidateQueries({ queryKey: ['admin-assets-full'] })
       queryClient.invalidateQueries({ queryKey: ['admin-assets-halt'] })
       queryClient.invalidateQueries({ queryKey: ['audit-log'] })
+      toast.success(fairValueResetSuccessMessage(data.assetsUpdated), { duration: 3000 })
     },
   })
 
@@ -75,16 +81,6 @@ function SuperAdminFairValueResetControl() {
           {mutation.isPending ? 'Restaurando...' : 'Restaurar preços originais'}
         </button>
       </div>
-
-      {mutation.isSuccess && (
-        <p
-          data-testid="admin-motor-reset-fair-value-success"
-          role="status"
-          className="mt-2 text-[10px] text-[#2EBD85]"
-        >
-          {mutation.data.assetsUpdated} ações restauradas para o fair value.
-        </p>
-      )}
 
       {mutation.isError && (
         <p
