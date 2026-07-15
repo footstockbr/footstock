@@ -58,25 +58,23 @@ function SuperAdminFairValueResetControl() {
   return (
     <div
       data-testid="admin-motor-kpi-fair-value-reset"
-      className="bg-[#1E2329] rounded-xl border border-[rgba(246,70,93,.18)] p-4"
+      className="mt-3 border-t border-[rgba(240,185,11,.1)] pt-3"
     >
-      <div className="text-[10px] text-[#929AA5] uppercase tracking-wide mb-1">
-        Preços das ações
-      </div>
-      <div className="text-sm font-bold text-[#EAECEF]">Restaurar fair value</div>
-      <p className="text-[10px] text-[#929AA5] mt-1 mb-3">
-        Retorna todas as ações ao valor original cadastrado.
-      </p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-[10px] text-[#929AA5] uppercase tracking-wide">
+          Preço das ações
+        </div>
 
-      <button
-        type="button"
-        data-testid="admin-motor-reset-fair-value-button"
-        onClick={handleReset}
-        disabled={mutation.isPending}
-        className="w-full rounded border border-[rgba(246,70,93,.3)] bg-[rgba(246,70,93,.1)] px-3 py-2 text-[11px] font-semibold text-[#F6465D] transition-colors hover:bg-[rgba(246,70,93,.16)] disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {mutation.isPending ? 'Restaurando...' : 'Restaurar preços originais'}
-      </button>
+        <button
+          type="button"
+          data-testid="admin-motor-reset-fair-value-button"
+          onClick={handleReset}
+          disabled={mutation.isPending}
+          className="rounded border border-[rgba(246,70,93,.3)] bg-[rgba(246,70,93,.1)] px-3 py-1.5 text-[11px] font-semibold text-[#F6465D] transition-colors hover:bg-[rgba(246,70,93,.16)] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {mutation.isPending ? 'Restaurando...' : 'Restaurar preços originais'}
+        </button>
+      </div>
 
       {mutation.isSuccess && (
         <p

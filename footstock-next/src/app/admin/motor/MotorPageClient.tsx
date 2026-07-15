@@ -645,10 +645,7 @@ export default function MotorPageClient({ adminRole }: MotorPageClientProps) {
       {/* KPIs — dados reais */}
       <div
         data-testid="admin-motor-kpis"
-        className={cn(
-          'grid grid-cols-1 sm:grid-cols-2 gap-3',
-          adminRole === 'SUPER_ADMIN' ? 'lg:grid-cols-3' : 'lg:grid-cols-2'
-        )}
+        className="grid grid-cols-1 sm:grid-cols-2 gap-3"
       >
         <div data-testid="admin-motor-kpi-pnl" className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
           <div className="text-[10px] text-[#929AA5] uppercase tracking-wide mb-1">P&L Agregado</div>
@@ -663,39 +660,46 @@ export default function MotorPageClient({ adminRole }: MotorPageClientProps) {
         </div>
 
         <div data-testid="admin-motor-kpi-circuit-breakers" className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
-          {/* div 1 — estado atual (conteúdo original): contagem de ativos suspensos */}
-          <div data-testid="admin-motor-kpi-circuit-breakers-status">
-            <div className="flex items-center justify-between mb-1">
-              <div className="text-[10px] text-[#929AA5] uppercase tracking-wide">Circuit Breakers</div>
-              <span>🔒</span>
+          {/* Primeira linha: estado atual e halt automático lado a lado. */}
+          <div className={cn('grid grid-cols-1', canGlobalHalt && 'sm:grid-cols-2')}>
+            {/* div 1 — estado atual: contagem de ativos suspensos */}
+            <div
+              data-testid="admin-motor-kpi-circuit-breakers-status"
+              className={cn(canGlobalHalt && 'sm:pr-4')}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <div className="text-[10px] text-[#929AA5] uppercase tracking-wide">Circuit Breakers</div>
+                <span>🔒</span>
+              </div>
+              {kpisLoading ? (
+                <Skeleton className="h-7 w-12" />
+              ) : (
+                <div
+                  className="text-lg font-extrabold"
+                  style={{ color: (kpis?.circuitBreakers ?? 0) > 0 ? '#F6465D' : '#2EBD85' }}
+                >
+                  {kpis?.circuitBreakers ?? 0}
+                </div>
+              )}
+              <div className="text-[10px] text-[#929AA5] mt-1">
+                {(kpis?.circuitBreakers ?? 0) === 0 ? 'nenhum ativo suspenso' : 'ativos com negociação suspensa'}
+              </div>
             </div>
-            {kpisLoading ? (
-              <Skeleton className="h-7 w-12" />
-            ) : (
+
+            {/* div 2 — controle admin: toggle on/off + limiar (%) com submit */}
+            {canGlobalHalt && (
               <div
-                className="text-lg font-extrabold"
-                style={{ color: (kpis?.circuitBreakers ?? 0) > 0 ? '#F6465D' : '#2EBD85' }}
+                data-testid="admin-motor-kpi-circuit-breakers-control"
+                className="mt-3 border-t border-[rgba(240,185,11,.1)] pt-3 sm:mt-0 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0"
               >
-                {kpis?.circuitBreakers ?? 0}
+                <CircuitBreakerControl />
               </div>
             )}
-            <div className="text-[10px] text-[#929AA5] mt-1">
-              {(kpis?.circuitBreakers ?? 0) === 0 ? 'nenhum ativo suspenso' : 'ativos com negociação suspensa'}
-            </div>
           </div>
 
-          {/* div 2 — controle admin: toggle on/off + limiar (%) com submit */}
-          {canGlobalHalt && (
-            <div
-              data-testid="admin-motor-kpi-circuit-breakers-control"
-              className="mt-3 pt-3 border-t border-[rgba(240,185,11,.1)]"
-            >
-              <CircuitBreakerControl />
-            </div>
-          )}
+          {/* div 3 — reset global de preços, exclusivo do SUPER_ADMIN */}
+          <FairValueResetControl adminRole={adminRole} />
         </div>
-
-        <FairValueResetControl adminRole={adminRole} />
       </div>
 
       {/* Tabs */}

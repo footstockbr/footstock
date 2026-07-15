@@ -25,6 +25,9 @@ describe('FairValueResetControl', () => {
 
     expect(markup).toContain('data-testid="admin-motor-reset-fair-value-button"')
     expect(markup).toContain('Restaurar preços originais')
+    expect(markup).toContain('Preço das ações')
+    expect(markup).not.toContain('Restaurar fair value')
+    expect(markup).not.toContain('Retorna todas as ações ao valor original cadastrado.')
   })
 
   test('mantém a mensagem de confirmação solicitada', () => {
