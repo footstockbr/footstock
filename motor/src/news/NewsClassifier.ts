@@ -12,29 +12,81 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createHash } from 'crypto'
 import type Redis from 'ioredis'
 import { type PrismaClient, Prisma } from '@prisma/client'
-import { ImpactCategory } from './types'
+import {
+  ImpactCategory,
+  CLASSIFIER_OUTPUT_VERSION,
+  MULTI_TEAM_CAP,
+  isTeamSignalConfident,
+  resolveConfidenceThreshold,
+  type ClassifiedNews,
+  type ClassifiedTeam,
+} from './types'
 import { logger } from '../utils/logger'
 import { newsQueue, type RawNewsItem } from './NewsQueue'
-import type { NewsPublisher } from './NewsPublisher'
-import { buildAliasIndex, resolveFromIndex, type AliasIndex } from './ticker-fallback'
-import { aiClientOptions, getAIProvider, resolveModel } from './ai-provider'
+import { NewsPersistenceError, type NewsPublisher } from './NewsPublisher'
+import { unmarkAsProcessed } from './news-dedup'
+import {
+  buildAliasIndex,
+  resolveFromIndex,
+  type AliasIndex,
+} from './ticker-fallback'
+import { aiClientOptions, resolveModel } from './ai-provider'
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export interface ClassifiedNews {
-  ticker: string          // ticker do ativo afetado; '' se não identificado
-  sentiment: number       // -1.0 a 1.0
-  impactCategory: string  // ImpactCategory como string
-  relevance: number       // 0.0 a 1.0
+// O contrato de saída (ClassifiedNews, ClassifiedTeam, limiar por versão) vive
+// em ./types. Re-exportado aqui porque os consumidores existentes (NewsPublisher,
+// suites) importam `ClassifiedNews` deste módulo.
+export type { ClassifiedNews, ClassifiedTeam, TeamSignalOrigin } from './types'
+
+/**
+ * Fallback de classificação. É uma FÁBRICA (não uma constante) porque
+ * `teams` é um array: espalhar uma constante compartilharia a mesma referência
+ * entre notícias.
+ */
+function makeClassificationFallback(): ClassifiedNews {
+  return {
+    ticker: '',
+    sentiment: 0,
+    impactCategory: 'INSTITUCIONAL',
+    relevance: 0,
+    teams: [],
+  }
 }
 
-const CLASSIFICATION_FALLBACK: ClassifiedNews = {
-  ticker: '',
-  sentiment: 0,
-  impactCategory: 'INSTITUCIONAL',
-  relevance: 0,
+/** Por que o classificador caiu no fallback determinístico (mono-time). */
+type FallbackReason =
+  | 'credit_circuit_open'
+  | 'llm_no_team'
+  | 'parse_invalid'
+  | 'api_error_non_retryable'
+  | 'api_unavailable'
+
+/** Shape bruto (não confiável) devolvido pelo LLM. */
+interface ParsedTeam {
+  ticker?: unknown
+  sentiment?: unknown
+  confidence?: unknown
+}
+
+interface ParsedClassification {
+  teams?: unknown
+  ticker?: unknown
+  sentiment?: unknown
+  confidence?: unknown
+  impactCategory?: unknown
+  relevance?: unknown
+}
+
+/** Candidato a time, já normalizado, antes da política de confidence e do corte. */
+interface TeamCandidate {
+  ticker: string
+  sentiment: number
+  confidence: number
+  /** Ordem de aparição na resposta do LLM (usada como desempate determinístico). */
+  order: number
 }
 
 // ---------------------------------------------------------------------------
@@ -48,7 +100,14 @@ const MODEL = resolveModel('claude-sonnet-4-6')
 function resolveMaxTokens(): number {
   const raw = Number.parseInt(process.env.NEWS_CLASSIFIER_MAX_TOKENS ?? '', 10)
   if (Number.isFinite(raw) && raw > 0) return raw
-  return getAIProvider() === 'kimi' ? 512 : 150
+  // O default do Anthropic subiu de 150 para 512 no contrato multi-time. Com
+  // 150, um grupo de 3 já truncava no meio do JSON, o parse falhava e a notícia
+  // caía no fallback mono-time sem sinal de causa óbvio. O teto ficou em 512
+  // (mesmo valor que o caminho Kimi já usava) porque o prompt deixou de impor
+  // limite de quantidade em `teams`: o corte para MULTI_TEAM_CAP é feito pelo
+  // parser, então a resposta pode legitimamente trazer mais de 3 clubes e ela
+  // precisa caber inteira — truncar aqui reintroduziria o corte cego no LLM.
+  return 512
 }
 
 const MAX_TOKENS = resolveMaxTokens()
@@ -231,14 +290,34 @@ ${mapSection}
 Tickers disponíveis: ${TICKERS_40.join(', ')}
 Categorias de impacto: ${IMPACT_CATEGORIES}
 
-Regras:
-- ticker: código do clube afetado (sempre 4 chars), ou "" se a notícia não afeta nenhum clube específico
-- sentiment: número de -1.0 (muito negativo) a 1.0 (muito positivo) para o clube
+Uma notícia pode afetar MAIS DE UM clube. Liste em "teams" TODOS os clubes
+afetados, sem limite de quantidade, na ORDEM EM QUE APARECEM no texto — o clube
+que é o sujeito do título vem primeiro. NÃO pré-selecione, não corte e não
+descarte clube afetado por achar que são muitos: quem escolhe quais entram no
+grupo final é o sistema, e um clube omitido aqui não pode ser recuperado nem
+registrado depois.
+
+Campos de cada item de "teams":
+- ticker: código do clube afetado (sempre 4 chars), obrigatoriamente um da lista acima
+- sentiment: -1.0 (muito negativo) a 1.0 (muito positivo) PARA AQUELE CLUBE
+- confidence: 0.0 a 1.0 — quanto você confia em que o clube é afetado E em que o sinal está correto
+
+Regras de decisão (obrigatórias):
+- Vitória e derrota no mesmo confronto: sinais opostos e de mesma magnitude para os dois clubes
+- Venda de jogador para rival: comprador positivo se houver reforço material; vendedor negativo se houver perda material; se o efeito não for claro, vendedor com sentiment 0
+- Empate que elimina os dois: ambos negativos
+- Lesão de jogador emprestado: impacta o clube onde ele joga; o clube dono só entra em "teams" se a matéria citar obrigação financeira ou contratual explícita
+- Decisão judicial ou administrativa: sentimento pela consequência direta, nunca por menção incidental
+- Menção incidental (tabela de classificação, histórico, comparação): NÃO gera item em "teams"
+- Ambiguidade: sentiment 0 com confidence baixa
+- Se a notícia não afeta nenhum clube específico: "teams": []
+
+Campos da notícia inteira (não por clube):
 - impactCategory: uma das categorias listadas acima
-- relevance: 0.0 a 1.0 — quão relevante é para o mercado financeiro do clube
+- relevance: 0.0 a 1.0 — quão relevante é para o mercado financeiro
 
 Responda SOMENTE com JSON no formato:
-{"ticker":"URU3","sentiment":0.8,"impactCategory":"ESPORTIVA_MAJORITARIA","relevance":0.9}`
+{"teams":[{"ticker":"URU3","sentiment":0.8,"confidence":0.95},{"ticker":"POR3","sentiment":-0.8,"confidence":0.9}],"impactCategory":"ESPORTIVA_MAJORITARIA","relevance":0.9}`
   }
 
   private buildDynamicPrompt(item: RawNewsItem): string {
@@ -379,7 +458,7 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
     // esgotado ha pouco, pular a chamada (todos os itens falhariam igual) e ir
     // direto ao fallback. Evita o flood de N erros [SYS_002] por lote/rodada.
     if (Date.now() < this.creditCircuitOpenUntil) {
-      return this.withTickerFallback({ ...CLASSIFICATION_FALLBACK }, item.title)
+      return this.withTickerFallback(makeClassificationFallback(), item.title, 'credit_circuit_open')
     }
 
     // Lazy: garante prefixo + elegibilidade mesmo se classify for chamado
@@ -413,34 +492,31 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
       let parseValid = true
       let result: ClassifiedNews
       try {
-        const parsed = JSON.parse(text) as Partial<ClassifiedNews>
+        const parsed = JSON.parse(text) as ParsedClassification
 
-        const rawTicker = typeof parsed.ticker === 'string' ? parsed.ticker.toUpperCase().slice(0, 4) : ''
-        const ticker = TICKERS_40.includes(rawTicker) ? rawTicker : ''
-        if (rawTicker && !ticker) {
-          logger.warn(`[NewsClassifier] Ticker inválido retornado pelo LLM: "${rawTicker}" — ignorado`)
-        }
-
-        const sentiment = typeof parsed.sentiment === 'number' && isFinite(parsed.sentiment)
-          ? Math.max(-1, Math.min(1, parsed.sentiment))
-          : 0
         const relevance = typeof parsed.relevance === 'number' && isFinite(parsed.relevance)
           ? Math.max(0, Math.min(1, parsed.relevance))
           : 0
 
+        // Pipeline multi-time. `teams[0]` (rank 0) é a âncora; `ticker` e
+        // `sentiment` de topo são a projeção dela para o consumidor legado.
+        const teams = this.parseTeams(parsed, item.title, item.description)
+        const anchor = teams[0]
+
         result = {
-          ticker,
-          sentiment,
+          ticker: anchor?.ticker ?? '',
+          sentiment: anchor?.sentiment ?? 0,
           impactCategory: typeof parsed.impactCategory === 'string' ? parsed.impactCategory : 'INSTITUCIONAL',
           relevance,
+          teams,
         }
       } catch {
         parseValid = false
         logger.warn(`[NewsClassifier] Resposta Sonnet não é JSON válido — aplicando fallback`)
-        result = { ...CLASSIFICATION_FALLBACK }
+        result = makeClassificationFallback()
       }
 
-      result = this.withTickerFallback(result, item.title)
+      result = this.withTickerFallback(result, item.title, parseValid ? 'llm_no_team' : 'parse_invalid')
 
       this.logCall(response, { attempt, latencyMs: Date.now() - startMs, ticker: result.ticker, parseValid })
       // Sucesso fecha o circuito (credito de volta / API saudavel).
@@ -468,7 +544,7 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
         } else if (!isCreditExhaustedError(err)) {
           logger.error(`[SYS_002] Sonnet API erro não-retentável (status=${status ?? 'n/a'}): ${error.message}`)
         }
-        return this.withTickerFallback({ ...CLASSIFICATION_FALLBACK }, item.title)
+        return this.withTickerFallback(makeClassificationFallback(), item.title, 'api_error_non_retryable')
       }
 
       // Timeout/abort tem teto próprio (1 retry) para não multiplicar custo numa
@@ -480,26 +556,260 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
       }
 
       logger.error(`[SYS_002] Sonnet API indisponível após ${attempt} tentativa(s): ${error.message}`)
-      return this.withTickerFallback({ ...CLASSIFICATION_FALLBACK }, item.title)
+      return this.withTickerFallback(makeClassificationFallback(), item.title, 'api_unavailable')
     } finally {
       clearTimeout(timeout)
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Parser multi-time
+  //
+  // Ordem OBRIGATÓRIA do pipeline de seleção (decisão do operador, 2026-07-28):
+  //   1) dedup por ticker
+  //   2) política de confidence
+  //   3) corte para MULTI_TEAM_CAP
+  //   4) atribuição de rank
+  // Inverter (2) e (3) deixaria vaga vazia com candidato elegível de fora.
+  // ---------------------------------------------------------------------------
+
+  private parseTeams(
+    parsed: ParsedClassification,
+    title: string,
+    description?: string | null,
+  ): ClassifiedTeam[] {
+    const candidates = this.collectTeamCandidates(parsed)
+    if (candidates.length === 0) return []
+
+    // (1) dedup por ticker — mantém a primeira ocorrência (ordem de aparição).
+    const seen = new Set<string>()
+    const deduped: TeamCandidate[] = []
+    const duplicates: string[] = []
+    for (const candidate of candidates) {
+      if (seen.has(candidate.ticker)) {
+        duplicates.push(candidate.ticker)
+        continue
+      }
+      seen.add(candidate.ticker)
+      deduped.push(candidate)
+    }
+    if (duplicates.length > 0) {
+      logger.info(
+        `[NewsClassifier.metrics] ${JSON.stringify({
+          event: 'news_classifier_teams_deduped',
+          title: title.slice(0, 80),
+          duplicates,
+        })}`
+      )
+    }
+
+    // A âncora (futuro rank 0) é resolvida ANTES da política de confidence: ela
+    // é função pura do título (e do corpo como fallback), nunca do confidence
+    // nem do sentimento. O rank 0 precisa ser estável a recalibração do modelo
+    // porque carrega `ticker`/`sentiment` de topo lidos por consumidor legado.
+    const anchorTicker = this.resolveAnchorTicker(deduped, title, description)
+
+    // (2) política de confidence — aplicada apenas aos times que NÃO são a
+    // âncora (o rank 0 segue o gate de publicação existente, não o limiar).
+    // Time abaixo do limiar não é descartado: entra NEUTRAL, com origem
+    // `low_confidence`, e não despacha impacto.
+    const threshold = resolveConfidenceThreshold(CLASSIFIER_OUTPUT_VERSION)
+    if (threshold === null) {
+      logger.warn(
+        `[NewsClassifier] Limiar de confidence não resolvido para a versão ` +
+        `"${CLASSIFIER_OUTPUT_VERSION}" — fail-closed: todo time de rank 1+ entra como low_confidence`
+      )
+    }
+    const policed = deduped.map((candidate) => {
+      const isAnchor = candidate.ticker === anchorTicker
+      const confident = isAnchor || isTeamSignalConfident(candidate.confidence, CLASSIFIER_OUTPUT_VERSION)
+      return {
+        ...candidate,
+        sentiment: confident ? candidate.sentiment : 0,
+        origin: (confident ? 'classifier' : 'low_confidence') as ClassifiedTeam['origin'],
+      }
+    })
+
+    // (3) corte para MULTI_TEAM_CAP — a âncora ocupa uma vaga por direito; as
+    // vagas restantes vão para os maiores `confidence`, com desempate por ordem
+    // de aparição. Os cortados são sempre registrados em log estruturado.
+    const anchor = policed.find((team) => team.ticker === anchorTicker)
+    const others = policed.filter((team) => team.ticker !== anchorTicker)
+    const ranked = [...others].sort((a, b) =>
+      b.confidence !== a.confidence ? b.confidence - a.confidence : a.order - b.order
+    )
+    const keptOthers = ranked.slice(0, Math.max(0, MULTI_TEAM_CAP - (anchor ? 1 : 0)))
+    const dropped = ranked.slice(keptOthers.length)
+    if (dropped.length > 0) {
+      logger.info(
+        `[NewsClassifier.metrics] ${JSON.stringify({
+          event: 'news_classifier_teams_capped',
+          title: title.slice(0, 80),
+          cap: MULTI_TEAM_CAP,
+          dropped: dropped.map((team) => ({ ticker: team.ticker, confidence: team.confidence })),
+        })}`
+      )
+    }
+
+    // (4) atribuição de rank — âncora em 0; os demais em ordem de aparição,
+    // não por confidence (a ordem do corte não deve vazar para a ordem do grupo).
+    const keptInOrder = keptOthers.sort((a, b) => a.order - b.order)
+    const selected = anchor ? [anchor, ...keptInOrder] : keptInOrder
+    const teams: ClassifiedTeam[] = selected.map((team, rank) => ({
+      ticker: team.ticker,
+      sentiment: team.sentiment,
+      confidence: team.confidence,
+      rank,
+      origin: team.origin,
+    }))
+
+    logger.info(
+      `[NewsClassifier.metrics] ${JSON.stringify({
+        event: 'news_classifier_teams_resolved',
+        title: title.slice(0, 80),
+        classifier_version: CLASSIFIER_OUTPUT_VERSION,
+        confidence_threshold: threshold,
+        multi_team: teams.length > 1,
+        teams: teams.map((team) => ({
+          ticker: team.ticker,
+          rank: team.rank,
+          sentiment: team.sentiment,
+          confidence: team.confidence,
+          origin: team.origin,
+        })),
+      })}`
+    )
+
+    return teams
+  }
+
+  /**
+   * Normaliza o array bruto do LLM em candidatos válidos. Aceita também o shape
+   * legado mono-time (`{ticker, sentiment}` na raiz) para não perder a notícia
+   * quando o modelo ignora o formato novo.
+   */
+  private collectTeamCandidates(parsed: ParsedClassification): TeamCandidate[] {
+    const rawTeams: ParsedTeam[] = Array.isArray(parsed.teams)
+      ? (parsed.teams as ParsedTeam[])
+      : []
+
+    // A normalização vem ANTES da decisão pelo shape legado: um `teams` não
+    // vazio em tamanho mas composto só de lixo (null, ticker fora da lista,
+    // objeto sem ticker) normaliza para zero candidatos. Testar `rawTeams.length`
+    // primeiro faria essa resposta híbrida suprimir um `ticker` raiz válido e
+    // terminar sem nenhum time.
+    const normalized = this.normalizeCandidates(rawTeams)
+    if (normalized.length > 0) return normalized
+
+    if (typeof parsed.ticker === 'string') {
+      logger.warn(
+        rawTeams.length === 0
+          ? '[NewsClassifier] Resposta em shape legado (ticker na raiz, sem teams[]) — tratada como time único'
+          : '[NewsClassifier] Resposta híbrida: teams[] sem candidato válido — recorrendo ao ticker da raiz'
+      )
+      return this.normalizeCandidates([
+        { ticker: parsed.ticker, sentiment: parsed.sentiment, confidence: parsed.confidence },
+      ])
+    }
+
+    return normalized
+  }
+
+  private normalizeCandidates(rawTeams: ParsedTeam[]): TeamCandidate[] {
+    const candidates: TeamCandidate[] = []
+    rawTeams.forEach((raw, order) => {
+      if (!raw || typeof raw !== 'object') return
+      const rawTicker = typeof raw.ticker === 'string' ? raw.ticker.toUpperCase().slice(0, 4) : ''
+      if (!rawTicker) return
+      if (!TICKERS_40.includes(rawTicker)) {
+        logger.warn(`[NewsClassifier] Ticker inválido retornado pelo LLM: "${rawTicker}" — ignorado`)
+        return
+      }
+      candidates.push({
+        ticker: rawTicker,
+        sentiment: clampRange(raw.sentiment, -1, 1),
+        confidence: clampRange(raw.confidence, 0, 1),
+        order,
+      })
+    })
+    return candidates
+  }
+
+  /**
+   * Ticker do rank 0: o primeiro ticker único citado no TÍTULO; se o título não
+   * resolver nenhum dos candidatos, o primeiro citado no CORPO. Não usa
+   * `confidence` nem sentimento em nenhum dos dois passos.
+   *
+   * A resolução delega ao MESMO `resolveFromIndex` do fallback determinístico,
+   * sobre um recorte do índice de aliases restrito aos candidatos. Isso mantém
+   * a semântica idêntica à do resolver espelhado (match mais à esquerda, com
+   * desempate por alias mais longo): uma segunda implementação local
+   * desempatava só por ordem dos candidatos e podia eleger rank 0 diferente do
+   * fallback quando dois tickers têm aliases sobrepostos.
+   *
+   * `candidates[0]` (ordem da resposta do LLM) é o ÚLTIMO recurso, usado apenas
+   * quando nem título nem corpo resolvem — nunca antes de tentar o corpo.
+   */
+  private resolveAnchorTicker(
+    candidates: TeamCandidate[],
+    title: string,
+    description?: string | null,
+  ): string {
+    const allowed = new Set(candidates.map((candidate) => candidate.ticker))
+    const scoped: AliasIndex = this.tickerIndex.filter(([, ticker]) => allowed.has(ticker))
+
+    if (scoped.length > 0) {
+      const fromTitle = resolveFromIndex(title, scoped)
+      if (fromTitle) return fromTitle.ticker
+
+      const fromBody = resolveFromIndex(description ?? '', scoped)
+      if (fromBody) return fromBody.ticker
+    }
+
+    return candidates[0].ticker
+  }
+
   /**
    * Fallback determinístico (gatilho "sem time"): quando o classificador não
-   * identifica o clube (ticker vazio — seja por julgamento do LLM, parse inválido
+   * identifica o clube (teams vazio — seja por julgamento do LLM, parse inválido
    * OU falha de API como crédito esgotado/timeout), tenta resolver pelo TÍTULO de
    * forma precision-first. NÃO altera relevance/sentiment → notícias institucionais
    * ganham o badge do time sem disparar impacto de preço (que exige relevance>0.3
    * no publish). Aplicado em TODOS os caminhos de retorno de classify().
+   *
+   * O fallback é SEMPRE mono-time (nunca inventa grupo) e registra explicitamente
+   * que caiu no fallback e por quê (`reason`), com `origin: 'classifier_fallback'`
+   * no time resolvido — a UI e a telemetria distinguem isso de `low_confidence`.
    */
-  private withTickerFallback(result: ClassifiedNews, title: string): ClassifiedNews {
+  private withTickerFallback(result: ClassifiedNews, title: string, reason: FallbackReason): ClassifiedNews {
     if (result.ticker) return result
     const hit = resolveFromIndex(title, this.tickerIndex)
+    logger.info(
+      `[NewsClassifier.metrics] ${JSON.stringify({
+        event: 'news_classifier_deterministic_fallback',
+        reason,
+        title: title.slice(0, 80),
+        resolved: hit !== null,
+        ticker: hit?.ticker ?? null,
+        alias: hit?.alias ?? null,
+        multi_team: false,
+      })}`
+    )
     if (!hit) return result
-    logger.info(`[NewsClassifier] Fallback determinístico: "${title.slice(0, 60)}" → ${hit.ticker} (alias="${hit.alias}")`)
-    return { ...result, ticker: hit.ticker }
+    logger.info(`[NewsClassifier] Fallback determinístico (${reason}): "${title.slice(0, 60)}" → ${hit.ticker} (alias="${hit.alias}")`)
+    return {
+      ...result,
+      ticker: hit.ticker,
+      teams: [
+        {
+          ticker: hit.ticker,
+          sentiment: result.sentiment,
+          confidence: 0,
+          rank: 0,
+          origin: 'classifier_fallback',
+        },
+      ],
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -591,6 +901,25 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
           logger.warn(`[RATE_001] Rate limit atingido — re-enfileirando item e aguardando 1s`)
           newsQueue.enqueue(item)
           await sleep(1000)
+        } else if (err instanceof NewsPersistenceError) {
+          // Critério 6 (item 014): a notícia NÃO chegou ao banco, então ela não
+          // pode continuar marcada como processada. Desmarcamos a URL para que o
+          // próximo ciclo do RSSFetcher a traga de volta, em vez de perdê-la em
+          // silêncio pelos 48h do TTL de dedup.
+          //
+          // Sem re-enfileirar na fila em memória de propósito: o erro é de
+          // infraestrutura de banco e tende a persistir por mais de um item;
+          // re-enfileirar aqui giraria a fila em busy-loop contra um banco que
+          // ainda está fora. O ciclo de RSS (10 min) é o backoff natural.
+          const unmarked = await unmarkAsProcessed(this.redis, err.item.url)
+          logger.error(JSON.stringify({
+            event: 'news_worker_persist_failed',
+            url: err.item.url,
+            title: err.item.title.slice(0, 80),
+            source: err.item.source,
+            unmarked_for_retry: unmarked,
+            error_message: (err.cause as Error | undefined)?.message ?? err.message,
+          }))
         } else {
           logger.error(`[NewsClassifier] Erro inesperado no worker: ${(err as Error).message}`)
           // fallback já aplicado em classify
@@ -612,6 +941,14 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/** Número do LLM saneado para o intervalo [min, max]. Não numérico vira `min` quando
+ * o intervalo é não negativo (confidence) e 0 quando cruza o zero (sentiment). */
+function clampRange(value: unknown, min: number, max: number): number {
+  const fallback = min >= 0 ? min : 0
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
+  return Math.max(min, Math.min(max, value))
 }
 
 // Política de retry (centralizada aqui; SDK roda com maxRetries:0).

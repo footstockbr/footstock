@@ -6,7 +6,9 @@
 import RedisMock from 'ioredis-mock'
 import type Redis from 'ioredis'
 import { NewsClassifier, RateLimitError } from '../NewsClassifier'
+import { NewsPersistenceError } from '../NewsPublisher'
 import { newsQueue, type RawNewsItem } from '../NewsQueue'
+import { NEWS_URLS_KEY } from '../news-dedup'
 import { buildAliasIndex } from '../ticker-fallback'
 
 // ---------------------------------------------------------------------------
@@ -353,6 +355,90 @@ describe('NewsClassifier', () => {
     await classifier.startClassifying(mockPublisher as any)
 
     expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('publisher crash'))
+  }, 5000)
+
+  // -------------------------------------------------------------------------
+  // Critério 6 (item 014) — falha de banco não pode terminar com o item
+  // marcado como processado.
+  //
+  // A marca é escrita pelo RSSFetcher lá no ENFILEIRAMENTO. Quando o publisher
+  // falha ao gravar no banco, quem está segurando a URL é o set de dedup, com
+  // TTL de 48h: sem desfazer a marca, a notícia some em silêncio até o TTL
+  // expirar. É esse desfazer que o worker faz aqui.
+  // -------------------------------------------------------------------------
+
+  test('[CRITERIO 6 — falha de persistencia] desmarca a URL do dedup e loga estruturado', async () => {
+    const { logger } = require('../../utils/logger')
+    const item = makeRawItem()
+    const mockPublisher = {
+      publish: jest.fn().mockRejectedValue(new NewsPersistenceError(item, new Error('DB Error'))),
+    }
+
+    mockCreate.mockResolvedValue(sonnetsResponse({
+      ticker: 'FLM', sentiment: 0.4, impactCategory: 'RESULTADO_ESPORTIVO', relevance: 0.8,
+    }))
+
+    // Estado do mundo real no momento da falha: a URL já está no set de dedup.
+    await (redis as any).sadd(NEWS_URLS_KEY, item.url)
+    expect(await (redis as any).sismember(NEWS_URLS_KEY, item.url)).toBe(1)
+
+    while (!newsQueue.isEmpty()) newsQueue.dequeue()
+    newsQueue.enqueue(item)
+
+    setTimeout(() => classifier.stopClassifying(), 50)
+    await classifier.startClassifying(mockPublisher as any)
+
+    // O que o próximo ciclo do RSSFetcher enxerga: a URL voltou a ser elegível.
+    expect(await (redis as any).sismember(NEWS_URLS_KEY, item.url)).toBe(0)
+
+    const structured: Array<Record<string, unknown>> = (logger.error as jest.Mock).mock.calls
+      .map((call: unknown[]) => {
+        try {
+          return JSON.parse(call[0] as string) as Record<string, unknown>
+        } catch {
+          return null
+        }
+      })
+      .filter((entry): entry is Record<string, unknown> => entry !== null)
+    const falhas = structured.filter((entry) => entry.event === 'news_worker_persist_failed')
+    expect(falhas).toHaveLength(1)
+    expect(falhas[0]).toMatchObject({
+      url: item.url,
+      source: item.source,
+      unmarked_for_retry: true,
+      error_message: 'DB Error',
+    })
+
+    // Sem re-enfileiramento em memória de propósito: o retorno é pelo ciclo de
+    // RSS, não por busy-loop contra um banco que ainda está fora.
+    expect(newsQueue.isEmpty()).toBe(true)
+  }, 5000)
+
+  test('[CRITERIO 6 — Redis fora no unmark] degrada em warn, sem derrubar o worker', async () => {
+    const { logger } = require('../../utils/logger')
+    const item = makeRawItem()
+    const mockPublisher = {
+      publish: jest.fn().mockRejectedValue(new NewsPersistenceError(item, new Error('DB Error'))),
+    }
+
+    mockCreate.mockResolvedValue(sonnetsResponse({
+      ticker: 'FLM', sentiment: 0.4, impactCategory: 'RESULTADO_ESPORTIVO', relevance: 0.8,
+    }))
+
+    jest
+      .spyOn(redis as unknown as { srem: (...args: unknown[]) => Promise<number> }, 'srem')
+      .mockRejectedValue(new Error('Redis Error'))
+
+    while (!newsQueue.isEmpty()) newsQueue.dequeue()
+    newsQueue.enqueue(item)
+
+    setTimeout(() => classifier.stopClassifying(), 50)
+    await expect(classifier.startClassifying(mockPublisher as any)).resolves.toBeUndefined()
+
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('news_dedup_unmark_failed'))
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('"unmarked_for_retry":false')
+    )
   }, 5000)
 
   // -------------------------------------------------------------------------

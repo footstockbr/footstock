@@ -11,6 +11,11 @@ import type { PrismaClient } from '@prisma/client'
 import { logger } from '../utils/logger'
 import { newsQueue, type RawNewsItem } from './NewsQueue'
 import { FallbackPool } from './FallbackPool'
+import {
+  NEWS_URLS_KEY,
+  URL_TTL_SECONDS,
+  markAsProcessed as markUrlAsProcessed,
+} from './news-dedup'
 
 // ---------------------------------------------------------------------------
 // Config
@@ -25,9 +30,10 @@ const FEEDS_FALLBACK = [
   { url: 'https://www.mercadodabola.com.br/feed/',        source: 'Mercado da Bola'   },
 ]
 
-const NEWS_URLS_KEY = 'news:urls'
+// `NEWS_URLS_KEY` e `URL_TTL_SECONDS` vivem em `./news-dedup` desde o item 014:
+// o worker de classificação precisa da MESMA chave para desmarcar um item que
+// falhou ao ser persistido (critério 6).
 const NEWS_LAST_FETCH_KEY = 'news:last_fetch'
-const URL_TTL_SECONDS = 48 * 60 * 60    // 48 horas
 const FETCH_INTERVAL_MS = 10 * 60 * 1000  // 10 minutos - FDD canonico
 const NEWS_MAX_AGE_MS = 12 * 60 * 60 * 1000 // 12 horas — INTAKE canônico
 
@@ -138,8 +144,7 @@ export class RSSFetcher {
   }
 
   async markAsProcessed(url: string): Promise<void> {
-    await this.redis.sadd(NEWS_URLS_KEY, url)
-    await this.redis.expire(NEWS_URLS_KEY, URL_TTL_SECONDS)
+    await markUrlAsProcessed(this.redis, url)
   }
 
   // ---------------------------------------------------------------------------
