@@ -4,17 +4,61 @@ import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
 import { resolveTickerFromText } from '@/lib/utils/resolve-ticker'
+import { writeNewsGroup } from '@/lib/services/newsGroupWriter'
 import type { User, AdminRole } from '@/types'
 
-const createSchema = z.object({
-  title: z.string().min(5, 'Titulo deve ter pelo menos 5 caracteres').max(255),
-  content: z.string().min(10, 'Conteudo deve ter pelo menos 10 caracteres').max(4000),
-  impact: z.enum(['FINANCEIRA_CRITICA', 'ESPORTIVA_MAJORITARIA', 'MERCADO_ATIVOS', 'INTEGRIDADE_SAUDE', 'INSTITUCIONAL', 'ESPORTIVA_MENOR']),
-  sentiment: z.enum(['BULLISH', 'BEARISH', 'NEUTRAL']),
-  ticker: z.string().max(5).optional().default(''),
-  source: z.string().max(255).nullable().optional(),
-  isPublished: z.boolean().optional().default(false),
-})
+// Mensagens do grupo multi-time (M067). Ficam aqui e nao no service porque este
+// POST valida `sentiment` como enum (o injetor valida como numero) e porque o
+// operador ve exatamente estas frases no modal de criacao.
+const GROUP_MAX_ADDITIONAL_MSG = 'Grupo de noticia aceita no maximo 3 times (1 principal + 2 adicionais).'
+const GROUP_EMPTY_TICKER_MSG = 'Time adicional sem ticker. Escolha o time ou remova a linha.'
+const groupDuplicateTickerMsg = (ticker: string) =>
+  `Ticker repetido no grupo: ${ticker}. Cada time entra uma vez so na mesma noticia.`
+
+const createSchema = z
+  .object({
+    title: z.string().min(5, 'Titulo deve ter pelo menos 5 caracteres').max(255),
+    content: z.string().min(10, 'Conteudo deve ter pelo menos 10 caracteres').max(4000),
+    impact: z.enum(['FINANCEIRA_CRITICA', 'ESPORTIVA_MAJORITARIA', 'MERCADO_ATIVOS', 'INTEGRIDADE_SAUDE', 'INSTITUCIONAL', 'ESPORTIVA_MENOR']),
+    sentiment: z.enum(['BULLISH', 'BEARISH', 'NEUTRAL']),
+    ticker: z.string().max(5).optional().default(''),
+    source: z.string().max(255).nullable().optional(),
+    isPublished: z.boolean().optional().default(false),
+    // Times adicionais do MESMO fato. Ausente ou vazio = noticia de linha unica,
+    // caminho identico ao anterior a este item (criterio 17). Diferente do
+    // `ticker` principal, o ticker do irmao NAO passa por auto-deteccao: o texto
+    // e um so e resolveria sempre o mesmo time, o que criaria ticker repetido.
+    additionalTeams: z
+      .array(
+        z.object({
+          ticker: z.string().min(1, GROUP_EMPTY_TICKER_MSG).max(5),
+          sentiment: z.enum(['BULLISH', 'BEARISH', 'NEUTRAL']),
+        })
+      )
+      .max(2, GROUP_MAX_ADDITIONAL_MSG)
+      .optional(),
+  })
+  .superRefine((data, ctx) => {
+    const extra = data.additionalTeams ?? []
+    if (extra.length === 0) return
+    // Ticker repetido violaria o indice unico parcial por ticker (DB-05) com um
+    // P2002 opaco. Comparacao case-insensitive porque este endpoint nao faz
+    // upper-case no schema.
+    const seen = new Set<string>()
+    if (data.ticker) seen.add(data.ticker.toUpperCase())
+    extra.forEach((team, index) => {
+      const normalized = team.ticker.toUpperCase()
+      if (seen.has(normalized)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['additionalTeams', index, 'ticker'],
+          message: groupDuplicateTickerMsg(normalized),
+        })
+        return
+      }
+      seen.add(normalized)
+    })
+  })
 
 const VALID_ADMIN_ROLES = ['SUPER_ADMIN', 'ADMINISTRADOR', 'MODERADOR', 'EDITOR', 'MONITOR', 'CLUB_PARTNER']
 
@@ -58,7 +102,16 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Item 017 / DB-01: a listagem admin conta GRUPOS, nao linhas. Uma noticia de
+    // N times sao N linhas irmas pelo group_id; so a ancora (group_rank 0) entra na
+    // lista. Sem este filtro um grupo de 3 ocupa 3 dos 100 slots e a janela encolhe
+    // ate 3x (RB21). Com acervo unitario pos-backfill (item 008) toda linha tem
+    // group_rank 0, entao o resultado e identico ao de antes (criterio 17).
+    // O `take: 100` continua o mesmo de proposito: agora sao 100 grupos de verdade.
+    // Sem `select`: groupId/groupRank seguem no retorno (o item 018 usa groupId no
+    // data-testid do badge de grupo).
     const news = await prisma.news.findMany({
+      where: { groupRank: 0 },
       orderBy: { publishedAt: { sort: 'desc', nulls: 'last' } },
       take: 100,
     })
@@ -91,11 +144,19 @@ export async function POST(request: NextRequest) {
 
   const parsed = createSchema.safeParse(body)
   if (!parsed.success) {
-    return errors.validation('Dados invalidos. Verifique titulo (min 5), conteudo (min 10), impacto e sentimento.')
+    // A mensagem generica nao serve para o grupo multi-time: "verifique titulo,
+    // conteudo, impacto e sentimento" manda o operador olhar campos que estao
+    // certos enquanto o erro real e a terceira linha de time. Quando existe
+    // issue em `additionalTeams`, a mensagem especifica dela vence.
+    const groupIssue = parsed.error.issues.find(issue => issue.path[0] === 'additionalTeams')
+    return errors.validation(
+      groupIssue?.message ??
+        'Dados invalidos. Verifique titulo (min 5), conteudo (min 10), impacto e sentimento.'
+    )
   }
 
   try {
-    const { title, content, impact, sentiment, ticker, source, isPublished } = parsed.data
+    const { title, content, impact, sentiment, ticker, source, isPublished, additionalTeams } = parsed.data
 
     // Auto-detect ticker from title+content when not explicitly provided
     let resolvedTicker = ticker || null
@@ -113,22 +174,88 @@ export async function POST(request: NextRequest) {
       resolvedAssetId = asset?.id ?? null
     }
 
-    const news = await prisma.news.create({
-      data: {
-        title,
-        content,
-        impact,
-        sentiment,
+    // Caminho de linha unica: create direto, sem transacao e sem group_id/rank —
+    // o trigger `news_group_defaults_trg` preenche (DB-03). Identico ao anterior
+    // a este item (criterio 17).
+    if (!additionalTeams || additionalTeams.length === 0) {
+      const news = await prisma.news.create({
+        data: {
+          title,
+          content,
+          impact,
+          sentiment,
+          ticker: resolvedTicker,
+          assetIds: resolvedAssetId ? [resolvedAssetId] : [],
+          source: source || null,
+          isPublished,
+          publishedAt: isPublished ? new Date() : null,
+          author: auth.user.name,
+        },
+      })
+
+      return ok(news, 201)
+    }
+
+    // ----------------------------------------------------------------------
+    // Grupo multi-time: 2 ou 3 linhas irmas do mesmo fato
+    // ----------------------------------------------------------------------
+    // Quando o ticker principal veio de auto-deteccao, o superRefine do schema
+    // nao teve como compara-lo com os irmaos (naquele momento era string vazia).
+    // Recheca aqui, antes de escrever, para o operador receber 422 legivel em vez
+    // de P2002 do indice unico parcial (DB-05).
+    const groupTickers = new Set<string>()
+    if (resolvedTicker) groupTickers.add(resolvedTicker.toUpperCase())
+    for (const team of additionalTeams) {
+      const normalized = team.ticker.toUpperCase()
+      if (groupTickers.has(normalized)) {
+        return errors.validation(groupDuplicateTickerMsg(normalized))
+      }
+      groupTickers.add(normalized)
+    }
+
+    // UMA instancia de publishedAt para todas as linhas: a ordenacao do feed usa
+    // esse campo e recalcular por linha criaria empate instavel entre irmas.
+    const groupPublishedAt = isPublished ? new Date() : null
+
+    const rows = [
+      {
         ticker: resolvedTicker,
+        sentiment,
         assetIds: resolvedAssetId ? [resolvedAssetId] : [],
-        source: source || null,
-        isPublished,
-        publishedAt: isPublished ? new Date() : null,
-        author: auth.user.name,
+        rank: 0,
       },
+    ]
+    for (let i = 0; i < additionalTeams.length; i++) {
+      const teamTicker = additionalTeams[i].ticker.toUpperCase()
+      // Mesma tolerancia da ancora: ticker sem Asset correspondente grava a linha
+      // com `assetIds` vazio em vez de derrubar a criacao. Este endpoint e
+      // editorial e nao publica evento de motor, entao a linha sem asset e
+      // apenas conteudo — diferente do `/inject`, que precisa do assetId.
+      const asset = await prisma.asset.findUnique({
+        where: { ticker: teamTicker },
+        select: { id: true },
+      })
+      rows.push({
+        ticker: teamTicker,
+        sentiment: additionalTeams[i].sentiment,
+        assetIds: asset ? [asset.id] : [],
+        rank: i + 1,
+      })
+    }
+
+    const { anchor } = await writeNewsGroup(rows, {
+      title,
+      content,
+      impact,
+      source: source || null,
+      isPublished,
+      publishedAt: groupPublishedAt,
+      author: auth.user.name,
     })
 
-    return ok(news, 201)
+    // Retorna a ancora, como no caminho de linha unica: o admin lista e edita
+    // grupos pela ancora (GET filtra `groupRank: 0`).
+    return ok(anchor, 201)
   } catch (error) {
     console.error('[news] Error:', error)
     return errors.server()

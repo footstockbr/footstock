@@ -221,7 +221,12 @@ export class PriceCalculator {
     if (previousDeltas && previousDeltas.size > 1) {
       const corrResult = correlationLayer.compute(state, previousDeltas)
       correlationDelta = corrResult.delta
-      if (correlationDelta !== 0) {
+      // A guarda aceita `suppressedPeers > 0` porque a supressão intra-grupo pode ZERAR
+      // `correlationDelta` — é exatamente o caso canônico do RB9 (sinais opostos entre
+      // irmãos de grupo). Com a condição antiga o LayerResult desaparecia justamente no
+      // cenário mais interessante e os contadores nunca afloravam em runtime, violando
+      // Zero Silêncio. Autorizado pelo operador no recovery de 2026-07-30 (item 021).
+      if (correlationDelta !== 0 || corrResult.suppressedPeers > 0) {
         layerResults.push({
           layer: 'L10_Correlation',  // mantido como L10 para compatibilidade
           deltaPrice: correlationDelta,
@@ -230,6 +235,13 @@ export class PriceCalculator {
             regionalRho: corrResult.regionalRho,
             clusterPeers: corrResult.clusterPeers,
             regionalPeers: corrResult.regionalPeers,
+            // Supressão intra-grupo (RB9 / critério 26). Este literal lista campos
+            // NOMEADOS, sem spread, então campo novo em CorrelationResult não aflora
+            // sozinho: sem estas duas linhas a supressão seria invisível em runtime.
+            // `suppressedGroups` sai como string porque LayerResult.metadata é
+            // Record<string, number | string | boolean>.
+            suppressedPeers: corrResult.suppressedPeers,
+            suppressedGroups: corrResult.suppressedGroups.join(','),
           },
         })
       }

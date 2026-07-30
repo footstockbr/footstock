@@ -104,3 +104,7 @@ secrets/
 *-secrets.json
 *-secrets.yaml
 *-secrets.yml
+
+# Artefatos de corrida do Playwright (F-025-05, item 025 do loop M067)
+footstock-next/playwright-report/
+footstock-next/test-results/

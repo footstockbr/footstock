@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Lock } from 'lucide-react'
 import { IMPACT_CATEGORY_LABELS, IMPACT_CATEGORY_OPTIONS, SENTIMENT_HEX_COLORS, SENTIMENT_LABELS, SENTIMENT_OPTIONS } from '@/lib/constants/admin-ui'
@@ -22,9 +22,48 @@ interface NewsItem {
   author: string
   createdAt: string
   updatedAt: string
+  // Grupo multi-time (M067). O GET admin devolve so as ancoras
+  // (`where: { groupRank: 0 }`, item 017) e nao usa `select`, entao os dois campos
+  // chegam sempre. Opcionais no tipo porque acervo pre-backfill e mocks de teste
+  // podem nao te-los.
+  groupId?: string | null
+  groupRank?: number | null
 }
 
 type FilterType = 'todas' | 'publicada' | 'rascunho' | 'arquivada'
+
+/** Espelha o `take: 100` do GET /api/v1/admin/news. */
+const NEWS_WINDOW_SIZE = 100
+
+/** Cap DB-04 do grupo: 1 time principal + 2 adicionais. */
+const MAX_GROUP_TEAMS = 3
+
+interface CreateTeamRow {
+  ticker: string
+  sentiment: string
+}
+
+/**
+ * Aviso de escopo do grupo. Um componente unico (e nao o mesmo literal repetido
+ * em dois modais) para o `data-testid` aparecer uma vez so no fonte e no DOM.
+ */
+const GroupScopeWarning = ({ children }: { children: ReactNode }) => (
+  <div
+    data-testid="admin-noticias-group-scope-warning"
+    style={{
+      marginBottom: '16px',
+      padding: '10px 14px',
+      background: 'rgba(240, 185, 11, 0.06)',
+      border: '1px solid rgba(240, 185, 11, 0.15)',
+      borderRadius: '6px',
+      color: '#F0B90B',
+      fontSize: '12px',
+      lineHeight: '1.5',
+    }}
+  >
+    {children}
+  </div>
+)
 
 const getSentimentColor = (sentiment: string): string => SENTIMENT_HEX_COLORS[sentiment] ?? '#F0B90B'
 
@@ -49,6 +88,9 @@ const EMPTY_CREATE = {
   ticker: '',
   source: '',
   isPublished: false,
+  // Times adicionais do MESMO fato. Vazio = notícia de linha única, payload
+  // idêntico ao anterior a este item.
+  additionalTeams: [] as CreateTeamRow[],
 }
 
 export default function NoticiasPage() {
@@ -59,16 +101,30 @@ export default function NoticiasPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Erro de ação de card (publicar/arquivar/deletar). Antes era `alert()`, que o
+  // Playwright não vê e o operador dispensa sem ler.
+  const [actionError, setActionError] = useState<string | null>(null)
+  // Janela cheia: o GET devolve no máximo 100 grupos.
+  const [windowSaturated, setWindowSaturated] = useState(false)
+
   // Edit modal
   const [editingItem, setEditingItem] = useState<NewsItem | null>(null)
   const [editForm, setEditForm] = useState({ title: '', content: '', impact: 'ESPORTIVA_MAJORITARIA', sentiment: 'NEUTRAL', ticker: '' })
   const [savingEdit, setSavingEdit] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
+  // Quantas linhas o PATCH afetou (campo `groupAffected` da resposta, item 017).
+  const [editNotice, setEditNotice] = useState<string | null>(null)
 
   // Create modal
   const [creating, setCreating] = useState(false)
   const [createForm, setCreateForm] = useState(EMPTY_CREATE)
   const [savingCreate, setSavingCreate] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+
+  // Delete confirmation modal
+  const [deleteTarget, setDeleteTarget] = useState<NewsItem | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchNews()
@@ -87,6 +143,7 @@ export default function NoticiasPage() {
       ticker: item.ticker ?? '',
     })
     setEditError(null)
+    setEditNotice(null)
   }, [highlightedNewsId, news, editingItem])
 
   const fetchNews = async () => {
@@ -95,7 +152,24 @@ export default function NoticiasPage() {
       const res = await fetch('/api/v1/admin/news', { credentials: 'include' })
       if (!res.ok) throw new Error('Erro ao carregar noticias')
       const data = await res.json()
-      setNews(data.data || [])
+      const payload: NewsItem[] = data.data || []
+
+      // A rota já filtra `groupRank: 0` (item 017), então cada item aqui é UM
+      // grupo, não uma linha. O filtro defensivo abaixo existe porque a lista
+      // alimenta os contadores do header: se alguma vez uma linha irmã escapar
+      // (backfill incompleto, rota alterada), contaríamos a mesma notícia 2 ou 3
+      // vezes. Descarte é logado, nunca silencioso.
+      const anchors = payload.filter((item) => item.groupRank === 0 || item.groupRank == null)
+      if (anchors.length !== payload.length) {
+        console.warn(
+          `[admin/noticias] ${payload.length - anchors.length} linha(s) irmã(s) (groupRank > 0) vieram do GET e foram descartadas da lista. A rota deveria filtrar groupRank: 0.`
+        )
+      }
+
+      setNews(anchors)
+      // A janela é fechada em 100 grupos no servidor. Sem este sinal o operador
+      // acha que a notícia dele não foi criada, quando ela só caiu fora da página.
+      setWindowSaturated(payload.length >= NEWS_WINDOW_SIZE)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro desconhecido')
     } finally {
@@ -113,11 +187,15 @@ export default function NoticiasPage() {
     })
   }
 
+  // Contadores contam GRUPOS, não linhas: `news` só tem âncoras (a rota filtra
+  // `groupRank: 0` e o fetch reforça). Uma notícia de 3 times conta 1 aqui, que é
+  // o que o operador vê como "uma notícia" na lista.
   const publishCount = news.filter((n) => n.isPublished && !n.isArchived).length
   const draftCount = news.filter((n) => !n.isPublished && !n.isArchived).length
   const archivedCount = news.filter((n) => n.isArchived).length
 
   const togglePublish = async (id: string, isPublished: boolean) => {
+    setActionError(null)
     try {
       const res = await fetch(`/api/v1/admin/news/${id}`, {
         method: 'PATCH',
@@ -128,11 +206,12 @@ export default function NoticiasPage() {
       if (!res.ok) throw new Error('Erro ao atualizar')
       fetchNews()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Erro ao atualizar')
+      setActionError(err instanceof Error ? err.message : 'Erro ao atualizar')
     }
   }
 
   const archiveNews = async (id: string) => {
+    setActionError(null)
     try {
       const res = await fetch(`/api/v1/admin/news/${id}`, {
         method: 'PATCH',
@@ -143,21 +222,34 @@ export default function NoticiasPage() {
       if (!res.ok) throw new Error('Erro ao arquivar')
       fetchNews()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Erro ao arquivar')
+      setActionError(err instanceof Error ? err.message : 'Erro ao arquivar')
     }
   }
 
-  const deleteNews = async (id: string) => {
-    if (!confirm('Tem certeza que deseja deletar essa noticia?')) return
+  const openDeleteModal = (item: NewsItem) => {
+    setDeleteTarget(item)
+    setDeleteError(null)
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    setDeleteError(null)
     try {
-      const res = await fetch(`/api/v1/admin/news/${id}`, {
+      const res = await fetch(`/api/v1/admin/news/${deleteTarget.id}`, {
         method: 'DELETE',
         credentials: 'include',
       })
-      if (!res.ok) throw new Error('Erro ao deletar')
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error?.message || 'Erro ao deletar')
+      }
+      setDeleteTarget(null)
       fetchNews()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Erro ao deletar')
+      setDeleteError(err instanceof Error ? err.message : 'Erro ao deletar')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -165,12 +257,14 @@ export default function NoticiasPage() {
     setEditingItem(item)
     setEditForm({ title: item.title, content: item.content, impact: item.impact, sentiment: item.sentiment, ticker: item.ticker ?? '' })
     setEditError(null)
+    setEditNotice(null)
   }
 
   const saveEdit = async () => {
     if (!editingItem) return
     setSavingEdit(true)
     setEditError(null)
+    setEditNotice(null)
     try {
       const isExternal = isExternalSource(editingItem)
       // Only send title/content if news is admin-created (not external)
@@ -190,10 +284,22 @@ export default function NoticiasPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
+      const data = await res.json().catch(() => null)
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error?.message || 'Erro ao salvar')
+        throw new Error(data?.error?.message || 'Erro ao salvar')
       }
+      // `groupAffected` (item 017) diz quantas linhas o PATCH tocou: 1 quando a
+      // notícia é de um time só, 2 ou 3 quando é multi-time e o campo editado é
+      // do grupo. Sem esse retorno o operador não tem como saber se mexeu em uma
+      // linha ou no fato inteiro.
+      const affected = typeof data?.data?.groupAffected === 'number' ? data.data.groupAffected : null
+      setEditNotice(
+        affected === null
+          ? 'Notícia salva.'
+          : affected > 1
+            ? `Notícia salva. ${affected} linhas do grupo foram atualizadas (todos os times deste fato).`
+            : 'Notícia salva. 1 linha atualizada.'
+      )
       fetchNews()
       setEditingItem(null)
     } catch (err) {
@@ -203,33 +309,90 @@ export default function NoticiasPage() {
     }
   }
 
+  // ---- Criação: times do grupo -------------------------------------------
+  const addCreateTeam = () => {
+    if (createForm.additionalTeams.length >= MAX_GROUP_TEAMS - 1) return
+    setCreateError(null)
+    setCreateForm({
+      ...createForm,
+      additionalTeams: [...createForm.additionalTeams, { ticker: '', sentiment: 'NEUTRAL' }],
+    })
+  }
+
+  const removeCreateTeam = (index: number) => {
+    setCreateError(null)
+    setCreateForm({
+      ...createForm,
+      additionalTeams: createForm.additionalTeams.filter((_, i) => i !== index),
+    })
+  }
+
+  const updateCreateTeam = (index: number, patch: Partial<CreateTeamRow>) => {
+    setCreateError(null)
+    setCreateForm({
+      ...createForm,
+      additionalTeams: createForm.additionalTeams.map((team, i) => (i === index ? { ...team, ...patch } : team)),
+    })
+  }
+
   const saveCreate = async () => {
+    setCreateError(null)
     if (!createForm.title.trim() || !createForm.content.trim()) {
-      alert('Título e conteúdo são obrigatórios')
+      setCreateError('Título e conteúdo são obrigatórios')
       return
     }
+
+    // Validação local dos times adicionais: o servidor também valida e devolve
+    // 422, mas errar aqui evita um round-trip e mantém o que o operador digitou.
+    const extra = createForm.additionalTeams
+    if (extra.some((team) => !team.ticker)) {
+      setCreateError('Time adicional sem ticker. Escolha o time ou remova a linha.')
+      return
+    }
+    const seen = new Set<string>()
+    if (createForm.ticker) seen.add(createForm.ticker)
+    for (const team of extra) {
+      if (seen.has(team.ticker)) {
+        setCreateError(`Ticker repetido no grupo: ${team.ticker}. Cada time entra uma vez só na mesma notícia.`)
+        return
+      }
+      seen.add(team.ticker)
+    }
+
     setSavingCreate(true)
     try {
+      // Sem times adicionais o payload é exatamente o de antes deste item: nenhum
+      // campo novo vai na requisição de notícia de linha única (critério 17).
+      const payload: Record<string, unknown> = {
+        title: createForm.title,
+        content: createForm.content,
+        impact: createForm.impact,
+        sentiment: createForm.sentiment,
+        ticker: createForm.ticker,
+        source: createForm.source || null,
+        isPublished: createForm.isPublished,
+      }
+      if (extra.length > 0) {
+        payload.additionalTeams = extra.map((team) => ({ ticker: team.ticker, sentiment: team.sentiment }))
+      }
+
       const res = await fetch('/api/v1/admin/news', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: createForm.title,
-          content: createForm.content,
-          impact: createForm.impact,
-          sentiment: createForm.sentiment,
-          ticker: createForm.ticker,
-          source: createForm.source || null,
-          isPublished: createForm.isPublished,
-        }),
+        body: JSON.stringify(payload),
       })
-      if (!res.ok) throw new Error('Erro ao criar noticia')
+      if (!res.ok) {
+        // A mensagem do 422 é específica (ticker repetido, time sem ticker, mais
+        // de 3 times) e é a única pista que o operador tem para corrigir.
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error?.message || 'Erro ao criar noticia')
+      }
       fetchNews()
       setCreating(false)
       setCreateForm(EMPTY_CREATE)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Erro ao criar')
+      setCreateError(err instanceof Error ? err.message : 'Erro ao criar')
     } finally {
       setSavingCreate(false)
     }
@@ -348,6 +511,60 @@ export default function NoticiasPage() {
       {loading && <div data-testid="admin-noticias-loading" style={{ color: '#8f95a5', padding: '20px' }}>Carregando...</div>}
       {error && <div data-testid="admin-noticias-error" style={{ color: '#F6465D', padding: '20px' }}>Erro: {error}</div>}
 
+      {actionError && (
+        <div
+          data-testid="admin-noticias-action-error"
+          style={{
+            marginBottom: '12px',
+            padding: '10px 14px',
+            background: 'rgba(246, 70, 93, 0.08)',
+            border: '1px solid rgba(246, 70, 93, 0.2)',
+            borderRadius: '6px',
+            color: '#f6465d',
+            fontSize: '12px',
+          }}
+        >
+          {actionError}
+        </div>
+      )}
+
+      {editNotice && (
+        <div
+          data-testid="admin-noticias-group-affected-notice"
+          style={{
+            marginBottom: '12px',
+            padding: '10px 14px',
+            background: 'rgba(46, 189, 133, 0.08)',
+            border: '1px solid rgba(46, 189, 133, 0.2)',
+            borderRadius: '6px',
+            color: '#2EBD85',
+            fontSize: '12px',
+          }}
+        >
+          {editNotice}
+        </div>
+      )}
+
+      {/* Janela do GET fechada em 100 grupos: sem este aviso o operador conclui
+          que a notícia dele não foi criada quando ela só ficou fora da página. */}
+      {windowSaturated && (
+        <div
+          data-testid="admin-noticias-window-saturated-warning"
+          style={{
+            marginBottom: '12px',
+            padding: '10px 14px',
+            background: 'rgba(240, 185, 11, 0.06)',
+            border: '1px solid rgba(240, 185, 11, 0.15)',
+            borderRadius: '6px',
+            color: '#F0B90B',
+            fontSize: '11px',
+          }}
+        >
+          Lista limitada às {NEWS_WINDOW_SIZE} notícias mais recentes (contando cada notícia multi-time como uma só).
+          Notícias mais antigas existem, mas não aparecem aqui — e os contadores acima também só refletem esta janela.
+        </div>
+      )}
+
       <div data-testid="admin-noticias-list">
         {filteredNews.map((item) => {
           const sentimentColor = getSentimentColor(item.sentiment)
@@ -368,6 +585,26 @@ export default function NoticiasPage() {
                     ) : (
                       <span className="badge" style={{ color: 'var(--muted)', opacity: 0.5 }} title="Sem time vinculado">
                         Sem time
+                      </span>
+                    )}
+                    {/* Badge de grupo (M067). O testid usa `groupId` — e não
+                        `item.id` — porque é o groupId que identifica o fato: as
+                        linhas irmãs compartilham esse valor e é por ele que o
+                        E2E localiza o grupo. Só aparece quando o grupo é
+                        multi-linha... o que esta lista NÃO sabe: o GET só devolve
+                        âncoras (`groupRank: 0`) e nenhum campo de contagem, então
+                        o badge não pode dizer "3 times" nem se esconder para
+                        notícias de um único time. Fica visível para toda notícia
+                        com groupId, identificando o fato, e a contagem real de
+                        times depende de um agregado que a rota ainda não expõe. */}
+                    {item.groupId && (
+                      <span
+                        className="badge"
+                        data-testid={`admin-noticias-group-badge-${item.groupId}`}
+                        style={{ color: 'var(--muted)', fontFamily: 'var(--mono)' }}
+                        title={`Grupo (fato) ${item.groupId} — times adicionais deste mesmo fato compartilham este id`}
+                      >
+                        grupo {item.groupId.slice(0, 6)}
                       </span>
                     )}
                     <span className="badge" data-testid={`admin-noticias-impact-badge-${item.id}`} style={{ color: 'var(--muted)' }}>
@@ -430,7 +667,7 @@ export default function NoticiasPage() {
                   </button>
                 )}
                 <button
-                  onClick={() => deleteNews(item.id)}
+                  onClick={() => openDeleteModal(item)}
                   className="btn btn-sm btn-outline"
                   data-testid={`admin-noticias-delete-button-${item.id}`}
                   style={{ background: 'transparent', color: 'var(--red)', borderColor: 'var(--red)' }}
@@ -497,6 +734,18 @@ export default function NoticiasPage() {
               </div>
             )}
 
+            {/* Escopo da edição: o PATCH aplica título/conteúdo/impacto/fonte/
+                publicação/arquivamento no GRUPO inteiro e time/sentimento só
+                NESTA linha (item 017). Sem este aviso o operador acha que está
+                editando uma notícia e altera as três. */}
+            <GroupScopeWarning>
+              <strong>Escopo desta edição:</strong> título, conteúdo, impacto, publicação e arquivamento valem para{' '}
+              <strong>todos os times</strong> desta notícia (o fato é um só).{' '}
+              <strong>Time e sentimento</strong> valem somente para <strong>esta linha</strong>
+              {editingItem.ticker ? ` (${editingItem.ticker})` : ''}. Para ajustar o sentimento de outro time, edite a
+              notícia dele.
+            </GroupScopeWarning>
+
             {editError && (
               <div
                 data-testid="admin-noticias-edit-modal-error"
@@ -513,6 +762,13 @@ export default function NoticiasPage() {
                 {editError}
               </div>
             )}
+
+            <div
+              data-testid="admin-noticias-edit-modal-group-fields-label"
+              style={{ fontSize: '11px', fontWeight: 700, color: '#8f95a5', textTransform: 'uppercase', marginBottom: '10px' }}
+            >
+              Campos do fato — aplicam a todos os times
+            </div>
 
             <div style={{ marginBottom: '16px' }}>
               <label style={labelStyle}>
@@ -548,31 +804,48 @@ export default function NoticiasPage() {
               />
             </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={labelStyle}>Time</label>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={labelStyle}>Impacto</label>
               <select
-                value={editForm.ticker}
-                onChange={(e) => setEditForm({ ...editForm, ticker: e.target.value })}
+                value={editForm.impact}
+                onChange={(e) => setEditForm({ ...editForm, impact: e.target.value })}
                 style={inputStyle}
-                data-testid="admin-noticias-edit-modal-ticker-select"
+                data-testid="admin-noticias-edit-modal-impact-select"
               >
-                <option value="">Selecionar time...</option>
-                {CLUBS.map((c) => (
-                  <option key={c.ticker} value={c.ticker}>{c.ticker} — {c.displayName}</option>
-                ))}
+                {IMPACT_CATEGORY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
+            </div>
+
+            {/* Time e sentimento são POR LINHA: o PATCH aplica os dois somente
+                nesta notícia, mesmo quando ela faz parte de um grupo. */}
+            <div
+              data-testid="admin-noticias-edit-modal-line-fields-label"
+              style={{
+                fontSize: '11px',
+                fontWeight: 700,
+                color: '#8f95a5',
+                textTransform: 'uppercase',
+                marginBottom: '10px',
+                paddingTop: '14px',
+                borderTop: '1px solid #2a2d35',
+              }}
+            >
+              Campos desta linha — aplicam somente a este time
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
               <div>
-                <label style={labelStyle}>Impacto</label>
+                <label style={labelStyle}>Time</label>
                 <select
-                  value={editForm.impact}
-                  onChange={(e) => setEditForm({ ...editForm, impact: e.target.value })}
+                  value={editForm.ticker}
+                  onChange={(e) => setEditForm({ ...editForm, ticker: e.target.value })}
                   style={inputStyle}
-                  data-testid="admin-noticias-edit-modal-impact-select"
+                  data-testid="admin-noticias-edit-modal-ticker-select"
                 >
-                  {IMPACT_CATEGORY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  <option value="">Selecionar time...</option>
+                  {CLUBS.map((c) => (
+                    <option key={c.ticker} value={c.ticker}>{c.ticker} — {c.displayName}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -617,6 +890,23 @@ export default function NoticiasPage() {
           <div className="modal-box" data-testid="admin-noticias-create-modal" onClick={(e) => e.stopPropagation()}>
             <h2 style={{ margin: 0, marginBottom: '20px' }}>Nova Noticia</h2>
 
+            {createError && (
+              <div
+                data-testid="admin-noticias-create-modal-error"
+                style={{
+                  marginBottom: '16px',
+                  padding: '10px 14px',
+                  background: 'rgba(246, 70, 93, 0.08)',
+                  border: '1px solid rgba(246, 70, 93, 0.2)',
+                  borderRadius: '6px',
+                  color: '#f6465d',
+                  fontSize: '12px',
+                }}
+              >
+                {createError}
+              </div>
+            )}
+
             <div style={{ marginBottom: '16px' }}>
               <label style={labelStyle}>Titulo *</label>
               <input
@@ -640,44 +930,120 @@ export default function NoticiasPage() {
               />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
-              <div>
-                <label style={labelStyle}>Impacto</label>
-                <select
-                  value={createForm.impact}
-                  onChange={(e) => setCreateForm({ ...createForm, impact: e.target.value })}
-                  style={inputStyle}
-                  data-testid="admin-noticias-create-modal-impact-select"
-                >
-                  {IMPACT_CATEGORY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={labelStyle}>Sentimento</label>
-                <select
-                  value={createForm.sentiment}
-                  onChange={(e) => setCreateForm({ ...createForm, sentiment: e.target.value })}
-                  style={inputStyle}
-                  data-testid="admin-noticias-create-modal-sentiment-select"
-                >
-                  {SENTIMENT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={labelStyle}>Impacto</label>
+              <select
+                value={createForm.impact}
+                onChange={(e) => setCreateForm({ ...createForm, impact: e.target.value })}
+                style={inputStyle}
+                data-testid="admin-noticias-create-modal-impact-select"
+              >
+                {IMPACT_CATEGORY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
             </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={labelStyle}>Time</label>
-              <select
-                value={createForm.ticker}
-                onChange={(e) => setCreateForm({ ...createForm, ticker: e.target.value })}
-                style={inputStyle}
-                data-testid="admin-noticias-create-modal-ticker-select"
-              >
-                <option value="">Selecionar time...</option>
-                {CLUBS.map((c) => (
-                  <option key={c.ticker} value={c.ticker}>{c.ticker} — {c.displayName}</option>
-                ))}
-              </select>
+            {/* Times envolvidos no MESMO fato (grupo M067). Uma linha por time,
+                cada uma com sentimento próprio: uma venda é BULLISH para quem
+                vende e BEARISH para quem compra. Título, conteúdo, impacto e
+                fonte são do fato e ficam fora daqui. Com um time só o payload
+                enviado é idêntico ao de antes deste item. */}
+            <div
+              data-testid="admin-noticias-create-modal-teams-section"
+              style={{ marginBottom: '16px', paddingTop: '14px', borderTop: '1px solid #2a2d35' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#8f95a5', textTransform: 'uppercase' }}>
+                  Times envolvidos ({1 + createForm.additionalTeams.length} de {MAX_GROUP_TEAMS})
+                </div>
+                {createForm.additionalTeams.length < MAX_GROUP_TEAMS - 1 && (
+                  <button
+                    type="button"
+                    onClick={addCreateTeam}
+                    className="btn btn-sm btn-outline"
+                    data-testid="admin-noticias-create-modal-add-team-button"
+                    style={{ background: 'transparent', color: 'var(--accent)', borderColor: 'var(--accent)' }}
+                  >
+                    + Adicionar time
+                  </button>
+                )}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div>
+                  <label style={labelStyle}>Time principal</label>
+                  <select
+                    value={createForm.ticker}
+                    onChange={(e) => setCreateForm({ ...createForm, ticker: e.target.value })}
+                    style={inputStyle}
+                    data-testid="admin-noticias-create-modal-ticker-select"
+                  >
+                    <option value="">Selecionar time...</option>
+                    {CLUBS.map((c) => (
+                      <option key={c.ticker} value={c.ticker}>{c.ticker} — {c.displayName}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Sentimento</label>
+                  <select
+                    value={createForm.sentiment}
+                    onChange={(e) => setCreateForm({ ...createForm, sentiment: e.target.value })}
+                    style={inputStyle}
+                    data-testid="admin-noticias-create-modal-sentiment-select"
+                  >
+                    {SENTIMENT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {createForm.additionalTeams.map((team, index) => (
+                <div
+                  key={index}
+                  data-testid={`admin-noticias-create-modal-team-${index + 1}-row`}
+                  style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '12px', alignItems: 'end', marginBottom: '12px' }}
+                >
+                  <div>
+                    <label style={labelStyle}>Time adicional {index + 1} *</label>
+                    <select
+                      value={team.ticker}
+                      onChange={(e) => updateCreateTeam(index, { ticker: e.target.value })}
+                      style={inputStyle}
+                      data-testid={`admin-noticias-create-modal-team-${index + 1}-ticker-select`}
+                    >
+                      <option value="">Selecionar time...</option>
+                      {CLUBS.map((c) => (
+                        <option key={c.ticker} value={c.ticker}>{c.ticker} — {c.displayName}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Sentimento</label>
+                    <select
+                      value={team.sentiment}
+                      onChange={(e) => updateCreateTeam(index, { sentiment: e.target.value })}
+                      style={inputStyle}
+                      data-testid={`admin-noticias-create-modal-team-${index + 1}-sentiment-select`}
+                    >
+                      {SENTIMENT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeCreateTeam(index)}
+                    className="btn btn-sm btn-outline"
+                    data-testid={`admin-noticias-create-modal-team-${index + 1}-remove-button`}
+                    style={{ background: 'transparent', color: 'var(--red)', borderColor: 'var(--red)' }}
+                  >
+                    Remover
+                  </button>
+                </div>
+              ))}
+
+              <div style={{ fontSize: '10px', color: '#929aa5' }}>
+                {createForm.additionalTeams.length === 0
+                  ? 'Notícia de um time. Adicione outro time apenas quando o MESMO fato atingir mais de um clube (ex: transferência entre dois times).'
+                  : 'As linhas compartilham título, conteúdo, impacto e fonte. Cada time tem o seu sentimento.'}
+              </div>
             </div>
 
             <div style={{ marginBottom: '16px' }}>
@@ -726,6 +1092,75 @@ export default function NoticiasPage() {
                 style={{ background: 'var(--accent)', color: 'var(--bg)', border: 'none' }}
               >
                 {savingCreate ? 'Criando...' : 'Criar Noticia'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Deletar ── */}
+      {/* Substitui o `confirm()` nativo: o modal do navegador não é inspecionável
+          por E2E, não cabe texto de escopo e não tem estado de erro. A condição
+          `!editingItem` mantém os dois modais mutuamente exclusivos — ambos usam
+          o mesmo `data-testid` de aviso de escopo. */}
+      {deleteTarget && !editingItem && (
+        <div className="modal-overlay" data-testid="admin-noticias-delete-modal-overlay" onClick={() => setDeleteTarget(null)}>
+          <div className="modal-box" data-testid="admin-noticias-delete-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '460px' }}>
+            <h2 style={{ margin: 0, marginBottom: '16px' }}>Deletar notícia</h2>
+
+            {/* Escopo real do DELETE desde o item 020 (DB-23): a rota lê o
+                `group_id` da linha e apaga o GRUPO INTEIRO via deleteMany, não
+                apenas o id recebido. A copy anterior (item 018) descrevia com
+                precisão o escopo de linha vigente até então, e virou falsa com
+                DB-23. Notícia de time único tem `group_id = id`, logo para ela o
+                grupo é ela mesma e o efeito prático é o de antes. O texto antigo
+                não é citado aqui: o passo 5 da Verificação do item 020 grepa por
+                ele como guarda de regressão. */}
+            <GroupScopeWarning>
+              <strong>Escopo:</strong> apaga <strong>o grupo inteiro</strong>
+              {deleteTarget.ticker ? ` (a partir de ${deleteTarget.ticker})` : ''}. Se este fato envolve outros times,{' '}
+              <strong>todas as linhas do mesmo fato</strong> — uma por time — são removidas na mesma operação. A
+              remoção é <strong>definitiva</strong> (não vai para arquivadas) e exige perfil SUPER_ADMIN.
+            </GroupScopeWarning>
+
+            <div data-testid="admin-noticias-delete-modal-target" style={{ fontSize: '13px', marginBottom: '20px', color: 'white' }}>
+              {deleteTarget.title}
+            </div>
+
+            {deleteError && (
+              <div
+                data-testid="admin-noticias-delete-modal-error"
+                style={{
+                  marginBottom: '16px',
+                  padding: '10px 14px',
+                  background: 'rgba(246, 70, 93, 0.08)',
+                  border: '1px solid rgba(246, 70, 93, 0.2)',
+                  borderRadius: '6px',
+                  color: '#f6465d',
+                  fontSize: '12px',
+                }}
+              >
+                {deleteError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="btn"
+                data-testid="admin-noticias-delete-modal-cancel-button"
+                style={{ background: 'transparent', color: '#8f95a5', borderColor: '#8f95a5', border: '1px solid' }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={deleting}
+                className="btn btn-solid"
+                data-testid="admin-noticias-delete-modal-confirm-button"
+                style={{ background: 'var(--red)', color: 'white', border: 'none' }}
+              >
+                {deleting ? 'Deletando...' : 'Deletar definitivamente'}
               </button>
             </div>
           </div>

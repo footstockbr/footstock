@@ -88,16 +88,16 @@ test.describe('Smoke Tests — Produção', () => {
     expect(resultText).not.toContain('Análise em desenvolvimento')
   })
 
-  test('ST005: Feed de notícias carregando com timestamp recente (< 24h)', async ({ page }) => {
+  test('ST005: Feed de notícias carregando com item visível', async ({ page }) => {
     await page.goto('/noticias')
-    await expect(page.locator('[data-testid="news-item"]').first()).toBeVisible({ timeout: 10_000 })
-    // Verificar que a notícia mais recente tem timestamp das últimas 24h (não é fallback pool)
-    const timestamp = await page.locator('[data-testid="news-timestamp"]').first().getAttribute('datetime')
-    if (timestamp) {
-      const newsDate = new Date(timestamp)
-      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
-      expect(newsDate.getTime()).toBeGreaterThan(oneDayAgo.getTime())
-    }
+    // O componente real (noticias-content.tsx) só expõe o namespace `noticias-*`;
+    // `news-item` nunca existiu. O id é dinâmico por notícia (`noticias-item-{id}`),
+    // daí o seletor por prefixo.
+    await expect(page.locator('[data-testid^="noticias-item-"]').first()).toBeVisible({ timeout: 10_000 })
+    // `news-timestamp` também nunca existiu: o card só renderiza texto relativo
+    // (date-fns `formatDistanceToNow`), sem atributo `datetime` machine-readable.
+    // Assert de recência removido conscientemente (criterio 49, source.md do loop
+    // 07-28-noticias-multi-time-linha-por-time).
   })
 
   test('ST006: Motor de mercado emitindo ticks via WebSocket (< 5s)', async ({ page }) => {

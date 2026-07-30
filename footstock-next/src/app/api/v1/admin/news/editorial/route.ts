@@ -28,6 +28,14 @@ const createSchema = z.object({
   status: z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']).default('DRAFT'),
 })
 
+// Item 017 (correcao pos-auditoria): teto de CHAVES DE GRUPO distintas usadas na
+// resolucao do filtro por ticker, mais os limites da varredura paginada que as
+// coleta. O teto de grupos acompanha o `take` da listagem final (200); o teto de
+// paginas limita o trabalho por request (no pior caso 2000 linhas varridas).
+const GROUP_KEY_LIMIT = 200
+const GROUP_SCAN_PAGE_SIZE = 200
+const GROUP_SCAN_MAX_PAGES = 10
+
 function parseDate(raw?: string): Date | null {
   if (!raw) return null
   const d = new Date(raw)
@@ -71,8 +79,12 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ success: false, error: 'Filtro de data inválido.' }, { status: 400 })
   }
 
+  // Item 017 / ST004: a listagem editorial tambem conta GRUPOS, nao linhas — so a
+  // ancora (group_rank 0) entra. Acervo unitario pos-backfill (item 008) tem
+  // group_rank 0 em toda linha, entao o resultado nao muda (criterio 17).
   const where: Record<string, unknown> = {
     ...statusFilter(status),
+    groupRank: 0,
   }
 
   if (fromDate || toDate) {
@@ -90,7 +102,57 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
     if (!asset) {
       return NextResponse.json({ success: true, data: [] })
     }
-    where.assetIds = { has: asset.id }
+    // Item 017 / ST004: o ticker filtrado pode estar num IRMAO (group_rank > 0).
+    // Combinar `assetIds has X` direto com `groupRank: 0` esconderia o grupo
+    // inteiro. Padrao do item 015: resolver primeiro os group_id que tem alguma
+    // linha casando no ticker, depois filtrar a ancora DENTRO desses grupos.
+    //
+    // Correcao pos-auditoria: um `take` cru sobre LINHAS nao serve de teto de
+    // GRUPOS. Varias linhas cabem no mesmo grupo, entao 200 linhas podem valer
+    // poucos grupos e — sem `orderBy` — a janela era arbitraria, podendo omitir
+    // grupos recentes que ainda cabiam na listagem. A varredura agora e ORDENADA
+    // (createdAt desc, id desc como tie-break unico) e PAGINADA por cursor, com
+    // teto em CHAVES DISTINTAS. Se a varredura estourar o teto de paginas, o que
+    // sobra sao sempre os grupos mais RECENTES, mesma semantica do
+    // `orderBy createdAt desc` da listagem final.
+    const groupKeys: string[] = []
+    const seenGroupKeys = new Set<string>()
+    let scanCursor: string | null = null
+    let scanPages = 0
+
+    while (seenGroupKeys.size < GROUP_KEY_LIMIT && scanPages < GROUP_SCAN_MAX_PAGES) {
+      // Anotacao explicita: o spread condicional do cursor deixa o arg como uniao,
+      // e sem o tipo aqui o TS entra em inferencia circular (TS7022).
+      const page: { id: string; groupId: string | null }[] = await prisma.news.findMany({
+        where: { assetIds: { has: asset.id } },
+        select: { id: true, groupId: true },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: GROUP_SCAN_PAGE_SIZE,
+        ...(scanCursor ? { cursor: { id: scanCursor }, skip: 1 } : {}),
+      })
+      scanPages += 1
+      if (page.length === 0) break
+
+      for (const row of page) {
+        // Grupo unitario D1 pode ter group_id nulo; nesse caso a chave do grupo e o id.
+        const key = row.groupId ?? row.id
+        if (seenGroupKeys.has(key)) continue
+        seenGroupKeys.add(key)
+        groupKeys.push(key)
+        if (seenGroupKeys.size >= GROUP_KEY_LIMIT) break
+      }
+
+      if (page.length < GROUP_SCAN_PAGE_SIZE) break
+      scanCursor = page[page.length - 1].id
+    }
+
+    if (groupKeys.length === 0) {
+      return NextResponse.json({ success: true, data: [] })
+    }
+    where.OR = [
+      { groupId: { in: groupKeys } },
+      { AND: [{ groupId: null }, { id: { in: groupKeys } }] },
+    ]
   }
 
   const rows = await prisma.news.findMany({
@@ -108,6 +170,9 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
       publishedAt: true,
       createdAt: true,
       assetIds: true,
+      // Item 017: o item 018 precisa do groupId para o badge de grupo na tela.
+      groupId: true,
+      groupRank: true,
     },
   })
 

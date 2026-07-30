@@ -33,6 +33,14 @@ jobs:
           key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
           restore-keys: ${{ runner.os }}-npm-
 
+      # Guard bloqueante M067/item 010, antes de qualquer instalacao/build: o motor
+      # (deploy separado, motor-deploy.yml) gera Prisma Client a partir de
+      # prisma/schema.prisma (raiz), enquanto este deploy aplica migrations e builda
+      # o app contra footstock-next/prisma/schema.prisma. Um drift no model News
+      # entre os dois produz perda silenciosa de noticias no motor.
+      - name: Guard de drift do model News (prisma/ vs footstock-next/prisma/)
+        run: node scripts/check-news-schema-drift.js
+
       - name: Instalar dependências
         working-directory: footstock-next
         run: npm ci --legacy-peer-deps

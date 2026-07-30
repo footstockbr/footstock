@@ -803,10 +803,26 @@ export class MarketEngine {
       const tick = ticks.find(t => t.assetId === assetId)
       if (tick && state.currentPrice > 0) {
         const previousPrice = this.previousTickPrices.get(assetId)
+        // Grupos de notícia ativos deste ativo, para a supressão de correlação da L10
+        // (RB9 / critério 26). Derivado do estado VIVO de notícia, que L7 já decai e
+        // filtra por `ticksRemaining` a cada tick — sem expiração paralela e sem risco
+        // de grupo fantasma suprimindo correlação depois da notícia expirar.
+        // ATENÇÃO: esta derivação é gêmea de `activeNewsGroupIds()` em
+        // CorrelationLayer.ts e as duas TÊM de andar juntas. A duplicação é
+        // deliberada: o critério 5 do item 021 fecha o diff deste arquivo neste bloco,
+        // então não há import novo aqui. Quem alterar uma, altera a outra.
+        const newsGroupIds = [
+          ...new Set(
+            (state.activeNewsImpacts ?? [])
+              .filter((news) => news.ticksRemaining > 0 && !!news.correlationId)
+              .map((news) => news.correlationId as string)
+          ),
+        ]
         this.previousTickDeltas.set(assetId, {
           deltaPercent: computeTickReturnDelta(state.currentPrice, previousPrice),
           cluster: state.cluster,
           state: state.state,
+          ...(newsGroupIds.length > 0 ? { newsGroupIds } : {}),
         })
         // Grava o preço deste tick como base do retorno do PRÓXIMO tick.
         this.previousTickPrices.set(assetId, state.currentPrice)

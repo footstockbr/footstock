@@ -24,6 +24,14 @@ jobs:
         with:
           node-version: '22'
 
+      # Guard bloqueante M067/item 010: o Dockerfile do motor gera Prisma Client a
+      # partir de prisma/schema.prisma (raiz) — este deploy nao roda migrations
+      # nem toca footstock-next/, mas o build do motor confia que os dois schemas
+      # estao sincronizados. Um drift no model News produz perda silenciosa de
+      # noticias (NewsPublisher.ts engole PrismaClientValidationError).
+      - name: Guard de drift do model News (prisma/ vs footstock-next/prisma/)
+        run: node scripts/check-news-schema-drift.js
+
       - name: Instalar dependências motor
         working-directory: motor
         run: npm ci

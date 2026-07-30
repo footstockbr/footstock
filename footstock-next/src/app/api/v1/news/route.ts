@@ -127,7 +127,16 @@ export async function GET(request: NextRequest) {
         prisma.news.findMany({
           where,
           select: { id: true, groupId: true },
-          orderBy: [{ publishedAt: 'desc' }, { groupId: 'asc' }],
+          // `id` fecha a ordenacao (W-03, override humano do listener-recovery de
+          // 2026-07-29). Sem ele, duas ancoras com group_id NULL e published_at
+          // empatado ficam em ordem indefinida, e o mesmo grupo podia aparecer em
+          // duas paginas ou sumir entre elas (criterios 9 e 10). Como `id` e unico,
+          // a ordem passa a ser total. Para essas linhas COALESCE(group_id, id) = id,
+          // entao o desempate agora casa a chave efetiva usada pelo ramo filtrado.
+          // Os dois primeiros termos seguem intactos: news_feed_anchor_visible_idx
+          // continua servindo (published_at DESC, group_id); o `id` so resolve empate
+          // residual dentro do que o indice ja entregou ordenado.
+          orderBy: [{ publishedAt: 'desc' }, { groupId: 'asc' }, { id: 'asc' }],
           skip,
           take,
         }),

@@ -55,6 +55,13 @@ jobs:
       - name: Validar cobertura de env vars
         run: chmod +x scripts/check-env-coverage.sh && ./scripts/check-env-coverage.sh
 
+      # Guard bloqueante M067/item 010: o motor gera Prisma Client a partir de
+      # prisma/schema.prisma (raiz) enquanto o app + migrations de producao usam
+      # footstock-next/prisma/schema.prisma. Um drift no model News entre os dois
+      # produz perda silenciosa de noticias no motor (ver script para detalhes).
+      - name: Guard de drift do model News (prisma/ vs footstock-next/prisma/)
+        run: node scripts/check-news-schema-drift.js
+
       - name: Verificar tipos TypeScript
         working-directory: footstock-next
         run: npx tsc --noEmit

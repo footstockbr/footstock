@@ -297,6 +297,17 @@ test.describe('F5: Comunidade — Forum e Glossário', () => {
     await page.goto('/noticias')
     await page.waitForLoadState('networkidle')
     await expectNoServerError(page)
+    // Afirma conteúdo real, não só ausência de erro (criterio 50): ao menos um
+    // card do feed (`noticias-item-{id}`) visível, com o badge de sentimento
+    // (Positivo/Negativo/Neutro) renderizado dentro dele.
+    // Card multi-time (item 016) renderiza UMA badge de sentimento por linha do
+    // grupo, entao o locator precisa sobreviver a N alvos: afirma ao menos um e
+    // valida a visibilidade do primeiro, sem strict-mode violation.
+    const firstCard = page.locator('[data-testid^="noticias-item-"]').first()
+    await expect(firstCard).toBeVisible({ timeout: 10_000 })
+    const sentimentBadges = firstCard.getByText(/^(Positivo|Negativo|Neutro)$/)
+    expect(await sentimentBadges.count()).toBeGreaterThan(0)
+    await expect(sentimentBadges.first()).toBeVisible()
   })
 })
 

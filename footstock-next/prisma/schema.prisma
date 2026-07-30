@@ -773,6 +773,20 @@ model News {
   // Item 15: marca quando o sentimento foi definido pelo classificador LLM. NULL = ainda nao
   // classificado (alvo do cron classify-news-sentiment + backfill). Evita reprocessar.
   sentimentClassifiedAt DateTime?      @map("sentiment_classified_at")
+  // ─── M067 - noticia multi-time (grupo + despacho duravel) ─────────────────
+  // Migration: prisma/migrations/20260729020000_M067-news-multi-team-group/
+  // Nullable nesta etapa (D1). O aperto para NOT NULL de groupId/groupRank e D8 (item 027).
+  // groupId sempre preenchido na pratica: trigger news_group_defaults_trg cobre writer antigo
+  // (DB-03); noticia de time unico tem groupId = id. groupRank 0 = time principal (ancora).
+  // CHECK (group_rank BETWEEN 0 AND 2), UNIQUE (group_id, group_rank), os indices unicos
+  // PARCIAIS por ticker e os indices parciais de leitura sao de propriedade da M067 e NAO sao
+  // declarados aqui: Prisma nao expressa indice parcial (WHERE), e declarar so a parte
+  // expressavel produziria uma representacao falsa do banco.
+  groupId               String?        @map("group_id")
+  groupRank             Int?           @map("group_rank")
+  // DB-12: marcador de despacho duravel. Preenchido tanto no despacho bem-sucedido quanto na
+  // decisao de nao despachar por gate de relevancia (evita reenvio eterno pelo reconciliador).
+  impactDispatchedAt    DateTime?      @map("impact_dispatched_at")
   createdAt             DateTime       @default(now()) @map("created_at")
   updatedAt             DateTime       @updatedAt @map("updated_at")
 

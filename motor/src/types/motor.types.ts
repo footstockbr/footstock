@@ -123,6 +123,14 @@ export interface PreviousTickDelta {
   deltaPercent: number   // (finalPrice - prevPrice) / prevPrice
   cluster: AssetCluster
   state: string          // UF do clube (para rho regional)
+  // Grupos de notícia ATIVOS neste par no fim do tick anterior (RB9 / critério 26).
+  // Transporta o `groupId` que `ActiveNewsImpact.correlationId` já carrega (F9): a
+  // CorrelationLayer não tem outra forma de saber o grupo dos PARES, porque só recebe
+  // este mapa. Preenchido no ponto único de repopulação em MarketEngine (bookkeeping
+  // pós-tick), derivado de `state.activeNewsImpacts` com `ticksRemaining > 0`.
+  // OPCIONAL de propósito: ausente/vazio significa "par sem notícia de grupo ativa" e
+  // preserva byte-a-byte o comportamento de todo chamador anterior a este campo.
+  newsGroupIds?: string[]
 }
 
 // ─── Layer Result ─────────────────────────────────────────────────────────

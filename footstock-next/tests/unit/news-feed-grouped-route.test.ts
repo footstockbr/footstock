@@ -156,7 +156,7 @@ describe('[CRITERIO 8] pagination.total conta grupos visiveis', () => {
 })
 
 describe('[CRITERIO 9] ordenacao estavel sob empate de published_at', () => {
-  it('orderBy e exatamente [{ publishedAt: desc }, { groupId: asc }]', async () => {
+  it('orderBy e exatamente [{ publishedAt: desc }, { groupId: asc }, { id: asc }]', async () => {
     wireFindMany(
       [{ id: 'n1', groupId: 'g1' }],
       [row({ id: 'n1', groupId: 'g1', groupRank: 0 })]
@@ -168,7 +168,41 @@ describe('[CRITERIO 9] ordenacao estavel sob empate de published_at', () => {
     expect(findManyNews.mock.calls[0][0].orderBy).toEqual([
       { publishedAt: 'desc' },
       { groupId: 'asc' },
+      { id: 'asc' },
     ])
+  })
+
+  // W-03 do review-executed do item 015 (override humano do listener-recovery de
+  // 2026-07-29): com so dois termos, duas ancoras de group_id NULL e published_at
+  // empatado ficavam em ordem indefinida e o mesmo grupo podia repetir ou sumir
+  // entre paginas. `id` e unico, entao fecha a ordem; e como COALESCE(group_id, id)
+  // = id nessas linhas, o desempate passa a casar a chave efetiva do ramo filtrado.
+  it('desempata por id, fechando a ordem total quando group_id e NULL nas duas ancoras', async () => {
+    wireFindMany(
+      [
+        { id: 'n-a', groupId: null },
+        { id: 'n-b', groupId: null },
+      ],
+      [
+        row({ id: 'n-b', groupId: null, groupRank: 0 }),
+        row({ id: 'n-a', groupId: null, groupRank: 0 }),
+      ]
+    )
+    countNews.mockResolvedValue(2)
+
+    const res = await GET(request())
+    const json = await body(res)
+
+    const orderBy = findManyNews.mock.calls[0][0].orderBy
+    // O ultimo termo tem que ser `id`: e o unico campo unico da tabela, entao e
+    // ele que transforma a ordenacao parcial em total.
+    expect(orderBy[orderBy.length - 1]).toEqual({ id: 'asc' })
+    // Sem `id` no orderBy, o empate em (published_at, group_id NULL) deixaria a
+    // pagina a criterio do plano de execucao do Postgres.
+    expect(orderBy).toHaveLength(3)
+    // A pagina continua com um item por grupo, e cada linha de group_id NULL e
+    // seu proprio grupo (janela D1).
+    expect(json.data).toHaveLength(2)
   })
 })
 
