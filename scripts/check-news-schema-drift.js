@@ -18,7 +18,8 @@
  *
  * O que o guard compara: a assinatura estrutural do bloco `model News { ... }`
  * (campos, tipos, atributos de campo e atributos de bloco `@@...`),
- * ignorando comentários (`//...` de linha inteira ou em final de linha) e
+ * ignorando comentários (`//...` de linha inteira ou em final de linha, mas
+ * nunca `//` dentro de string literal) e
  * diferenças de espaçamento — os dois arquivos legitimamente têm comentários
  * diferentes (paths de migration relativos a cada schema) sem que isso seja
  * drift real.
@@ -90,9 +91,41 @@ function extractModelBlock(content, modelName, filePath) {
 }
 
 /**
+ * Corta o comentario de fim de linha (`// ...`) respeitando string literal.
+ *
+ * Por que scanner char-a-char e nao `line.split('//')[0]`: o split cego corta
+ * tambem o `//` que vive DENTRO de aspas — ex. `@default("https://cdn/x.png")`
+ * vira `@default("https:`. Como o truncamento seria IDENTICO nos dois schemas,
+ * um drift real que morasse justamente na parte cortada (outro host, outro
+ * path) passaria como "sem drift": falso-negativo silencioso, exatamente o
+ * modo de falha que este guard existe para impedir. Nenhum dos campos atuais
+ * do model News tem `//` dentro de string, entao isso e blindagem preventiva
+ * para o proximo campo com URL default.
+ */
+function stripLineComment(line) {
+  let inString = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inString && ch === '\\') {
+      i++; // escape dentro de string: `\"` nao fecha a aspa
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (!inString && ch === '/' && line[i + 1] === '/') {
+      return line.slice(0, i);
+    }
+  }
+  return line;
+}
+
+/**
  * Normaliza o corpo do model para uma lista de linhas comparaveis:
  * - remove comentarios de linha inteira (`// ...`)
- * - remove comentarios em final de linha (`campo ... // ...`)
+ * - remove comentarios em final de linha (`campo ... // ...`), sem tocar em
+ *   `//` que faca parte de uma string literal (ver `stripLineComment`)
  * - colapsa espacos multiplos em um unico espaco
  * - remove linhas vazias resultantes
  * A ORDEM das linhas e preservada e significativa (ordem de campos importa).
@@ -104,7 +137,7 @@ function normalizeModelBody(rawBody) {
       const trimmed = line.trim();
       if (trimmed.startsWith('//')) return ''; // comentario de linha inteira
       // remove comentario em final de linha, preservando o conteudo antes dele
-      const withoutTrailingComment = line.split('//')[0];
+      const withoutTrailingComment = stripLineComment(line);
       return withoutTrailingComment.trim().replace(/\s+/g, ' ');
     })
     .filter((line) => line.length > 0);
@@ -174,4 +207,11 @@ function main() {
   process.exit(1);
 }
 
-main();
+// So executa (e so chama process.exit) quando invocado como CLI. Sob `require`
+// o modulo apenas expoe os helpers, permitindo unit test de `stripLineComment`
+// sem derrubar o processo do runner.
+if (require.main === module) {
+  main();
+}
+
+module.exports = { stripLineComment, normalizeModelBody, extractModelBlock };

@@ -512,6 +512,40 @@ describe('E3a/E3b — admin/news/[id] preserva assetIds da linha', () => {
     expect(transaction).not.toHaveBeenCalled()
   })
 
+  test('caso 15: ticker NAO-VAZIO sem Asset correspondente devolve 422 NEWS-004, nao NEWS-003 (F-019-03)', async () => {
+    findUniqueNews.mockResolvedValue(adminContextRow())
+    findManyNews.mockResolvedValue([{ id: 'n2', assetIds: ['asset-pal'] }])
+    // Nenhum Asset casa com 'XXXX': antes do fix isso virava `resolvedAssetId: null`,
+    // indistinguivel da intencao de limpar, e a linha de grupo recebia NEWS-003 —
+    // uma copy falando em "limpar o vinculo de time" que o admin nao pediu.
+    findUniqueAsset.mockResolvedValue(null)
+
+    const res = await adminNewsPATCH(adminPatchReq({ ticker: 'XXXX' }), adminPatchCtx('n1'))
+    const body = await res.json()
+
+    expect(res.status).toBe(422)
+    expect(body.error.code).toBe('NEWS-004')
+    // Recusa ANTES de qualquer escrita, igual ao ramo NEWS-003.
+    expect(updateNews).not.toHaveBeenCalled()
+    expect(updateManyNews).not.toHaveBeenCalled()
+    expect(transaction).not.toHaveBeenCalled()
+  })
+
+  test('caso 15b: `ticker: ""` continua em NEWS-003 — limpar de proposito nao virou ticker invalido', async () => {
+    findUniqueNews.mockResolvedValue(adminContextRow())
+    findManyNews.mockResolvedValue([{ id: 'n2', assetIds: ['asset-pal'] }])
+
+    const res = await adminNewsPATCH(adminPatchReq({ ticker: '' }), adminPatchCtx('n1'))
+    const body = await res.json()
+
+    expect(res.status).toBe(422)
+    expect(body.error.code).toBe('NEWS-003')
+    // Ticker vazio nunca chega a consultar Asset: `resolvedAssetId === null` aqui e
+    // intencao declarada, e e por isso que a guarda de NEWS-004 nao o alcanca.
+    expect(findUniqueAsset).not.toHaveBeenCalled()
+    expect(updateNews).not.toHaveBeenCalled()
+  })
+
   test('caso 7: publicar ancora sem time cujo titulo resolve para o irmao nao grava ticker nem assetIds', async () => {
     findUniqueNews
       .mockResolvedValueOnce(adminContextRow({ groupRank: 0, ticker: null, assetIds: [] }))
@@ -610,6 +644,44 @@ describe('E7 — batch-resolve em lote misto', () => {
     // Contadores anteriores nao mudam de semantica: as duas linhas foram resolvidas.
     expect(body.data.resolved).toBe(2)
   })
+
+  test('caso 16: duas linhas do MESMO grupo resolvendo para o MESMO time no mesmo lote (F-019-02)', async () => {
+    jest.spyOn(console, 'log').mockImplementation(() => {})
+    findManyNews
+      // scan de "sem time": as DUAS linhas pertencem ao grupo g1
+      .mockResolvedValueOnce([
+        { id: 'n1', title: 'Primeira', content: 'c1', groupId: 'g1', groupRank: 0, assetIds: [] },
+        { id: 'n2', title: 'Segunda', content: 'c2', groupId: 'g1', groupRank: 1, assetIds: [] },
+      ])
+      // snapshot de irmaos lido UMA vez, antes do loop: nenhuma das duas tem asset ainda
+      .mockResolvedValueOnce([
+        { id: 'n1', groupId: 'g1', assetIds: [] },
+        { id: 'n2', groupId: 'g1', assetIds: [] },
+      ])
+    mockResolveTickerFromText.mockResolvedValue('PAL')
+    findUniqueAsset.mockResolvedValue({ id: 'asset-pal' })
+
+    const res = await batchResolvePOST(batchResolveReq())
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(updateNews).toHaveBeenCalledTimes(2)
+
+    const primeira = updateNews.mock.calls[0][0] as { where: unknown; data: Record<string, unknown> }
+    expect(primeira.where).toEqual({ id: 'n1' })
+    expect(primeira.data).toEqual({ ticker: 'PAL', assetIds: ['asset-pal'] })
+
+    // Sem refletir a escrita da primeira linha no snapshot, a segunda gravaria
+    // `['asset-pal']` tambem: o grupo terminaria com duas linhas do mesmo time e
+    // sem um unico skip para sinalizar.
+    const segunda = updateNews.mock.calls[1][0] as { where: unknown; data: Record<string, unknown> }
+    expect(segunda.where).toEqual({ id: 'n2' })
+    expect(segunda.data).toEqual({ ticker: 'PAL' })
+    expect(Object.keys(segunda.data)).not.toContain('assetIds')
+
+    expect(body.data.skipped_group).toBe(1)
+    expect(body.data.skipped_by_reason['sibling-owns-asset']).toBe(1)
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -651,6 +723,45 @@ describe('E8 — cron reconcile-null-tickers', () => {
     expect(warn).toHaveBeenCalledWith(
       '[cron/reconcile-null-tickers] assetIds preservado (DB-19)',
       expect.objectContaining({ newsId: 'n1', groupId: 'g1', reason: 'sibling-owns-asset' })
+    )
+  })
+
+  test('caso 17: duas linhas do MESMO grupo resolvendo para o MESMO time no mesmo scan (F-019-02)', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    jest.spyOn(console, 'log').mockImplementation(() => {})
+    findManyNews
+      .mockResolvedValueOnce([
+        { id: 'n1', title: 'Primeira do grupo', groupId: 'g1', groupRank: 0, assetIds: [] },
+        { id: 'n2', title: 'Segunda do grupo', groupId: 'g1', groupRank: 1, assetIds: [] },
+      ])
+      .mockResolvedValueOnce([
+        { id: 'n1', groupId: 'g1', assetIds: [] },
+        { id: 'n2', groupId: 'g1', assetIds: [] },
+      ])
+    mockResolveTickerFromTitle.mockResolvedValue('PAL')
+    findUniqueAsset.mockResolvedValue({ id: 'asset-pal' })
+
+    const res = await reconcileCronGET(cronReq())
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(updateNews).toHaveBeenCalledTimes(2)
+
+    const primeira = updateNews.mock.calls[0][0] as { where: unknown; data: Record<string, unknown> }
+    expect(primeira.data).toEqual({ ticker: 'PAL', assetIds: ['asset-pal'] })
+
+    // O caminho sem humano e onde o achatamento intra-scan doeria mais: aqui nao ha
+    // admin para reparar o grupo depois.
+    const segunda = updateNews.mock.calls[1][0] as { where: unknown; data: Record<string, unknown> }
+    expect(segunda.where).toEqual({ id: 'n2' })
+    expect(segunda.data).toEqual({ ticker: 'PAL' })
+    expect(Object.keys(segunda.data)).not.toContain('assetIds')
+
+    expect(body.skipped_group).toBe(1)
+    expect(body.skipped_by_reason['sibling-owns-asset']).toBe(1)
+    expect(warn).toHaveBeenCalledWith(
+      '[cron/reconcile-null-tickers] assetIds preservado (DB-19)',
+      expect.objectContaining({ newsId: 'n2', reason: 'sibling-owns-asset' })
     )
   })
 

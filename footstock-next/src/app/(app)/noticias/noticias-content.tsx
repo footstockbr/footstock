@@ -17,12 +17,17 @@ const SENTIMENT_MAP: Record<AssetSentiment, { variant: BadgeVariant; label: stri
 
 // M067 item 016 — uma linha de time do grupo ja resolvida para exibicao.
 // `isUnresolved` cobre DB-20: a linha tem `ticker` mas nenhum asset resolvivel
-// no `assetMap`, entao ela continua visivel (Zero Silencio) sem navegacao.
+// no `assetMap`, entao ela continua visivel (Zero Silencio) e ainda navega pelo
+// proprio ticker.
+// `navTicker` e `badgeKey` sao `string` (nunca nulos/vazios): os dois ramos
+// construtores exigem ticker para produzir uma badge — sem ticker a linha vira
+// `null` e e filtrada. Manter o tipo estreito evita ressuscitar o `disabled`,
+// que quebraria o criterio 45 (badge tem de ser parada de foco).
 interface ResolvedTeamBadge {
   team: NewsTeamLine;
   badgeKey: string;
   label: string;
-  navTicker: string | null;
+  navTicker: string;
   isUnresolved: boolean;
 }
 
@@ -212,30 +217,30 @@ export function NoticiasContent() {
                       <div className="flex flex-wrap gap-1.5">
                         {teamBadges.map(({ team, badgeKey, label, navTicker, isUnresolved }) => {
                           const teamSentiment = SENTIMENT_MAP[team.sentiment] ?? SENTIMENT_MAP.NEUTRAL;
-                          const testidBase = `noticias-item-${groupId}-badge-${badgeKey || team.id}`;
-                          const canNavigate = !!navTicker;
+                          const testidBase = `noticias-item-${groupId}-badge-${badgeKey}`;
 
                           return (
+                            // Sem `disabled` aqui de proposito: o criterio 45 exige que
+                            // toda badge seja parada de foco propria, e elemento
+                            // `disabled` nao recebe foco. Como `navTicker` e sempre
+                            // string, tambem nao havia caso real de desabilitar.
                             <button
                               key={team.id}
                               type="button"
                               data-testid={testidBase}
-                              disabled={!canNavigate}
                               aria-label={`${label}, ${teamSentiment.label}`}
                               onClick={(e) => {
                                 // ST005 / D-F + DB-21: stopPropagation permanece como
                                 // camada defensiva mesmo com os controles ja separados.
                                 e.stopPropagation();
-                                if (navTicker) {
-                                  router.push(`?ticker=${encodeURIComponent(navTicker)}`);
-                                }
+                                router.push(`?ticker=${encodeURIComponent(navTicker)}`);
                               }}
                               onKeyDown={(e) => {
                                 if (e.key === "Enter" || e.key === " ") {
                                   e.stopPropagation();
                                 }
                               }}
-                              className={`inline-flex items-center gap-1 rounded-sm focus:outline-none focus:ring-1 focus:ring-[#F0B90B] ${canNavigate ? "cursor-pointer" : "cursor-default"}`}
+                              className="inline-flex items-center gap-1 rounded-sm focus:outline-none focus:ring-1 focus:ring-[#F0B90B] cursor-pointer"
                             >
                               <span className="text-xs font-medium text-[#C0C4CE]">{label}</span>
                               {isUnresolved && (

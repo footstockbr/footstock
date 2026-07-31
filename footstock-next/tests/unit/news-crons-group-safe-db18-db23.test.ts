@@ -263,6 +263,22 @@ describe('DB-23 / criterio 39 — DELETE de escopo de grupo em admin/news/[id]',
     expect(deleteNews).not.toHaveBeenCalled()
   })
 
+  it('CASO 5b: grupo apagado na janela entre a leitura e o deleteMany devolve 404 (F020-R3)', async () => {
+    // TOCTOU real: o findUnique achou a linha, outra requisicao apagou o grupo antes
+    // do deleteMany. `deleteMany` nao lanca P2025, entao sem a guarda a rota respondia
+    // 200 "deletada com sucesso" com deletedCount 0 — regressao contra o
+    // `prisma.news.delete` anterior ao item 020, que caia em P2025 -> 404.
+    findUniqueNews.mockResolvedValue(deleteContextRow({ id: 'n2', groupId: 'g1' }))
+    deleteManyNews.mockResolvedValueOnce({ count: 0 })
+
+    const res = await adminNewsDELETE(adminDeleteReq(), adminDeleteCtx('n2'))
+    const body = await res.json()
+
+    expect(res.status).toBe(404)
+    expect(body.error.code).toBe('NEWS-001')
+    expect(deleteManyNews).toHaveBeenCalledTimes(1)
+  })
+
   it('CASO 6: sem SUPER_ADMIN devolve 403 ADMIN-051 sem ler nem escrever', async () => {
     mockHasAdminRole.mockReturnValueOnce(false)
 
@@ -441,13 +457,26 @@ describe('CASO 12 — varredura transversal dos escritores de massa', () => {
     mockResolveTickerFromText.mockResolvedValue('PAL')
     findUniqueAsset.mockResolvedValue({ id: 'asset-pal' })
 
-    // Os quatro caminhos deste item na mesma varredura.
-    await reconcileCronGET(cronReq())
-    await batchResolvePOST(batchResolveReq())
+    // Os quatro caminhos deste item na mesma varredura. O status de cada um e
+    // assertado (F020-R4): se uma rota quebrasse antes de escrever, os lacos abaixo
+    // iterariam sobre arrays vazios e a varredura passaria por VACUIDADE.
+    const r1 = await reconcileCronGET(cronReq())
+    expect(r1.status).toBe(200)
+    const r2 = await batchResolvePOST(batchResolveReq())
+    expect(r2.status).toBe(200)
     findManyNews.mockResolvedValueOnce([sentimentRow({ id: 'n2', groupRank: 3 })])
-    await sentimentCronGET(cronReq())
+    const r3 = await sentimentCronGET(cronReq())
+    expect(r3.status).toBe(200)
     findUniqueNews.mockResolvedValue(deleteContextRow({ id: 'n2', groupId: 'g1' }))
-    await adminNewsDELETE(adminDeleteReq(), adminDeleteCtx('n2'))
+    const r4 = await adminNewsDELETE(adminDeleteReq(), adminDeleteCtx('n2'))
+    expect(r4.status).toBe(200)
+
+    // Pisos de vacuidade dos lacos 2 e 3: os dois iteram sobre o que foi gravado, e
+    // array vazio satisfaz `for` trivialmente. Sem piso para `updateManyNews` (bloco
+    // 1) nem para a escrita de sentimento (bloco 4): nos dois o esperado e ZERO
+    // chamadas, e a assercao negativa ja e o piso correto.
+    expect(deleteManyNews).toHaveBeenCalled()
+    expect(updateNews.mock.calls.length).toBeGreaterThan(0)
 
     // 1. Nenhum updateMany carregando assetIds (clausula 2 de DB-19).
     for (const [arg] of updateManyNews.mock.calls) {

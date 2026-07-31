@@ -139,14 +139,32 @@ async function main(): Promise<void> {
     orderBy: [{ publishedAt: 'desc' }, { groupId: 'asc' }],
     select: { id: true, groupId: true },
   })
-  ok('where groupRank:0 + orderBy [publishedAt desc, groupId asc]', `${anchors.length} ancora(s)`)
+  // Assert, nao `ok` incondicional: a ancora `${PREFIX}rank-0` foi criada acima
+  // com `groupRank: 0` e `isPublished: true`, entao TEM que aparecer aqui. Um
+  // `ok` cego reportaria verde com 0 linhas — exatamente o silencio que este
+  // smoke existe para nao ter.
+  if (anchors.some((a) => a.groupId === GROUP_ID)) {
+    ok('where groupRank:0 + orderBy [publishedAt desc, groupId asc]', `${anchors.length} ancora(s), grupo do smoke presente`)
+  } else {
+    fail('where groupRank:0 + orderBy [publishedAt desc, groupId asc]', `grupo ${GROUP_ID} ausente em ${anchors.length} ancora(s): ${JSON.stringify(anchors)}`)
+  }
 
   // ─── 5. update de impactDispatchedAt (marcador DB-12, item 014) ──────────
   const marked = await prisma.news.updateMany({
     where: { groupId: GROUP_ID, impactDispatchedAt: null, ticker: { not: null } },
     data: { impactDispatchedAt: new Date('2026-07-29T03:05:00.000Z') },
   })
-  ok('updateMany impactDispatchedAt (predicado do reconciliador)', `${marked.count} linha(s) marcada(s)`)
+  // Contagem esperada = 2, derivada dos creates acima: das 3 linhas do grupo, a
+  // ancora (`rank-0`) ja nasceu com `impactDispatchedAt` preenchido, entao o
+  // predicado do reconciliador so pega `rank-1` (POR3) e `rank-2` (REG3), ambas
+  // com ticker nao nulo e marcador nulo. `ok` incondicional aqui reportaria
+  // verde com 0 marcadas — que e precisamente a falha silenciosa a detectar.
+  const MARKED_EXPECTED = 2
+  if (marked.count === MARKED_EXPECTED) {
+    ok('updateMany impactDispatchedAt (predicado do reconciliador)', `${marked.count} linha(s) marcada(s)`)
+  } else {
+    fail('updateMany impactDispatchedAt (predicado do reconciliador)', `esperado ${MARKED_EXPECTED}, veio ${marked.count}`)
+  }
 
   // ─── 6. Controle negativo: o client REJEITA campo inexistente ────────────
   // Sem este teste, os OKs acima nao provariam nada: um client que ignorasse campo

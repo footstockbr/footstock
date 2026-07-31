@@ -84,8 +84,14 @@ export async function GET(request: NextRequest) {
   // T-09: suportar filtro por ticker também
   const ticker = searchParams.get('ticker')
   const impact = searchParams.get('impact')
-  const { page, limit, skip } = parsePagination(searchParams, 20)
+  const { page, limit } = parsePagination(searchParams, 20)
   const take = Math.min(limit, MAX_PAGE_SIZE)
+  // O `skip` de `parsePagination` e derivado de `limit` (cap 100), mas esta rota
+  // pagina por `take` (cap 50, = HYDRATION_MAX_GROUPS). Usar os dois juntos abre
+  // um buraco: com `?limit=100&page=2` o skip seria 100 e o take 50, entao as
+  // linhas 50..99 nunca sao devolvidas por pagina nenhuma. O offset tem que sair
+  // do MESMO tamanho de pagina que o `take`.
+  const skip = (page - 1) * take
 
   if (impact && !VALID_IMPACTS.includes(impact)) {
     return errors.validation('Categoria de impacto inválida.')

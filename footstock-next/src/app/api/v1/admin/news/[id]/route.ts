@@ -228,6 +228,24 @@ export async function PATCH(request: NextRequest, { params }: NewsParams) {
         })
         resolvedAssetId = asset?.id ?? null
       }
+      // F-019-03: ticker NAO-VAZIO que nao casa com nenhum Asset produzia
+      // `resolvedAssetId === null`, indistinguivel de `ticker: ''` (intencao de
+      // LIMPAR). Em linha de grupo isso caia na regra 2 do helper e devolvia 422
+      // NEWS-003 falando em "limpar o vinculo de time" — descrevendo uma acao que
+      // o admin nao pediu. Recusar aqui devolve a `resolvedAssetId === null` o
+      // significado unico de `ticker === ''`. Mesmo veredito que a rota editorial
+      // ja dava para o caso (`editorial/[id]:203`, 422 'Ticker invalido.').
+      if (ticker && resolvedAssetId === null) {
+        return NextResponse.json(
+          {
+            error: {
+              code: 'NEWS-004',
+              message: 'Ticker invalido: nenhum ativo corresponde a este ticker.',
+            },
+          },
+          { status: 422 }
+        )
+      }
       // Item 019 / ST003 (E3a, ambos os ramos): DB-19. A substituicao cega por
       // `[asset.id]` achatava o grupo quando o asset e de um irmao, e o ramo de
       // ticker vazio apagava o vinculo de uma linha com irmaos vivos.
@@ -438,6 +456,19 @@ export async function DELETE(request: NextRequest, { params }: NewsParams) {
     }
 
     const { count: deletedCount } = await prisma.news.deleteMany({ where: groupWhere })
+
+    // F020-R3: `findUnique` e `deleteMany` nao sao atomicos entre si. Se outra
+    // requisicao apagar o grupo na janela, `deleteMany` devolve `{ count: 0 }` sem
+    // lancar P2025 e a rota responderia 200 "deletada com sucesso" sem ter deletado
+    // nada — regressao real de comportamento, porque o `prisma.news.delete` anterior
+    // ao item 020 lancava P2025 e o catch abaixo virava 404. Codigo REUSADO: NEWS-001
+    // ja e o "nao existe" desta rota, e o runbook do item 020 proibe codigo novo aqui.
+    if (deletedCount === 0) {
+      return NextResponse.json(
+        { error: { code: 'NEWS-001', message: 'Notícia não encontrada' } },
+        { status: 404 }
+      )
+    }
 
     return ok({ message: 'Notícia deletada com sucesso', deletedCount })
   } catch (error) {

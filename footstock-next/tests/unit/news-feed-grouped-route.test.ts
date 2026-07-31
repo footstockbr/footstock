@@ -389,6 +389,12 @@ describe('[RETROCOMPAT] grupo unitario do backfill do item 008', () => {
   })
 
   it('linha com group_id NULL (janela D1) ainda e hidratada pelo proprio id', async () => {
+    // O `groupRank: null` aqui e DELIBERADO e nao deve ser "corrigido" para 0:
+    // e a unica cobertura do fallback `rankOf(row) = row.groupRank ?? 0` sobre uma
+    // linha hidratada. Na janela D1 o acervo pre-backfill tem as duas colunas nulas
+    // (o CHECK news_group_rank_chk restringe a faixa 0..2, mas NAO implica NOT NULL).
+    // Trocar por 0 tornaria a assercao de groupRank vacua. Ja foi levantado como
+    // falso positivo em reviews/REVIEW-EXECUTED-015.md e descartado la.
     wireFindMany(
       [{ id: 'legado', groupId: null }],
       [row({ id: 'legado', groupId: null, groupRank: null })]
@@ -418,6 +424,22 @@ describe('[LIMITE] hidratacao com no maximo 50 ids', () => {
     expect(findManyNews.mock.calls[0][0].take).toBe(50)
     const hydrateIn = findManyNews.mock.calls[1][0].where.OR[0].groupId.in as string[]
     expect(hydrateIn).toHaveLength(50)
+  })
+
+  it('o skip acompanha o take capado, sem pular grupos entre paginas', async () => {
+    // `parsePagination` deriva o skip de `limit` (cap 100); esta rota pagina por
+    // `take` (cap 50). Se o skip viesse de `limit`, `?limit=100&page=2` pediria
+    // OFFSET 100 com LIMIT 50 e os grupos 50..99 nao apareceriam em pagina
+    // nenhuma. O offset tem que ser multiplo do tamanho de pagina efetivo.
+    const anchors = Array.from({ length: 60 }, (_, i) => ({ id: `n${i}`, groupId: `g${i}` }))
+    const siblings = anchors.map((a) => row({ id: a.id, groupId: a.groupId, groupRank: 0 }))
+    wireFindMany(anchors, siblings)
+    countNews.mockResolvedValue(200)
+
+    await GET(request('?limit=100&page=2'))
+
+    expect(findManyNews.mock.calls[0][0].take).toBe(50)
+    expect(findManyNews.mock.calls[0][0].skip).toBe(50)
   })
 
   it('pagina vazia nao emite a query de hidratacao', async () => {

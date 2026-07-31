@@ -145,6 +145,24 @@ export async function GET(req: NextRequest) {
             ...(assetIdsData ?? {}),
           },
         })
+
+        // F-019-02: o snapshot de irmaos e lido UMA vez antes do loop e nao
+        // enxerga as escritas do proprio loop. Duas linhas do MESMO grupo no MESMO
+        // scan que resolvam para o MESMO asset gravariam ambas `[assetX]` — o
+        // achatamento que o skip `sibling-owns-asset` existe para impedir, e sem
+        // nenhum warn, porque skip nenhum ocorre. Agrava aqui: este caminho roda
+        // sem humano. Refletir a escrita no bucket fecha o INTRA-scan; a corrida
+        // entre execucoes simultaneas e outro problema e nao se resolve aqui.
+        if (assetIdsData && news.groupId) {
+          const bucket = siblingsByGroup.get(news.groupId)
+          if (!bucket) {
+            siblingsByGroup.set(news.groupId, [{ id: news.id, assetIds: assetIdsData.assetIds }])
+          } else {
+            const own = bucket.find(row => row.id === news.id)
+            if (own) own.assetIds = assetIdsData.assetIds
+            else bucket.push({ id: news.id, assetIds: assetIdsData.assetIds })
+          }
+        }
         reconciled++
       } catch (err) {
         failed++

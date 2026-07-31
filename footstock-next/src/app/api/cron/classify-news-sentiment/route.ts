@@ -30,6 +30,13 @@ import type { Prisma, Sentiment } from '@prisma/client'
 // Tipado como `Prisma.NewsWhereInput` (nao `as const`): o `as const` deixa o `OR`
 // readonly e o Prisma exige array mutavel; o tipo nomeado tambem faz o compilador
 // validar o proprio predicado.
+//
+// F-020-R6 — escopo desta constante: ela e a guarda DESTE cron, nao um invariante
+// global de "ninguem sobrescreve sentimento de linha de grupo". As superficies
+// MANUAIS (PATCH admin/news/[id], PATCH editorial, POST editorial) continuam
+// podendo escrever `sentiment` por linha — permitido pelo criterio 23. O unico
+// escritor AUTOMATICO de sentimento sobre News e este cron; e so sobre ele que a
+// metrica de alvo zero dos itens 022 e 023 se sustenta.
 const SENTIMENT_ELIGIBLE_WHERE: Prisma.NewsWhereInput = {
   sentimentClassifiedAt: null,
   OR: [{ groupRank: null }, { groupRank: 0 }],

@@ -566,7 +566,14 @@ export class NewsPublisher {
       // `sentiment === 0`) é o que mantém neutro-por-decisão, neutro-por-
       // confidence e neutro-por-fallback distinguíveis. A linha foi gravada
       // normalmente; ela apenas não gera evento, e o motivo fica no log.
-      if (row.origin === 'low_confidence') {
+      //
+      // `rank > 0` é parte do gate, não decoração: `types.ts` define
+      // `low_confidence` como estado exclusivo dos ranks 1 e 2, e o caminho
+      // flag-OFF já tem defesa em profundidade para isso (`planRows` fixa
+      // `origin: 'classifier'` no rank 0). Sem esta metade, o caminho flag-ON
+      // ficava sem a mesma defesa: um classificador futuro que emitisse
+      // `low_confidence` no rank 0 silenciaria a âncora — e só com o flag ligado.
+      if (row.rank > 0 && row.origin === 'low_confidence') {
         this.logSkip(ctx.groupId, [row], 'low_confidence', {})
         // Também terminal. A seção 10.6 foi escrita antes de o gate de confidence
         // existir (item 011), mas o motivo é o mesmo dos outros dois: a linha tem

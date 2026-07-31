@@ -9,6 +9,28 @@ interface NewsStatusToggleProps {
   onToggle: () => void
 }
 
+// Item 020 / F020-R1: a escrita de status vive fora do handler porque o harness de
+// teste do repo roda em `testEnvironment: 'node'` (jest.config.ts) — sem jsdom nao
+// ha clique para simular, e este e o unico ponto onde o verbo pode regredir.
+//
+// PATCH nos DOIS sentidos, nunca DELETE. Depois do DB-23 (item 020) o
+// `DELETE /api/v1/admin/news/[id]` virou apagamento FISICO do GRUPO inteiro
+// (`deleteMany` por group_id, ate 3 linhas irmas): um switch de status jamais pode
+// destruir dado em definitivo, ainda mais sem caminho de volta. Verbo PATCH e nao
+// PUT porque a rota so exporta PATCH e DELETE — o ramo antigo de restore mandava
+// PUT e tomava 405.
+export async function requestNewsStatusChange(
+  newsId: string,
+  nextStatus: 'published' | 'archived',
+  fetcher: typeof fetch = fetch
+): Promise<Response> {
+  return fetcher(`/api/v1/admin/news/${newsId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ isPublished: nextStatus === 'published' }),
+  })
+}
+
 export function NewsStatusToggle({ newsId, currentStatus, onToggle }: NewsStatusToggleProps) {
   const [loading, setLoading] = useState(false)
   const [optimisticStatus, setOptimisticStatus] = useState(currentStatus)
@@ -22,16 +44,7 @@ export function NewsStatusToggle({ newsId, currentStatus, onToggle }: NewsStatus
     setOptimisticStatus(nextStatus)
 
     try {
-      let res: Response
-      if (previousStatus === 'published') {
-        res = await fetch(`/api/v1/admin/news/${newsId}`, { method: 'DELETE' })
-      } else {
-        res = await fetch(`/api/v1/admin/news/${newsId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ isPublished: true }),
-        })
-      }
+      const res = await requestNewsStatusChange(newsId, nextStatus)
 
       if (res.ok) {
         onToggle()

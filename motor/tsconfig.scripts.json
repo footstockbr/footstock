@@ -1,0 +1,9 @@
+{
+  "//": "Typecheck de `scripts/`, que fica FORA do tsconfig principal por causa de `rootDir: ./src` (adicionar `scripts/**/*` la emitiria TS6059). Sem este arquivo, os scripts operacionais do motor (smoke da M067, etc) nunca sao verificados por tsc e podem quebrar em producao com erro que o compilador pegaria de graca. `noEmit` porque nada aqui entra no `dist/`.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true
+  },
+  "include": ["scripts/**/*"]
+}

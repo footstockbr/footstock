@@ -705,6 +705,29 @@ describe('NewsPublisher', () => {
       expect(rows[0].news_id).toBe(lowConfidenceRow.id)
     })
 
+    test('[GATE confidence] rank 0 marcado como low_confidence NAO e silenciado com o flag ligado', async () => {
+      // Simetrico do teste `[FLAG OFF] rank 0 marcado como low_confidence ...`.
+      // `types.ts` define `low_confidence` como estado exclusivo dos ranks 1 e 2;
+      // o caminho flag-OFF ja se protege fixando `origin: 'classifier'` no rank 0.
+      // Este teste trava a mesma defesa no caminho flag-ON: um classificador que
+      // emita `low_confidence` fora de contrato no rank 0 nao pode silenciar a
+      // ancora do grupo.
+      await publisher.publish(
+        makeRaw(),
+        makeMultiTeamClassified({
+          teams: [
+            makeTeam({ ticker: 'PAL3', sentiment: 0.7, confidence: 0.1, rank: 0, origin: 'low_confidence' }),
+            makeTeam({ ticker: 'URU3', sentiment: 0.5, confidence: 0.9, rank: 1 }),
+          ],
+        })
+      )
+
+      expect(dbRows).toHaveLength(2)
+      // A ancora despacha apesar do `origin` fora de contrato.
+      expect(publishedEvents().map((event) => event.assetId).sort()).toEqual(['PAL3', 'URU3'])
+      expect(skipLogs('low_confidence')).toHaveLength(0)
+    })
+
     test('[GATE relevancia] grupo reprovado nao despacha NADA mesmo com confidence alto em todos os times', async () => {
       await publisher.publish(makeRaw(), makeMultiTeamClassified({ relevance: 0.2 }))
 

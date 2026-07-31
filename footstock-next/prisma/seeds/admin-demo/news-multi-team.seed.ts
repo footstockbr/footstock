@@ -65,71 +65,81 @@ const newsMultiTeamSeed = async () => {
     )
   }
 
-  console.log('[seed] News multi-team: limpando linhas anteriores do proprio grupo (escopo por id fixo)...')
-  // Delete escopado aos 2 ids fixos deste grupo, nunca um deleteMany({}) — que
-  // apagaria as linhas mono-time de news.seed.ts (fora do escopo deste seed).
-  await prisma.news.deleteMany({ where: { id: { in: [GROUP_ANCHOR_ID, GROUP_SIBLING_ID] } } })
-
-  console.log('[seed] News multi-team: gravando grupo POR3 (ancora) / URU3 (irmao)...')
+  console.log('[seed] News multi-team: limpando e gravando o grupo POR3 (ancora) / URU3 (irmao)...')
 
   const now = new Date()
   const publishedAt = new Date(now.getTime() - 90 * 60 * 1000) // 1h30 atras
 
-  // Ancora (groupRank 0): id fixo escolhido explicitamente, entao groupId =
-  // o proprio id ja no create — nao precisa do update pos-create que
-  // newsGroupWriter.ts usa quando o id vem de cuid() em runtime.
-  await prisma.news.create({
-    data: {
-      id: GROUP_ANCHOR_ID,
-      title: 'POR3 goleia URU3 por 4 a 0 em confronto direto',
-      content:
-        'Vitoria consolida a boa fase do Porco do Parque FC e agrava a crise do Urubu da Gavea FC, ' +
-        'que ve o rival abrir vantagem na tabela. Mesma noticia, impacto oposto para cada clube.',
-      impact: 'ESPORTIVA_MAJORITARIA',
-      sentiment: 'BULLISH',
-      ticker: 'POR3',
-      assetIds: [porAsset.id],
-      source: 'Comunicado Oficial',
-      isPublished: true,
-      publishedAt,
-      isArchived: false,
-      author: 'admin',
-      groupId: GROUP_ANCHOR_ID,
-      groupRank: 0,
-      // Seed nao passa pelo NewsPublisher real; marcamos o despacho como
-      // concluido no proprio ato de semear para nao deixar a linha elegivel
-      // ao reconciliador de impacto pendente (DB-12, criterio 4).
-      impactDispatchedAt: publishedAt,
-      createdAt: publishedAt,
-      updatedAt: publishedAt,
-    },
-  })
+  // Delete + os 2 creates numa transacao unica: grupo parcial (1 das 2 linhas)
+  // e exatamente o estado que o desenho B proibe — o writer de producao
+  // (writeNewsGroup) usa $transaction pela mesma razao, e um seed sequencial
+  // contradiria por omissao a invariante que ele existe para demonstrar.
+  // Idempotencia ja vinha do delete escopado; a transacao cobre a atomicidade
+  // DENTRO de uma execucao.
+  // Forma array (nao callback) e segura aqui porque porAsset.id/uruAsset.id ja
+  // foram resolvidos pelo Promise.all acima: nenhum argumento depende de valor
+  // produzido dentro da propria transacao.
+  await prisma.$transaction([
+    // Delete escopado aos 2 ids fixos deste grupo, nunca um deleteMany({}) — que
+    // apagaria as linhas mono-time de news.seed.ts (fora do escopo deste seed).
+    prisma.news.deleteMany({ where: { id: { in: [GROUP_ANCHOR_ID, GROUP_SIBLING_ID] } } }),
 
-  // Irmao (groupRank 1): mesma impactCategory e publishedAt da ancora
-  // (mesma magnitude, sinal oposto — criterio 3 da secao 12 de source.md).
-  await prisma.news.create({
-    data: {
-      id: GROUP_SIBLING_ID,
-      title: 'POR3 goleia URU3 por 4 a 0 em confronto direto',
-      content:
-        'Vitoria consolida a boa fase do Porco do Parque FC e agrava a crise do Urubu da Gavea FC, ' +
-        'que ve o rival abrir vantagem na tabela. Mesma noticia, impacto oposto para cada clube.',
-      impact: 'ESPORTIVA_MAJORITARIA',
-      sentiment: 'BEARISH',
-      ticker: 'URU3',
-      assetIds: [uruAsset.id],
-      source: 'Comunicado Oficial',
-      isPublished: true,
-      publishedAt,
-      isArchived: false,
-      author: 'admin',
-      groupId: GROUP_ANCHOR_ID,
-      groupRank: 1,
-      impactDispatchedAt: publishedAt,
-      createdAt: publishedAt,
-      updatedAt: publishedAt,
-    },
-  })
+    // Ancora (groupRank 0): id fixo escolhido explicitamente, entao groupId =
+    // o proprio id ja no create — nao precisa do update pos-create que
+    // newsGroupWriter.ts usa quando o id vem de cuid() em runtime.
+    prisma.news.create({
+      data: {
+        id: GROUP_ANCHOR_ID,
+        title: 'POR3 goleia URU3 por 4 a 0 em confronto direto',
+        content:
+          'Vitoria consolida a boa fase do Porco do Parque FC e agrava a crise do Urubu da Gavea FC, ' +
+          'que ve o rival abrir vantagem na tabela. Mesma noticia, impacto oposto para cada clube.',
+        impact: 'ESPORTIVA_MAJORITARIA',
+        sentiment: 'BULLISH',
+        ticker: 'POR3',
+        assetIds: [porAsset.id],
+        source: 'Comunicado Oficial',
+        isPublished: true,
+        publishedAt,
+        isArchived: false,
+        author: 'admin',
+        groupId: GROUP_ANCHOR_ID,
+        groupRank: 0,
+        // Seed nao passa pelo NewsPublisher real; marcamos o despacho como
+        // concluido no proprio ato de semear para nao deixar a linha elegivel
+        // ao reconciliador de impacto pendente (DB-12, criterio 4).
+        impactDispatchedAt: publishedAt,
+        createdAt: publishedAt,
+        updatedAt: publishedAt,
+      },
+    }),
+
+    // Irmao (groupRank 1): mesma impactCategory e publishedAt da ancora
+    // (mesma magnitude, sinal oposto — criterio 3 da secao 12 de source.md).
+    prisma.news.create({
+      data: {
+        id: GROUP_SIBLING_ID,
+        title: 'POR3 goleia URU3 por 4 a 0 em confronto direto',
+        content:
+          'Vitoria consolida a boa fase do Porco do Parque FC e agrava a crise do Urubu da Gavea FC, ' +
+          'que ve o rival abrir vantagem na tabela. Mesma noticia, impacto oposto para cada clube.',
+        impact: 'ESPORTIVA_MAJORITARIA',
+        sentiment: 'BEARISH',
+        ticker: 'URU3',
+        assetIds: [uruAsset.id],
+        source: 'Comunicado Oficial',
+        isPublished: true,
+        publishedAt,
+        isArchived: false,
+        author: 'admin',
+        groupId: GROUP_ANCHOR_ID,
+        groupRank: 1,
+        impactDispatchedAt: publishedAt,
+        createdAt: publishedAt,
+        updatedAt: publishedAt,
+      },
+    }),
+  ])
 
   console.log('[seed] News multi-team: grupo gravado (2 linhas, groupId=%s)', GROUP_ANCHOR_ID)
   await prisma.$disconnect()

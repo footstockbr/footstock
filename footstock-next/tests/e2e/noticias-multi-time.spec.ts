@@ -227,14 +227,44 @@ test.describe('M067 item 016 — badge de sentimento por time', () => {
     const badge = page.locator(`[data-testid="noticias-item-${GROUP_ID}-badge-URU3"]`)
     const expandBtn = page.locator(`[data-testid="noticias-item-${GROUP_ID}-expand"]`)
 
-    // Focar a badge e avancar com Tab: o proximo alvo nao pode ser o mesmo no.
+    // A sequencia esperada e LIDA do DOM, nao escrita a mao: a ordem das badges
+    // vem do array `teams` do payload, entao fixar tickers aqui faria o teste
+    // mentir se o fixture mudasse. `not(-sentiment|-unresolved)` isola os
+    // botoes-badge dos spans internos.
+    const renderedBadgeIds = await page
+      .locator(
+        `[data-testid^="noticias-item-${GROUP_ID}-badge-"]:not([data-testid$="-sentiment"]):not([data-testid$="-unresolved"])`,
+      )
+      .evaluateAll((els) => els.map((el) => el.getAttribute('data-testid') ?? ''))
+
+    const startIndex = renderedBadgeIds.indexOf(`noticias-item-${GROUP_ID}-badge-URU3`)
+    expect(startIndex, `badge URU3 ausente em ${JSON.stringify(renderedBadgeIds)}`).toBeGreaterThanOrEqual(0)
+
+    // Do ponto de partida ate a expansao: cada badge irma e uma parada propria e
+    // o controle de expansao e a ultima. Um card com badge aninhada na expansao
+    // (ou vice-versa) colapsaria paradas e quebraria esta lista.
+    const expectedStops = [...renderedBadgeIds.slice(startIndex + 1), `noticias-item-${GROUP_ID}-expand`]
+
+    const focusedTestId = () =>
+      page.evaluate(() => {
+        const el = document.activeElement
+        if (!el || el === document.body) return '(body)'
+        return el.getAttribute('data-testid') ?? `(${el.tagName.toLowerCase()} sem data-testid)`
+      })
+
     await badge.focus()
     await expect(badge).toBeFocused()
-    await page.keyboard.press('Tab')
-    await expect(badge).not.toBeFocused()
 
-    // O controle de expansao e alcancavel por foco proprio (nao aninhado).
-    await expandBtn.focus()
+    // Travessia REAL por Tab: afirma QUAL elemento recebeu o foco a cada passo,
+    // nao apenas que a badge o perdeu.
+    const visitedStops: string[] = []
+    for (let i = 0; i < expectedStops.length; i += 1) {
+      await page.keyboard.press('Tab')
+      visitedStops.push(await focusedTestId())
+    }
+    expect(visitedStops).toEqual(expectedStops)
+
+    // O controle de expansao foi alcancado pelo teclado (nao por `.focus()`).
     await expect(expandBtn).toBeFocused()
     await expect(expandBtn).toHaveAttribute('aria-expanded', 'false')
     await page.keyboard.press('Enter')
