@@ -20,9 +20,10 @@
 // (mapa por versao, fail-closed, `>=`, rank 0 fora do gate) foi fechada no item
 // 011 e nao se reabre aqui.
 //
-// LIMITE DECLARADO: o corpus e `provenance: 'simulated'` (ver cabecalho da
-// fixture). Este numero mede FIDELIDADE DE PIPELINE, nao a hipotese H8. O teste
-// [H8] no fim do arquivo torna essa lacuna visivel em vez de deixa-la implicita.
+// LIMITE DECLARADO: o corpus e agent-sim com `provenance: 'simulated'` (ver
+// cabecalho/meta da fixture). Este numero mede FIDELIDADE DE PIPELINE, nao a
+// hipotese H8. O teste [H8/CI] no fim do arquivo impede promover esta simulacao
+// a evidencia de producao.
 // ============================================================================
 
 import RedisMock from 'ioredis-mock'
@@ -41,8 +42,10 @@ import {
 import {
   GOLDEN_SET,
   GOLDEN_ASSET_ALIASES,
+  GOLDEN_SET_META,
   GOLDEN_SET_MIN_SIZE,
   HARD_CASES_OBRIGATORIOS,
+  isProductionH8Evidence,
   SIGNAL_ACCURACY_TARGET,
   THRESHOLD_SWEEP,
   type ExpectedSignal,
@@ -652,24 +655,25 @@ describe('Golden set — fallback deterministico mono-time (criterio 47)', () =>
 // ---------------------------------------------------------------------------
 
 describe('Golden set — limite declarado', () => {
-  test('[H8] o corpus e simulado: a taxa medida e fidelidade de pipeline, nao validacao do modelo', () => {
+  test('[H8/CI] agent-sim nao pode qualificar como evidencia H8 de producao', () => {
     const gravados = GOLDEN_SET.filter((gold) => gold.provenance === 'recorded')
     const simulados = GOLDEN_SET.filter((gold) => gold.provenance === 'simulated')
+    const realHttp = GOLDEN_SET.filter((gold) => gold.provenance === 'real-http')
 
-    // Enquanto nenhum caso for 'recorded', H8 (o MODELO acerta o sinal por
-    // time?) segue NAO verificada por esta suite. O teste nao falha por isso —
-    // ele existe para que a lacuna esteja escrita, e nao inferida do silencio.
-    if (gravados.length === 0) {
-      // eslint-disable-next-line no-console
-      console.log(
-        `\n[H8 NAO VERIFICADA] ${simulados.length}/${GOLDEN_SET.length} casos com provenance='simulated'. ` +
-        'A taxa A acima mede se o PIPELINE preserva o sinal rotulado, com respostas do classificador ' +
-        'escritas a mao a partir da secao 13.3. Ela NAO mede se o Sonnet acerta o sinal por time. ' +
-        'Para verificar H8: gravar respostas reais (provenance=\'recorded\') e re-rodar esta mesma suite.'
-      )
-    }
+    expect(GOLDEN_SET_META.provenance).toBe('simulated')
+    expect(GOLDEN_SET_META.acquisition).toBe('agent-sim')
+    expect(GOLDEN_SET_META.productionH8Eligible).toBe(false)
+    expect(simulados).toHaveLength(GOLDEN_SET.length)
+    expect(realHttp).toHaveLength(0)
+    expect(isProductionH8Evidence(GOLDEN_SET_META, GOLDEN_SET)).toBe(false)
 
-    expect(simulados.length + gravados.length).toBe(GOLDEN_SET.length)
+    expect(simulados.length + gravados.length + realHttp.length).toBe(GOLDEN_SET.length)
+
+    // eslint-disable-next-line no-console
+    console.log(
+      `\n[H8 NAO VERIFICADA] ${simulados.length}/${GOLDEN_SET.length} casos agent-sim. ` +
+      'TAXA A mede fidelidade do pipeline. G3 exige 32 respostas com provenance=\'real-http\'.'
+    )
 
     // Os erros de modelo injetados existem para que a taxa A nao seja um 100%
     // vazio. Se alguem remover todos, a medicao perde o unico contrapeso que

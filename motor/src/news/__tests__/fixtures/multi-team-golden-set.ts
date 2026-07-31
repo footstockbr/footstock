@@ -21,16 +21,16 @@
 //
 // LIMITE DECLARADO (Zero Assumido) — LEIA ANTES DE CITAR O PERCENTUAL
 //   Em 2026-07-31 (item 005 loop 07-31-plano-acao-fechamento-multi-time) o
-//   operador AUTORIZOU gravacao com simulacao local do provider Kimi apos
-//   falha de creditos reais (Kimi 403 usage limit; Anthropic 400 credit low).
-//   Todos os 32 casos estao com `provenance: 'recorded'` sob a meta:
-//     provider=kimi model=kimi-for-coding recorded_by=agent-sim operator-auth
-//   Os campos `llm` sao a resposta efetiva adotada para H8 (simulacao Kimi
-//   pelo agente executor, com rotulos humanos intactos). Os tres casos
-//   `modelError: true` (GS-10, GS-18, GS-25) preservam modos de falha RB13.
-//   Meta de calibracao: SIGNAL_ACCURACY_TARGET 0.85. Nao reverter para
-//   `simulated` sem reabrir G3. Artefatos: reviews/G3-H8-GOLDEN-SET-EVIDENCE.md
-//   e reviews/H8-GOLDEN-SET-RECORDED.json no loop 07-31.
+//   operador AUTORIZOU simulacao local do provider Kimi apos falha de creditos
+//   reais (Kimi 403 usage limit; Anthropic 400 credit low). Autorizacao para
+//   simular NAO transforma a captura em resposta real do provider.
+//   Todos os 32 casos estao com `provenance: 'simulated'` e a meta do corpus
+//   registra `acquisition: 'agent-sim'` + `productionH8Eligible: false`.
+//   Os campos `llm` sao respostas simuladas pelo agente executor, com rotulos
+//   humanos intactos. Os tres casos `modelError: true` (GS-10, GS-18, GS-25)
+//   preservam modos de falha RB13. Meta de calibracao:
+//   SIGNAL_ACCURACY_TARGET 0.85. H8/G3 exige nova gravacao `real-http` dos 32
+//   casos; o artefato historico do loop 07-31 nao libera producao.
 //
 // ROTULAGEM (o que cada `expected` significa)
 //   'positivo' | 'negativo' | 'neutro' — o time e legitimamente afetado e o
@@ -70,6 +70,24 @@ export const HARD_CASES_OBRIGATORIOS: readonly HardCase[] = [
 /** Sinal esperado pela rotulagem humana. Ver cabecalho. */
 export type ExpectedSignal = 'positivo' | 'negativo' | 'neutro' | 'ausente'
 
+/**
+ * `recorded` e reservado para capturas legadas/locais cuja origem HTTP real
+ * nao foi comprovada. Somente `real-http` pode participar do gate H8 de
+ * producao; `simulated` inclui explicitamente `agent-sim`.
+ */
+export type GoldenProvenance = 'simulated' | 'recorded' | 'real-http'
+
+export interface GoldenSetMeta {
+  schema: 'h8-golden-set-meta/v1'
+  provenance: GoldenProvenance
+  acquisition: 'agent-sim' | 'local-recorder' | 'provider-http'
+  productionH8Eligible: boolean
+  provider: string | null
+  model: string | null
+  recordedAt: string | null
+  note: string
+}
+
 export interface GoldenLabel {
   ticker: string
   expected: ExpectedSignal
@@ -101,10 +119,36 @@ export interface GoldenCase {
     impactCategory: string
     relevance: number
   }
-  provenance: 'simulated' | 'recorded'
+  provenance: GoldenProvenance
   /** `true` quando o `llm` injeta deliberadamente um erro realista do modelo. */
   modelError?: boolean
   note?: string
+}
+
+export const GOLDEN_SET_META: GoldenSetMeta = {
+  schema: 'h8-golden-set-meta/v1',
+  provenance: 'simulated',
+  acquisition: 'agent-sim',
+  productionH8Eligible: false,
+  provider: 'kimi',
+  model: 'kimi-for-coding',
+  recordedAt: null,
+  note: 'Simulacao autorizada pelo operador; nao comprova proveniencia real nem libera G3/H8.',
+}
+
+/** Guarda unica para consumidores que precisam decidir se H8 pode ir a review. */
+export function isProductionH8Evidence(
+  meta: GoldenSetMeta,
+  cases: readonly GoldenCase[],
+): boolean {
+  return (
+    meta.provenance === 'real-http' &&
+    meta.acquisition === 'provider-http' &&
+    meta.productionH8Eligible === true &&
+    meta.recordedAt !== null &&
+    cases.length >= 30 &&
+    cases.every((gold) => gold.provenance === 'real-http')
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +214,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'ESPORTIVA_MAJORITARIA',
       relevance: 0.9,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
   },
   {
     id: 'GS-02',
@@ -190,7 +234,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'ESPORTIVA_MAJORITARIA',
       relevance: 0.88,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
     note: 'O corpo cita um alias do PERDEDOR (beira-rio) antes de qualquer alias do vencedor; a ancora ainda assim vem do titulo.',
   },
   {
@@ -211,7 +255,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'ESPORTIVA_MAJORITARIA',
       relevance: 0.85,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
     note: 'Rank 0 com sinal NEGATIVO — prova que a ancora nao e "o time bem avaliado", e sim o sujeito do titulo.',
   },
   {
@@ -234,7 +278,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'ESPORTIVA_MAJORITARIA',
       relevance: 0.8,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
     note: 'Grupo de 3 exatamente no cap — nenhum corte, nenhum log de cap.',
   },
   {
@@ -259,7 +303,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'ESPORTIVA_MAJORITARIA',
       relevance: 0.82,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
     note: '4 times legitimos: o cap de 3 corta o de menor confidence (POR3). O corte NAO conta como erro de sinal; entra na taxa de corte por cap.',
   },
   {
@@ -280,7 +324,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'ESPORTIVA_MAJORITARIA',
       relevance: 0.75,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
     note: 'O time do titulo tem a MENOR confidence do grupo (0.45 < 0.6) e mesmo assim e rank 0 e mantem o sinal — a ancora esta fora do gate de confidence.',
   },
 
@@ -308,7 +352,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'MERCADO_ATIVOS',
       relevance: 0.8,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
   },
   {
     id: 'GS-08',
@@ -328,7 +372,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'MERCADO_ATIVOS',
       relevance: 0.6,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
     note: 'Ancora com confidence abaixo do limiar mantem o proprio NEUTRAL: neutro por decisao do modelo, nao por low_confidence.',
   },
   {
@@ -349,7 +393,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'MERCADO_ATIVOS',
       relevance: 0.82,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
   },
   {
     id: 'GS-10',
@@ -369,7 +413,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'MERCADO_ATIVOS',
       relevance: 0.5,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
     modelError: true,
     note: 'ERRO DE MODELO INJETADO (RB13): o classificador trata negocio sem valores como reforco material e devolve CRZ3 positivo com confidence alta. O limiar nao protege contra erro CONFIANTE — este e o modo de falha que a taxa de acerto existe para medir.',
   },
@@ -391,7 +435,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'MERCADO_ATIVOS',
       relevance: 0.55,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
   },
 
   // -------------------------------------------------------------------------
@@ -416,7 +460,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'ESPORTIVA_MAJORITARIA',
       relevance: 0.85,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
     note: 'Contra-exemplo do desenho A: um unico registro com um unico sentimento nao consegue representar dois negativos sem inverter um deles.',
   },
   {
@@ -437,7 +481,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'ESPORTIVA_MAJORITARIA',
       relevance: 0.78,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
   },
   {
     id: 'GS-14',
@@ -457,7 +501,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'ESPORTIVA_MAJORITARIA',
       relevance: 0.76,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
     note: 'Titulo NAO resolve ticker; a ancora vem do CORPO (Ceara aparece antes de Bahia). A ordem da resposta do LLM esta deliberadamente invertida: um parser que caisse em candidates[0] devolveria BMP3.',
   },
   {
@@ -478,7 +522,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'ESPORTIVA_MAJORITARIA',
       relevance: 0.8,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
   },
 
   // -------------------------------------------------------------------------
@@ -501,7 +545,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'INTEGRIDADE_SAUDE',
       relevance: 0.6,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
     note: 'O clube dono aparece PRIMEIRO no titulo e ainda assim nao pode virar rank 0: ele nem sequer e candidato.',
   },
   {
@@ -522,7 +566,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'INTEGRIDADE_SAUDE',
       relevance: 0.7,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
     note: 'Par simetrico do GS-16: mesma familia de manchete, rotulo do clube dono muda porque a obrigacao contratual e explicita.',
   },
   {
@@ -543,7 +587,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'INTEGRIDADE_SAUDE',
       relevance: 0.62,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
     modelError: true,
     note: 'ERRO DE MODELO INJETADO (RB13): o classificador inclui o clube dono sem obrigacao explicita. O `expectedAnchor` e URU3 porque a ancora e funcao pura do titulo entre os CANDIDATOS — o pipeline age certo sobre uma entrada errada. Efeito colateral que a suite documenta: um falso positivo que vira ancora fica ISENTO do limiar e despacha.',
   },
@@ -562,7 +606,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'INTEGRIDADE_SAUDE',
       relevance: 0.5,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
   },
 
   // -------------------------------------------------------------------------
@@ -588,7 +632,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'INSTITUCIONAL',
       relevance: 0.75,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
   },
   {
     id: 'GS-21',
@@ -608,7 +652,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'INSTITUCIONAL',
       relevance: 0.5,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
     note: 'Mesmo confidence nos dois times, tratamento DIFERENTE: a ancora despacha NEUTRAL de decisao, o rank 1 vira low_confidence. Entra na taxa B.',
   },
   {
@@ -629,7 +673,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'INSTITUCIONAL',
       relevance: 0.65,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
   },
   {
     id: 'GS-23',
@@ -646,7 +690,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'INSTITUCIONAL',
       relevance: 0.6,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
   },
 
   // -------------------------------------------------------------------------
@@ -669,7 +713,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'ESPORTIVA_MENOR',
       relevance: 0.55,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
     note: 'Manchete com 3 clubes no titulo que deve virar grupo UNITARIO.',
   },
   {
@@ -690,7 +734,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'ESPORTIVA_MENOR',
       relevance: 0.5,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
     modelError: true,
     note: 'ERRO DE MODELO INJETADO (RB13): o classificador gera linha para uma comparacao historica. Sentimento 0 NAO absolve: a linha existe, ocupa vaga no grupo e vira badge no card. E por isso que "ausente" e um rotulo, e nao o mesmo que "neutro".',
   },
@@ -712,7 +756,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'ESPORTIVA_MAJORITARIA',
       relevance: 0.72,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
     note: 'Contraponto do GS-25: aqui a referencia historica NAO deve suprimir os times, porque eles sao os sujeitos do jogo.',
   },
 
@@ -738,7 +782,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'MERCADO_ATIVOS',
       relevance: 0.4,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
   },
   {
     id: 'GS-28',
@@ -758,7 +802,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'INSTITUCIONAL',
       relevance: 0.45,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
   },
   {
     id: 'GS-29',
@@ -778,7 +822,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'MERCADO_ATIVOS',
       relevance: 0.55,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
     note: 'FRONTEIRA DO LIMIAR: BMP3 tem confidence EXATAMENTE 0.6. A comparacao e `>=`, entao ele passa e permanece origin=classifier.',
   },
 
@@ -807,7 +851,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'ESPORTIVA_MAJORITARIA',
       relevance: 0.7,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
     note: 'Combina os dois limites num caso so: 4 times E o time do titulo com a MENOR confidence (0.45). A ancora sobrevive ao corte por direito; o cortado e o de menor confidence entre os NAO-ancora (TIM3, 0.5).',
   },
   {
@@ -830,7 +874,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'MERCADO_ATIVOS',
       relevance: 0.5,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
     note: 'Grupo de 3 em que um rank nao-ancora fica logo ABAIXO do limiar (0.55) e os outros ficam em cima (0.6 e 0.65) — as tres faixas do gate num caso so.',
   },
   {
@@ -851,7 +895,7 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       impactCategory: 'INSTITUCIONAL',
       relevance: 0.6,
     },
-    provenance: 'recorded',
+    provenance: 'simulated',
   },
 ]
 
