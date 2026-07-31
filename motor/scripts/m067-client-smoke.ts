@@ -15,6 +15,7 @@
 //
 // Requer um banco com a M067 aplicada. NAO faz parte do build (scripts/ fora de rootDir).
 // Idempotente: limpa as linhas que cria (prefixo m067-smoke-) na entrada e na saida.
+// CI (motor-deploy): Prisma Client e gerado do schema monorepo antes de typecheck:scripts.
 
 import { PrismaClient, Prisma } from '@prisma/client'
 

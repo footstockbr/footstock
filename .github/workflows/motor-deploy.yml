@@ -7,6 +7,9 @@ on:
       - 'motor/**'
       - 'Dockerfile'
       - 'docker-compose.yml'
+      - '.github/workflows/motor-deploy.yml'
+      - 'prisma/schema.prisma'
+      - 'scripts/check-news-schema-drift.js'
   workflow_dispatch:
 
 jobs:
@@ -35,6 +38,21 @@ jobs:
       - name: Instalar dependências motor
         working-directory: motor
         run: npm ci
+
+      # Prisma Client precisa existir antes de typecheck:scripts (m067-client-smoke.ts
+      # importa @prisma/client). Espelha o Dockerfile da raiz: schema monorepo em
+      # prisma/schema.prisma (sem url no estilo Prisma 7) + generate Prisma 6.
+      - name: Generate Prisma Client (schema monorepo)
+        working-directory: motor
+        run: |
+          mkdir -p prisma
+          cp ../prisma/schema.prisma prisma/schema.prisma
+          if ! grep -qE '^\s*url\s*=' prisma/schema.prisma; then
+            sed -i 's/provider = "postgresql"/provider = "postgresql"\n  url       = env("DATABASE_URL")\n  directUrl = env("DIRECT_URL")/' prisma/schema.prisma
+          fi
+          DATABASE_URL="postgresql://prisma:prisma@localhost/prisma" \
+          DIRECT_URL="postgresql://prisma:prisma@localhost/prisma" \
+            npx --yes prisma@^6 generate --schema=prisma/schema.prisma
 
       # Gate G1 / F-009-R2-03: typecheck do pacote motor + scripts (tsconfig.scripts.json)
       # DEVE falhar o pipeline antes do deploy se houver erro de tipo em motor/scripts/.
