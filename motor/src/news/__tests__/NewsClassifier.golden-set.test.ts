@@ -28,6 +28,7 @@
 import RedisMock from 'ioredis-mock'
 import type Redis from 'ioredis'
 import { NewsClassifier } from '../NewsClassifier'
+import { makeEnabledRuntime } from './helpers/enabled-llm-runtime'
 import type { RawNewsItem } from '../NewsQueue'
 import { buildAliasIndex, resolveFromIndex } from '../ticker-fallback'
 import {
@@ -117,7 +118,7 @@ const pct = (n: number, d: number): string =>
 
 const makeClassifier = (): { redis: Redis; classifier: NewsClassifier } => {
   const redis = new RedisMock() as unknown as Redis
-  const classifier = new NewsClassifier(redis)
+  const classifier = new NewsClassifier(redis, undefined, makeEnabledRuntime())
   ;(classifier as unknown as { tickerIndex: typeof ALIAS_INDEX }).tickerIndex = ALIAS_INDEX
   return { redis, classifier }
 }
@@ -557,7 +558,10 @@ describe('Golden set — casos obrigatorios do limiar e do cap', () => {
       const redis = new RedisMock() as unknown as Redis
       await (redis as unknown as { set: (k: string, v: number, m: string, t: number) => Promise<unknown> })
         .set('news:sonnet:tokens', 100, 'EX', 60)
-      const isolado = new Isolado(redis)
+      // Mesmo runtime enabled de makeClassifier: sem ele o classificador isolado
+      // cai no fallback deterministico mono-time e CASO 5 nao exercita o gate
+      // de versao orfa (item 002 + G1).
+      const isolado = new Isolado(redis, undefined, makeEnabledRuntime())
       ;(isolado as unknown as { tickerIndex: typeof ALIAS_INDEX }).tickerIndex = ALIAS_INDEX
 
       // GS-04: tres times, todos com confidence MUITO acima de 0.6. Se houvesse

@@ -31,6 +31,12 @@ import {
   type AliasIndex,
 } from './ticker-fallback'
 import { aiClientOptions, resolveModel } from './ai-provider'
+import {
+  getNewsLlmRuntimeService,
+  type NewsLlmRuntimeConfigService,
+  type ResolvedLlmRuntime,
+} from './NewsLlmRuntimeConfigService'
+import { classifyHttpErrorToHealth } from './llm-health'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -63,6 +69,11 @@ type FallbackReason =
   | 'parse_invalid'
   | 'api_error_non_retryable'
   | 'api_unavailable'
+  | 'llm_disabled_by_admin'
+  | 'no_config'
+  | 'no_active_provider'
+  | 'token_missing'
+  | 'adapter_unknown'
 
 /** Shape bruto (não confiável) devolvido pelo LLM. */
 interface ParsedTeam {
@@ -93,9 +104,8 @@ interface TeamCandidate {
 // Config de model e caching
 // ---------------------------------------------------------------------------
 
-// Resolvido pelo provider ativo (AI_PROVIDER): claude-sonnet-4-6 no Anthropic,
-// kimi-for-coding (ou KIMI_MODEL) no Kimi. Ver ./ai-provider.ts.
-const MODEL = resolveModel('claude-sonnet-4-6')
+// Modelo base Anthropic; o runtime service mapeia para o modelo do provider ativo.
+const ANTHROPIC_BASE_MODEL = 'claude-sonnet-4-6'
 
 function resolveMaxTokens(): number {
   const raw = Number.parseInt(process.env.NEWS_CLASSIFIER_MAX_TOKENS ?? '', 10)
@@ -192,6 +202,9 @@ export class NewsClassifier {
   private readonly cacheMode: CacheMode
   private readonly promptFormat: PromptFormat
   private readonly timeoutMs: number
+  private readonly runtime: NewsLlmRuntimeConfigService
+  private boundConfigVersion = -1
+  private boundModel = resolveModel(ANTHROPIC_BASE_MODEL)
 
   // Estado derivado do prefixo estático (recomputado quando o mapa muda)
   private staticPrefix = ''
@@ -204,27 +217,58 @@ export class NewsClassifier {
   constructor(
     private readonly redis: Redis,
     private readonly prisma?: PrismaClient,
+    runtime?: NewsLlmRuntimeConfigService,
   ) {
     this.cacheMode = resolveCacheMode()
     this.promptFormat = resolvePromptFormat()
     this.timeoutMs = resolveTimeoutMs()
+    this.runtime = runtime ?? getNewsLlmRuntimeService()
 
-    // TTL estendido (1h) exige header beta. Inofensivo quando não usado.
+    // Cliente inicial via env (compat testes); hot-swap em ensureClient().
+    this.anthropic = this.buildClientFromEnv()
+  }
+
+  private buildClientFromEnv(): Anthropic {
     const defaultHeaders =
       this.cacheMode === '1h'
         ? { 'anthropic-beta': 'extended-cache-ttl-2025-04-11' }
         : undefined
-
-    this.anthropic = new Anthropic({
-      // apiKey + baseURL resolvidos pelo provider ativo (Anthropic ou Kimi).
+    return new Anthropic({
       ...aiClientOptions(),
-      // O SDK reentrega 429/5xx/timeout até maxRetries (default 2). Combinado com
-      // o retry manual 3x daqui, dava até ~9 chamadas HTTP por item — exatamente
-      // o multiplicador de custo que motivou esta mudança. Centralizamos o retry
-      // numa única política (a manual, em classify), zerando a do SDK.
       maxRetries: 0,
       ...(defaultHeaders ? { defaultHeaders } : {}),
     })
+  }
+
+  private buildClientFromRuntime(rt: ResolvedLlmRuntime): Anthropic {
+    const defaultHeaders =
+      this.cacheMode === '1h'
+        ? { 'anthropic-beta': 'extended-cache-ttl-2025-04-11' }
+        : undefined
+    return new Anthropic({
+      apiKey: rt.apiKey,
+      ...(rt.baseURL ? { baseURL: rt.baseURL } : {}),
+      maxRetries: 0,
+      ...(defaultHeaders ? { defaultHeaders } : {}),
+    })
+  }
+
+  /** Aplica hot switch se configVersion mudou. Retorna runtime atual. */
+  private async ensureClient(): Promise<ResolvedLlmRuntime> {
+    const rt = await this.runtime.getRuntimeConfig()
+    if (rt.llmEnabled && rt.reason === 'ok' && rt.configVersion !== this.boundConfigVersion) {
+      this.anthropic = this.buildClientFromRuntime(rt)
+      this.boundConfigVersion = rt.configVersion
+      this.boundModel = rt.model
+      logger.info(
+        `[NewsClassifier] Runtime LLM aplicado: provider=${rt.providerName} slug=${rt.adapterSlug} v=${rt.configVersion} model=${rt.model}`,
+      )
+    }
+    return rt
+  }
+
+  private currentModel(): string {
+    return this.boundModel || resolveModel(ANTHROPIC_BASE_MODEL)
   }
 
   // ---------------------------------------------------------------------------
@@ -366,7 +410,7 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
       // tamanho real do prefixo, não o prompt inteiro.
       const probe = await (this.anthropic.messages as { countTokens?: (args: unknown) => Promise<{ input_tokens?: number }> })
         .countTokens?.({
-          model: MODEL,
+          model: this.currentModel(),
           messages: [{ role: 'user', content: [{ type: 'text', text: this.staticPrefix }] }],
         })
 
@@ -413,7 +457,7 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
   private buildCreateParams(item: RawNewsItem): Anthropic.MessageCreateParamsNonStreaming {
     if (this.promptFormat === 'legacy') {
       return {
-        model: MODEL,
+        model: this.currentModel(),
         max_tokens: MAX_TOKENS,
         messages: [{ role: 'user', content: this.buildLegacyPrompt(item) }],
       }
@@ -436,7 +480,7 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
     }
 
     return {
-      model: MODEL,
+      model: this.currentModel(),
       max_tokens: MAX_TOKENS,
       messages: [
         {
@@ -452,12 +496,28 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
   // ---------------------------------------------------------------------------
 
   async classify(item: RawNewsItem, attempt = 1): Promise<ClassifiedNews> {
+    // Runtime config (hot switch). Node-only: zero HTTP, zero rate-limit.
+    const runtime = await this.ensureClient()
+    if (!runtime.llmEnabled || runtime.reason !== 'ok') {
+      await this.runtime.publishHealth(
+        { state: 'disabled', reasonCode: 'llm_disabled_by_admin' },
+        runtime,
+      )
+      const reason: FallbackReason =
+        runtime.reason === 'ok' ? 'llm_disabled_by_admin' : runtime.reason
+      return this.withTickerFallback(makeClassificationFallback(), item.title, reason)
+    }
+
     await this.checkRateLimit()
 
     // Circuit-breaker de credito esgotado: se a Anthropic ja sinalizou billing
     // esgotado ha pouco, pular a chamada (todos os itens falhariam igual) e ir
     // direto ao fallback. Evita o flood de N erros [SYS_002] por lote/rodada.
     if (Date.now() < this.creditCircuitOpenUntil) {
+      await this.runtime.publishHealth(
+        { state: 'insufficient_credits', reasonCode: 'credit_exhausted' },
+        runtime,
+      )
       return this.withTickerFallback(makeClassificationFallback(), item.title, 'credit_circuit_open')
     }
 
@@ -521,6 +581,12 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
       this.logCall(response, { attempt, latencyMs: Date.now() - startMs, ticker: result.ticker, parseValid })
       // Sucesso fecha o circuito (credito de volta / API saudavel).
       this.creditCircuitOpenUntil = 0
+      if (!parseValid || !text) {
+        const h = classifyHttpErrorToHealth({ parseValid, emptyText: !text })
+        await this.runtime.publishHealth(h, runtime)
+      } else {
+        await this.runtime.publishHealth({ state: 'healthy', reasonCode: 'ok' }, runtime)
+      }
       return result
     } catch (err) {
       const error = err as Error
@@ -544,6 +610,8 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
         } else if (!isCreditExhaustedError(err)) {
           logger.error(`[SYS_002] Sonnet API erro não-retentável (status=${status ?? 'n/a'}): ${error.message}`)
         }
+        const h = classifyHttpErrorToHealth({ status, message: error.message, aborted })
+        await this.runtime.publishHealth(h, runtime)
         return this.withTickerFallback(makeClassificationFallback(), item.title, 'api_error_non_retryable')
       }
 
@@ -556,6 +624,8 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
       }
 
       logger.error(`[SYS_002] Sonnet API indisponível após ${attempt} tentativa(s): ${error.message}`)
+      const h = classifyHttpErrorToHealth({ status, message: error.message, aborted })
+      await this.runtime.publishHealth(h, runtime)
       return this.withTickerFallback(makeClassificationFallback(), item.title, 'api_unavailable')
     } finally {
       clearTimeout(timeout)
@@ -830,7 +900,7 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
     logger.info(
       `[NewsClassifier.metrics] ${JSON.stringify({
         event: 'news_classifier_anthropic_call',
-        model: MODEL,
+        model: this.currentModel(),
         cache_mode: this.cacheMode,
         cache_eligible: this.cacheEligible,
         prefix_hash: this.prefixHash.slice(0, 12),
@@ -860,7 +930,7 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
     logger.info(
       `[NewsClassifier.metrics] ${JSON.stringify({
         event: 'news_classifier_anthropic_call_failed',
-        model: MODEL,
+        model: this.currentModel(),
         cache_mode: this.cacheMode,
         attempt: meta.attempt,
         latency_ms: meta.latencyMs,
@@ -880,7 +950,7 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
     this.running = true
     await this.loadTickerAliases()
     logger.info(
-      `[NewsClassifier] Worker iniciado (model=${MODEL}, cache=${this.cacheMode}, format=${this.promptFormat}, timeout=${this.timeoutMs}ms)`
+      `[NewsClassifier] Worker iniciado (model=${this.currentModel()}, cache=${this.cacheMode}, format=${this.promptFormat}, timeout=${this.timeoutMs}ms)`
     )
 
     while (this.running) {

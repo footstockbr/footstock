@@ -6,6 +6,8 @@
 // resposta Anthropic incluindo usage/cache e count_tokens), entao o mesmo
 // @anthropic-ai/sdk atende os dois providers: muda apenas baseURL + apiKey + model.
 // Default: kimi (decisao operacional 2026-06-25).
+// Preferencia em runtime: NewsLlmRuntimeConfigService (DB + hot switch).
+// Este modulo permanece como fallback de env para boot/testes.
 // ============================================================================
 
 export type AIProvider = 'anthropic' | 'kimi'

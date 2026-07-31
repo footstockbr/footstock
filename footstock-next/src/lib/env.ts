@@ -165,6 +165,8 @@ const envSchema = z.object({
 
   // Segurança adicional
   ENCRYPTION_KEY: z.string().min(32).optional(),
+  NEWS_LLM_TOKEN_KEY: z.string().min(64).optional(),
+  NEWS_LLM_TOKEN_KEY_VERSION: z.coerce.number().int().positive().optional(),
   INTERNAL_JOBS_SECRET: z.string().min(32).optional(),
   REVALIDATE_SECRET: z.string().min(1).optional(),
   INVITE_TOKEN_SECRET: z.string().min(32).optional(),

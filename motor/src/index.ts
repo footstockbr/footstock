@@ -18,6 +18,7 @@ import { MotorHealthService } from './services/MotorHealthService'
 import { AdminChannel } from './broadcast/AdminChannel'
 import { RSSFetcher } from './news/RSSFetcher'
 import { NewsClassifier } from './news/NewsClassifier'
+import { NewsLlmRuntimeConfigService, setNewsLlmRuntimeService } from './news/NewsLlmRuntimeConfigService'
 import { NewsPublisher } from './news/NewsPublisher'
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
@@ -191,7 +192,9 @@ async function main() {
       const newsAdapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! })
       newsPrisma = new PrismaClient({ adapter: newsAdapter })
       const publisher = new NewsPublisher(newsPrisma, redis)
-      newsClassifier = new NewsClassifier(redis, newsPrisma)
+      const llmRuntime = new NewsLlmRuntimeConfigService(newsPrisma, redis)
+      setNewsLlmRuntimeService(llmRuntime)
+      newsClassifier = new NewsClassifier(redis, newsPrisma, llmRuntime)
       rssFetcher = new RSSFetcher(redis, newsPrisma)
       newsClassifier.startClassifying(publisher).catch(err =>
         logger.error('[motor] Classifier error:', err)

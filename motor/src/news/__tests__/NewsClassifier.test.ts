@@ -10,15 +10,19 @@ import { NewsPersistenceError } from '../NewsPublisher'
 import { newsQueue, type RawNewsItem } from '../NewsQueue'
 import { NEWS_URLS_KEY } from '../news-dedup'
 import { buildAliasIndex } from '../ticker-fallback'
+import { makeEnabledRuntime } from './helpers/enabled-llm-runtime'
 
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
 
 const mockCreate = jest.fn()
+const mockCountTokens = jest.fn()
 jest.mock('@anthropic-ai/sdk', () => {
   return jest.fn().mockImplementation(() => ({
-    messages: { create: mockCreate },
+    // countTokens no factory: ensureClient/hot-switch recria o client e
+    // nao pode perder o mock injetado em instancias anteriores.
+    messages: { create: mockCreate, countTokens: mockCountTokens },
   }))
 })
 
@@ -49,9 +53,13 @@ describe('NewsClassifier', () => {
     redis = new RedisMock() as unknown as Redis
     // Inicializar token bucket
     await (redis as any).set('news:sonnet:tokens', 60, 'EX', 60)
-    classifier = new NewsClassifier(redis)
-    mockCreate.mockReset()
+    // Runtime habilitado: evita Node-only short-circuit do NewsLlmRuntimeConfigService
+    classifier = new NewsClassifier(redis, undefined, makeEnabledRuntime())
     jest.clearAllMocks()
+    mockCreate.mockReset()
+    mockCountTokens.mockReset()
+    // Default fail-closed: countTokens indisponivel a menos que o teste configure.
+    mockCountTokens.mockRejectedValue(new Error('countTokens not configured in test'))
   })
 
   test('[SUCCESS] classificação normal retorna dados corretos', async () => {
@@ -481,9 +489,8 @@ describe('NewsClassifier', () => {
   })
 
   test('[CACHE — elegível] countTokens >= margem habilita cache_control no bloco estático', async () => {
-    // Injeta countTokens no mock do SDK retornando acima da margem (1100).
-    const anthropicInstance = (classifier as unknown as { anthropic: { messages: Record<string, unknown> } }).anthropic
-    anthropicInstance.messages.countTokens = jest.fn().mockResolvedValue({ input_tokens: 1500 })
+    // Acima da margem (1100); mock no factory sobrevive a rebuild do client (hot switch).
+    mockCountTokens.mockResolvedValue({ input_tokens: 1500 })
 
     mockCreate.mockResolvedValue(sonnetsResponse({
       ticker: 'URU3', sentiment: 0.5, impactCategory: 'RESULTADO_ESPORTIVO', relevance: 0.8,
@@ -502,8 +509,7 @@ describe('NewsClassifier', () => {
   })
 
   test('[CACHE — abaixo da margem] countTokens < 1100 NÃO habilita cache (gate)', async () => {
-    const anthropicInstance = (classifier as unknown as { anthropic: { messages: Record<string, unknown> } }).anthropic
-    anthropicInstance.messages.countTokens = jest.fn().mockResolvedValue({ input_tokens: 800 })
+    mockCountTokens.mockResolvedValue({ input_tokens: 800 })
 
     mockCreate.mockResolvedValue(sonnetsResponse({
       ticker: 'URU3', sentiment: 0.5, impactCategory: 'RESULTADO_ESPORTIVO', relevance: 0.8,
@@ -519,7 +525,7 @@ describe('NewsClassifier', () => {
     const prev = process.env.NEWS_CLASSIFIER_PROMPT_FORMAT
     process.env.NEWS_CLASSIFIER_PROMPT_FORMAT = 'legacy'
     try {
-      const legacyClassifier = new NewsClassifier(redis)
+      const legacyClassifier = new NewsClassifier(redis, undefined, makeEnabledRuntime())
       mockCreate.mockResolvedValue(sonnetsResponse({
         ticker: 'URU3', sentiment: 0.5, impactCategory: 'RESULTADO_ESPORTIVO', relevance: 0.8,
       }))

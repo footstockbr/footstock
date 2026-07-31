@@ -978,3 +978,33 @@ model BalanceResetLog {
   @@index([adminId])
   @@map("balance_reset_logs")
 }
+
+// ─── News LLM providers (G-IA / Super Admin) ─────────────────────────────────
+// Paridade com footstock-next/prisma/schema.prisma (motor Prisma Client).
+
+model NewsLlmProvider {
+  id               String    @id
+  slug             String    @unique
+  name             String
+  enabled          Boolean   @default(true)
+  tokenCiphertext  String?   @map("token_ciphertext") @db.Text
+  tokenKeyVersion  Int       @default(1) @map("token_key_version")
+  deletedAt        DateTime? @map("deleted_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  createdBy        String?   @map("created_by")
+
+  @@index([deletedAt])
+  @@map("news_llm_providers")
+}
+
+model NewsLlmConfig {
+  id               String   @id @default("default")
+  llmEnabled       Boolean  @default(true) @map("llm_enabled")
+  activeProviderId String?  @map("active_provider_id")
+  configVersion    Int      @default(1) @map("config_version")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  updatedBy        String?  @map("updated_by")
+
+  @@map("news_llm_config")
+}

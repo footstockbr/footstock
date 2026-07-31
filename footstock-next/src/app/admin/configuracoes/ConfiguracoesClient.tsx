@@ -6,10 +6,11 @@ import { AdminBreadcrumb } from '@/components/admin/AdminBreadcrumb'
 import { cn } from '@/lib/utils'
 import { ConfigGateways } from './ConfigGateways'
 import { ConfigAdmins } from './ConfigAdmins'
+import { ConfigIAModal, ConfigIATabButton } from './ConfigIA'
 
-type ConfigTab = 'gateways' | 'admins'
+type ConfigTab = 'gateways' | 'admins' | 'ia'
 
-const TABS: { id: ConfigTab; label: string; icon: React.ElementType }[] = [
+const TABS: { id: Exclude<ConfigTab, 'ia'>; label: string; icon: React.ElementType }[] = [
   { id: 'gateways', label: 'Gateways', icon: Settings },
   { id: 'admins', label: 'Administradores', icon: Shield },
 ]
@@ -20,6 +21,7 @@ interface ConfiguracoesClientProps {
 
 export function ConfiguracoesClient({ adminId }: ConfiguracoesClientProps) {
   const [activeTab, setActiveTab] = useState<ConfigTab>('gateways')
+  const [iaOpen, setIaOpen] = useState(false)
 
   return (
     <div className="space-y-5">
@@ -36,16 +38,19 @@ export function ConfiguracoesClient({ adminId }: ConfiguracoesClientProps) {
       </div>
 
       {/* Tabs */}
-      <div data-testid="admin-configuracoes-tabs" className="flex gap-2">
+      <div data-testid="admin-configuracoes-tabs" className="flex gap-2 flex-wrap">
         {TABS.map((tab) => {
           const Icon = tab.icon
           return (
             <button
               key={tab.id}
               data-testid={`admin-configuracoes-tab-${tab.id}-button`}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                setActiveTab(tab.id)
+                setIaOpen(false)
+              }}
               className={cn(
-                'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
+                'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all min-h-[44px]',
                 activeTab === tab.id
                   ? 'bg-[#F0B90B] text-[#080b12]'
                   : 'bg-[#1E2329] text-[#929AA5] border border-[rgba(240,185,11,.1)] hover:border-[rgba(240,185,11,.3)]'
@@ -56,15 +61,25 @@ export function ConfiguracoesClient({ adminId }: ConfiguracoesClientProps) {
             </button>
           )
         })}
+        <ConfigIATabButton
+          active={activeTab === 'ia' || iaOpen}
+          onClick={() => {
+            setActiveTab('ia')
+            setIaOpen(true)
+          }}
+        />
       </div>
 
       {/* Content */}
-      {activeTab === 'gateways' && (
-        <ConfigGateways adminId={adminId} />
+      {activeTab === 'gateways' && <ConfigGateways adminId={adminId} />}
+      {activeTab === 'admins' && <ConfigAdmins adminId={adminId} />}
+      {activeTab === 'ia' && !iaOpen && (
+        <p className="text-sm text-[#929AA5]">
+          Clique novamente em <strong className="text-[#F0B90B]">IA</strong> para abrir o modal de providers.
+        </p>
       )}
-      {activeTab === 'admins' && (
-        <ConfigAdmins adminId={adminId} />
-      )}
+
+      <ConfigIAModal open={iaOpen} onClose={() => setIaOpen(false)} />
     </div>
   )
 }

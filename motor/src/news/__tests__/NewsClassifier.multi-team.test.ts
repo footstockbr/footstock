@@ -22,6 +22,7 @@ import {
   isTeamSignalConfident,
   resolveConfidenceThreshold,
 } from '../types'
+import { makeEnabledRuntime } from './helpers/enabled-llm-runtime'
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -84,7 +85,7 @@ describe('NewsClassifier — contrato multi-time', () => {
     redis = new RedisMock() as unknown as Redis
     await (redis as unknown as { set: (k: string, v: number, m: string, t: number) => Promise<unknown> })
       .set('news:sonnet:tokens', 60, 'EX', 60)
-    classifier = new NewsClassifier(redis)
+    classifier = new NewsClassifier(redis, undefined, makeEnabledRuntime())
     ;(classifier as unknown as { tickerIndex: typeof ALIAS_INDEX }).tickerIndex = ALIAS_INDEX
     mockCreate.mockReset()
     jest.clearAllMocks()

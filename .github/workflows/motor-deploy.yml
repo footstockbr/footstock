@@ -36,6 +36,12 @@ jobs:
         working-directory: motor
         run: npm ci
 
+      # Gate G1 / F-009-R2-03: typecheck do pacote motor + scripts (tsconfig.scripts.json)
+      # DEVE falhar o pipeline antes do deploy se houver erro de tipo em motor/scripts/.
+      - name: Typecheck all (motor + scripts)
+        working-directory: motor
+        run: npm run typecheck:all
+
       - name: Test gate (motor)
         working-directory: motor
         run: npm test -- --ci --silent
