@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Plus, Trash2, X } from 'lucide-react'
+import { KeyRound, Loader2, Plus, Trash2, X } from 'lucide-react'
 import {
   healthAriaLabel,
   LLM_HEALTH_COLORS,
@@ -85,6 +85,8 @@ export function ConfigIAModal({ open, onClose }: ConfigIAModalProps) {
   const [newToken, setNewToken] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<ProviderDto | null>(null)
   const [confirmName, setConfirmName] = useState('')
+  const [tokenTarget, setTokenTarget] = useState<string | null>(null)
+  const [tokenValue, setTokenValue] = useState('')
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['admin-news-llm-providers'],
@@ -194,6 +196,30 @@ export function ConfigIAModal({ open, onClose }: ConfigIAModalProps) {
     },
   })
 
+  const tokenMutation = useMutation({
+    mutationFn: async () => {
+      if (!tokenTarget) throw new Error('Sem alvo')
+      const res = await fetch(`/api/v1/admin/news/llm-providers/${tokenTarget}/token`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: tokenValue }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error?.message ?? 'Erro ao salvar token')
+      return json.data as { providers: ProviderDto[]; config: ConfigDto }
+    },
+    onSuccess: () => {
+      setTokenTarget(null)
+      setTokenValue('')
+      setFeedback({ type: 'ok', msg: 'Token gravado (criptografado em repouso).' })
+      queryClient.invalidateQueries({ queryKey: ['admin-news-llm-providers'] })
+    },
+    onError: (err: Error) => {
+      setFeedback({ type: 'err', msg: err.message })
+    },
+  })
+
   const deleteMutation = useMutation({
     mutationFn: async () => {
       if (!deleteTarget) throw new Error('Sem alvo')
@@ -222,7 +248,11 @@ export function ConfigIAModal({ open, onClose }: ConfigIAModalProps) {
 
   const health = data?.health
   const healthLabel = healthAriaLabel(health ?? null)
-  const submitting = applyMutation.isPending || createMutation.isPending || deleteMutation.isPending
+  const submitting =
+    applyMutation.isPending ||
+    createMutation.isPending ||
+    deleteMutation.isPending ||
+    tokenMutation.isPending
 
   return (
     <div
@@ -295,60 +325,134 @@ export function ConfigIAModal({ open, onClose }: ConfigIAModalProps) {
                 <div
                   key={p.id}
                   data-testid={`admin-config-ia-row-${p.slug}`}
-                  className="flex items-center gap-2 rounded-lg border border-[rgba(240,185,11,.1)] bg-[#0B0E11] px-3 py-2 min-h-[44px]"
+                  className="rounded-lg border border-[rgba(240,185,11,.1)] bg-[#0B0E11]"
                 >
-                  <input
-                    type="radio"
-                    name="active-llm-provider"
-                    data-testid={`admin-config-ia-radio-${p.slug}`}
-                    checked={draftActive === p.id}
-                    disabled={!enabled || submitting}
-                    onChange={() => setDraftActive(p.id)}
-                    aria-label={`Selecionar ${p.name}`}
-                    className="accent-[#F0B90B] disabled:opacity-40"
-                  />
-                  <span className="flex-1 text-sm text-[#EAECEF] truncate">
-                    {p.name}
-                    {p.tokenConfigured ? (
-                      <span className="ml-2 text-[10px] text-[#929AA5]">token ok</span>
-                    ) : (
-                      <span className="ml-2 text-[10px] text-[#F0B90B]">env/token pendente</span>
-                    )}
-                  </span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={enabled}
-                    data-testid={`admin-config-ia-toggle-${p.slug}`}
-                    disabled={submitting}
-                    onClick={() => {
-                      const next = !enabled
-                      setDraftEnabled((m) => ({ ...m, [p.id]: next }))
-                      if (!next && draftActive === p.id) setDraftActive(null)
-                    }}
-                    className={`relative h-6 w-11 rounded-full transition-colors min-h-[24px] ${
-                      enabled ? 'bg-[#2EBD85]' : 'bg-[#3a3f47]'
-                    }`}
-                  >
-                    <span
-                      className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
-                        enabled ? 'translate-x-5' : ''
-                      }`}
+                  <div className="flex items-center gap-2 px-3 py-2 min-h-[44px]">
+                    <input
+                      type="radio"
+                      name="active-llm-provider"
+                      data-testid={`admin-config-ia-radio-${p.slug}`}
+                      checked={draftActive === p.id}
+                      disabled={!enabled || submitting}
+                      onChange={() => setDraftActive(p.id)}
+                      aria-label={`Selecionar ${p.name}`}
+                      className="accent-[#F0B90B] disabled:opacity-40"
                     />
-                  </button>
-                  <button
-                    type="button"
-                    data-testid={`admin-config-ia-delete-${p.slug}`}
-                    aria-label={`Excluir ${p.name}`}
-                    disabled={submitting}
-                    onClick={() => {
-                      setDeleteTarget(p)
-                      setConfirmName('')
-                    }}
-                    className="min-h-[44px] min-w-[44px] flex items-center justify-center text-[#F6465D] hover:bg-[rgba(246,70,93,.1)] rounded-lg"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                    <span className="flex-1 text-sm text-[#EAECEF] truncate">
+                      {p.name}
+                      {p.tokenConfigured ? (
+                        <span className="ml-2 text-[10px] text-[#929AA5]">token ok</span>
+                      ) : (
+                        <span className="ml-2 text-[10px] text-[#F0B90B]">env/token pendente</span>
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      data-testid={`admin-config-ia-token-toggle-${p.slug}`}
+                      aria-label={`${p.tokenConfigured ? 'Trocar' : 'Definir'} token de ${p.name}`}
+                      aria-expanded={tokenTarget === p.id}
+                      title={`${p.tokenConfigured ? 'Trocar' : 'Definir'} token`}
+                      disabled={submitting}
+                      onClick={() => {
+                        setTokenValue('')
+                        setTokenTarget((cur) => (cur === p.id ? null : p.id))
+                      }}
+                      className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-[rgba(240,185,11,.1)] ${
+                        tokenTarget === p.id ? 'text-[#F0B90B]' : 'text-[#929AA5]'
+                      }`}
+                    >
+                      <KeyRound className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={enabled}
+                      data-testid={`admin-config-ia-toggle-${p.slug}`}
+                      disabled={submitting}
+                      onClick={() => {
+                        const next = !enabled
+                        setDraftEnabled((m) => ({ ...m, [p.id]: next }))
+                        if (!next && draftActive === p.id) setDraftActive(null)
+                      }}
+                      className={`relative h-6 w-11 rounded-full transition-colors min-h-[24px] ${
+                        enabled ? 'bg-[#2EBD85]' : 'bg-[#3a3f47]'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                          enabled ? 'translate-x-5' : ''
+                        }`}
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`admin-config-ia-delete-${p.slug}`}
+                      aria-label={`Excluir ${p.name}`}
+                      disabled={submitting}
+                      onClick={() => {
+                        setDeleteTarget(p)
+                        setConfirmName('')
+                      }}
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center text-[#F6465D] hover:bg-[rgba(246,70,93,.1)] rounded-lg"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  {tokenTarget === p.id && (
+                    <form
+                      data-testid={`admin-config-ia-token-form-${p.slug}`}
+                      className="px-3 pb-3 pt-1 space-y-2 border-t border-[rgba(240,185,11,.08)]"
+                      onSubmit={(e) => {
+                        e.preventDefault()
+                        setFeedback(null)
+                        tokenMutation.mutate()
+                      }}
+                    >
+                      <label
+                        className="block text-[10px] text-[#929AA5] uppercase tracking-wide pt-2"
+                        htmlFor={`llm-token-${p.slug}`}
+                      >
+                        Token de {p.name}
+                      </label>
+                      <input
+                        id={`llm-token-${p.slug}`}
+                        type="password"
+                        data-testid={`admin-config-ia-token-input-${p.slug}`}
+                        value={tokenValue}
+                        onChange={(e) => setTokenValue(e.target.value)}
+                        placeholder={p.tokenConfigured ? 'Colar novo token para substituir' : 'Colar token'}
+                        className="w-full bg-[#1a1815] border border-[rgba(240,185,11,.15)] rounded-lg px-3 py-2 text-sm font-mono text-[#c5b99a] focus:outline-none focus:border-[#F0B90B]"
+                        autoComplete="new-password"
+                        spellCheck={false}
+                      />
+                      <p className="text-[10px] text-[#929AA5]">
+                        Gravado criptografado (AES-256-GCM). Nunca é exibido de volta — para conferir,
+                        só substituindo.
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="submit"
+                          data-testid={`admin-config-ia-token-save-${p.slug}`}
+                          disabled={submitting || !tokenValue.trim()}
+                          className="min-h-[44px] px-4 rounded-lg bg-[#2EBD85] text-[#080b12] text-sm font-medium disabled:opacity-50"
+                        >
+                          {tokenMutation.isPending ? 'Salvando...' : 'Salvar token'}
+                        </button>
+                        <button
+                          type="button"
+                          data-testid={`admin-config-ia-token-cancel-${p.slug}`}
+                          onClick={() => {
+                            setTokenTarget(null)
+                            setTokenValue('')
+                          }}
+                          className="min-h-[44px] px-3 rounded-lg border border-[rgba(240,185,11,.18)] text-sm text-[#929AA5]"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </form>
+                  )}
                 </div>
               )
             })}

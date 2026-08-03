@@ -320,6 +320,65 @@ export async function createProvider(input: {
   return toProviderDto(rows[0], configs[0]?.active_provider_id ?? null)
 }
 
+/**
+ * Grava/rotaciona a credencial de um provider JA existente.
+ *
+ * Existe porque `createProvider` rejeita slug duplicado (LLM-004): os nativos
+ * `seed-kimi`/`seed-anthropic` nascem com `token_ciphertext = NULL` e nao tinham
+ * nenhum caminho de escrita de token pela UI.
+ *
+ * Bumpa `config_version` de proposito: o snapshot de health e casado por
+ * (providerId, configVersion), entao trocar a chave invalida o ultimo veredito
+ * (ex: `insufficient_credits`) em vez de deixar a bolinha vermelha grudada.
+ */
+export async function updateProviderToken(input: {
+  id: string
+  token: string
+  adminId: string
+}): Promise<{ providers: ProviderDto[]; config: ConfigDto }> {
+  await ensureLlmTablesSeeded(input.adminId)
+
+  const token = input.token?.trim()
+  if (!token) {
+    const err = new Error('Token e obrigatorio.')
+    ;(err as Error & { code: string }).code = 'LLM-002'
+    throw err
+  }
+
+  const rows = await prisma.$queryRaw<ProviderRow[]>`
+    SELECT id, slug, name, enabled, token_ciphertext, token_key_version, deleted_at, created_at, updated_at, created_by
+    FROM news_llm_providers WHERE id = ${input.id} AND deleted_at IS NULL LIMIT 1
+  `
+  const row = rows[0]
+  if (!row) {
+    const err = new Error('Provider nao encontrado.')
+    ;(err as Error & { code: string }).code = 'LLM-404'
+    throw err
+  }
+
+  const encrypted = encryptToken(token)
+  const ciphertext = serializeEncryptedToken(encrypted)
+
+  await prisma.$transaction([
+    prisma.$executeRaw`
+      UPDATE news_llm_providers
+      SET token_ciphertext = ${ciphertext},
+          token_key_version = ${encrypted.v},
+          updated_at = NOW()
+      WHERE id = ${row.id} AND deleted_at IS NULL
+    `,
+    prisma.$executeRaw`
+      UPDATE news_llm_config
+      SET config_version = config_version + 1,
+          updated_at = NOW(),
+          updated_by = ${input.adminId}
+      WHERE id = 'default'
+    `,
+  ])
+
+  return listProvidersAndConfig().then(({ providers, config }) => ({ providers, config }))
+}
+
 export async function applyProviderState(input: {
   expectedVersion: number
   /** Map providerId -> enabled */

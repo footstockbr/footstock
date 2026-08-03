@@ -92,6 +92,24 @@ async function mockLlmApis(page: Page, healthState: string = 'healthy') {
       })
       return
     }
+    if (method === 'PUT' && url.includes('/token')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            providers: MOCK_PROVIDERS.providers.map((p) =>
+              p.id === 'seed-anthropic' ? { ...p, tokenConfigured: true } : p,
+            ),
+            config: {
+              ...MOCK_PROVIDERS.config,
+              configVersion: MOCK_PROVIDERS.config.configVersion + 1,
+            },
+          },
+        }),
+      })
+      return
+    }
     if (method === 'PATCH') {
       await route.fulfill({
         status: 200,
@@ -180,6 +198,18 @@ test.describe('Admin IA providers (G-IA)', () => {
     await expect(page.getByRole('status').or(page.locator('[class*="2EBD85"]')).first()).toBeVisible({
       timeout: 5_000,
     }).catch(() => {})
+
+    // Token por linha: a chave abre o input, salvar fecha e some o "pendente".
+    await page.getByTestId('admin-config-ia-token-toggle-anthropic').click()
+    const tokenForm = page.getByTestId('admin-config-ia-token-form-anthropic')
+    await expect(tokenForm).toBeVisible()
+    const tokenInput = page.getByTestId('admin-config-ia-token-input-anthropic')
+    await expect(tokenInput).toHaveAttribute('type', 'password')
+    // Botao so habilita com valor — guard contra PUT de token vazio.
+    await expect(page.getByTestId('admin-config-ia-token-save-anthropic')).toBeDisabled()
+    await tokenInput.fill('sk-test-e2e-token-update')
+    await page.getByTestId('admin-config-ia-token-save-anthropic').click()
+    await expect(tokenForm).toBeHidden()
 
     // Cadastro via +
     await page.getByTestId('admin-config-ia-add-toggle').click()
