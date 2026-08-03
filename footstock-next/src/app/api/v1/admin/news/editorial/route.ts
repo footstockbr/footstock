@@ -42,21 +42,37 @@ function parseDate(raw?: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d
 }
 
+// Arquivamento é a coluna `isArchived`, NÃO a presença de `publishedAt`.
+//
+// A regra antiga (`!isPublished && publishedAt != null`) funcionava por acidente
+// enquanto toda linha despublicada vinha do fluxo editorial, que zera
+// `published_at` em rascunho. O gate editorial do motor quebra essa premissa:
+// ele grava `isPublished: false` mantendo `publishedAt` com a DATA DA FONTE
+// (nulificá-la jogaria a notícia para o topo do feed do admin, porque
+// `ORDER BY ... DESC` no Postgres coloca NULLS FIRST). Com a regra antiga toda
+// notícia barrada apareceria como ARQUIVADA — status que o operador lê como
+// "alguém arquivou isso de propósito".
+//
+// A rota de grupo (`PATCH /api/v1/admin/news/[id] { isArchived: true }`) já é a
+// única que arquiva de fato, e a tela `/admin/noticias` já deriva o rótulo de
+// `isArchived`. Esta rota agora concorda com as duas.
 function statusFilter(status: 'ALL' | 'PUBLISHED' | 'DRAFT' | 'ARCHIVED') {
-  if (status === NEWS_STATUS.PUBLISHED) return { isPublished: true as const }
-  if (status === NEWS_STATUS.DRAFT) return { isPublished: false as const, publishedAt: null }
-  if (status === NEWS_STATUS.ARCHIVED) return { isPublished: false as const, NOT: { publishedAt: null } }
+  if (status === NEWS_STATUS.PUBLISHED) return { isPublished: true as const, isArchived: false as const }
+  if (status === NEWS_STATUS.DRAFT) return { isPublished: false as const, isArchived: false as const }
+  if (status === NEWS_STATUS.ARCHIVED) return { isArchived: true as const }
   return {}
 }
 
 function statusToPersist(status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED') {
   if (status === NEWS_STATUS.PUBLISHED) {
-    return { isPublished: true, publishedAt: new Date() }
+    return { isPublished: true, isArchived: false, publishedAt: new Date() }
   }
   if (status === NEWS_STATUS.ARCHIVED) {
-    return { isPublished: false, publishedAt: new Date() }
+    // Espelha o que a rota de grupo grava ao arquivar, para que o registro criado
+    // já nasça legível pelo mesmo filtro que o lê.
+    return { isPublished: false, isArchived: true, archivedAt: new Date(), publishedAt: null }
   }
-  return { isPublished: false, publishedAt: null }
+  return { isPublished: false, isArchived: false, publishedAt: null }
 }
 
 async function getHandler(req: NextRequest): Promise<NextResponse> {
@@ -167,12 +183,19 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
       sentiment: true,
       source: true,
       isPublished: true,
+      isArchived: true,
       publishedAt: true,
       createdAt: true,
       assetIds: true,
       // Item 017: o item 018 precisa do groupId para o badge de grupo na tela.
       groupId: true,
       groupRank: true,
+      // Gate editorial do motor: sem estes dois campos o consumidor vê a linha
+      // como um rascunho qualquer, sem saber que foi o motor que a barrou nem
+      // por quê. `editorialCheckedAt` também é o discriminador do acervo antigo
+      // (nulo = nunca passou pelo gate).
+      editorialBlockReason: true,
+      editorialCheckedAt: true,
     },
   })
 
@@ -187,10 +210,12 @@ async function getHandler(req: NextRequest): Promise<NextResponse> {
 
   const data = rows.map(item => {
     const tickers = item.assetIds.map(id => tickerByAssetId.get(id)).filter(Boolean) as string[]
-    const statusComputed = item.isPublished
-      ? 'PUBLISHED'
-      : item.publishedAt
+    // Ordem importa: uma linha arquivada pode ter ficado com `isPublished true`
+    // em acervo antigo, e nesses casos o arquivamento é a informação que vale.
+    const statusComputed = item.isArchived
       ? 'ARCHIVED'
+      : item.isPublished
+      ? 'PUBLISHED'
       : 'DRAFT'
     return {
       ...item,

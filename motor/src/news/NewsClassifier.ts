@@ -17,13 +17,15 @@ import {
   CLASSIFIER_OUTPUT_VERSION,
   MULTI_TEAM_CAP,
   isTeamSignalConfident,
+  isLlmUnavailableReason,
   resolveConfidenceThreshold,
   type ClassifiedNews,
   type ClassifiedTeam,
+  type ClassifierFallbackReason,
 } from './types'
 import { logger } from '../utils/logger'
 import { newsQueue, type RawNewsItem } from './NewsQueue'
-import { NewsPersistenceError, type NewsPublisher } from './NewsPublisher'
+import { NewsDispatchError, NewsPersistenceError, type NewsPublisher } from './NewsPublisher'
 import { unmarkAsProcessed } from './news-dedup'
 import {
   buildAliasIndex,
@@ -45,7 +47,12 @@ import { classifyHttpErrorToHealth } from './llm-health'
 // O contrato de saída (ClassifiedNews, ClassifiedTeam, limiar por versão) vive
 // em ./types. Re-exportado aqui porque os consumidores existentes (NewsPublisher,
 // suites) importam `ClassifiedNews` deste módulo.
-export type { ClassifiedNews, ClassifiedTeam, TeamSignalOrigin } from './types'
+export type {
+  ClassifiedNews,
+  ClassifiedTeam,
+  TeamSignalOrigin,
+  ClassifierFallbackReason,
+} from './types'
 
 /**
  * Fallback de classificação. É uma FÁBRICA (não uma constante) porque
@@ -62,18 +69,15 @@ function makeClassificationFallback(): ClassifiedNews {
   }
 }
 
-/** Por que o classificador caiu no fallback determinístico (mono-time). */
-type FallbackReason =
-  | 'credit_circuit_open'
-  | 'llm_no_team'
-  | 'parse_invalid'
-  | 'api_error_non_retryable'
-  | 'api_unavailable'
-  | 'llm_disabled_by_admin'
-  | 'no_config'
-  | 'no_active_provider'
-  | 'token_missing'
-  | 'adapter_unknown'
+/**
+ * Por que o classificador caiu no fallback determinístico (mono-time).
+ *
+ * A definição migrou para `./types` em 2026-08-03 porque o gate editorial
+ * (NewsPublisher) precisa distinguir "o LLM respondeu e disse que não há time"
+ * de "o LLM não respondeu". Alias local mantido para não tocar nos ~20 usos
+ * internos deste módulo.
+ */
+type FallbackReason = ClassifierFallbackReason
 
 /** Shape bruto (não confiável) devolvido pelo LLM. */
 interface ParsedTeam {
@@ -89,6 +93,24 @@ interface ParsedClassification {
   confidence?: unknown
   impactCategory?: unknown
   relevance?: unknown
+}
+
+/**
+ * O modelo declarou, de propósito, que NENHUM clube da lista é afetado?
+ *
+ * Só `teams: []` explícito conta — e apenas quando o payload também não traz o
+ * shape legado (`ticker` na raiz), que `collectTeamCandidates` ainda aceita.
+ * Qualquer outra forma de terminar sem time (array não vazio que normaliza para
+ * zero, ticker fora dos 40, campo ausente) é payload inutilizável, não veredito:
+ * vira `parse_invalid` e segue para o fallback determinístico, em vez de virar
+ * `llm_no_team` e bloquear a publicação por decisão editorial que ninguém tomou.
+ */
+function isExplicitNoTeamVerdict(parsed: ParsedClassification): boolean {
+  return (
+    Array.isArray(parsed.teams) &&
+    parsed.teams.length === 0 &&
+    typeof parsed.ticker !== 'string'
+  )
 }
 
 /** Candidato a time, já normalizado, antes da política de confidence e do corte. */
@@ -334,6 +356,24 @@ ${mapSection}
 Tickers disponíveis: ${TICKERS_40.join(', ')}
 Categorias de impacto: ${IMPACT_CATEGORIES}
 
+ESCOPO EDITORIAL (aplique ANTES de qualquer outra regra):
+Este produto cobre EXCLUSIVAMENTE os clubes da lista de tickers acima. Uma
+notícia só entra no escopo se algum clube DA LISTA for afetado de forma direta.
+Devolva "teams": [] — sem exceção e sem tentar aproximar — quando a notícia for:
+- de outro esporte (NBA, NFL, tênis, vôlei, automobilismo, e-sports);
+- sobre clube estrangeiro, salvo se o texto declarar efeito concreto sobre um
+  clube da lista (transferência, dívida, disputa contratual, indenização);
+- sobre jogador, técnico ou dirigente que não pertence a nenhum clube da lista
+  no momento da notícia — inclusive brasileiro atuando fora do país;
+- sobre seleção, CBF, FIFA, UEFA, Conmebol ou entidade, sem consequência
+  declarada para um clube específico da lista;
+- social, policial, publicitária, leilão, agenda ou celebridade, sem efeito
+  esportivo ou financeiro sobre um clube da lista.
+Menção de passagem a um clube da lista NÃO coloca a notícia em escopo. O teste é
+sempre: "existe consequência para ESTE clube afirmada no texto?" Se não existe,
+"teams": []. Devolver [] é a resposta CORRETA para notícia fora de escopo, não
+uma falha sua — não force um ticker para evitar a lista vazia.
+
 Uma notícia pode afetar MAIS DE UM clube. Liste em "teams" TODOS os clubes
 afetados, sem limite de quantidade, na ORDEM EM QUE APARECEM no texto — o clube
 que é o sujeito do título vem primeiro. NÃO pré-selecione, não corte e não
@@ -550,6 +590,14 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
       }
 
       let parseValid = true
+      // Motivo a carimbar SE o classificador terminar sem time nenhum. O default
+      // é `parse_invalid` (indisponibilidade) e só vira `llm_no_team` (veredito
+      // editorial que BLOQUEIA a publicação) quando o modelo declarou lista vazia
+      // de propósito. Sem essa distinção, um payload de time inutilizável —
+      // `teams: [{ticker: "PAL"}]`, ticker fora dos 40 — normalizaria para zero
+      // candidatos e seria lido como "o LLM disse que não há clube", bloqueando
+      // notícia legítima de clube brasileiro em vez de cair no fallback por título.
+      let noTeamReason: ClassifierFallbackReason = 'parse_invalid'
       let result: ClassifiedNews
       try {
         const parsed = JSON.parse(text) as ParsedClassification
@@ -562,6 +610,7 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
         // `sentiment` de topo são a projeção dela para o consumidor legado.
         const teams = this.parseTeams(parsed, item.title, item.description)
         const anchor = teams[0]
+        noTeamReason = isExplicitNoTeamVerdict(parsed) ? 'llm_no_team' : 'parse_invalid'
 
         result = {
           ticker: anchor?.ticker ?? '',
@@ -576,7 +625,7 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
         result = makeClassificationFallback()
       }
 
-      result = this.withTickerFallback(result, item.title, parseValid ? 'llm_no_team' : 'parse_invalid')
+      result = this.withTickerFallback(result, item.title, parseValid ? noTeamReason : 'parse_invalid')
 
       this.logCall(response, { attempt, latencyMs: Date.now() - startMs, ticker: result.ticker, parseValid })
       // Sucesso fecha o circuito (credito de volta / API saudavel).
@@ -852,7 +901,16 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
    * no time resolvido — a UI e a telemetria distinguem isso de `low_confidence`.
    */
   private withTickerFallback(result: ClassifiedNews, title: string, reason: FallbackReason): ClassifiedNews {
+    // O LLM devolveu time: não houve fallback nenhum, e `fallbackReason` fica
+    // ausente — é assim que o gate editorial sabe que existe veredito do LLM.
     if (result.ticker) return result
+
+    // A partir daqui SEMPRE carimbar o motivo, inclusive quando o resolvedor
+    // determinístico não achar nada. O gate editorial decide por este campo, e
+    // um `undefined` aqui seria lido como "o LLM respondeu" — fail-open exato
+    // que este carimbo existe para fechar.
+    const degraded = isLlmUnavailableReason(reason)
+    const stamped: ClassifiedNews = { ...result, fallbackReason: reason, llmDegraded: degraded }
     const hit = resolveFromIndex(title, this.tickerIndex)
     logger.info(
       `[NewsClassifier.metrics] ${JSON.stringify({
@@ -863,12 +921,13 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
         ticker: hit?.ticker ?? null,
         alias: hit?.alias ?? null,
         multi_team: false,
+        llm_degraded: degraded,
       })}`
     )
-    if (!hit) return result
+    if (!hit) return stamped
     logger.info(`[NewsClassifier] Fallback determinístico (${reason}): "${title.slice(0, 60)}" → ${hit.ticker} (alias="${hit.alias}")`)
     return {
-      ...result,
+      ...stamped,
       ticker: hit.ticker,
       teams: [
         {
@@ -981,7 +1040,7 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
           // infraestrutura de banco e tende a persistir por mais de um item;
           // re-enfileirar aqui giraria a fila em busy-loop contra um banco que
           // ainda está fora. O ciclo de RSS (10 min) é o backoff natural.
-          const unmarked = await unmarkAsProcessed(this.redis, err.item.url)
+          const unmarked = await unmarkAsProcessed(this.redis, err.item.url, err.item.title)
           logger.error(JSON.stringify({
             event: 'news_worker_persist_failed',
             url: err.item.url,
@@ -990,9 +1049,37 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
             unmarked_for_retry: unmarked,
             error_message: (err.cause as Error | undefined)?.message ?? err.message,
           }))
+        } else if (err instanceof NewsDispatchError) {
+          // As linhas JÁ estão no banco; só o despacho pós-commit falhou. NÃO
+          // desmarcar: o RSS traria a mesma URL de volta em 10 min e gravaria um
+          // segundo registro do mesmo fato. O grupo fica sem `impactDispatchedAt`
+          // e é retentável pelo caminho de reconciliação, não por re-fetch.
+          logger.error(JSON.stringify({
+            event: 'news_worker_dispatch_failed',
+            url: err.item.url,
+            group_id: err.groupId,
+            title: err.item.title.slice(0, 80),
+            source: err.item.source,
+            unmarked_for_retry: false,
+            error_message: (err.cause as Error | undefined)?.message ?? err.message,
+          }))
         } else {
-          logger.error(`[NewsClassifier] Erro inesperado no worker: ${(err as Error).message}`)
-          // fallback já aplicado em classify
+          // Erro inesperado que NÃO é nem persistência nem despacho: veio da
+          // classificação ou da parte pura do publisher, antes de qualquer
+          // escrita. Nada foi gravado, então manter a URL marcada perderia a
+          // notícia em silêncio pelos 48h do TTL — o mesmo bug que o critério 6
+          // consertou para a falha de banco. Desmarcamos para que o próximo
+          // ciclo do RSS a traga de volta.
+          const unmarked = await unmarkAsProcessed(this.redis, item.url, item.title)
+          logger.error(JSON.stringify({
+            event: 'news_worker_unexpected_failed',
+            url: item.url,
+            title: item.title.slice(0, 80),
+            source: item.source,
+            unmarked_for_retry: unmarked,
+            error_name: (err as Error).name,
+            error_message: (err as Error).message,
+          }))
         }
       }
     }

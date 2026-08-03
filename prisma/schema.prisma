@@ -535,6 +535,14 @@ model News {
   // DB-12: marcador de despacho duravel. Preenchido tanto no despacho bem-sucedido quanto na
   // decisao de nao despachar por gate de relevancia (evita reenvio eterno pelo reconciliador).
   impactDispatchedAt    DateTime?      @map("impact_dispatched_at")
+  // ─── Gate editorial de escopo (motor/src/news/editorial-gate.ts) ──────────
+  // Migration: footstock-next/prisma/migrations/20260803120000_news-editorial-gate/
+  // Declarado AQUI, no schema da raiz, porque este e o schema que gera o client do
+  // motor (ver Dockerfile stage 2) e o publisher do motor grava os dois campos.
+  // Omitir aqui faria o `create` falhar em runtime com "Unknown argument", mesmo
+  // com as colunas ja existindo no banco.
+  editorialBlockReason  String?        @map("editorial_block_reason")
+  editorialCheckedAt    DateTime?      @map("editorial_checked_at")
   createdAt             DateTime       @default(now()) @map("created_at")
   updatedAt             DateTime       @updatedAt @map("updated_at")
 

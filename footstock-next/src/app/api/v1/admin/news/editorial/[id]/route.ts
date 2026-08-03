@@ -309,9 +309,16 @@ async function deleteHandler(req: NextRequest) {
   const id = extractNewsId(req)
   try {
     // Soft delete: arquiva a notícia em vez de remover fisicamente do banco.
-    // O campo isPublished=false sinaliza status ARCHIVED para a camada de leitura.
     // Item 017 / ST006: por ser ARQUIVAMENTO (nao DELETE fisico), tem escopo de grupo
     // — criterio 22. O DELETE fisico por grupo (DB-23, criterio 39) e do item 020.
+    //
+    // O sinal de arquivamento e a coluna `isArchived`, NAO a ausencia de
+    // `isPublished`. Desde o gate editorial existe uma terceira combinacao
+    // legitima — isPublished=false E isArchived=false — que e a linha bloqueada
+    // por escopo, e ela NAO e arquivo. Gravar so `isPublished: false` aqui
+    // deixava a linha invisivel para `GET ...?status=ARCHIVED` (que filtra por
+    // `isArchived: true`) e a fazia reaparecer como DRAFT. Mesma forma de escrita
+    // do caminho canonico `PATCH /api/v1/admin/news/[id] { isArchived: true }`.
     const existing = await prisma.news.findUnique({
       where: { id },
       select: { groupId: true },
@@ -325,7 +332,7 @@ async function deleteHandler(req: NextRequest) {
     }
     const archived = await prisma.news.updateMany({
       where: existing.groupId ? { groupId: existing.groupId } : { id },
-      data: { isPublished: false },
+      data: { isPublished: false, isArchived: true, archivedAt: new Date() },
     })
     return NextResponse.json({
       success: true,

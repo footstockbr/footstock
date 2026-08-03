@@ -38,7 +38,7 @@ export const IMPACT_MAGNITUDE: Record<ImpactCategory, number> = {
  * calibração em silêncio. Ao mudar prompt/modelo/parser, bumpar esta versão E
  * acrescentar a entrada correspondente no mapa.
  */
-export const CLASSIFIER_OUTPUT_VERSION = 'news-classifier/2026-07-28-multi-team'
+export const CLASSIFIER_OUTPUT_VERSION = 'news-classifier/2026-08-03-editorial-scope'
 
 /** Máximo de times por notícia (tamanho máximo do grupo). Decisão fechada: 3. */
 export const MULTI_TEAM_CAP = 3
@@ -58,6 +58,53 @@ export const MULTI_TEAM_CAP = 3
  * baixa e neutro por fallback são três coisas diferentes.
  */
 export type TeamSignalOrigin = 'classifier' | 'low_confidence' | 'classifier_fallback'
+
+/**
+ * Motivo pelo qual o classificador caiu no fallback determinístico em vez de
+ * usar a resposta do LLM. Vive aqui (e não em NewsClassifier) porque o gate
+ * editorial em NewsPublisher precisa distinguir "o LLM respondeu e disse que
+ * não há time" de "o LLM não respondeu" — são decisões editoriais opostas.
+ */
+export type ClassifierFallbackReason =
+  | 'credit_circuit_open'
+  | 'llm_no_team'
+  | 'parse_invalid'
+  | 'api_error_non_retryable'
+  | 'api_unavailable'
+  | 'llm_disabled_by_admin'
+  | 'no_config'
+  | 'no_active_provider'
+  | 'token_missing'
+  | 'adapter_unknown'
+
+/**
+ * Motivos que significam INDISPONIBILIDADE do LLM (o veredito editorial dele
+ * nunca chegou). `llm_no_team` NÃO está aqui de propósito: nesse caso o LLM
+ * respondeu, foi parseado com sucesso, e disse explicitamente que a notícia não
+ * afeta clube nenhum — isso é um veredito válido de fora-de-escopo, não uma
+ * degradação. `parse_invalid` está aqui porque uma resposta que não parseia é
+ * indistinguível de resposta ausente.
+ */
+export const LLM_UNAVAILABLE_REASONS: ReadonlySet<ClassifierFallbackReason> = Object.freeze(
+  new Set<ClassifierFallbackReason>([
+    'credit_circuit_open',
+    'parse_invalid',
+    'api_error_non_retryable',
+    'api_unavailable',
+    'llm_disabled_by_admin',
+    'no_config',
+    'no_active_provider',
+    'token_missing',
+    'adapter_unknown',
+  ]),
+)
+
+/** `true` quando o motivo indica que o LLM não emitiu veredito utilizável. */
+export function isLlmUnavailableReason(
+  reason: ClassifierFallbackReason | null | undefined,
+): boolean {
+  return reason != null && LLM_UNAVAILABLE_REASONS.has(reason)
+}
 
 /** Um time afetado pela notícia. `rank` 0 é a âncora do grupo. */
 export interface ClassifiedTeam {
@@ -91,6 +138,19 @@ export interface ClassifiedNews {
   relevance: number
   /** Times afetados, ordenados por `rank`. Vazio quando nenhum time foi identificado. */
   teams: ClassifiedTeam[]
+  /**
+   * Motivo do fallback, quando houve. `undefined`/`null` significa que a
+   * resposta veio do LLM sem nenhum fallback. Opcional para não quebrar
+   * fixtures e chamadores existentes que montam ClassifiedNews à mão.
+   */
+  fallbackReason?: ClassifierFallbackReason | null
+  /**
+   * `true` quando o LLM estava indisponível (ver LLM_UNAVAILABLE_REASONS) e a
+   * classificação é resultado de heurística determinística. O gate editorial
+   * usa isto para escolher entre bloquear por veredito do LLM e publicar em
+   * modo degradado.
+   */
+  llmDegraded?: boolean
 }
 
 /**
@@ -113,6 +173,7 @@ export interface ClassifiedNews {
  */
 export const CONFIDENCE_THRESHOLD_BY_VERSION: Readonly<Record<string, number>> = Object.freeze({
   'news-classifier/2026-07-28-multi-team': 0.6,
+  'news-classifier/2026-08-03-editorial-scope': 0.6,
 })
 
 /**

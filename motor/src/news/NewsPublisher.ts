@@ -25,6 +25,8 @@ import type Redis from 'ioredis'
 import { PrismaClient } from '@prisma/client'
 import { ImpactCategory, MULTI_TEAM_CAP } from './types'
 import type { TeamSignalOrigin } from './types'
+import { decideEditorialPublication } from './editorial-gate'
+import type { EditorialDecision } from './editorial-gate'
 import { logger } from '../utils/logger'
 import type { RawNewsItem } from './NewsQueue'
 import type { ClassifiedNews } from './NewsClassifier'
@@ -83,6 +85,8 @@ export type DispatchSkipReason =
   | 'relevance_gate'        // grupo inteiro reprovado por relevance <= 0.3
   | 'low_confidence'        // linha de rank 1 ou 2 abaixo do limiar da versão
   | 'ticker_unresolved'     // nenhum ticker resolvido para a linha
+  | 'editorial_blocked'     // grupo não publicado pelo gate editorial de escopo
+  | 'degraded_publication'  // publicado sem LLM (heurística) — não move preço
 
 // ---------------------------------------------------------------------------
 // Falha ruidosa de persistência (item 014, critério 6)
@@ -108,6 +112,32 @@ export class NewsPersistenceError extends Error {
     super(`[NewsPublisher] Falha ao persistir noticia '${item.url}': ${cause.message}`)
     this.name = 'NewsPersistenceError'
     this.item = item
+    this.cause = cause
+  }
+}
+
+/**
+ * Lançada quando algo falha DEPOIS que as linhas já foram commitadas.
+ *
+ * É a contraparte exata da `NewsPersistenceError` e existe pelo mesmo motivo:
+ * dizer ao worker o que fazer com o set de dedup. Aqui a resposta é o oposto —
+ * a notícia ESTÁ no banco, então desmarcar a URL faria o RSS trazê-la de volta
+ * no ciclo seguinte e gravar uma SEGUNDA linha do mesmo fato. Duplicata no feed
+ * é justamente uma das falhas que este trabalho está consertando.
+ *
+ * Sem este tipo, o worker teria de adivinhar de que lado da transação veio um
+ * erro genérico e escolher entre perder notícia (nunca desmarcar) ou duplicar
+ * notícia (sempre desmarcar). Com ele, cada lado é explícito.
+ */
+export class NewsDispatchError extends Error {
+  readonly item: RawNewsItem
+  readonly groupId: string
+
+  constructor(item: RawNewsItem, groupId: string, cause: Error) {
+    super(`[NewsPublisher] Falha pós-commit no grupo '${groupId}': ${cause.message}`)
+    this.name = 'NewsDispatchError'
+    this.item = item
+    this.groupId = groupId
     this.cause = cause
   }
 }
@@ -197,6 +227,7 @@ export class NewsPublisher {
     // -----------------------------------------------------------------------
     let persisted: PersistedRow[]
     let groupId: string
+    let editorial: EditorialDecision
 
     try {
       const prismaLike = this.prisma as unknown as PrismaLike
@@ -206,6 +237,20 @@ export class NewsPublisher {
       // sem ganho de atomicidade (o asset não é escrito aqui).
       const withAssets = await this.resolveAssets(prismaLike, planned)
 
+      // ---------------------------------------------------------------------
+      // Gate editorial de escopo (autoritativo). Roda DEPOIS de resolveAssets
+      // porque a decisão depende de `assetId`: "existe na tabela `assets`" é a
+      // definição operacional de time local. Roda ANTES da persistência porque
+      // o veredito é o próprio valor de `isPublished` — a linha continua sendo
+      // gravada (o admin precisa ver o que foi barrado e por quê), mas não
+      // aparece para o usuário final.
+      // ---------------------------------------------------------------------
+      editorial = decideEditorialPublication({
+        fallbackReason: classified.fallbackReason ?? null,
+        rows: withAssets,
+        title: raw.title,
+      })
+
       logger.info(JSON.stringify({
         event: 'news_publisher_persist',
         title: raw.title.slice(0, 80),
@@ -213,6 +258,10 @@ export class NewsPublisher {
         classified_ticker: classified.ticker || null,
         classified_relevance: classified.relevance,
         classified_impact: classified.impactCategory,
+        classifier_fallback_reason: classified.fallbackReason ?? null,
+        editorial_publish: editorial.publish,
+        editorial_block_reason: editorial.blockReason,
+        editorial_degraded: editorial.degraded,
         rows: withAssets.map((row) => ({
           ticker: row.ticker || null,
           rank: row.rank,
@@ -223,7 +272,7 @@ export class NewsPublisher {
       }))
 
       const grouped = withAssets.length > 1
-      const persistCtx = { raw, impact, publishedAt, sentimentClassifiedAt, grouped }
+      const persistCtx = { raw, impact, publishedAt, sentimentClassifiedAt, grouped, editorial }
 
       // Grupo de N linhas: transação única (critério 1). Grupo unitário (flag
       // desligado, ou uma única linha elegível): `create` direto, SEM transação.
@@ -268,6 +317,10 @@ export class NewsPublisher {
       event: 'news_publisher_group_persisted',
       group_id: groupId,
       multi_team_enabled: multiTeam,
+      editorial_publish: editorial.publish,
+      editorial_block_reason: editorial.blockReason,
+      editorial_degraded: editorial.degraded,
+      source: raw.source,
       rows: persisted.map((row) => ({
         news_id: row.newsId,
         ticker: row.ticker || null,
@@ -278,14 +331,46 @@ export class NewsPublisher {
 
     // -----------------------------------------------------------------------
     // Passo 3 — Publicar os N eventos APÓS o commit
+    //
+    // Grupo barrado pelo gate editorial não despacha nada: se a notícia não é
+    // visível para o usuário, mover o preço do ativo por causa dela seria pior
+    // do que publicá-la — o usuário veria o preço andar sem explicação no feed.
+    // Publicação DEGRADADA (sem LLM) também não despacha: o sentimento e a
+    // categoria vieram de heurística de título, não de análise.
+    // Nos dois casos as linhas são marcadas como terminais (`impactDispatchedAt`),
+    // senão ficariam elegíveis a retentativa para sempre.
     // -----------------------------------------------------------------------
-    await this.dispatchGroup({
-      raw,
-      classified,
-      impact,
-      groupId,
-      rows: persisted,
-    })
+    // Daqui para baixo as linhas JÁ estão commitadas. Qualquer falha vira
+    // `NewsDispatchError` para que o worker saiba não desmarcar a URL do set de
+    // dedup: a notícia existe: reprocessá-la criaria uma duplicata no feed.
+    try {
+      if (!editorial.publish || editorial.degraded) {
+        const reason: DispatchSkipReason = editorial.publish
+          ? 'degraded_publication'
+          : 'editorial_blocked'
+        this.logSkip(groupId, persisted, reason, {
+          editorial_block_reason: editorial.blockReason,
+          classifier_fallback_reason: classified.fallbackReason ?? null,
+          source: raw.source,
+        })
+        await this.markImpactDispatched(
+          groupId,
+          persisted.map((row) => ({ newsId: row.newsId, outcome: reason })),
+          new Date()
+        )
+        return
+      }
+
+      await this.dispatchGroup({
+        raw,
+        classified,
+        impact,
+        groupId,
+        rows: persisted,
+      })
+    } catch (err) {
+      throw new NewsDispatchError(raw, groupId, err as Error)
+    }
 
     // -----------------------------------------------------------------------
     // Passo 4 — Notificação NEWS_FAVORITE_CLUB
@@ -450,6 +535,7 @@ export class NewsPublisher {
       publishedAt: Date
       sentimentClassifiedAt: Date
       grouped: boolean
+      editorial: EditorialDecision
     }
   ): Promise<{ rows: PersistedRow[]; groupId: string }> {
     const ordered = [...rows].sort((a, b) => a.rank - b.rank)
@@ -484,7 +570,13 @@ export class NewsPublisher {
   /** Payload de uma linha. `extra` carrega os campos de grupo quando aplicável. */
   private rowData(
     row: PlannedRow,
-    ctx: { raw: RawNewsItem; impact: ImpactCategory; publishedAt: Date; sentimentClassifiedAt: Date },
+    ctx: {
+      raw: RawNewsItem
+      impact: ImpactCategory
+      publishedAt: Date
+      sentimentClassifiedAt: Date
+      editorial: EditorialDecision
+    },
     extra: Record<string, unknown>
   ): Record<string, unknown> {
     return {
@@ -498,8 +590,21 @@ export class NewsPublisher {
       ticker: row.ticker || null,
       assetIds: row.assetId ? [row.assetId] : [],
       source: ctx.raw.source,
-      isPublished: true,
+      // Gate editorial (ver editorial-gate.ts). Era `true` incondicional até
+      // 2026-08-03 — qualquer coisa que chegasse ao publisher virava linha
+      // publicada, inclusive NBA, futebol europeu e notícia sem time nenhum
+      // quando o LLM estava fora do ar. A linha continua sendo GRAVADA quando
+      // barrada: o admin precisa enxergar o que o gate comeu (e poder publicar
+      // à mão um falso positivo), e apagar a evidência tornaria o gate cego.
+      isPublished: ctx.editorial.publish,
+      // `publishedAt` segue preenchido MESMO na linha barrada: esta coluna é a
+      // data da FONTE (`raw.publishedAt`), não o instante de entrada no feed.
+      // Anulá-la perderia a informação e, como Postgres ordena `DESC` com
+      // NULLS FIRST, empilharia todo o bloqueado no topo da lista do admin.
+      // Quem controla visibilidade é `isPublished`, e só ele.
       publishedAt: ctx.publishedAt,
+      editorialBlockReason: ctx.editorial.blockReason,
+      editorialCheckedAt: ctx.sentimentClassifiedAt,
       sentimentClassifiedAt: ctx.sentimentClassifiedAt,
       ...extra,
     }

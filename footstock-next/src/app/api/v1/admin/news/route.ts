@@ -15,6 +15,22 @@ const GROUP_EMPTY_TICKER_MSG = 'Time adicional sem ticker. Escolha o time ou rem
 const groupDuplicateTickerMsg = (ticker: string) =>
   `Ticker repetido no grupo: ${ticker}. Cada time entra uma vez so na mesma noticia.`
 
+/** Linha irma hidratada no GET: so o que a lista admin precisa para desenhar time+sentimento. */
+interface AdminSiblingRow {
+  id: string
+  groupId: string | null
+  groupRank: number | null
+  ticker: string | null
+  assetIds: string[]
+  sentiment: string
+  impact: string
+}
+
+/** Grupo unitario pre-backfill (item 008) nao tem group_id: o grupo e o proprio id. */
+function anchorGroupKey(row: { id: string; groupId: string | null }): string {
+  return row.groupId ?? row.id
+}
+
 const createSchema = z
   .object({
     title: z.string().min(5, 'Titulo deve ter pelo menos 5 caracteres').max(255),
@@ -110,11 +126,64 @@ export async function GET(request: NextRequest) {
     // O `take: 100` continua o mesmo de proposito: agora sao 100 grupos de verdade.
     // Sem `select`: groupId/groupRank seguem no retorno (o item 018 usa groupId no
     // data-testid do badge de grupo).
-    const news = await prisma.news.findMany({
+    const anchors = await prisma.news.findMany({
       where: { groupRank: 0 },
       orderBy: { publishedAt: { sort: 'desc', nulls: 'last' } },
       take: 100,
     })
+
+    if (anchors.length === 0) return ok([])
+
+    // Hidratacao de irmaos. A lista mostra um card por FATO e precisa exibir todo
+    // time envolvido com o sentimento proprio de cada um; a ancora sozinha nao diz
+    // quantos times o grupo tem. Sem `isPublished` no filtro de proposito: o admin
+    // enxerga rascunho e arquivada, ao contrario do feed publico.
+    const groupIds = anchors.map(anchorGroupKey)
+    const siblingRows = (await prisma.news.findMany({
+      where: {
+        OR: [
+          { groupId: { in: groupIds } },
+          { AND: [{ groupId: null }, { id: { in: groupIds } }] },
+        ],
+      },
+      select: {
+        id: true,
+        groupId: true,
+        groupRank: true,
+        ticker: true,
+        assetIds: true,
+        sentiment: true,
+        impact: true,
+      },
+      orderBy: [{ groupId: 'asc' }, { groupRank: 'asc' }],
+    })) as unknown as AdminSiblingRow[]
+
+    const byGroup = new Map<string, AdminSiblingRow[]>()
+    for (const row of siblingRows) {
+      const key = anchorGroupKey(row)
+      const bucket = byGroup.get(key)
+      if (bucket) bucket.push(row)
+      else byGroup.set(key, [row])
+    }
+    for (const bucket of byGroup.values()) {
+      bucket.sort((a, b) => (a.groupRank ?? 0) - (b.groupRank ?? 0))
+    }
+
+    // Fallback para a propria ancora: grupo cujas linhas sumiram entre as duas
+    // queries continua renderizavel em vez de virar card sem time nenhum.
+    const news = anchors.map((anchor) => ({
+      ...anchor,
+      teams: (byGroup.get(anchorGroupKey(anchor)) ?? [anchor as unknown as AdminSiblingRow]).map(
+        (row) => ({
+          id: row.id,
+          ticker: row.ticker,
+          assetIds: row.assetIds,
+          sentiment: row.sentiment,
+          impact: row.impact,
+          groupRank: row.groupRank ?? 0,
+        })
+      ),
+    }))
 
     return ok(news)
   } catch (error) {

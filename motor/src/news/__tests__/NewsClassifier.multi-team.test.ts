@@ -558,4 +558,80 @@ describe('NewsClassifier — contrato multi-time', () => {
     // Orçamento de saída compatível com uma lista sem teto declarado.
     expect(params.max_tokens).toBeGreaterThanOrEqual(512)
   })
+
+  // -------------------------------------------------------------------------
+  // fallbackReason — insumo do gate editorial (`editorial-gate.ts`)
+  //
+  // A distinção que importa: "o modelo DISSE que não há clube" (veredito, bloqueia)
+  // versus "não deu para saber" (degradação, cai no resolvedor determinístico).
+  // Carimbar o motivo errado inverte a decisão do gate.
+  // -------------------------------------------------------------------------
+
+  describe('[FALLBACK REASON]', () => {
+    test('lista de times VAZIA e explícita vira veredito llm_no_team', async () => {
+      mockCreate.mockResolvedValue(llmResponse({
+        teams: [], impactCategory: 'INSTITUCIONAL', relevance: 0.1,
+      }))
+
+      const result = await classifier.classify(
+        makeRawItem('LeBron James negocia com os 76ers')
+      )
+
+      expect(result.fallbackReason).toBe('llm_no_team')
+      expect(result.llmDegraded).toBe(false)
+    })
+
+    test('payload de time INUTILIZÁVEL não vira veredito — é parse_invalid', async () => {
+      // Ticker fora dos 40 do app: `parseTeams` normaliza para zero candidatos.
+      // Sem esta distinção o gate leria "o LLM disse que não há clube" e bloquearia
+      // uma notícia que na verdade nunca foi classificada.
+      mockCreate.mockResolvedValue(llmResponse({
+        teams: [{ ticker: 'XYZ9', sentiment: 0.5, confidence: 0.9 }],
+        impactCategory: 'ESPORTIVA_MAJORITARIA',
+        relevance: 0.8,
+      }))
+
+      const result = await classifier.classify(
+        makeRawItem('Notícia sobre um clube que o app não lista')
+      )
+
+      expect(result.teams).toEqual([])
+      expect(result.fallbackReason).toBe('parse_invalid')
+      expect(result.llmDegraded).toBe(true)
+    })
+
+    test('resposta que não é JSON vira parse_invalid', async () => {
+      mockCreate.mockResolvedValue({ content: [{ type: 'text', text: 'desculpe, não consigo' }] })
+
+      const result = await classifier.classify(makeRawItem('Manchete qualquer'))
+
+      expect(result.fallbackReason).toBe('parse_invalid')
+      expect(result.llmDegraded).toBe(true)
+    })
+
+    test('classificação bem-sucedida NÃO carimba motivo nenhum', async () => {
+      mockCreate.mockResolvedValue(llmResponse({
+        teams: [{ ticker: 'URU3', sentiment: 0.8, confidence: 0.9 }],
+        impactCategory: 'ESPORTIVA_MAJORITARIA',
+        relevance: 0.9,
+      }))
+
+      const result = await classifier.classify(makeRawItem('Flamengo vence clássico'))
+
+      expect(result.fallbackReason).toBeUndefined()
+      expect(result.llmDegraded).toBeUndefined()
+    })
+
+    test('resolvedor por título salva o ticker mas o motivo continua carimbado', async () => {
+      // O gate precisa saber que a âncora veio de heurística, não de análise:
+      // é o que faz a publicação sair como DEGRADADA (sem despachar preço).
+      mockCreate.mockResolvedValue({ content: [{ type: 'text', text: 'nao é json' }] })
+
+      const result = await classifier.classify(makeRawItem('Flamengo anuncia reforço'))
+
+      expect(result.ticker).toBe('URU3')
+      expect(result.fallbackReason).toBe('parse_invalid')
+      expect(result.llmDegraded).toBe(true)
+    })
+  })
 })

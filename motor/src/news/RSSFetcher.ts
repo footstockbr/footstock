@@ -15,6 +15,8 @@ import {
   NEWS_URLS_KEY,
   URL_TTL_SECONDS,
   markAsProcessed as markUrlAsProcessed,
+  markTitleAsProcessed,
+  isTitleDuplicate,
 } from './news-dedup'
 
 // ---------------------------------------------------------------------------
@@ -147,6 +149,31 @@ export class RSSFetcher {
     await markUrlAsProcessed(this.redis, url)
   }
 
+  /**
+   * Dedup por assinatura de título. Fail-open igual ao de URL: Redis fora do ar
+   * não pode travar a ingestão — o pior caso é uma duplicata a mais, e o admin
+   * ainda pode arquivá-la.
+   */
+  async isTitleDuplicate(title: string): Promise<boolean> {
+    if (!title) return false
+    try {
+      return await isTitleDuplicate(this.redis, title)
+    } catch (err) {
+      logger.warn(`[RSS] Redis indisponível em isTitleDuplicate — assumindo não-duplicata: ${(err as Error).message}`)
+      return false
+    }
+  }
+
+  /** Best-effort: falhar aqui não pode desfazer o enfileiramento já feito. */
+  async markTitleAsProcessed(title: string): Promise<void> {
+    if (!title) return
+    try {
+      await markTitleAsProcessed(this.redis, title)
+    } catch (err) {
+      logger.warn(`[RSS] Falha ao marcar assinatura de titulo: ${(err as Error).message}`)
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Ciclo principal de fetch
   // ---------------------------------------------------------------------------
@@ -189,9 +216,24 @@ export class RSSFetcher {
           continue
         }
 
+        // Dedup por título: o mesmo fato chega por URLs diferentes (feed da home
+        // e feed da editoria, republicação com querystring de campanha) e sem
+        // isto vira dois grupos distintos no admin com o mesmo título.
+        if (await this.isTitleDuplicate(item.title)) {
+          duplicateCount++
+          logger.info(JSON.stringify({
+            event: 'news_rss_title_duplicate',
+            source,
+            url: item.url,
+            title: item.title.slice(0, 80),
+          }))
+          continue
+        }
+
         const enqueued = newsQueue.enqueue(item)
         if (enqueued) {
           await this.markAsProcessed(item.url)
+          await this.markTitleAsProcessed(item.title)
           newCount++
           totalCount++
         } else {

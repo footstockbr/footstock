@@ -787,6 +787,16 @@ model News {
   // DB-12: marcador de despacho duravel. Preenchido tanto no despacho bem-sucedido quanto na
   // decisao de nao despachar por gate de relevancia (evita reenvio eterno pelo reconciliador).
   impactDispatchedAt    DateTime?      @map("impact_dispatched_at")
+  // ─── Gate editorial de escopo (motor/src/news/editorial-gate.ts) ──────────
+  // Migration: prisma/migrations/20260803120000_news-editorial-gate/
+  // NULL = linha escrita antes do gate existir, ou linha publicada normalmente.
+  // Preenchido com o motivo quando o gate barrou a publicacao (is_published=false).
+  // Nao e enum Prisma de proposito: o conjunto de motivos e do motor, que nao
+  // compartilha o client; promover a enum exigiria migration a cada motivo novo.
+  editorialBlockReason  String?        @map("editorial_block_reason")
+  // Instante em que o gate avaliou a linha. NULL = nunca passou pelo gate (passivo
+  // anterior a 2026-08-03) — e o predicado que o backfill usa para achar o passivo.
+  editorialCheckedAt    DateTime?      @map("editorial_checked_at")
   createdAt             DateTime       @default(now()) @map("created_at")
   updatedAt             DateTime       @updatedAt @map("updated_at")
 

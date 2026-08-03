@@ -95,7 +95,10 @@ export class AIAdvisorService {
     const recentNewsRaw = assetId
       ? await prisma.news
           .findMany({
-            where: { assetIds: { has: assetId } },
+            // `isPublished`/`isArchived` NÃO são opcionais aqui: sem eles o
+            // conselheiro raciocina em cima de notícia que o gate editorial
+            // barrou e que o usuário nunca viu no feed — e cita no output.
+            where: { assetIds: { has: assetId }, isPublished: true, isArchived: false },
             orderBy: { publishedAt: 'desc' },
             take: 5,
             select: { title: true, sentiment: true },

@@ -6,6 +6,27 @@ import { Lock } from 'lucide-react'
 import { IMPACT_CATEGORY_LABELS, IMPACT_CATEGORY_OPTIONS, SENTIMENT_HEX_COLORS, SENTIMENT_LABELS, SENTIMENT_OPTIONS } from '@/lib/constants/admin-ui'
 import { CLUBS_PUBLIC as CLUBS } from '@/lib/constants/clubs-public'
 
+// Motivos de bloqueio do gate editorial do motor (`motor/src/news/editorial-gate.ts`).
+// O rotulo explica o "por que" ao operador; o title traz a acao recomendada.
+const EDITORIAL_BLOCK_LABELS: Record<string, { label: string; hint: string }> = {
+  out_of_scope_llm: {
+    label: 'FORA DE ESCOPO',
+    hint: 'A IA analisou e concluiu que nenhum clube do app e afetado (outro esporte, clube estrangeiro, pessoa sem vinculo).',
+  },
+  no_local_team: {
+    label: 'SEM TIME LOCAL',
+    hint: 'A IA estava indisponivel e o resolvedor por titulo nao achou nenhum clube do app. Publique na mao se for falso-positivo.',
+  },
+  asset_unresolved: {
+    label: 'TIME FORA DO APP',
+    hint: 'Ha um clube identificado, mas ele nao existe na tabela de ativos deste app.',
+  },
+  out_of_scope_heuristic: {
+    label: 'PAUTA FORA DE ESCOPO',
+    hint: 'A IA estava indisponivel e o titulo casou uma pauta que nunca move preco (leilao, acao social, outro esporte). A mencao ao clube parece incidental.',
+  },
+}
+
 interface NewsItem {
   id: string
   title: string
@@ -18,6 +39,11 @@ interface NewsItem {
   isPublished: boolean
   publishedAt?: string
   isArchived: boolean
+  // Gate editorial de escopo (motor). Preenchido quando o motor decidiu NAO
+  // publicar: a linha e gravada mesmo assim para o operador auditar e, se for
+  // falso-positivo, publicar na mao pelo botao "Publicar". `null` = passou no
+  // gate. Opcional no tipo porque o acervo anterior ao gate nao tem a coluna.
+  editorialBlockReason?: string | null
   clicks: number
   author: string
   createdAt: string
@@ -28,6 +54,20 @@ interface NewsItem {
   // podem nao te-los.
   groupId?: string | null
   groupRank?: number | null
+  // Linhas irmas do MESMO fato, hidratadas pelo GET admin. Uma entrada por time,
+  // cada uma com o sentimento proprio daquele time (uma venda e BULLISH para quem
+  // vende e BEARISH para quem compra). Sempre inclui a propria ancora. Opcional no
+  // tipo porque mocks de teste e respostas antigas em cache podem nao trazer.
+  teams?: NewsTeamLine[]
+}
+
+interface NewsTeamLine {
+  id: string
+  ticker: string | null
+  assetIds: string[]
+  sentiment: string
+  impact: string
+  groupRank: number
 }
 
 type FilterType = 'todas' | 'publicada' | 'rascunho' | 'arquivada'
@@ -71,6 +111,29 @@ const getSentimentLabel = (sentiment: string): string => SENTIMENT_LABELS[sentim
 
 const isExternalSource = (item: NewsItem): boolean => {
   return Boolean(item.source && item.source.trim().length > 0)
+}
+
+/** Ticker -> nome exibido, para o tooltip da badge de time. */
+const CLUB_NAME_BY_TICKER = new Map(CLUBS.map((c) => [c.ticker, c.displayName]))
+
+/**
+ * Linhas de time do card, sempre com pelo menos uma entrada. Grupo unitario e
+ * resposta sem `teams[]` (mock ou cache antigo) caem na propria ancora, entao o
+ * card nunca fica sem time nem sem sentimento.
+ */
+const resolveTeamLines = (item: NewsItem): NewsTeamLine[] => {
+  const lines = Array.isArray(item.teams) ? item.teams : []
+  if (lines.length > 0) return [...lines].sort((a, b) => a.groupRank - b.groupRank)
+  return [
+    {
+      id: item.id,
+      ticker: item.ticker,
+      assetIds: item.assetIds,
+      sentiment: item.sentiment,
+      impact: item.impact,
+      groupRank: 0,
+    },
+  ]
 }
 
 const formatDateTime = (dateStr: string): string => {
@@ -567,50 +630,57 @@ export default function NoticiasPage() {
 
       <div data-testid="admin-noticias-list">
         {filteredNews.map((item) => {
-          const sentimentColor = getSentimentColor(item.sentiment)
-          const sentimentLabel = getSentimentLabel(item.sentiment)
+          const teamLines = resolveTeamLines(item)
           const statusLabel = item.isArchived ? 'ARQUIVADA' : item.isPublished ? 'PUBLICADA' : 'RASCUNHO'
           const statusColor = item.isArchived ? '#929aa5' : item.isPublished ? '#2EBD85' : '#F0B90B'
           const isExternal = isExternalSource(item)
+          // So faz sentido mostrar o motivo enquanto a noticia continua fora do ar.
+          // Se o operador publicou na mao, o motivo vira historico e some do card.
+          const editorialBlock =
+            !item.isPublished && item.editorialBlockReason
+              ? (EDITORIAL_BLOCK_LABELS[item.editorialBlockReason] ?? {
+                  label: item.editorialBlockReason.toUpperCase(),
+                  hint: 'Bloqueada pelo gate editorial do motor.',
+                })
+              : null
 
           return (
             <div key={item.id} className={`news-card ${item.isPublished ? 'published' : ''}`} data-testid={`admin-noticias-card-${item.id}`}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '8px' }}>
                 <div style={{ flex: 1 }}>
                   <div className="news-badges">
-                    {item.ticker ? (
-                      <span className="badge" data-testid={`admin-noticias-ticker-badge-${item.id}`} style={{ color: 'var(--accent2)' }}>
-                        {item.ticker}
-                      </span>
-                    ) : (
-                      <span className="badge" style={{ color: 'var(--muted)', opacity: 0.5 }} title="Sem time vinculado">
-                        Sem time
-                      </span>
-                    )}
-                    {/* Badge de grupo (M067). O testid usa `groupId` — e não
-                        `item.id` — porque é o groupId que identifica o fato: as
-                        linhas irmãs compartilham esse valor e é por ele que o
-                        E2E localiza o grupo. Só aparece quando o grupo é
-                        multi-linha... o que esta lista NÃO sabe: o GET só devolve
-                        âncoras (`groupRank: 0`) e nenhum campo de contagem, então
-                        o badge não pode dizer "3 times" nem se esconder para
-                        notícias de um único time. Fica visível para toda notícia
-                        com groupId, identificando o fato, e a contagem real de
-                        times depende de um agregado que a rota ainda não expõe. */}
-                    {item.groupId && (
+                    {/* O time saiu daqui: virou uma linha por time na coluna da
+                        direita, ao lado do sentimento de cada um (a badge nua na
+                        esquerda não dizia de quem era o "Neutral" do canto).
+                        A badge `grupo {hash}` também saiu — mostrava 6 chars de um
+                        uuid que não significam nada para o operador. A informação
+                        que ela tentava dar (é um fato multi-time) agora vem do
+                        próprio número de linhas à direita, e o id completo continua
+                        acessível no tooltip do rótulo do grupo. */}
+                    {teamLines.length > 1 && (
                       <span
                         className="badge"
-                        data-testid={`admin-noticias-group-badge-${item.groupId}`}
-                        style={{ color: 'var(--muted)', fontFamily: 'var(--mono)' }}
-                        title={`Grupo (fato) ${item.groupId} — times adicionais deste mesmo fato compartilham este id`}
+                        data-testid={`admin-noticias-group-badge-${item.groupId ?? item.id}`}
+                        style={{ color: 'var(--accent)' }}
+                        title={`Mesmo fato em ${teamLines.length} times — id do grupo: ${item.groupId ?? item.id}`}
                       >
-                        grupo {item.groupId.slice(0, 6)}
+                        {teamLines.length} times
                       </span>
                     )}
                     <span className="badge" data-testid={`admin-noticias-impact-badge-${item.id}`} style={{ color: 'var(--muted)' }}>
                       {IMPACT_CATEGORY_LABELS[item.impact] ?? item.impact}
                     </span>
                     <span className="badge" data-testid={`admin-noticias-status-badge-${item.id}`} style={{ color: statusColor }}>{statusLabel}</span>
+                    {editorialBlock && (
+                      <span
+                        className="badge"
+                        data-testid={`admin-noticias-editorial-badge-${item.id}`}
+                        style={{ color: '#F6465D' }}
+                        title={editorialBlock.hint}
+                      >
+                        {editorialBlock.label}
+                      </span>
+                    )}
                     {isExternal && (
                       <span
                         className="badge"
@@ -631,11 +701,51 @@ export default function NoticiasPage() {
                     Por {item.author} · {formatDateTime(item.publishedAt || item.createdAt)} · {item.clicks} cliques
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: sentimentColor }} />
-                  <span data-testid={`admin-noticias-sentiment-${item.id}`} style={{ fontSize: '10px', fontWeight: '700', color: sentimentColor }}>
-                    {sentimentLabel}
-                  </span>
+                {/* Uma linha por time envolvido no fato: badge do time + o
+                    sentimento DAQUELE time. A âncora (groupRank 0) vem primeiro e
+                    os times adicionais em rows abaixo. Notícia de um time só
+                    renderiza uma linha e fica visualmente igual ao de antes. */}
+                <div
+                  data-testid={`admin-noticias-teams-${item.id}`}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', flexShrink: 0 }}
+                >
+                  {teamLines.map((team) => {
+                    const teamColor = getSentimentColor(team.sentiment)
+                    const teamLabel = getSentimentLabel(team.sentiment)
+                    const clubName = team.ticker ? CLUB_NAME_BY_TICKER.get(team.ticker) : undefined
+
+                    return (
+                      <div
+                        key={team.id}
+                        data-testid={`admin-noticias-team-row-${team.id}`}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}
+                      >
+                        {team.ticker ? (
+                          <span
+                            className="badge"
+                            data-testid={`admin-noticias-ticker-badge-${team.id}`}
+                            style={{ color: 'var(--accent2)' }}
+                            title={clubName ? `${team.ticker} — ${clubName}` : team.ticker}
+                          >
+                            {team.ticker}
+                          </span>
+                        ) : (
+                          <span className="badge" style={{ color: 'var(--muted)', opacity: 0.5 }} title="Sem time vinculado">
+                            Sem time
+                          </span>
+                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: '62px' }}>
+                          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: teamColor, flexShrink: 0 }} />
+                          <span
+                            data-testid={`admin-noticias-sentiment-${team.id}`}
+                            style={{ fontSize: '10px', fontWeight: '700', color: teamColor }}
+                          >
+                            {teamLabel}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
 

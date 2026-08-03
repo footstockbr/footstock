@@ -28,6 +28,7 @@ import type Redis from 'ioredis'
 import {
   NewsPublisher,
   NewsPersistenceError,
+  NewsDispatchError,
   NEWS_MULTI_TEAM_FLAG,
   isMultiTeamFanOutEnabled,
 } from '../NewsPublisher'
@@ -343,7 +344,7 @@ describe('NewsPublisher', () => {
   // Edge cases de ticker
   // -------------------------------------------------------------------------
 
-  test('[EDGE — Ticker vazio] asset.findUnique nao chamado; assetIds vazio; sem Redis', async () => {
+  test('[EDGE — Ticker vazio] asset.findUnique nao chamado; assetIds vazio; sem Redis; NAO publicada', async () => {
     await publisher.publish(makeRaw(), makeClassified({ ticker: '', relevance: 0.9 }))
 
     expect(mockAssetFindUnique).not.toHaveBeenCalled()
@@ -353,11 +354,20 @@ describe('NewsPublisher', () => {
         data: expect.objectContaining({
           ticker: null,
           assetIds: [],
+          // Gate editorial (2026-08-03): notícia sem clube ancorado NÃO entra no
+          // feed. Até esta data `isPublished` era `true` incondicional aqui, e
+          // era exatamente por isso que NBA e futebol europeu apareciam para o
+          // usuário como "Sem time / Neutral".
+          isPublished: false,
+          editorialBlockReason: 'asset_unresolved',
         }),
       })
     )
     expect(mockPublish).not.toHaveBeenCalled()
-    expect(skipLogs('ticker_unresolved')).toHaveLength(1)
+    // O grupo é barrado ANTES de dispatchGroup, então o motivo do skip é o do
+    // gate editorial e não mais o gate de ticker de dentro do dispatch.
+    expect(skipLogs('editorial_blocked')).toHaveLength(1)
+    expect(skipLogs('ticker_unresolved')).toHaveLength(0)
   })
 
   test('[EDGE — Ticker resolvido mas Asset nao encontrado no banco] ticker gravado, assetIds vazio, warn emitido', async () => {
@@ -505,6 +515,12 @@ describe('NewsPublisher', () => {
       // Payload do HEAD, literal (`git show HEAD:motor/src/news/NewsPublisher.ts`,
       // linhas 81-91): title, content, impact, sentiment, ticker, assetIds,
       // source, isPublished, publishedAt. Nove chaves, nem uma a mais.
+      //
+      // 2026-08-03: o gate editorial acrescenta `editorialBlockReason` e
+      // `editorialCheckedAt`. A divergência admitida com o HEAD passa de um
+      // campo para três, e as três estão enumeradas abaixo. `isPublished`
+      // continua `true` AQUI porque este caso tem clube ancorado num asset real
+      // — o gate só muda o valor quando não há âncora local.
       await publisher.publish(makeRaw(), makeMultiTeamClassified())
 
       expect(mockNewsCreate).toHaveBeenCalledTimes(1)
@@ -526,13 +542,17 @@ describe('NewsPublisher', () => {
         source: 'ESPN Brasil',
         isPublished: true,
         publishedAt: new Date('2026-07-28T12:00:00.000Z'),
-        // --- única divergência admitida, mandatada pelo critério 36 ---
+        // --- divergência mandatada pelo critério 36 ---
         sentimentClassifiedAt: expect.any(Date),
+        // --- divergências do gate editorial (2026-08-03) ---
+        editorialBlockReason: null,
+        editorialCheckedAt: expect.any(Date),
       })
       // `toEqual` acima já rejeita chave extra; explicitado para o leitor.
       expect(Object.keys(written).sort()).toEqual([
-        'assetIds', 'content', 'impact', 'isPublished', 'publishedAt',
-        'sentiment', 'sentimentClassifiedAt', 'source', 'ticker', 'title',
+        'assetIds', 'content', 'editorialBlockReason', 'editorialCheckedAt',
+        'impact', 'isPublished', 'publishedAt', 'sentiment',
+        'sentimentClassifiedAt', 'source', 'ticker', 'title',
       ])
     })
 
@@ -910,9 +930,15 @@ describe('NewsPublisher', () => {
 
       expect(mockPublish).not.toHaveBeenCalled()
       expect(dbRows[0].impactDispatchedAt).toBeInstanceOf(Date)
+      // O marcador continua sendo gravado (o ponto do DB-12: decisão terminal
+      // não pode ficar na fila do reconciliador para sempre). O que mudou em
+      // 2026-08-03 é QUEM decide: o gate editorial barra o grupo antes de
+      // `dispatchGroup`, então o outcome é `editorial_blocked` e não mais
+      // `ticker_unresolved`. A linha também não é publicada.
       expect(impactMarkLogs()[0].marked).toEqual([
-        { news_id: dbRows[0].id, outcome: 'ticker_unresolved' },
+        { news_id: dbRows[0].id, outcome: 'editorial_blocked' },
       ])
+      expect(dbRows[0].isPublished).toBe(false)
     })
 
     test('[DB-12] linha low_confidence e marcada junto com as irmas que despacharam', async () => {
@@ -984,6 +1010,123 @@ describe('NewsPublisher', () => {
       )
       expect(falhas).toHaveLength(1)
       expect(falhas[0].news_ids).toEqual([dbRows[0].id])
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // Gate editorial de escopo (2026-08-03)
+  //
+  // A matriz de decisão pura vive em `editorial-gate.test.ts`. Aqui testamos a
+  // INTEGRAÇÃO: o que o publisher grava, o que despacha e como marca a linha.
+  // -------------------------------------------------------------------------
+
+  describe('gate editorial', () => {
+    test('[BLOQUEIO] veredito llm_no_team grava a linha DESPUBLICADA e não despacha', async () => {
+      // A linha é gravada de propósito: o admin precisa ver o que foi barrado
+      // para poder republicar um falso-positivo na mão.
+      await publisher.publish(
+        makeRaw({ title: 'LeBron James negocia com os 76ers' }),
+        makeClassified({ fallbackReason: 'llm_no_team' })
+      )
+
+      expect(dbRows).toHaveLength(1)
+      expect(dbRows[0].isPublished).toBe(false)
+      expect(dbRows[0].editorialBlockReason).toBe('out_of_scope_llm')
+      expect(mockPublish).not.toHaveBeenCalled()
+      expect(skipLogs('editorial_blocked')).toHaveLength(1)
+    })
+
+    test('[BLOQUEIO] a linha barrada MANTÉM published_at da fonte', async () => {
+      // Nulificar jogaria a notícia para o topo da listagem do admin: no
+      // Postgres `ORDER BY ... DESC` coloca NULLS FIRST.
+      await publisher.publish(makeRaw(), makeClassified({ fallbackReason: 'llm_no_team' }))
+
+      expect(dbRows[0].publishedAt).toEqual(new Date('2026-07-28T12:00:00.000Z'))
+    })
+
+    test('[BLOQUEIO] decisão terminal: o grupo barrado leva impactDispatchedAt', async () => {
+      // Sem o marcador a linha ficaria elegível a retentativa de despacho para
+      // sempre, e o reconciliador a veria como trabalho pendente.
+      await publisher.publish(makeRaw(), makeClassified({ fallbackReason: 'llm_no_team' }))
+
+      expect(impactMarkLogs()).toHaveLength(1)
+      expect(impactMarkLogs()[0].marked).toEqual([
+        { news_id: dbRows[0].id, outcome: 'editorial_blocked' },
+      ])
+      expect(dbRows[0].impactDispatchedAt).toBeInstanceOf(Date)
+    })
+
+    test('[DEGRADADO] sem LLM, clube ancorado publica MAS não move preço', async () => {
+      // Terceira via do circuito de crédito aberto: o feed não fica vazio, e o
+      // preço não anda com base em sentimento que ninguém analisou.
+      await publisher.publish(
+        makeRaw({ title: 'Flamengo anuncia reforço' }),
+        makeClassified({ fallbackReason: 'credit_circuit_open' })
+      )
+
+      expect(dbRows[0].isPublished).toBe(true)
+      expect(dbRows[0].editorialBlockReason).toBeNull()
+      expect(mockPublish).not.toHaveBeenCalled()
+      expect(skipLogs('degraded_publication')).toHaveLength(1)
+      expect(dbRows[0].impactDispatchedAt).toBeInstanceOf(Date)
+    })
+
+    test('[DEGRADADO] pauta fora de escopo no título é barrada mesmo com clube ancorado', async () => {
+      // O "6º Leilão do Instituto" da amostra: ancora num clube por menção
+      // incidental e publicaria se o modo degradado confiasse só na âncora.
+      await publisher.publish(
+        makeRaw({ title: 'Fim de semana em mansão e póquer com Neymar: os lotes do 6º Leilão do Instituto' }),
+        makeClassified({ fallbackReason: 'credit_circuit_open' })
+      )
+
+      expect(dbRows[0].isPublished).toBe(false)
+      expect(dbRows[0].editorialBlockReason).toBe('out_of_scope_heuristic')
+      expect(mockPublish).not.toHaveBeenCalled()
+    })
+
+    test('[SAUDÁVEL] o mesmo título de leilão publica quando o LLM classificou', async () => {
+      // A heurística de título é degradado-only: com veredito do modelo ela não
+      // roda, senão suprimiria notícia financeira legítima sobre leilão de ativos.
+      await publisher.publish(
+        makeRaw({ title: 'Flamengo leiloa camisas para custear reforço' }),
+        makeClassified()
+      )
+
+      expect(dbRows[0].isPublished).toBe(true)
+      expect(dbRows[0].editorialBlockReason).toBeNull()
+      expect(mockPublish).toHaveBeenCalledTimes(1)
+    })
+
+    test('[AUDITORIA] toda linha avaliada carrega editorialCheckedAt', async () => {
+      // É o discriminador do acervo anterior ao gate no backfill: nulo = nunca
+      // passou pelo gate.
+      await publisher.publish(makeRaw(), makeClassified())
+
+      expect(dbRows[0].editorialCheckedAt).toBeInstanceOf(Date)
+    })
+
+    test('[PÓS-COMMIT] qualquer falha depois do commit vira NewsDispatchError', async () => {
+      // A distinção diz ao worker se pode ou não desmarcar a URL do dedup:
+      // desmarcar aqui recriaria a linha no ciclo seguinte (duplicata no feed).
+      //
+      // Os erros REAIS do pós-commit (Redis fora, updateMany fora) já são
+      // engolidos e degradados em log por `dispatchGroup`/`markImpactDispatched`,
+      // então não há como dispará-los pelo mock do banco. O que se testa aqui é o
+      // contrato do envelope: se algum dia algo escapar daquelas defesas, ele sai
+      // tipado como pós-commit e não como falha de persistência.
+      jest
+        .spyOn(
+          publisher as unknown as { dispatchGroup: () => Promise<void> },
+          'dispatchGroup'
+        )
+        .mockRejectedValue(new Error('bug inesperado no despacho'))
+
+      await expect(publisher.publish(makeRaw(), makeClassified())).rejects.toBeInstanceOf(
+        NewsDispatchError
+      )
+      // A linha continua no banco: é justamente por isso que o worker não pode
+      // desmarcar a URL.
+      expect(dbRows).toHaveLength(1)
     })
   })
 })

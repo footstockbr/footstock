@@ -161,16 +161,58 @@ describe('criterio 21 — listagens admin ancoradas em grupo', () => {
       groupId: `g${i}`,
       groupRank: 0,
     }))
-    findManyNews.mockResolvedValue(anchors)
+    // 3 linhas por grupo: a ancora mais dois times adicionais do mesmo fato.
+    const siblings = anchors.flatMap((a, i) =>
+      [0, 1, 2].map((rank) => ({
+        id: `${a.id}-r${rank}`,
+        groupId: `g${i}`,
+        groupRank: rank,
+        ticker: `T${rank}`,
+        assetIds: [],
+        sentiment: rank === 0 ? 'NEUTRAL' : 'BULLISH',
+        impact: 'ESPORTIVA_MAJORITARIA',
+      }))
+    )
+    findManyNews.mockResolvedValueOnce(anchors).mockResolvedValueOnce(siblings)
 
     const res = await adminNewsGET(adminListReq())
     const body = await res.json()
 
-    expect(findManyNews).toHaveBeenCalledTimes(1)
+    // Duas queries: ancoras (janela) + hidratacao dos irmaos do mesmo fato.
+    expect(findManyNews).toHaveBeenCalledTimes(2)
     const arg = findManyNews.mock.calls[0][0] as { where: Record<string, unknown>; take: number }
     expect(arg.where).toEqual({ groupRank: 0 })
     expect(arg.take).toBe(100)
     expect(body.data).toHaveLength(10)
+    // A janela continua contando GRUPOS, mas cada card agora carrega os 3 times.
+    expect(body.data[0].teams).toHaveLength(3)
+    expect(body.data[0].teams.map((t: { groupRank: number }) => t.groupRank)).toEqual([0, 1, 2])
+    expect(body.data[0].teams[1].sentiment).toBe('BULLISH')
+  })
+
+  test('caso 1b: GET /admin/news sem irmaos devolve o proprio card com uma linha de time', async () => {
+    findManyNews
+      .mockResolvedValueOnce([
+        {
+          id: 'n1',
+          groupId: 'g1',
+          groupRank: 0,
+          ticker: 'FLA',
+          assetIds: [],
+          sentiment: 'BEARISH',
+          impact: 'ESPORTIVA_MAJORITARIA',
+        },
+      ])
+      // Grupo que sumiu entre as duas queries: o card nao pode ficar sem time.
+      .mockResolvedValueOnce([])
+
+    const res = await adminNewsGET(adminListReq())
+    const body = await res.json()
+
+    expect(body.data).toHaveLength(1)
+    expect(body.data[0].teams).toHaveLength(1)
+    expect(body.data[0].teams[0].ticker).toBe('FLA')
+    expect(body.data[0].teams[0].sentiment).toBe('BEARISH')
   })
 
   test('caso 2: GET /editorial filtra groupRank 0 junto do filtro de status', async () => {
@@ -211,6 +253,81 @@ describe('criterio 21 — listagens admin ancoradas em grupo', () => {
     ])
     expect(body.data).toHaveLength(1)
     expect(body.data[0].id).toBe('n1')
+  })
+
+  // -------------------------------------------------------------------------
+  // Gate editorial (2026-08-03): arquivamento e a coluna `is_archived`, nao a
+  // presenca de `published_at`.
+  //
+  // O motor grava linha barrada com `isPublished false` MANTENDO `publishedAt`
+  // (a data da fonte). Nulificar jogaria a noticia para o topo da listagem,
+  // porque `ORDER BY ... DESC` no Postgres poe NULLS FIRST. Com a regra antiga
+  // (`!isPublished && publishedAt != null`) toda linha barrada aparecia como
+  // ARQUIVADA — status que o operador le como "alguem arquivou de proposito".
+  // -------------------------------------------------------------------------
+
+  test('caso 3b: linha barrada pelo gate NAO e rotulada ARCHIVED', async () => {
+    findManyNews.mockResolvedValue([
+      {
+        id: 'n-blocked',
+        groupId: 'g9',
+        groupRank: 0,
+        assetIds: [],
+        isPublished: false,
+        isArchived: false,
+        publishedAt: new Date('2026-08-03T09:00:00.000Z'),
+        editorialBlockReason: 'no_local_team',
+        editorialCheckedAt: new Date('2026-08-03T09:05:00.000Z'),
+      },
+    ])
+
+    const res = await editorialGET(editorialListReq({ status: 'ALL' }))
+    const body = await res.json()
+
+    expect(body.data[0].status).toBe('DRAFT')
+    // O motivo viaja junto: sem ele a tela mostra um rascunho qualquer, sem
+    // dizer que foi o motor que barrou nem por que.
+    expect(body.data[0].editorialBlockReason).toBe('no_local_team')
+  })
+
+  test('caso 3c: linha realmente arquivada continua ARCHIVED', async () => {
+    findManyNews.mockResolvedValue([
+      {
+        id: 'n-arch',
+        groupId: 'g9',
+        groupRank: 0,
+        assetIds: [],
+        isPublished: false,
+        isArchived: true,
+        publishedAt: OLD_PUBLISHED,
+        editorialBlockReason: null,
+        editorialCheckedAt: null,
+      },
+    ])
+
+    const res = await editorialGET(editorialListReq({ status: 'ALL' }))
+    const body = await res.json()
+
+    expect(body.data[0].status).toBe('ARCHIVED')
+  })
+
+  test('caso 3d: o filtro ?status=ARCHIVED consulta is_archived, nao published_at', async () => {
+    findManyNews.mockResolvedValue([])
+
+    await editorialGET(editorialListReq({ status: 'ARCHIVED' }))
+
+    const arg = findManyNews.mock.calls[0][0] as { where: Record<string, unknown> }
+    expect(arg.where).toMatchObject({ isArchived: true })
+    expect(arg.where.NOT).toBeUndefined()
+  })
+
+  test('caso 3e: ?status=DRAFT nao varre as linhas arquivadas', async () => {
+    findManyNews.mockResolvedValue([])
+
+    await editorialGET(editorialListReq({ status: 'DRAFT' }))
+
+    const arg = findManyNews.mock.calls[0][0] as { where: Record<string, unknown> }
+    expect(arg.where).toMatchObject({ isPublished: false, isArchived: false })
   })
 })
 
@@ -431,7 +548,15 @@ describe('criterio 22 — soft delete editorial por grupo', () => {
       data: Record<string, unknown>
     }
     expect(arg.where).toEqual({ groupId: 'g1' })
-    expect(arg.data).toEqual({ isPublished: false })
+    // Arquivar grava `isArchived`, nao apenas `isPublished: false`. Depois do
+    // gate editorial, isPublished=false sozinho tambem descreve a linha
+    // BLOQUEADA por escopo, que nao e arquivo — e o filtro `?status=ARCHIVED`
+    // le `isArchived`. Sem esta coluna o soft delete sumia do arquivo.
+    expect(arg.data).toEqual({
+      isPublished: false,
+      isArchived: true,
+      archivedAt: expect.any(Date),
+    })
     expect(body.data).toEqual({ id: 'n1', groupAffected: 3 })
   })
 
