@@ -25,6 +25,14 @@ const EDITORIAL_BLOCK_LABELS: Record<string, { label: string; hint: string }> = 
     label: 'PAUTA FORA DE ESCOPO',
     hint: 'A IA estava indisponivel e o titulo casou uma pauta que nunca move preco (leilao, acao social, outro esporte). A mencao ao clube parece incidental.',
   },
+  // Nao vem do gate ao vivo: e o passivo despublicado de uma vez em 2026-08-03,
+  // quando o gate entrou. Vale a pena distinguir do `no_local_team` do motor
+  // porque estas linhas nunca passaram por classificador nenhum — foram
+  // avaliadas retroativamente pelo mesmo criterio (nenhum ativo local ancorado).
+  backfill_no_local_team: {
+    label: 'PASSIVO SEM TIME',
+    hint: 'Publicada antes do gate editorial existir e despublicada na limpeza retroativa de 2026-08-03 por nao ter nenhum clube do app ancorado. Publique na mao se for falso-positivo.',
+  },
 }
 
 interface NewsItem {
