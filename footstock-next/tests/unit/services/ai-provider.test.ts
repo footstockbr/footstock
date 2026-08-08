@@ -7,15 +7,27 @@ import {
   getActiveAIKey,
   hasAIKey,
   aiClientOptions,
+  aiClientOptionsForRuntime,
   resolveModel,
+  resolveActiveAIProviderRuntime,
 } from '@/lib/services/ai-provider'
 
 const ENV_KEYS = ['AI_PROVIDER', 'ANTHROPIC_API_KEY', 'KIMI_API_KEY', 'KIMI_BASE_URL', 'KIMI_MODEL'] as const
+
+const mockQueryRaw = jest.fn()
+
+jest.mock('@/lib/prisma', () => ({
+  prisma: {
+    $queryRaw: (strings: TemplateStringsArray, ...values: unknown[]) =>
+      mockQueryRaw(strings, ...values),
+  },
+}))
 
 describe('ai-provider', () => {
   const saved: Record<string, string | undefined> = {}
 
   beforeEach(() => {
+    mockQueryRaw.mockReset()
     for (const k of ENV_KEYS) {
       saved[k] = process.env[k]
       delete process.env[k]
@@ -87,5 +99,68 @@ describe('ai-provider', () => {
     expect(hasAIKey()).toBe(false) // ANTHROPIC_API_KEY ausente
     process.env.ANTHROPIC_API_KEY = 'sk-ant-test'
     expect(getActiveAIKey()).toBe('sk-ant-test')
+  })
+
+  it('runtime usa provider ativo do Super Admin mesmo quando AI_PROVIDER ainda aponta para kimi', async () => {
+    process.env.AI_PROVIDER = 'kimi'
+    process.env.KIMI_API_KEY = 'sk-kimi-test'
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-test'
+    mockQueryRaw.mockResolvedValue([
+      {
+        llm_enabled: true,
+        active_provider_id: 'seed-anthropic',
+        config_version: 8,
+        provider_id: 'seed-anthropic',
+        provider_slug: 'anthropic',
+        provider_name: 'Anthropic',
+        provider_enabled: true,
+        token_ciphertext: null,
+      },
+    ])
+
+    const runtime = await resolveActiveAIProviderRuntime()
+
+    expect(runtime?.provider).toBe('anthropic')
+    expect(runtime?.providerId).toBe('seed-anthropic')
+    expect(runtime?.apiKey).toBe('sk-ant-test')
+    expect(aiClientOptionsForRuntime(runtime!).baseURL).toBeUndefined()
+  })
+
+  it('runtime retorna null quando o provider ativo esta desabilitado', async () => {
+    process.env.AI_PROVIDER = 'kimi'
+    process.env.KIMI_API_KEY = 'sk-kimi-test'
+    mockQueryRaw.mockResolvedValue([
+      {
+        llm_enabled: true,
+        active_provider_id: 'seed-kimi',
+        config_version: 9,
+        provider_id: 'seed-kimi',
+        provider_slug: 'kimi',
+        provider_name: 'Kimi',
+        provider_enabled: false,
+        token_ciphertext: null,
+      },
+    ])
+
+    await expect(resolveActiveAIProviderRuntime()).resolves.toBeNull()
+  })
+
+  it('runtime falha fechado quando o slug persistido e desconhecido', async () => {
+    process.env.AI_PROVIDER = 'kimi'
+    process.env.KIMI_API_KEY = 'sk-kimi-test'
+    mockQueryRaw.mockResolvedValue([
+      {
+        llm_enabled: true,
+        active_provider_id: 'seed-x',
+        config_version: 10,
+        provider_id: 'seed-x',
+        provider_slug: 'desconhecido',
+        provider_name: 'Desconhecido',
+        provider_enabled: true,
+        token_ciphertext: null,
+      },
+    ])
+
+    await expect(resolveActiveAIProviderRuntime()).resolves.toBeNull()
   })
 })

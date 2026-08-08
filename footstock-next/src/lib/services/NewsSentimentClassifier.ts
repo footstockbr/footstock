@@ -9,21 +9,27 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import type { TextBlock } from '@anthropic-ai/sdk/resources/messages/messages'
-import { aiClientOptions, getAIProvider, hasAIKey, resolveModel } from '@/lib/services/ai-provider'
+import {
+  aiClientOptionsForRuntime,
+  resolveActiveAIProviderRuntime,
+  resolveModelForProvider,
+  type ActiveAIProviderRuntime,
+  type AIProvider,
+} from '@/lib/services/ai-provider'
 
 export type NewsSentiment = 'BULLISH' | 'BEARISH' | 'NEUTRAL'
 
 // Sentimento e tarefa simples -> modelo barato/rapido. Override via env (ex.: claude-sonnet-4-5).
-// Resolvido pelo provider ativo (AI_PROVIDER): no Kimi mapeia para kimi-for-coding/KIMI_MODEL.
-const MODEL = resolveModel(process.env.NEWS_SENTIMENT_MODEL ?? 'claude-haiku-4-5-20251001')
-
-function resolveMaxTokens(): number {
-  const raw = Number.parseInt(process.env.NEWS_SENTIMENT_MAX_TOKENS ?? '', 10)
-  if (Number.isFinite(raw) && raw > 0) return raw
-  return getAIProvider() === 'kimi' ? 256 : 16
+// Resolvido pelo provider ativo do Super Admin: no Kimi mapeia para kimi-for-coding/KIMI_MODEL.
+function resolveSentimentModel(provider: AIProvider): string {
+  return resolveModelForProvider(provider, process.env.NEWS_SENTIMENT_MODEL ?? 'claude-haiku-4-5-20251001')
 }
 
-const MAX_TOKENS = resolveMaxTokens()
+function resolveMaxTokens(provider: AIProvider): number {
+  const raw = Number.parseInt(process.env.NEWS_SENTIMENT_MAX_TOKENS ?? '', 10)
+  if (Number.isFinite(raw) && raw > 0) return raw
+  return provider === 'kimi' ? 256 : 16
+}
 
 const SYSTEM_PROMPT = `Voce classifica o SENTIMENTO de uma noticia de futebol brasileiro para um app que simula uma "bolsa de valores" de clubes. O sentimento reflete se a noticia tende a VALORIZAR ou DESVALORIZAR o(s) clube(s) citado(s).
 
@@ -34,15 +40,22 @@ Responda com EXATAMENTE uma palavra, sem pontuacao nem explicacao:
 
 Considere a manchete INTEIRA (ex.: "vence e sai da zona de rebaixamento" e BULLISH, nao BEARISH).`
 
-function getAnthropic(): Anthropic {
-  return new Anthropic(aiClientOptions())
+function getAnthropic(runtime: ActiveAIProviderRuntime): Anthropic {
+  return new Anthropic(aiClientOptionsForRuntime(runtime))
 }
 
 // Circuit-breaker de credito esgotado (mesma classe do motor): quando a Anthropic
 // responde "credit balance is too low", pular as proximas chamadas por um cooldown
 // em vez de floodar 1 erro por noticia ate a recarga. 0 = fechado.
 const CREDIT_EXHAUSTED_COOLDOWN_MS = 10 * 60 * 1000
-let creditCircuitOpenUntil = 0
+let creditCircuit:
+  | {
+      providerId: string | null
+      provider: AIProvider
+      configVersion: number | null
+      openUntil: number
+    }
+  | null = null
 
 function isCreditExhaustedError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : typeof err === 'string' ? err : ''
@@ -58,6 +71,25 @@ function parseSentiment(raw: string): NewsSentiment | null {
   return null
 }
 
+function isCreditCircuitOpen(runtime: ActiveAIProviderRuntime): boolean {
+  if (!creditCircuit) return false
+  if (Date.now() >= creditCircuit.openUntil) return false
+  return (
+    creditCircuit.providerId === runtime.providerId &&
+    creditCircuit.provider === runtime.provider &&
+    creditCircuit.configVersion === runtime.configVersion
+  )
+}
+
+function openCreditCircuit(runtime: ActiveAIProviderRuntime): void {
+  creditCircuit = {
+    providerId: runtime.providerId,
+    provider: runtime.provider,
+    configVersion: runtime.configVersion,
+    openUntil: Date.now() + CREDIT_EXHAUSTED_COOLDOWN_MS,
+  }
+}
+
 /**
  * Classifica o sentimento de UMA noticia. Retorna null em qualquer falha (sem API key, timeout,
  * resposta nao-parseavel). O chamador NAO deve persistir quando null — fica para a proxima rodada.
@@ -66,10 +98,11 @@ export async function classifyNewsSentiment(
   title: string,
   content?: string | null,
 ): Promise<NewsSentiment | null> {
-  if (!hasAIKey()) return null
+  const runtime = await resolveActiveAIProviderRuntime()
+  if (!runtime?.apiKey) return null
 
-  // Circuit aberto (credito esgotado recente): pular sem chamar a API nem logar.
-  if (Date.now() < creditCircuitOpenUntil) return null
+  // Circuit aberto do mesmo provider/config: pular sem chamar a API nem logar.
+  if (isCreditCircuitOpen(runtime)) return null
 
   const userPrompt =
     `Titulo: ${title}\n` +
@@ -77,11 +110,11 @@ export async function classifyNewsSentiment(
     `\nSentimento:`
 
   try {
-    const anthropic = getAnthropic()
+    const anthropic = getAnthropic(runtime)
     const res = await anthropic.messages.create(
       {
-        model: MODEL,
-        max_tokens: MAX_TOKENS,
+        model: resolveSentimentModel(runtime.provider),
+        max_tokens: resolveMaxTokens(runtime.provider),
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: userPrompt }],
       },
@@ -95,13 +128,13 @@ export async function classifyNewsSentiment(
         `(stop_reason=${res.stop_reason ?? 'n/a'}, blocks=${blockTypes})`,
       )
     }
-    creditCircuitOpenUntil = 0 // sucesso fecha o circuito
+    creditCircuit = null // sucesso fecha o circuito
     return parseSentiment(textBlock?.text ?? '')
   } catch (err) {
-    if (isCreditExhaustedError(err) && Date.now() >= creditCircuitOpenUntil) {
-      creditCircuitOpenUntil = Date.now() + CREDIT_EXHAUSTED_COOLDOWN_MS
+    if (isCreditExhaustedError(err) && !isCreditCircuitOpen(runtime)) {
+      openCreditCircuit(runtime)
       console.error(
-        `[NewsSentimentClassifier][CIRCUIT_OPEN] Credito Anthropic esgotado — pausando ` +
+        `[NewsSentimentClassifier][CIRCUIT_OPEN] Credito ${runtime.providerName ?? runtime.provider} esgotado; pausando ` +
         `classificacao por ${CREDIT_EXHAUSTED_COOLDOWN_MS / 60000}min ate recarga.`,
       )
     } else if (!isCreditExhaustedError(err)) {

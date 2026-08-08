@@ -10,7 +10,12 @@ import { redisPublisher as redis } from '@/lib/redis'
 import { prisma } from '@/lib/prisma'
 import { PLAN_TYPE, type PlanType } from '@/lib/enums'
 import { aiResponseParser } from '@/lib/services/AIResponseParser'
-import { aiClientOptions, hasAIKey, resolveModel } from '@/lib/services/ai-provider'
+import {
+  aiClientOptionsForRuntime,
+  resolveActiveAIProviderRuntime,
+  resolveModelForProvider,
+  type ActiveAIProviderRuntime,
+} from '@/lib/services/ai-provider'
 import type { AIAnalysis, AnalysisContext } from '@/lib/types/ai'
 
 // ---------------------------------------------------------------------------
@@ -62,13 +67,19 @@ export class TimeoutError extends Error {
 // endpoint Anthropic-compativel). Toggle em AI_PROVIDER — ver ./ai-provider.ts.
 // ---------------------------------------------------------------------------
 
-function getAnthropic(): Anthropic {
-  return new Anthropic(aiClientOptions())
+function getAnthropic(runtime: ActiveAIProviderRuntime): Anthropic {
+  return new Anthropic(aiClientOptionsForRuntime(runtime))
 }
 
-function getCacheKey(ticker: string, plan: PlanType): string {
+function getProviderCacheScope(runtime: ActiveAIProviderRuntime): string {
+  const providerKey = runtime.providerId ?? runtime.provider
+  const versionKey = runtime.configVersion ?? 'env'
+  return `${providerKey}:${versionKey}`
+}
+
+function getCacheKey(ticker: string, plan: PlanType, runtime: ActiveAIProviderRuntime): string {
   const planKey = plan === PLAN_TYPE.LENDA ? 'LENDA' : 'CRAQUE'
-  return `ai:cache:${ticker}:${planKey}`
+  return `ai:cache:${ticker}:${planKey}:${getProviderCacheScope(runtime)}`
 }
 
 // ---------------------------------------------------------------------------
@@ -308,7 +319,10 @@ Com base nos dados acima, nas notícias e no seu conhecimento sobre o clube/sele
    * Retorna o resultado cacheado (com cached: true) ou null se não houver entrada.
    */
   async peekCache(ticker: string, plan: PlanType): Promise<AIAnalysis | null> {
-    const cacheKey = getCacheKey(ticker, plan)
+    const runtime = await resolveActiveAIProviderRuntime()
+    if (!runtime?.apiKey) return null
+
+    const cacheKey = getCacheKey(ticker, plan, runtime)
     try {
       const cached = await redis.get(cacheKey)
       if (cached) {
@@ -326,17 +340,24 @@ Com base nos dados acima, nas notícias e no seu conhecimento sobre o clube/sele
    * Assume que o chamador já verificou o rate limit antes de invocar este método.
    */
   async analyze(ticker: string, userId: string, plan: PlanType): Promise<AIAnalysis> {
-    const cacheKey = getCacheKey(ticker, plan)
+    const runtime = await resolveActiveAIProviderRuntime()
+    if (!runtime?.apiKey && process.env.NODE_ENV !== 'development') {
+      throw new Error('Provider de IA ativo ausente, desabilitado ou sem credencial configurada.')
+    }
+
+    const cacheKey = runtime ? getCacheKey(ticker, plan, runtime) : null
 
     // Cache check (defesa em profundidade — peekCache já foi chamado na rota)
-    try {
-      const cached = await redis.get(cacheKey)
-      if (cached) {
-        const parsed = JSON.parse(cached as string) as AIAnalysis
-        return { ...parsed, cached: true }
+    if (cacheKey) {
+      try {
+        const cached = await redis.get(cacheKey)
+        if (cached) {
+          const parsed = JSON.parse(cached as string) as AIAnalysis
+          return { ...parsed, cached: true }
+        }
+      } catch {
+        // Redis indisponível — tratar como cache miss
       }
-    } catch {
-      // Redis indisponível — tratar como cache miss
     }
 
     // Buscar contexto, configuração do prompt e mapa de tickers em paralelo
@@ -347,8 +368,12 @@ Com base nos dados acima, nas notícias e no seu conhecimento sobre o clube/sele
     ])
 
     // Dev mode: retorna análise mock quando a credencial do provider ativo não está configurada
-    if (!hasAIKey() && process.env.NODE_ENV === 'development') {
+    if (!runtime?.apiKey && process.env.NODE_ENV === 'development') {
       return this.buildDevMockAnalysis(ticker, context, plan)
+    }
+
+    if (!runtime?.apiKey) {
+      throw new Error('Provider de IA ativo sem credencial configurada.')
     }
 
     const systemPrompt = this.buildSystemPrompt(promptConfig, tickerMap)
@@ -372,8 +397,9 @@ Com base nos dados acima, nas notícias e no seu conhecimento sobre o clube/sele
       const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS)
 
       try {
-        const anthropic = getAnthropic()
+        const anthropic = getAnthropic(runtime)
         let responseContent: string
+        const model = resolveModelForProvider(runtime.provider, 'claude-sonnet-4-5')
 
         type BetaContentBlock = { type: string; text?: string }
         type BetaMessageResponse = { content: BetaContentBlock[] }
@@ -385,7 +411,7 @@ Com base nos dados acima, nas notícias e no seu conhecimento sobre o clube/sele
           // Lenda: usa web_search tool via beta + system prompt
           const res = await (anthropic.beta.messages as unknown as BetaMessages).create(
             {
-              model: resolveModel('claude-sonnet-4-5'),
+              model,
               max_tokens: 1024,
               system: systemPrompt,
               tools: [{ type: 'web_search_20250305', name: 'web_search' }],
@@ -401,7 +427,7 @@ Com base nos dados acima, nas notícias e no seu conhecimento sobre o clube/sele
           // Craque: sem tools, com system prompt
           const res = await anthropic.messages.create(
             {
-              model: resolveModel('claude-sonnet-4-5'),
+              model,
               max_tokens: 1024,
               system: systemPrompt,
               messages: [{ role: 'user', content: userPrompt }],
@@ -450,7 +476,9 @@ Com base nos dados acima, nas notícias e no seu conhecimento sobre o clube/sele
 
     // Salvar no cache (silencioso em caso de falha)
     try {
-      await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(result))
+      if (cacheKey) {
+        await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(result))
+      }
     } catch {
       // ignorar falha de cache
     }

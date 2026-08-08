@@ -102,13 +102,24 @@ function setupContextMocks() {
 
 describe('AIAdvisorService.analyze', () => {
   let service: AIAdvisorService
+  const savedAIProvider = process.env.AI_PROVIDER
+  const savedAnthropicKey = process.env.ANTHROPIC_API_KEY
 
   beforeEach(() => {
     service = new AIAdvisorService()
     jest.clearAllMocks()
+    process.env.AI_PROVIDER = 'anthropic'
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-test'
     mockRedis.get.mockResolvedValue(null) // cache miss por padrão
     mockRedis.setex.mockResolvedValue('OK')
     setupContextMocks()
+  })
+
+  afterAll(() => {
+    if (savedAIProvider === undefined) delete process.env.AI_PROVIDER
+    else process.env.AI_PROVIDER = savedAIProvider
+    if (savedAnthropicKey === undefined) delete process.env.ANTHROPIC_API_KEY
+    else process.env.ANTHROPIC_API_KEY = savedAnthropicKey
   })
 
   // ── Plano Craque → sem tools, isWebSearched=false ─────────────────────────
@@ -168,8 +179,8 @@ describe('AIAdvisorService.analyze', () => {
     const getCalls = mockRedis.get.mock.calls.map((c: string[]) => c[0])
     const setexCalls = mockRedis.setex.mock.calls.map((c: string[]) => c[0])
 
-    const craqueKey = `ai:cache:${TICKER}:CRAQUE`
-    const lendaKey = `ai:cache:${TICKER}:LENDA`
+    const craqueKey = `ai:cache:${TICKER}:CRAQUE:anthropic:env`
+    const lendaKey = `ai:cache:${TICKER}:LENDA:anthropic:env`
 
     expect(getCalls).toContain(craqueKey)
     expect(getCalls).toContain(lendaKey)
