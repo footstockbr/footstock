@@ -39,6 +39,7 @@ import {
   type ResolvedLlmRuntime,
 } from './NewsLlmRuntimeConfigService'
 import { classifyHttpErrorToHealth } from './llm-health'
+import { extractJsonPayload, type JsonExtractionStrategy } from './extract-json-payload'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -401,7 +402,11 @@ Campos da notícia inteira (não por clube):
 - relevance: 0.0 a 1.0 — quão relevante é para o mercado financeiro
 
 Responda SOMENTE com JSON no formato:
-{"teams":[{"ticker":"URU3","sentiment":0.8,"confidence":0.95},{"ticker":"POR3","sentiment":-0.8,"confidence":0.9}],"impactCategory":"ESPORTIVA_MAJORITARIA","relevance":0.9}`
+{"teams":[{"ticker":"URU3","sentiment":0.8,"confidence":0.95},{"ticker":"POR3","sentiment":-0.8,"confidence":0.9}],"impactCategory":"ESPORTIVA_MAJORITARIA","relevance":0.9}
+
+FORMATO DA RESPOSTA (obrigatório): sua resposta inteira é o objeto JSON. Ela
+começa com { e termina com }. NÃO use bloco de código markdown (\`\`\`), não
+escreva nada antes nem depois do JSON e não explique o raciocínio.`
   }
 
   private buildDynamicPrompt(item: RawNewsItem): string {
@@ -579,9 +584,14 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
         { signal: controller.signal as AbortSignal }
       )
 
-      const textBlock = response.content.find((block) => block.type === 'text')
-      const text = textBlock?.type === 'text' ? textBlock.text : ''
-      if (!textBlock) {
+      // Concatena TODOS os blocos text, não só o primeiro: modelo com thinking
+      // (ou que resolve narrar antes de responder) manda o preâmbulo num bloco
+      // e o JSON no seguinte. Pegar só `[0]` descartava a resposta inteira.
+      const textBlocks = response.content.filter((block) => block.type === 'text')
+      const text = textBlocks
+        .map((block) => (block.type === 'text' ? block.text : ''))
+        .join('\n')
+      if (textBlocks.length === 0) {
         const blockTypes = response.content.map((block) => block.type).join(',') || 'none'
         logger.warn(
           `[NewsClassifier] Resposta sem bloco text; aplicando fallback ` +
@@ -599,8 +609,17 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
       // notícia legítima de clube brasileiro em vez de cair no fallback por título.
       let noTeamReason: ClassifierFallbackReason = 'parse_invalid'
       let result: ClassifiedNews
+      // `raw` é o caminho feliz. Qualquer outra estratégia significa que o
+      // modelo desobedeceu "Responda SOMENTE com JSON" e foi resgatado — o
+      // valor vai para a telemetria para a taxa ficar visível em produção.
+      let payloadStrategy: JsonExtractionStrategy | 'none' = 'none'
       try {
-        const parsed = JSON.parse(text) as ParsedClassification
+        const extraction = extractJsonPayload(text)
+        if (!extraction) {
+          throw new SyntaxError('resposta sem objeto JSON extraível')
+        }
+        payloadStrategy = extraction.strategy
+        const parsed = JSON.parse(extraction.json) as ParsedClassification
 
         const relevance = typeof parsed.relevance === 'number' && isFinite(parsed.relevance)
           ? Math.max(0, Math.min(1, parsed.relevance))
@@ -621,13 +640,30 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
         }
       } catch {
         parseValid = false
-        logger.warn(`[NewsClassifier] Resposta Sonnet não é JSON válido — aplicando fallback`)
+        payloadStrategy = 'none'
+        logger.warn(
+          `[NewsClassifier] Resposta do LLM não contém JSON válido — aplicando fallback ` +
+          `(prefixo: ${JSON.stringify(text.slice(0, 120))})`
+        )
         result = makeClassificationFallback()
+      }
+
+      if (parseValid && payloadStrategy !== 'raw') {
+        logger.warn(
+          `[NewsClassifier] JSON resgatado de resposta fora de contrato ` +
+          `(strategy=${payloadStrategy}, model=${this.currentModel()})`
+        )
       }
 
       result = this.withTickerFallback(result, item.title, parseValid ? noTeamReason : 'parse_invalid')
 
-      this.logCall(response, { attempt, latencyMs: Date.now() - startMs, ticker: result.ticker, parseValid })
+      this.logCall(response, {
+        attempt,
+        latencyMs: Date.now() - startMs,
+        ticker: result.ticker,
+        parseValid,
+        payloadStrategy,
+      })
       // Sucesso fecha o circuito (credito de volta / API saudavel).
       this.creditCircuitOpenUntil = 0
       if (!parseValid || !text) {
@@ -947,7 +983,13 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
 
   private logCall(
     response: Anthropic.Message,
-    meta: { attempt: number; latencyMs: number; ticker: string; parseValid: boolean },
+    meta: {
+      attempt: number
+      latencyMs: number
+      ticker: string
+      parseValid: boolean
+      payloadStrategy: JsonExtractionStrategy | 'none'
+    },
   ): void {
     const usage = response.usage as
       | (Anthropic.Usage & { cache_creation_input_tokens?: number | null; cache_read_input_tokens?: number | null })
@@ -974,6 +1016,9 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
         latency_ms: meta.latencyMs,
         returned_ticker: meta.ticker,
         parse_valid: meta.parseValid,
+        // 'raw' = modelo obedeceu; 'fenced'/'embedded' = resgatado do formato
+        // errado; 'none' = nem resgate salvou. Métrica de saúde do contrato.
+        payload_strategy: meta.payloadStrategy,
       })}`
     )
   }

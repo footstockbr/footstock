@@ -634,4 +634,120 @@ describe('NewsClassifier — contrato multi-time', () => {
       expect(result.llmDegraded).toBe(true)
     })
   })
+
+  // -------------------------------------------------------------------------
+  // Resposta fora do contrato de formato — regressão do incidente 2026-07-30
+  //
+  // O prompt pede "Responda SOMENTE com JSON", mas depois que o formato virou
+  // aninhado (`{"teams":[...]}`) o Sonnet passou a embrulhar tudo em code fence
+  // markdown (~83% das chamadas) ou a escrever preâmbulo em prosa (~17%). O
+  // `JSON.parse` no texto cru derrubava 100% das notícias em `parse_invalid` ->
+  // gate editorial degradado -> nada de despacho de preço, por 11 dias.
+  //
+  // Os mocks do resto da suíte usam `JSON.stringify` puro, que é exatamente o
+  // caso que produção NÃO estava produzindo — por isso a suíte ficou verde o
+  // incidente inteiro. Os payloads daqui são cópias literais do que voltou.
+  // -------------------------------------------------------------------------
+
+  describe('[FORMATO FORA DE CONTRATO]', () => {
+    const CLASSIFICACAO = {
+      teams: [
+        { ticker: 'URU3', sentiment: 0.8, confidence: 0.95 },
+        { ticker: 'POR3', sentiment: -0.8, confidence: 0.9 },
+      ],
+      impactCategory: 'ESPORTIVA_MAJORITARIA',
+      relevance: 0.9,
+    }
+    const JSON_TEXT = JSON.stringify(CLASSIFICACAO)
+    const TITULO = 'Flamengo vence Palmeiras por 3x1 e assume a liderança'
+
+    /** Resposta com blocos `text` arbitrários (o SDK pode devolver mais de um). */
+    const respostaComBlocos = (...textos: string[]) => ({
+      content: textos.map((text) => ({ type: 'text', text })),
+    })
+
+    const esperaClassificado = (result: Awaited<ReturnType<NewsClassifier['classify']>>) => {
+      expect(result.teams.map((team) => team.ticker)).toEqual(['URU3', 'POR3'])
+      expect(result.ticker).toBe('URU3')
+      expect(result.sentiment).toBe(0.8)
+      expect(result.relevance).toBe(0.9)
+      // Sem carimbo de degradação: a classificação é do LLM, não de heurística.
+      expect(result.fallbackReason).toBeUndefined()
+      expect(result.llmDegraded).toBeUndefined()
+    }
+
+    test('```json — resposta real de produção 2026-08-10 classifica normalmente', async () => {
+      mockCreate.mockResolvedValue(respostaComBlocos('```json\n' + JSON_TEXT + '\n```'))
+
+      esperaClassificado(await classifier.classify(makeRawItem(TITULO)))
+      expect(metricEvent('news_classifier_anthropic_call')).toMatchObject({
+        parse_valid: true,
+        payload_strategy: 'fenced',
+      })
+    })
+
+    test('preâmbulo em prosa antes do JSON classifica normalmente', async () => {
+      mockCreate.mockResolvedValue(respostaComBlocos(
+        'I need to analyze this match result between the two clubs.\n\n' + JSON_TEXT
+      ))
+
+      esperaClassificado(await classifier.classify(makeRawItem(TITULO)))
+      expect(metricEvent('news_classifier_anthropic_call')).toMatchObject({
+        payload_strategy: 'embedded',
+      })
+    })
+
+    test('preâmbulo num bloco text e JSON no seguinte classifica normalmente', async () => {
+      // Modelo com thinking (ou que resolve narrar antes) parte a resposta em
+      // dois blocos. Ler só `content[0]` descartava a resposta inteira.
+      mockCreate.mockResolvedValue(respostaComBlocos(
+        'Analisando: clássico com vencedor definido, dois clubes da lista.',
+        '```json\n' + JSON_TEXT + '\n```',
+      ))
+
+      esperaClassificado(await classifier.classify(makeRawItem(TITULO)))
+    })
+
+    test('JSON puro continua sendo o caminho feliz (não-regressão)', async () => {
+      mockCreate.mockResolvedValue(llmResponse(CLASSIFICACAO))
+
+      esperaClassificado(await classifier.classify(makeRawItem(TITULO)))
+      expect(metricEvent('news_classifier_anthropic_call')).toMatchObject({
+        payload_strategy: 'raw',
+      })
+    })
+
+    test('resgate não engole lixo: sem JSON continua parse_invalid', async () => {
+      mockCreate.mockResolvedValue(respostaComBlocos(
+        'Desculpe, não consigo classificar esta notícia com as regras fornecidas.'
+      ))
+
+      const result = await classifier.classify(makeRawItem(TITULO))
+
+      expect(result.fallbackReason).toBe('parse_invalid')
+      expect(result.llmDegraded).toBe(true)
+      expect(metricEvent('news_classifier_anthropic_call')).toMatchObject({
+        parse_valid: false,
+        payload_strategy: 'none',
+      })
+    })
+
+    test('duas classificações conflitantes degradam em vez de chutar uma', async () => {
+      // Rascunho seguido de versão final: escolher por posição arriscaria
+      // publicar o rascunho como veredito. Degradar é o comportamento correto.
+      const rascunho = JSON.stringify({
+        teams: [{ ticker: 'URU3', sentiment: -0.2, confidence: 0.4 }],
+        impactCategory: 'ESPORTIVA_MENOR',
+        relevance: 0.2,
+      })
+      mockCreate.mockResolvedValue(respostaComBlocos(
+        'Primeira leitura:\n' + rascunho + '\n\nCorrigindo:\n' + JSON_TEXT
+      ))
+
+      const result = await classifier.classify(makeRawItem(TITULO))
+
+      expect(result.fallbackReason).toBe('parse_invalid')
+      expect(result.llmDegraded).toBe(true)
+    })
+  })
 })
