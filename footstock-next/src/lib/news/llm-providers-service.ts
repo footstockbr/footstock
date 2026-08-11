@@ -114,7 +114,7 @@ export async function ensureLlmTablesSeeded(adminId?: string): Promise<void> {
   const cfg = configs[0]
   if (cfg && !cfg.active_provider_id && cfg.llm_enabled) {
     const envPref =
-      (process.env.AI_PROVIDER ?? 'kimi').trim().toLowerCase() === 'anthropic' ? 'anthropic' : 'kimi'
+      (process.env.AI_PROVIDER ?? 'anthropic').trim().toLowerCase() !== 'kimi' ? 'anthropic' : 'kimi'
     const providers = await prisma.$queryRaw<ProviderRow[]>`
       SELECT id, slug, name, enabled, token_ciphertext, token_key_version, deleted_at, created_at, updated_at, created_by
       FROM news_llm_providers

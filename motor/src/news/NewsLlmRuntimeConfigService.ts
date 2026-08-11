@@ -204,7 +204,7 @@ export class NewsLlmRuntimeConfigService {
    */
   private resolveFromEnvFallback(): ResolvedLlmRuntime {
     const provider =
-      (process.env.AI_PROVIDER ?? 'kimi').trim().toLowerCase() === 'anthropic' ? 'anthropic' : 'kimi'
+      (process.env.AI_PROVIDER ?? 'anthropic').trim().toLowerCase() !== 'kimi' ? 'anthropic' : 'kimi'
     const adapter = getAdapterBySlug(provider)
     if (!adapter) return this.nodeOnly('adapter_unknown')
 

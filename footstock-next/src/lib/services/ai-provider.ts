@@ -46,7 +46,7 @@ interface ActiveProviderDbRow {
 }
 
 function normalizeProvider(value: string | undefined | null): AIProvider {
-  return (value ?? 'kimi').trim().toLowerCase() === 'anthropic'
+  return (value ?? 'anthropic').trim().toLowerCase() !== 'kimi'
     ? 'anthropic'
     : 'kimi'
 }
@@ -57,7 +57,7 @@ function parseProviderSlug(value: string | undefined | null): AIProvider | null 
   return null
 }
 
-/** Provider de LLM ativo legado. Default 'kimi'; qualquer valor != 'anthropic' resolve para kimi. */
+/** Provider de LLM ativo legado. Default 'anthropic'; so 'kimi' explicito resolve para kimi. */
 export function getAIProvider(): AIProvider {
   return normalizeProvider(process.env.AI_PROVIDER)
 }

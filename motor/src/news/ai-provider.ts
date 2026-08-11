@@ -5,7 +5,9 @@
 // (https://api.kimi.com/coding + /v1/messages, auth via x-api-key, formato de
 // resposta Anthropic incluindo usage/cache e count_tokens), entao o mesmo
 // @anthropic-ai/sdk atende os dois providers: muda apenas baseURL + apiKey + model.
-// Default: kimi (decisao operacional 2026-06-25).
+// Default: anthropic (2026-08-11). O provider real vem do painel Super Admin via
+// NewsLlmRuntimeConfigService; este default so pinta o boot antes do primeiro
+// hot-swap, e apontar para kimi ali fazia o log de boot mentir sobre o provider.
 // Preferencia em runtime: NewsLlmRuntimeConfigService (DB + hot switch).
 // Este modulo permanece como fallback de env para boot/testes.
 // ============================================================================
@@ -16,9 +18,9 @@ export type AIProvider = 'anthropic' | 'kimi'
 const KIMI_DEFAULT_BASE_URL = 'https://api.kimi.com/coding'
 const KIMI_DEFAULT_MODEL = 'kimi-for-coding'
 
-/** Provider de LLM ativo. Default 'kimi'; qualquer valor != 'anthropic' resolve para kimi. */
+/** Provider de LLM ativo. Default 'anthropic'; so 'kimi' explicito resolve para kimi. */
 export function getAIProvider(): AIProvider {
-  return (process.env.AI_PROVIDER ?? 'kimi').trim().toLowerCase() === 'anthropic'
+  return (process.env.AI_PROVIDER ?? 'anthropic').trim().toLowerCase() !== 'kimi'
     ? 'anthropic'
     : 'kimi'
 }

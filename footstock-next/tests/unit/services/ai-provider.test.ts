@@ -41,16 +41,18 @@ describe('ai-provider', () => {
     }
   })
 
-  it('default provider é kimi quando AI_PROVIDER ausente', () => {
-    expect(getAIProvider()).toBe('kimi')
+  it('default provider é anthropic quando AI_PROVIDER ausente', () => {
+    expect(getAIProvider()).toBe('anthropic')
   })
 
-  it('AI_PROVIDER=anthropic seleciona anthropic; qualquer outro valor cai para kimi', () => {
-    process.env.AI_PROVIDER = 'anthropic'
-    expect(getAIProvider()).toBe('anthropic')
-    process.env.AI_PROVIDER = 'qualquer-coisa'
+  it('só AI_PROVIDER=kimi seleciona kimi; qualquer outro valor cai para anthropic', () => {
+    process.env.AI_PROVIDER = 'kimi'
     expect(getAIProvider()).toBe('kimi')
-    process.env.AI_PROVIDER = 'ANTHROPIC'
+    process.env.AI_PROVIDER = 'qualquer-coisa'
+    expect(getAIProvider()).toBe('anthropic')
+    process.env.AI_PROVIDER = 'KIMI'
+    expect(getAIProvider()).toBe('kimi')
+    process.env.AI_PROVIDER = 'anthropic'
     expect(getAIProvider()).toBe('anthropic')
   })
 
