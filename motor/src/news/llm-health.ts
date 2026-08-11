@@ -79,7 +79,15 @@ export function classifyHttpErrorToHealth(meta: {
   emptyText?: boolean
 }): { state: LlmHealthState; reasonCode: LlmHealthReasonCode } {
   const msg = (meta.message ?? '').toLowerCase()
-  if (/credit balance|insufficient (funds|credits?)|billing/.test(msg)) {
+  // Credito ESGOTADO = recusa efetiva por saldo (400/402 + mensagem de recusa).
+  // Saldo baixo, "billing tier" de rate-limit ou erro de servidor que cite billing
+  // nao entram aqui: viram error/rate_limited e nao param a operacao.
+  if (
+    (meta.status === undefined || meta.status === 400 || meta.status === 402) &&
+    /credit balance (is )?too low|insufficient (funds|credits?|balance|quota)|(credits?|quota|balance) (has been |is |are )?(exhausted|depleted)|payment required/.test(
+      msg,
+    )
+  ) {
     return { state: 'insufficient_credits', reasonCode: 'credit_exhausted' }
   }
   if (meta.aborted) return { state: 'error', reasonCode: 'timeout' }

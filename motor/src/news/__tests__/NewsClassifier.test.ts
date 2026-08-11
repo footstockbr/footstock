@@ -146,6 +146,18 @@ describe('NewsClassifier', () => {
     expect(mockCreate).toHaveBeenCalledTimes(1)
   })
 
+  test('[CIRCUIT — saldo baixo/rate-limit de billing] NÃO abre o circuito', async () => {
+    // Só a RECUSA por saldo zerado para a operação. Um 429 que menciona billing é
+    // rate-limit: a próxima notícia DEVE continuar batendo na API.
+    const err = Object.assign(new Error('billing tier rate limit exceeded'), { status: 429 })
+    mockCreate.mockRejectedValue(err)
+
+    await classifier.classify(makeRawItem())
+    const callsAfterFirst = mockCreate.mock.calls.length
+    await classifier.classify(makeRawItem())
+    expect(mockCreate.mock.calls.length).toBeGreaterThan(callsAfterFirst)
+  }, 20_000)
+
   test('[FALLBACK — 400 crédito esgotado + índice carregado] resolve ticker pelo título', async () => {
     // Cenário REAL de prod (2026-06-23): API Anthropic sem crédito → toda chamada
     // falha com 400. O fallback determinístico DEVE rodar mesmo nesse caminho de erro.

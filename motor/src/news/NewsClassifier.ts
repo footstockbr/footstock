@@ -283,6 +283,10 @@ export class NewsClassifier {
       this.anthropic = this.buildClientFromRuntime(rt)
       this.boundConfigVersion = rt.configVersion
       this.boundModel = rt.model
+      // O probe de cache roda contra ESTE cliente. Trocou de credencial/modelo,
+      // re-sondar: um probe feito com o cliente de boot (env, hoje sem chave)
+      // desabilitaria o prompt caching para sempre.
+      this.cacheProbed = false
       logger.info(
         `[NewsClassifier] Runtime LLM aplicado: provider=${rt.providerName} slug=${rt.adapterSlug} v=${rt.configVersion} model=${rt.model}`,
       )
@@ -442,6 +446,13 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
    */
   private async ensureCacheEligibility(): Promise<void> {
     if (this.cacheProbed) return
+
+    // Antes do primeiro hot-swap o cliente ainda e o de boot (env). Como as chaves
+    // de LLM sairam do env (o token vive no painel admin), sondar agora daria 401 e
+    // travaria cacheEligible=false. Adia sem marcar cacheProbed: classify() chama
+    // ensureClient() antes e a proxima passada sonda com a credencial correta.
+    if (this.boundConfigVersion < 0) return
+
     this.cacheProbed = true
 
     if (this.cacheMode === 'off' || this.promptFormat === 'legacy') {
@@ -1162,19 +1173,31 @@ const RETRY_MAX_DELAY_MS = 8000
 // que motivou esta mudança — API persistentemente lenta não vira 3x de gasto.
 const TIMEOUT_MAX_ATTEMPTS = 2
 
-// Cooldown do circuit-breaker de credito esgotado. Quando a Anthropic responde
-// "credit balance is too low" (billing), NAO adianta tentar os proximos itens do
-// lote nem as proximas rodadas de cron: todos falham igual. Abrimos o circuito por
+// Cooldown do circuit-breaker de credito esgotado. Quando a API RECUSA a chamada
+// por saldo zerado, os proximos itens do lote falham igual — abrimos o circuito por
 // este periodo, pulando a chamada e indo direto ao fallback (1 log em vez de N).
-const CREDIT_EXHAUSTED_COOLDOWN_MS = 10 * 60 * 1000
+// Curto de proposito: uma recusa por saldo custa 0 token, entao reprovar cedo e
+// barato e a operacao volta sozinha assim que o credito e recarregado.
+const CREDIT_EXHAUSTED_COOLDOWN_MS = 60 * 1000
 
-// Detecta o erro nao-retentavel ESPECIFICO de credito/billing esgotado (Anthropic
-// 400 invalid_request_error "credit balance is too low"). NAO confundir com 400 de
-// request malformado (bug local) — so o credito justifica abrir o circuito.
+// Detecta o erro de credito ESGOTADO — a API recusou de fato a chamada por saldo.
+// Exige DUAS evidencias para nao parar a operacao por sinal de saldo BAIXO:
+//   1. HTTP status de recusa por billing (400 invalid_request_error / 402), quando
+//      houver status. Um 429 "billing tier limit" e rate-limit, NAO credito acabado;
+//      um 500 que mencione billing e erro do servidor.
+//   2. Mensagem que afirma a recusa (saldo insuficiente / quota esgotada), nao um
+//      aviso generico com a palavra "billing".
+// Enquanto a API aceitar a chamada, o classificador segue operando ate acabar.
+const CREDIT_EXHAUSTED_STATUSES = new Set([400, 402])
+const CREDIT_EXHAUSTED_MESSAGE =
+  /credit balance (is )?too low|insufficient (funds|credits?|balance|quota)|(credits?|quota|balance) (has been |is |are )?(exhausted|depleted)|payment required/i
+
 function isCreditExhaustedError(err: unknown): boolean {
+  const status = extractHttpStatus(err)
+  if (status !== undefined && !CREDIT_EXHAUSTED_STATUSES.has(status)) return false
   const msg = (err as { message?: unknown } | null | undefined)?.message
   if (typeof msg !== 'string') return false
-  return /credit balance|insufficient (funds|credits?)|billing/i.test(msg)
+  return CREDIT_EXHAUSTED_MESSAGE.test(msg)
 }
 
 // Extrai o HTTP status de um erro do SDK Anthropic (APIError expõe `.status`).

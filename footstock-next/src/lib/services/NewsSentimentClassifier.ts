@@ -44,10 +44,11 @@ function getAnthropic(runtime: ActiveAIProviderRuntime): Anthropic {
   return new Anthropic(aiClientOptionsForRuntime(runtime))
 }
 
-// Circuit-breaker de credito esgotado (mesma classe do motor): quando a Anthropic
-// responde "credit balance is too low", pular as proximas chamadas por um cooldown
-// em vez de floodar 1 erro por noticia ate a recarga. 0 = fechado.
-const CREDIT_EXHAUSTED_COOLDOWN_MS = 10 * 60 * 1000
+// Circuit-breaker de credito esgotado (mesma classe do motor): quando a API RECUSA
+// a chamada por saldo zerado, pular as proximas por um cooldown curto em vez de
+// floodar 1 erro por noticia ate a recarga. 0 = fechado. Cooldown curto porque a
+// recusa por saldo custa 0 token — a operacao volta sozinha apos a recarga.
+const CREDIT_EXHAUSTED_COOLDOWN_MS = 60 * 1000
 let creditCircuit:
   | {
       providerId: string | null
@@ -57,9 +58,19 @@ let creditCircuit:
     }
   | null = null
 
+// Só a RECUSA efetiva por saldo zerado para a operacao. Exige status de billing
+// (400/402) quando houver status + mensagem que afirma a recusa. Um 429 "billing
+// tier limit" e rate-limit e um aviso de saldo baixo nao param a classificacao:
+// enquanto a API aceitar a chamada, seguimos operando ate o credito acabar.
+const CREDIT_EXHAUSTED_STATUSES = new Set([400, 402])
+const CREDIT_EXHAUSTED_MESSAGE =
+  /credit balance (is )?too low|insufficient (funds|credits?|balance|quota)|(credits?|quota|balance) (has been |is |are )?(exhausted|depleted)|payment required/i
+
 function isCreditExhaustedError(err: unknown): boolean {
+  const status = (err as { status?: unknown } | null | undefined)?.status
+  if (typeof status === 'number' && !CREDIT_EXHAUSTED_STATUSES.has(status)) return false
   const msg = err instanceof Error ? err.message : typeof err === 'string' ? err : ''
-  return /credit balance|insufficient (funds|credits?)|billing/i.test(msg)
+  return CREDIT_EXHAUSTED_MESSAGE.test(msg)
 }
 
 function parseSentiment(raw: string): NewsSentiment | null {

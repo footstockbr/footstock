@@ -40,6 +40,17 @@ describe('llm-health', () => {
     expect(classifyHttpErrorToHealth({ message: 'credit balance is too low' }).state).toBe(
       'insufficient_credits',
     )
+    // Saldo BAIXO / billing citado em rate-limit ou erro de servidor NÃO é crédito
+    // esgotado: a operação só para quando a API recusa por saldo (400/402).
+    expect(
+      classifyHttpErrorToHealth({ status: 429, message: 'billing tier rate limit' }).reasonCode,
+    ).toBe('rate_limited')
+    expect(
+      classifyHttpErrorToHealth({ status: 500, message: 'billing service unavailable' }).reasonCode,
+    ).toBe('server_error')
+    expect(
+      classifyHttpErrorToHealth({ status: 400, message: 'credit balance is too low' }).state,
+    ).toBe('insufficient_credits')
     expect(classifyHttpErrorToHealth({ status: 401 }).reasonCode).toBe('auth_invalid')
     expect(classifyHttpErrorToHealth({ aborted: true }).reasonCode).toBe('timeout')
     expect(classifyHttpErrorToHealth({ status: 503 }).reasonCode).toBe('server_error')
