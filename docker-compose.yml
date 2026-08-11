@@ -38,6 +38,10 @@ services:
     container_name: foot-stock-motor
     ports:
       - '3001:3001'
+    environment:
+      # Fuso canonico do FootStock — horario de Brasilia (GMT-3).
+      # Explicito aqui para nao depender do .env.docker (gitignored).
+      TZ: America/Sao_Paulo
     depends_on:
       postgres:
         condition: service_healthy
@@ -59,6 +63,9 @@ services:
     container_name: foot-stock-web
     ports:
       - '3000:3000'
+    environment:
+      # Fuso canonico do FootStock — horario de Brasilia (GMT-3).
+      TZ: America/Sao_Paulo
     depends_on:
       postgres:
         condition: service_healthy

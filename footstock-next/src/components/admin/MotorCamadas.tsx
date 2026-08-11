@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { MOTOR_LAYERS_DEFAULTS } from '@/lib/constants/motor-layers'
+import { formatDateTimeFull } from '@/lib/utils/format'
 import type {
   MotorLayersConfig,
   ClusterKey,
@@ -416,7 +417,7 @@ export function MotorCamadas() {
             </p>
             {config.updatedAt && (
               <p className="text-[10px] text-[#52585F] mt-1">
-                Última atualização: {new Date(config.updatedAt).toLocaleString('pt-BR')}
+                Última atualização: {formatDateTimeFull(config.updatedAt)}
               </p>
             )}
             {hasUnsavedChanges && (

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button, Modal } from "@/components/ui";
 import { CheckoutButton } from "@/components/payments/CheckoutButton";
 import { ROUTES } from "@/lib/constants/routes";
+import { formatDateMedium } from '@/lib/utils/format'
 
 interface SubscriptionManageProps {
   planType?: string | null;
@@ -116,7 +117,7 @@ export function SubscriptionManage({ planType }: SubscriptionManageProps) {
 
       const effectiveAt = json?.data?.cancellationEffectiveAt ?? json?.data?.expiresAt;
       const formattedDate = effectiveAt
-        ? new Date(effectiveAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })
+        ? formatDateMedium(effectiveAt)
         : null;
 
       toast.success(

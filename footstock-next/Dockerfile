@@ -63,6 +63,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
+# Fuso canonico do FootStock — horario de Brasilia (GMT-3)
+ENV TZ=America/Sao_Paulo
 # Bind 0.0.0.0 (Railway edge precisa alcançar via container interface)
 ENV HOSTNAME=0.0.0.0
 

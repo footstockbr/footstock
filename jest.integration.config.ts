@@ -4,6 +4,11 @@
 // Banco de teste separado obrigatório: TEST_DATABASE_URL
 // ============================================================================
 
+// Fuso canonico do FootStock — horario de Brasilia (GMT-3).
+// Fixado aqui para que a suite seja deterministica em qualquer maquina/CI,
+// espelhando o TZ dos containers de producao.
+process.env.TZ = 'America/Sao_Paulo'
+
 import type { Config } from 'jest'
 
 const config: Config = {

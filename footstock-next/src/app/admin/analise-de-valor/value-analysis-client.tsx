@@ -25,6 +25,7 @@ import { NativeSelect } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { humanizeLayer, newsImpactLabel, newsSentimentLabel } from '@/lib/admin/value-analysis'
+import { formatDateTimeCompact } from '@/lib/utils/format'
 
 type AssetOption = {
   id: string
@@ -416,12 +417,7 @@ function formatNumber(value: number): string {
 }
 
 function formatDateTime(value: string): string {
-  return new Date(value).toLocaleString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return formatDateTimeCompact(value)
 }
 
 function objectEntries(record: Record<string, number>): [string, number][] {

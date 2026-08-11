@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatBRLValue } from '@/lib/utils/format'
+import { formatBRLValue, formatDateTimeShort } from '@/lib/utils/format'
 import { cn } from '@/lib/utils'
 
 interface PaymentItem {
@@ -154,10 +154,7 @@ export function FinanceiroMovimentacoes() {
                   className="border-b border-[rgba(240,185,11,.05)] last:border-0 hover:bg-[rgba(240,185,11,.03)] transition-colors"
                 >
                   <td className="py-2.5 px-3 text-[#929AA5] whitespace-nowrap">
-                    {new Date(p.createdAt).toLocaleString('pt-BR', {
-                      dateStyle: 'short',
-                      timeStyle: 'short',
-                    })}
+                    {formatDateTimeShort(p.createdAt)}
                   </td>
                   <td className="py-2.5 px-3">
                     <div className="text-[#EAECEF] font-medium">{p.userName ?? '—'}</div>

@@ -5,7 +5,7 @@
 // pois a detecção é determinística (baseada em relógio BRT).
 // ============================================================================
 
-import { toZonedTime } from 'date-fns-tz'
+import { fromZonedTime, toZonedTime } from 'date-fns-tz'
 import { MarketSession, SESSION_LABELS } from '@/lib/constants/market'
 
 export const BRT_TIMEZONE = 'America/Sao_Paulo'
@@ -50,13 +50,33 @@ function findSession(hour: number, minute: number): MarketSession {
   return MarketSession.CLOSED
 }
 
+/**
+ * Proxima janela a comecar, pela MENOR distancia positiva ate o inicio dela,
+ * com rollover de 24h — espelho de SessionManager._findNextWindow do motor.
+ *
+ * A versao anterior varria SESSION_SCHEDULE na ordem do array e devolvia a
+ * primeira janela com `start > agora`. Como o array nao esta ordenado por
+ * relogio (CLOSING_CALL 00:45 e AFTER_MARKET 01:00 vem depois de TRADING
+ * 11:00), nenhuma casava durante o pregao e o fallback devolvia PRE_OPENING:
+ * as 17:41 o badge dizia "Fecha em 17h 03min" (contando ate a ABERTURA das
+ * 10:45 do dia seguinte) em vez do fechamento real das 00:45.
+ */
 function findNextWindow(hour: number, minute: number): SessionWindow {
   const timeMinutes = hour * 60 + minute
+  let best: SessionWindow | null = null
+  let bestDiff = Number.POSITIVE_INFINITY
+
   for (const w of SESSION_SCHEDULE) {
     const start = w.startHour * 60 + w.startMinute
-    if (start > timeMinutes) return w
+    let diff = (start - timeMinutes + 1440) % 1440
+    if (diff === 0) diff = 1440 // ja estamos no inicio dela: proxima ocorrencia e amanha
+    if (diff < bestDiff) {
+      bestDiff = diff
+      best = w
+    }
   }
-  return SESSION_SCHEDULE[0]!
+
+  return best ?? SESSION_SCHEDULE[0]!
 }
 
 export function getCurrentSession(now = new Date()): MarketSession {
@@ -74,17 +94,22 @@ export function getNextTransition(now = new Date()): NextTransition {
   const brt = toZonedTime(now, BRT_TIMEZONE)
   const nextWindow = findNextWindow(brt.getHours(), brt.getMinutes())
 
-  const transitionBrt = new Date(brt)
-  transitionBrt.setHours(nextWindow.startHour, nextWindow.startMinute, 0, 0)
-  if (transitionBrt.getTime() <= brt.getTime()) {
-    transitionBrt.setDate(transitionBrt.getDate() + 1)
+  // Candidato montado no espaco de wall-clock BRT (o que toZonedTime devolve).
+  const candidate = new Date(brt)
+  candidate.setHours(nextWindow.startHour, nextWindow.startMinute, 0, 0)
+  if (candidate.getTime() <= brt.getTime()) {
+    candidate.setDate(candidate.getDate() + 1)
   }
 
-  const countdownSeconds = Math.max(0, Math.floor((transitionBrt.getTime() - now.getTime()) / 1000))
+  // Volta de wall-clock BRT para o instante UTC real. Sem fromZonedTime o
+  // countdown e o transitionAt erravam pelo offset do fuso do PROCESSO — so
+  // acertavam por acidente quando o container ja rodava em America/Sao_Paulo.
+  const transitionAt = fromZonedTime(candidate, BRT_TIMEZONE)
+  const countdownSeconds = Math.max(0, Math.floor((transitionAt.getTime() - now.getTime()) / 1000))
 
   return {
     session: nextWindow.type,
-    transitionAt: transitionBrt.toISOString(),
+    transitionAt: transitionAt.toISOString(),
     countdownSeconds,
   }
 }

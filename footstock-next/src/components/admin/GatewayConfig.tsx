@@ -1,6 +1,7 @@
 'use client'
 
 import { CheckCircle, AlertCircle, Clock } from 'lucide-react'
+import { formatDateTimeCompact } from '@/lib/utils/format'
 
 interface GatewayStatus {
   gateway: string
@@ -81,9 +82,7 @@ export function GatewayConfig({ gatewayStatus }: GatewayConfigProps) {
                     {g.lastActivity && (
                       <p className="text-xs text-[#929AA5] flex items-center gap-1 mt-0.5">
                         <Clock className="h-3 w-3" />
-                        Última atividade: {new Date(g.lastActivity).toLocaleString('pt-BR', {
-                          day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
-                        })}
+                        Última atividade: {formatDateTimeCompact(g.lastActivity)}
                       </p>
                     )}
                   </div>

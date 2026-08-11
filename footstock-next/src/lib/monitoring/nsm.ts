@@ -9,6 +9,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { redisPublisher } from '@/lib/redis'
+import { hourInBRT } from '@/utils/timezone'
 
 // ---------------------------------------------------------------------------
 // Constantes configuráveis via env (sem redeploy)
@@ -66,10 +67,9 @@ function startOfTodayBRT(): Date {
   return new Date(`${brtStr}T00:00:00-03:00`)
 }
 
-/** Retorna a hora atual em BRT (0-23) */
+/** Hora atual em BRT (0-23) — delega ao helper canonico de fuso. */
 function currentHourBRT(): number {
-  const nowBRT = new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })
-  return new Date(nowBRT).getHours()
+  return hourInBRT()
 }
 
 // ---------------------------------------------------------------------------

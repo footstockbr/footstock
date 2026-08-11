@@ -22,6 +22,7 @@ import { orchestrateGlobalHalt } from '@/lib/admin/global-halt-orchestrator'
 import type { AdminMarketActionLog } from '@/lib/types/admin'
 import type { AdminRole } from '@/types'
 import { FairValueResetControl } from './FairValueResetControl'
+import { formatDateTimeShort } from '@/lib/utils/format'
 
 interface MotorKpis {
   circuitBreakers: number
@@ -219,7 +220,7 @@ function CircuitBreakerControl() {
       ) : data.updatedAt && !pctDirty ? (
         <p className="text-[9px] text-[#5E6673]">
           {enabled ? 'ativo' : 'desligado'} · halt a {data.thresholdPct}% · atualizado{' '}
-          {new Date(data.updatedAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+          {formatDateTimeShort(data.updatedAt)}
         </p>
       ) : (
         <p className="text-[9px] text-[#5E6673]">{enabled ? 'ativo' : 'desligado'} · halt a {data.thresholdPct}%</p>
@@ -277,7 +278,7 @@ function AuditLog() {
               {actions.map((a) => (
                 <tr key={a.id} className="border-b border-[rgba(240,185,11,.06)] last:border-0">
                   <td className="py-2 px-2 text-[#929AA5]">
-                    {new Date(a.timestamp).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                    {formatDateTimeShort(a.timestamp)}
                   </td>
                   <td className="py-2 px-2 text-[#c5b99a]">{a.adminName ?? a.adminId.slice(0, 8)}</td>
                   <td className="py-2 px-2">

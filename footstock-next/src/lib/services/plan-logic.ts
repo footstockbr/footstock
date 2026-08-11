@@ -1,7 +1,9 @@
 // ============================================================================
 // FootStock — plan-logic: 13 funções puras de negócio de planos
 // Sem side effects, sem banco — input → output puros, testáveis isoladamente
-// Todos os cálculos de data em UTC para evitar bugs de timezone
+// Cálculos de vigência em UTC (instante absoluto), independentes do fuso do
+// processo. A exibição ao usuário converte para America/Sao_Paulo via
+// @/lib/utils/format.
 // ============================================================================
 
 import type { PlanType } from '@/lib/enums'

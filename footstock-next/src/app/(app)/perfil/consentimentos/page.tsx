@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Button, Skeleton } from "@/components/ui";
 import { ROUTES } from "@/lib/constants/routes";
+import { formatDateMedium } from '@/lib/utils/format'
 
 interface Consent {
   id: string;
@@ -41,11 +42,7 @@ const PURPOSE_LABELS: Record<string, { label: string; description: string; requi
 };
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return formatDateMedium(iso);
 }
 
 export default function ConsentimentosPage() {

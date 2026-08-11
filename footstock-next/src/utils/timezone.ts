@@ -4,8 +4,29 @@
 // Usado pelos limites diários de ordens e jobs de expiração.
 // ============================================================================
 
+/** Fuso canônico do produto — horário de Brasília. */
+export const BR_TIMEZONE = 'America/Sao_Paulo' as const
+
 const BRT_OFFSET_HOURS = 3 // UTC-3 fixo (Brasil não usa DST desde 2019)
 const BRT_OFFSET_MS = BRT_OFFSET_HOURS * 60 * 60 * 1000
+
+/**
+ * Retorna a hora do relógio (0-23) em America/Sao_Paulo.
+ *
+ * Usa Intl.formatToParts em vez de reparsear `toLocaleString('en-US')`: aquele
+ * formato ("8/11/2026, 8:09:31 AM") não é padronizado por spec, e o resultado
+ * só ficava correto porque a ida e a volta passavam pelo mesmo fuso do
+ * processo — quebra silenciosamente se o parser mudar ou o TZ divergir.
+ */
+export function hourInBRT(now: Date = new Date()): number {
+  const hour = new Intl.DateTimeFormat('en-GB', {
+    timeZone: BR_TIMEZONE,
+    hour: '2-digit',
+    hour12: false,
+  }).format(now)
+  // en-GB + hour12:false devolve "00".."23"
+  return Number(hour) % 24
+}
 
 /**
  * Retorna a data atual no fuso BRT como string "YYYY-MM-DD".

@@ -23,6 +23,8 @@ FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3001
+# Fuso canonico do FootStock — horario de Brasilia (GMT-3)
+ENV TZ=America/Sao_Paulo
 
 # Criar usuário não-root
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001

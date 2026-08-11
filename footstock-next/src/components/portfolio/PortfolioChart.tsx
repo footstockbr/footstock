@@ -10,7 +10,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { formatFS } from '@/lib/utils/format'
+import { formatDateTimeFull, formatDayMonthLabel, formatFS } from '@/lib/utils/format'
 
 type Period = '1H' | '12H' | '24H' | '7D' | '30D' | '1Y' | 'ALL'
 
@@ -39,7 +39,7 @@ function formatAxisDate(date: string, period: Period): string {
   if (period === '1Y' || period === 'ALL') {
     return d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', month: 'short', year: '2-digit' })
   }
-  return `${d.getDate()}/${d.getMonth() + 1}`
+  return formatDayMonthLabel(d)
 }
 
 export function PortfolioChart() {
@@ -130,7 +130,7 @@ export function PortfolioChart() {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 formatter={(value: any) => [formatFS(value as number), 'Patrimônio'] as any}
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                labelFormatter={(label: any) => new Date(label as string).toLocaleString('pt-BR')}
+                labelFormatter={(label: any) => formatDateTimeFull(label as string)}
               />
               <Area
                 type="monotone"

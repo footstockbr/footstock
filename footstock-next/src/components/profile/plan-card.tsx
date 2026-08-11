@@ -9,6 +9,7 @@ import { ROUTES } from "@/lib/constants/routes";
 import { SubscriptionManage } from "./subscription-manage";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import type { User } from "@/types";
+import { formatDateMedium } from '@/lib/utils/format'
 
 interface Subscription {
   status: string;
@@ -25,11 +26,7 @@ interface PlanCardProps {
 }
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return formatDateMedium(iso);
 }
 
 function formatFS(amount: number) {

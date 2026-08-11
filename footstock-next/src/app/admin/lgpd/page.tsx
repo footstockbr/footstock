@@ -10,6 +10,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { AdminBreadcrumb } from '@/components/admin/AdminBreadcrumb'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AlertTriangle, Users, Download, FileText, Shield, RefreshCw } from 'lucide-react'
+import { formatDateTimeShort } from '@/lib/utils/format'
 
 interface ConsentStats { active: number; revoked: number }
 interface ExportStats { pending: number; completed: number; failed: number }
@@ -64,7 +65,7 @@ function StatCard({ title, value, sub, icon: Icon, alert }: {
 }
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+  return formatDateTimeShort(iso)
 }
 
 export default function AdminLgpdPage() {

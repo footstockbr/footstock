@@ -9,6 +9,7 @@ import { AtivoClient } from "./ativo-client";
 import { prisma } from "@/lib/prisma";
 import { SponsorBanner } from "@/components/shared/sponsor-banner";
 import { ClubCrest } from "@/components/market/ClubCrest";
+import { formatDateTimeFull } from '@/lib/utils/format'
 
 interface Props {
   params: Promise<{ ticker: string }>;
@@ -121,7 +122,7 @@ export default async function AtivoPage({ params }: Props) {
             {changeArrow} {changeSign}{changePercent.toFixed(2)}%
           </span>
         </div>
-        <p className="text-xs text-[#707A8A] mt-0.5">Última atualização: {asset.updatedAt.toLocaleString("pt-BR")}</p>
+        <p className="text-xs text-[#707A8A] mt-0.5">Última atualização: {formatDateTimeFull(asset.updatedAt)}</p>
       </div>
 
       {/* Stats */}

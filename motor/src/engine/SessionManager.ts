@@ -1,7 +1,9 @@
 // ============================================================================
 // FootStock Motor — SessionManager
 // Detecta sessão de mercado atual baseada no horário BRT via date-fns-tz.
-// Servidor Railway opera em TZ=UTC — toda conversão é explícita.
+// Fuso canônico do produto: America/Sao_Paulo (GMT-3). Os containers Railway
+// rodam com TZ=America/Sao_Paulo, mas a conversão aqui é SEMPRE explícita via
+// date-fns-tz — o resultado não depende do TZ do processo.
 // ============================================================================
 
 import { toZonedTime, fromZonedTime } from 'date-fns-tz'

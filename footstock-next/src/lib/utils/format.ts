@@ -35,18 +35,29 @@ export function formatPercent(value: number | null | undefined): string {
 }
 
 /**
+ * Fuso canonico do produto — horario de Brasilia (GMT-3, sem DST desde 2019).
+ *
+ * TODA formatacao de data/hora exibida ao usuario DEVE passar por este fuso.
+ * No servidor o container ja roda com TZ=America/Sao_Paulo, mas no browser o
+ * fuso e o do dispositivo do usuario — sem `timeZone` explicito, um usuario
+ * fora do Brasil (ou com relogio mal configurado) veria horarios errados e o
+ * SSR divergiria do CSR. Por isso o fuso e sempre explicito.
+ */
+export const BR_TIMEZONE = 'America/Sao_Paulo' as const
+
+/**
  * Formata data ISO para pt-BR curto: dd/mm/aa
  * Ex: "2026-04-09T..." → "09/04/26"
  */
 export function formatDateShort(iso: string): string {
-  return new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: '2-digit' })
+  return new Date(iso).toLocaleDateString('pt-BR', { timeZone: BR_TIMEZONE, day: '2-digit', month: '2-digit', year: '2-digit' })
 }
 
 /**
  * Formata data ISO para pt-BR longo: 09 de abril de 2026
  */
 export function formatDateLong(date: Date | string): string {
-  return new Date(date).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'long', year: 'numeric' })
+  return new Date(date).toLocaleDateString('pt-BR', { timeZone: BR_TIMEZONE, day: '2-digit', month: 'long', year: 'numeric' })
 }
 
 /**
@@ -54,10 +65,65 @@ export function formatDateLong(date: Date | string): string {
  */
 export function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleDateString('pt-BR', {
-    timeZone: 'America/Sao_Paulo',
+    timeZone: BR_TIMEZONE,
     day: '2-digit', month: '2-digit', year: '2-digit',
     hour: '2-digit', minute: '2-digit',
   })
+}
+
+/**
+ * Formata data com mes abreviado: "09 de abr. de 2026"
+ * Usado em cartoes de plano, consentimentos e toasts de assinatura.
+ */
+export function formatDateMedium(date: Date | string): string {
+  return new Date(date).toLocaleDateString('pt-BR', {
+    timeZone: BR_TIMEZONE,
+    day: '2-digit', month: 'short', year: 'numeric',
+  })
+}
+
+/**
+ * Formata data+hora no estilo curto do Intl: "09/04/26 14:30"
+ */
+export function formatDateTimeShort(date: Date | string): string {
+  return new Date(date).toLocaleString('pt-BR', {
+    timeZone: BR_TIMEZONE,
+    dateStyle: 'short', timeStyle: 'short',
+  })
+}
+
+/**
+ * Formata data+hora compacta sem ano: "09/04 14:30"
+ * Usado em tabelas densas de admin (gateways, analise de valor).
+ */
+export function formatDateTimeCompact(date: Date | string): string {
+  return new Date(date).toLocaleString('pt-BR', {
+    timeZone: BR_TIMEZONE,
+    day: '2-digit', month: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  })
+}
+
+/**
+ * Formata data+hora completa: "09/04/2026 14:30:15"
+ */
+export function formatDateTimeFull(date: Date | string): string {
+  return new Date(date).toLocaleString('pt-BR', { timeZone: BR_TIMEZONE })
+}
+
+/**
+ * Rotulo de eixo de grafico "dia/mes" — ex: "9/4"
+ *
+ * Substitui `${d.getDate()}/${d.getMonth() + 1}`, que resolvia no fuso do
+ * dispositivo e deslocava o rotulo em um dia para quem estivesse fora do BRT.
+ */
+export function formatDayMonthLabel(date: Date | string): string {
+  const parts = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: BR_TIMEZONE, day: 'numeric', month: 'numeric',
+  }).formatToParts(new Date(date))
+  const day = parts.find(p => p.type === 'day')?.value ?? ''
+  const month = parts.find(p => p.type === 'month')?.value ?? ''
+  return `${day}/${month}`
 }
 
 /**

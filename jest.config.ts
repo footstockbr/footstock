@@ -1,3 +1,8 @@
+// Fuso canonico do FootStock — horario de Brasilia (GMT-3).
+// Fixado aqui para que a suite seja deterministica em qualquer maquina/CI,
+// espelhando o TZ dos containers de producao.
+process.env.TZ = 'America/Sao_Paulo'
+
 import nextJest from 'next/jest.js'
 
 // O app Next real vive em footstock-next/ (src/app). A raiz do monorepo nao

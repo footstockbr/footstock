@@ -9,6 +9,7 @@ import { prisma } from '@/lib/prisma'
 import { redisPublisher } from '@/lib/redis'
 import { captureException } from '@/lib/monitoring/sentry'
 import { NSM_TARGET, NSM_ALERT_THRESHOLD, type AlertStatus, type NSMTrendPoint } from '@/lib/monitoring/nsm'
+import { hourInBRT } from '@/utils/timezone'
 
 // ---------------------------------------------------------------------------
 // Helpers internos
@@ -19,10 +20,9 @@ function todayISO(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
 }
 
-/** Hora atual em BRT (0-23) */
+/** Hora atual em BRT (0-23) — delega ao helper canonico de fuso. */
 function currentHourBRT(): number {
-  const nowBRT = new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })
-  return new Date(nowBRT).getHours()
+  return hourInBRT()
 }
 
 /** Início do dia BRT como Date UTC */

@@ -9,7 +9,7 @@ import {
   Tooltip,
   CartesianGrid,
 } from 'recharts'
-import { formatBRL } from '@/lib/utils/format'
+import { formatBRL, formatDayMonthLabel } from '@/lib/utils/format'
 import { ChartFrame } from './ChartFrame'
 
 interface MRRHistory {
@@ -90,10 +90,7 @@ export function MRRDashboard({
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(240,185,11,.06)" />
               <XAxis
                 dataKey="date"
-                tickFormatter={(v: string) => {
-                  const d = new Date(v)
-                  return `${d.getDate()}/${d.getMonth() + 1}`
-                }}
+                tickFormatter={(v: string) => formatDayMonthLabel(v)}
                 tick={{ fontSize: 10, fill: '#929AA5' }}
                 tickLine={false}
                 axisLine={false}

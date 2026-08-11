@@ -37,6 +37,9 @@ services:
     container_name: foot-stock-web-dev
     working_dir: /app
     command: npm run dev
+    environment:
+      # Fuso canonico do FootStock — horario de Brasilia (GMT-3).
+      TZ: America/Sao_Paulo
     ports:
       - '3000:3000'
     volumes:
