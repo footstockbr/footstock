@@ -8,12 +8,12 @@
 import type { IncomingMessage, ServerResponse } from 'http'
 import { RedisClientService } from '../../services/RedisClientService'
 import { REDIS_CHANNELS } from '../../types/events.types'
-import { logger } from '../../utils/logger'
+import { logger, motorMetrics } from '../../utils/logger'
 import { verifyJwt, JwtVerifyError, extractTokenFromRequest } from '../../lib/auth'
 import { tryAcquireSseSlot, releaseSseSlot } from '../sseConnectionLimiter'
 import { PriceBuffer } from '../../lib/PriceBuffer'
 import { DELAY_BY_PLAN } from '../../constants/delays'
-import type { MarketTickEvent } from '../../types/events.types'
+import type { MarketTickEvent, MarketStreamTick, MarketStreamPayload } from '../../types/events.types'
 
 const HEARTBEAT_INTERVAL_MS = 15_000
 
@@ -155,37 +155,66 @@ export function handleMarketStream(req: IncomingMessage, res: ServerResponse): v
       if (channel !== REDIS_CHANNELS.MARKET_TICK || closed) return
       try {
         const event = JSON.parse(message) as MarketTickEvent
-        if (!event.ticks || !Array.isArray(event.ticks)) {
-          res.write(`data: ${message}\n\n`)
-          return
-        }
+        // P0: nunca retransmitir payload bruto em caminhos de falha
+        if (!event.ticks || !Array.isArray(event.ticks)) return
 
-        // Push incoming ticks to buffer
+        // T7 — Versionar buffer de mercado com snapshot completo (OHLCV + OFI + book + variação)
         for (const tick of event.ticks) {
-          await priceBuffer.push(tick.ticker, tick.price, tick.timestamp)
+          await priceBuffer.push(tick.ticker, tick, tick.timestamp)
         }
 
-        // Resolve delayed prices per plan
-        const delayedTicks = []
+        // T8 — Resolve delayed snapshots per plan e enriquece com estado/metadados
+        const emittedAt = Date.now()
+        const streamTicks: MarketStreamTick[] = []
         for (const tick of event.ticks) {
           const delayed = await priceBuffer.getDelayed(tick.ticker, delayMs)
-          if (delayed) {
-            delayedTicks.push({ ...tick, price: delayed.price, timestamp: delayed.timestamp })
+          if (!delayed) {
+            // Buffer frio: emitir BUFFERING sem preço, sem fallback para realtime
+            motorMetrics.inc('market_stream_buffering_total')
+            motorMetrics.inc('market_stream_delay_fallback_blocked_total')
+            streamTicks.push({
+              assetId: tick.assetId,
+              ticker: tick.ticker,
+              state: 'BUFFERING',
+              delayed: delayMs > 0,
+              delayMs,
+              price: null,
+              change: null,
+              changePercent: null,
+              timestamp: null,
+              snapshotAgeMs: null,
+              bufferVersion: 2,
+            })
+            continue
           }
+
+          const snapshotAgeMs = emittedAt - delayed.timestamp
+          motorMetrics.observe('market_stream_snapshot_age_ms', snapshotAgeMs)
+          const state: MarketStreamTick['state'] = delayMs === 0 ? 'LIVE' : 'DELAYED'
+          streamTicks.push({
+            ...delayed,
+            state,
+            delayed: delayMs > 0,
+            delayMs,
+            snapshotAgeMs,
+            bufferVersion: 2,
+          })
         }
 
-        if (delayedTicks.length > 0) {
-          const output = JSON.stringify({
+        if (streamTicks.length > 0) {
+          motorMetrics.inc('market_stream_tick_emitted_total', streamTicks.length)
+          const output: MarketStreamPayload = {
             type: 'TICK',
-            timestamp: Date.now(),
-            ticks: delayedTicks,
-          })
-          res.write(`data: ${output}\n\n`)
+            timestamp: emittedAt,
+            ticks: streamTicks,
+          }
+          res.write(`data: ${JSON.stringify(output)}\n\n`)
         }
-      } catch {
+      } catch (err) {
+        logger.error('[marketStream] Falha ao processar tick:', err instanceof Error ? err.message : err)
         if (!closed) {
           try {
-            res.write(`data: ${message}\n\n`)
+            res.write(`event: error\ndata: ${JSON.stringify({ code: 'TICK_PROCESSING_ERROR', message: 'Serviço de streaming temporariamente indisponível.' })}\n\n`)
           } catch {
             cleanup()
           }

@@ -220,6 +220,7 @@ export class LeagueRepository {
       // Checagem de capacidade + inserção numa transação Serializable: antes a
       // contagem e o create eram separados (TOCTOU) — dois joins concorrentes
       // passavam ambos pela checagem e estouravam o maxMembers da liga AMIGOS.
+      // Ligas PUBLICA e PRO não aplicam capacidade (task 11).
       await prisma.$transaction(
         async (tx) => {
           const league = await tx.league.findUnique({
@@ -249,6 +250,17 @@ export class LeagueRepository {
       }
       throw err
     }
+  }
+
+  /** Busca a liga pública ativa mais recente para uma divisão (task 11). */
+  async findActivePublicLeagueByDivision(
+    division: League['division'],
+  ): Promise<{ id: string } | null> {
+    return prisma.league.findFirst({
+      where: { type: 'PUBLICA', division, status: 'ACTIVE' },
+      orderBy: { startsAt: 'desc' },
+      select: { id: true },
+    })
   }
 
   async getRanking(leagueId: string, currentUserId?: string): Promise<LeagueMemberRanking[]> {

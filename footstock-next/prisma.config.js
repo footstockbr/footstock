@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 // ============================================================================
 // Prisma 7 — config canonico (variante JS, sem TS transpiler no runner)
 //

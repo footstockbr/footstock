@@ -17,6 +17,84 @@ const querySchema = z.object({
   to: z.string().datetime().optional(),
 })
 
+// ─── Helpers de validação temporal ───────────────────────────────────────────
+
+function isValidISODate(value: string): boolean {
+  const date = new Date(value)
+  return !Number.isNaN(date.getTime()) && value.length >= 10
+}
+
+function parseQueryParams(searchParams: URLSearchParams): {
+  period: ChartPeriod
+  from?: Date
+  to?: Date
+  error?: NextResponse
+} {
+  const parsed = querySchema.safeParse(Object.fromEntries(searchParams))
+  if (!parsed.success) {
+    return {
+      period: '1M',
+      error: NextResponse.json(
+        { error: { code: 'VAL_002', message: 'Período inválido. Use: 1H, 1D, 1W, 1S, 1M, 3M, 1Y ou ALL.' } },
+        { status: 400 }
+      ),
+    }
+  }
+
+  const { period, from: fromStr, to: toStr } = parsed.data as {
+    period: ChartPeriod
+    from?: string
+    to?: string
+  }
+
+  // Rejeitar combinação ambígua: period define sua própria janela; from só pode
+  // ser usado junto com to (intervalo absoluto) ou com ALL.
+  if (fromStr && period !== 'ALL') {
+    return {
+      period,
+      error: NextResponse.json(
+        { error: { code: 'VAL_002', message: 'Use period sozinho, ou from/to com ALL. from não pode ser combinado com period.' } },
+        { status: 400 }
+      ),
+    }
+  }
+
+  const from = fromStr ? new Date(fromStr) : undefined
+  const to = toStr ? new Date(toStr) : undefined
+
+  if (fromStr && !isValidISODate(fromStr)) {
+    return {
+      period,
+      error: NextResponse.json(
+        { error: { code: 'VAL_002', message: 'from deve ser uma data ISO válida.' } },
+        { status: 400 }
+      ),
+    }
+  }
+
+  if (toStr && !isValidISODate(toStr)) {
+    return {
+      period,
+      error: NextResponse.json(
+        { error: { code: 'VAL_002', message: 'to deve ser uma data ISO válida.' } },
+        { status: 400 }
+      ),
+    }
+  }
+
+  if (from && to && from.getTime() >= to.getTime()) {
+    return {
+      period,
+      error: NextResponse.json(
+        { error: { code: 'VAL_002', message: 'from deve ser anterior a to.' } },
+        { status: 400 }
+      ),
+    }
+  }
+
+  return { period, from, to }
+}
+
 // GET /api/v1/assets/:ticker/history?period=1M
 export async function GET(
   request: NextRequest,
@@ -51,21 +129,8 @@ export async function GET(
   }
   const ticker = resolvedTicker
 
-  const parsed = querySchema.safeParse(
-    Object.fromEntries(request.nextUrl.searchParams)
-  )
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: 'VAL_002', message: 'Período inválido. Use: 1H, 1D, 1W, 1S, 1M, 3M, 1Y ou ALL.' } },
-      { status: 400 }
-    )
-  }
-
-  const { period, from, to } = parsed.data as {
-    period: ChartPeriod
-    from?: string
-    to?: string
-  }
+  const { period, from, to, error } = parseQueryParams(request.nextUrl.searchParams)
+  if (error) return error
 
   try {
     const asset = await prisma.asset.findUnique({ where: { ticker } })
@@ -77,43 +142,62 @@ export async function GET(
     }
 
     // Aplicar delay por plano: JOGADOR recebe dados com 1h de atraso (TASK-011)
+    const now = new Date()
+    const cutoff = new Date(now.getTime() - delayMs)
+    const requestedToDate = to
     const effectiveTo = delayMs > 0
-      ? new Date(Date.now() - delayMs)
-      : to ? new Date(to) : undefined
+      ? (requestedToDate
+          ? new Date(Math.min(requestedToDate.getTime(), cutoff.getTime()))
+          : cutoff)
+      : (requestedToDate ?? now)
+
+    const requestedFrom = from
+    const effectiveFrom = requestedFrom
 
     const priceHistory = await PriceHistoryRepository.findByTicker(ticker, {
       period,
-      from: from ? new Date(from) : undefined,
+      from: effectiveFrom,
       to: effectiveTo,
     })
 
     const granularity = PriceHistoryRepository.getGranularity(period)
     const isDelayed = delayMs > 0
+    const firstTimestamp = priceHistory[0]?.timestamp ?? null
+    const lastTimestamp = priceHistory[priceHistory.length - 1]?.timestamp ?? null
 
     const response = NextResponse.json({
       data: priceHistory,
       _meta: {
         ticker,
         period,
-        from: from ?? null,
-        to: to ?? null,
+        requestedFrom: requestedFrom?.toISOString() ?? null,
+        requestedTo: requestedToDate?.toISOString() ?? null,
+        effectiveFrom: effectiveFrom?.toISOString() ?? null,
+        effectiveTo: effectiveTo.toISOString(),
         count: priceHistory.length,
+        bucketSeconds: granularity === 'minute' ? 60 : granularity === 'hourly' ? 3600 : granularity === 'daily' ? 86400 : 604800,
         granularity,
-        delayed: isDelayed,
+        truncated: false,
+        isDelayed,
         delayMinutes: isDelayed ? delayMs / 60_000 : 0,
+        firstTimestamp,
+        lastTimestamp,
       },
     })
 
-    // 1H/1D → real-time, sem cache; outros → cache de 60s
-    if (period === '1H' || period === '1D') {
-      response.headers.set('Cache-Control', 'no-store')
-    } else {
-      response.headers.set('Cache-Control', 'public, s-maxage=60')
-    }
+    // Resposta autenticada depende do plano: nunca cache público
+    response.headers.set('Cache-Control', 'private, no-store')
 
     return response
   } catch (err) {
     console.error('[API] GET /assets/[ticker]/history error', err)
+    const message = err instanceof Error ? err.message : 'Erro interno'
+    if (message.includes('não está habilitado') || message.includes('não suportado')) {
+      return NextResponse.json(
+        { error: { code: 'VAL_002', message } },
+        { status: 400 }
+      )
+    }
     return errors.server()
   }
 }

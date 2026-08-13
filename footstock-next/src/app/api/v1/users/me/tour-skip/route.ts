@@ -2,11 +2,13 @@ import { NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
+import { leagueAutoEnrollService } from '@/lib/services/LeagueAutoEnrollService'
+import type { PlanType } from '@/types'
 
 /**
  * PATCH /api/v1/users/me/tour-skip
- * Marca o tour como pulado: tourCompleted=true + tourSkippedAt=now().
- * Sem corpo obrigatório.
+ * Marca o tour como pulado e inscreve o usuário na liga pública da divisão.
+ * Retorna o usuário atualizado + status da inscrição em liga.
  */
 export async function PATCH() {
   const auth = await getAuthUser()
@@ -16,9 +18,18 @@ export async function PATCH() {
     const updated = await prisma.user.update({
       where: { id: auth.user.id },
       data: { tourCompleted: true, tourSkippedAt: new Date() },
-      select: { id: true, tourCompleted: true, tourSkippedAt: true },
+      select: { id: true, tourCompleted: true, tourSkippedAt: true, planType: true },
     })
-    return ok(updated)
+
+    const leagueEnrollment = await leagueAutoEnrollService.enrollUserInPublicLeague(
+      auth.user.id,
+      (updated.planType ?? 'JOGADOR') as PlanType,
+    )
+
+    return ok({
+      ...updated,
+      leagueEnrollment,
+    })
   } catch {
     return errors.server()
   }

@@ -54,6 +54,11 @@ export interface MotorTick {
   haltReason?: string | null  // Motivo do halt (CIRCUIT_BREAKER ou reason admin)
   estimatedResume?: number | null  // Unix ms estimado para retomada
   attribution?: AnyPriceAttribution
+  // T7 — Snapshot completo do buffer de mercado (OFI, book pressure, volumes pendentes)
+  ofi?: number
+  bookPressure?: number
+  pendingBuyVolume?: number
+  pendingSellVolume?: number
 }
 
 // ─── Session ──────────────────────────────────────────────────────────────

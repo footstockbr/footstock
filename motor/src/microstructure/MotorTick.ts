@@ -27,6 +27,11 @@ export function buildMotorTick(
     changePercent: parseFloat(changePercent.toFixed(4)),
     sessionType,
     timestamp: Date.now(),
+    // T7 — Snapshot completo do buffer de mercado
+    ofi: state.ofiState,
+    bookPressure: state.bookPressure,
+    pendingBuyVolume: state.pendingBuyVolume,
+    pendingSellVolume: state.pendingSellVolume,
   }
 }
 
@@ -56,6 +61,11 @@ export function buildHaltTick(
     isHalted: true,
     haltReason,
     estimatedResume,
+    // T7 — Snapshot completo do buffer de mercado
+    ofi: state.ofiState,
+    bookPressure: state.bookPressure,
+    pendingBuyVolume: state.pendingBuyVolume,
+    pendingSellVolume: state.pendingSellVolume,
   }
 }
 

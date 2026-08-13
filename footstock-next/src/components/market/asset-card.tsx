@@ -10,7 +10,8 @@ import { ROUTES } from "@/lib/constants/routes";
 import { cn, formatFS, formatPercent } from "@/lib/utils";
 import { Star, WifiOff } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
+import { classifyTrend, TREND_LABELS } from "@/lib/market/trend";
 
 export interface AssetData {
   ticker: string;
@@ -26,10 +27,16 @@ export interface AssetData {
   division?: "SERIE_A" | "SERIE_B";
   clubColor?: string;
   clubColorSecondary?: string;
+  /** Estado do stream SSE para este ativo (LIVE/DELAYED/BUFFERING) */
+  state?: "LIVE" | "DELAYED" | "BUFFERING";
   /** Indica se o preço exibido tem delay server-side por plano */
   isDelayed?: boolean;
+  /** Atraso em ms (0 = tempo real) */
+  delayMs?: number;
   /** Atraso em minutos (0 = tempo real) */
   delayMinutes?: number;
+  /** Último snapshot está desatualizado (buffering) */
+  isStale?: boolean;
 }
 
 /** Countdown em segundos até resumeAt — atualiza a cada segundo. */
@@ -55,16 +62,10 @@ function useHaltCountdown(haltedUntil?: number | null): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-const SENTIMENT_LABELS = {
-  BULLISH: "Alta",
-  NEUTRAL: "Neutro",
-  BEARISH: "Baixa",
-};
-
-const SENTIMENT_VARIANTS = {
-  BULLISH: "success",
-  NEUTRAL: "default",
-  BEARISH: "error",
+const TREND_VARIANTS = {
+  up: "success",
+  stable: "default",
+  down: "error",
 } as const;
 
 interface AssetCardProps {
@@ -91,6 +92,7 @@ const FAVORITE_CARD_CLASSES =
 
 function AssetCard({ asset, isFavorite }: AssetCardProps) {
   const countdown = useHaltCountdown(asset.haltedUntil);
+  const trend = useMemo(() => classifyTrend(asset.change24h), [asset.change24h]);
 
   if (asset.halted) {
     return (
@@ -182,11 +184,12 @@ function AssetCard({ asset, isFavorite }: AssetCardProps) {
         />
       )}
 
-      {/* Badge de cotação atrasada — T-022 */}
-      {asset.isDelayed && (
+      {/* Badge de cotação atrasada / buffering — T-022/T9 */}
+      {(asset.isDelayed || asset.state === 'BUFFERING' || asset.isStale) && (
         <PriceBadge
           isDelayed={asset.isDelayed}
           delayMinutes={asset.delayMinutes ?? 0}
+          isBuffering={asset.state === 'BUFFERING' || asset.isStale}
           className="absolute top-2 right-2 z-10"
           size="sm"
         />
@@ -214,11 +217,11 @@ function AssetCard({ asset, isFavorite }: AssetCardProps) {
               />
             )}
             <Badge
-              data-testid="asset-card-sentiment"
-              variant={SENTIMENT_VARIANTS[asset.sentiment]}
+              data-testid="asset-card-trend"
+              variant={TREND_VARIANTS[trend]}
               size="xs"
             >
-              {SENTIMENT_LABELS[asset.sentiment]}
+              {TREND_LABELS[trend]}
             </Badge>
           </div>
           <p className="text-xs text-[#929AA5] leading-snug line-clamp-2 break-words">{asset.displayName}</p>

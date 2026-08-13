@@ -27,7 +27,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     if (!asset) return { title: 'Ativo não encontrado | FootStock' }
     return {
       title: `${asset.ticker} — ${asset.displayName} | FootStock`,
-      description: `Cotações, gráficos e análise de ${asset.displayName}. Preço atual: FS$${asset.currentPrice.toNumber().toFixed(2)}`,
+      description: `Cotações, gráficos e análise de ${asset.displayName} no simulador de trading de futebol.`,
       openGraph: {
         title: `${asset.displayName} | FootStock`,
         description: `Acompanhe ${asset.ticker} no simulador de trading de futebol.`,
@@ -84,13 +84,11 @@ export default async function AssetDetailServerPage({ params }: Props) {
     currentPrice: rawPrice,
   }
   const delayedAsset = await applyPriceDelay(assetItem, planType)
-  const currentPrice = delayedAsset.currentPrice
+  const currentPrice = delayedAsset.status === 'AVAILABLE' ? delayedAsset.currentPrice : 0
+  const change24h = delayedAsset.status === 'AVAILABLE' ? delayedAsset.changePercent : 0
 
   const openPrice = asset.openPrice.toNumber()
   const fairValue = asset.fairValue.toNumber()
-  const change24h = openPrice > 0
-    ? parseFloat(((currentPrice - openPrice) / openPrice * 100).toFixed(2))
-    : 0
 
   const fairValuePremium =
     fairValue > 0

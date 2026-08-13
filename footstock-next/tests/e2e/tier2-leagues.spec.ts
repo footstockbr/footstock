@@ -62,7 +62,41 @@ test.describe('T-016: Ligas — TIER 2', () => {
     }
   })
 
-  test('LG-04: Formulario de criacao de liga disponivel', async ({ page }) => {
+  test('LG-04: Aba Minhas lista memberships e Criadas por mim lista autoria', async ({ page }) => {
+    await loginAs(page, 'craque')
+    await page.goto('/ligas')
+    await page.waitForLoadState('networkidle')
+
+    await expectNoServerError(page)
+
+    const membershipsTab = page.locator('[data-testid="league-tab-memberships"]')
+    const criadasTab = page.locator('[data-testid="league-tab-criadas"]')
+
+    await expect(membershipsTab).toBeVisible()
+    await expect(criadasTab).toBeVisible()
+
+    await criadasTab.click()
+    await page.waitForTimeout(300)
+
+    const criadasList = page.locator('[data-testid="league-list-criadas"]')
+    const criadasEmpty = page.locator('[data-testid="league-list-empty"]')
+    await expect(criadasList.or(criadasEmpty)).toBeVisible()
+  })
+
+  test('LG-05: Estados de loading, error e empty sao identificaveis', async ({ page }) => {
+    await loginAs(page, 'craque')
+    await page.goto('/ligas')
+    await page.waitForLoadState('networkidle')
+
+    await expectNoServerError(page)
+
+    // Loading inicial ja terminou; garantimos que empty ou lista aparecem
+    const empty = page.locator('[data-testid="league-list-empty"]')
+    const list = page.locator('[data-testid="league-list-memberships"]')
+    await expect(empty.or(list)).toBeVisible()
+  })
+
+  test('LG-06: Formulario de criacao de liga disponivel', async ({ page }) => {
     await loginAs(page, 'craque')
     await page.goto('/ligas')
     await page.waitForLoadState('networkidle')
@@ -94,13 +128,13 @@ test.describe('T-016: Ligas — TIER 2', () => {
     }
   })
 
-  test('LG-05: GET /api/v1/leagues sem auth retorna 401', async ({ request }) => {
+  test('LG-07: GET /api/v1/leagues sem auth retorna 401', async ({ request }) => {
     const res = await request.get('/api/v1/leagues')
     expect([200, 401]).toContain(res.status()) // Pode ser publico ou privado
     expect(res.status()).not.toBe(500)
   })
 
-  test('LG-06: Endpoint de convite de liga disponivel', async ({ request }) => {
+  test('LG-08: Endpoint de convite de liga disponivel', async ({ request }) => {
     const loginRes = await request.post('/api/v1/auth/login', {
       data: { email: USERS.craque.email, password: USERS.craque.password },
     })

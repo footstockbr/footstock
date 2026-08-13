@@ -93,7 +93,7 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
   const { plan, hasAccess } = usePlanGuard()
   const { isOffline } = useMotorStatusContext()
   const { session } = useMarketSession()
-  const tick = useMarketTick(ticker)
+  const { tick } = useMarketTick(ticker)
   const { fsBalance: fsBalanceFetched } = useBalance()
   const { track } = useAnalytics()
   // Usar prop se fornecida (evita fetch extra); caso contrário usar hook

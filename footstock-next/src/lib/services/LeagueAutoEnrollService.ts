@@ -1,10 +1,17 @@
 // module-20: LeagueAutoEnrollService — inscrição automática em ligas públicas
 // Chamado ao concluir onboarding (tourCompleted = true) e ao fazer upgrade de plano.
-// Operação best-effort: falha silenciosa se não houver liga ativa para a divisão.
+// Operação idempotente: retry e concorrência produzem no máximo uma membership.
+// Task 11: remove capacidade de maxMembers para ligas PUBLICA; usa repositório.
 
-import { prisma } from '@/lib/prisma'
+import { leagueRepository } from '@/lib/repositories/LeagueRepository'
 import { LeagueError, LEAGUE_ERRORS } from '@/lib/errors/leagueErrors'
 import type { PlanType } from '@/types'
+
+export type LeagueAutoEnrollResult =
+  | { status: 'ENROLLED'; leagueId: string }
+  | { status: 'ALREADY_MEMBER'; leagueId: string }
+  | { status: 'NO_ACTIVE_PUBLIC_LEAGUE' }
+  | { status: 'FAILED'; reason: string }
 
 /** Mapeamento plano → divisão da liga pública correspondente */
 const PLAN_TO_DIVISION: Record<PlanType, 'BRONZE' | 'PRATA' | 'OURO'> = {
@@ -21,42 +28,41 @@ export class LeagueAutoEnrollService {
 
   /**
    * Inscreve o usuário na liga pública ativa de sua divisão.
-   * Seguro para chamar múltiplas vezes (idempotente — ALREADY_MEMBER é ignorado).
+   * Retorna status discriminado para feedback e rastreabilidade.
    *
    * Regras:
    * - Busca a liga PUBLICA mais recente com status ACTIVE para a divisão
-   * - Se não houver liga ativa, retorna sem erro (não quebra o fluxo principal)
-   * - Se já for membro, retorna silenciosamente
+   * - Se não houver liga ativa, retorna NO_ACTIVE_PUBLIC_LEAGUE
+   * - Se já for membro (P2002), retorna ALREADY_MEMBER
+   * - Falhas inesperadas retornam FAILED com motivo sanitizado
    */
-  async enrollUserInPublicLeague(userId: string, planType: PlanType): Promise<void> {
+  async enrollUserInPublicLeague(
+    userId: string,
+    planType: PlanType,
+  ): Promise<LeagueAutoEnrollResult> {
     const division = this.getDivisionForPlan(planType)
 
-    const league = await prisma.league.findFirst({
-      where: { type: 'PUBLICA', division, status: 'ACTIVE' },
-      orderBy: { startsAt: 'desc' },
-      select: { id: true, maxMembers: true, _count: { select: { members: true } } },
-    })
-
+    const league = await leagueRepository.findActivePublicLeagueByDivision(division)
     if (!league) {
-      // Nenhuma liga pública ativa para esta divisão — skip silencioso
-      return
-    }
-
-    if (league._count.members >= league.maxMembers) {
-      // Liga cheia — skip silencioso
-      return
+      return { status: 'NO_ACTIVE_PUBLIC_LEAGUE' }
     }
 
     try {
-      await prisma.leagueMember.create({
-        data: { leagueId: league.id, userId, joinedAt: new Date() },
-      })
+      await leagueRepository.addMember(league.id, userId)
+      return { status: 'ENROLLED', leagueId: league.id }
     } catch (err: unknown) {
-      // P2002 = unique constraint (já é membro) — idempotente
-      if ((err as { code?: string })?.code === 'P2002') return
-      if (err instanceof LeagueError && err.code === LEAGUE_ERRORS.ALREADY_MEMBER.code) return
-      // Qualquer outro erro: log e silencia para não quebrar fluxo principal
+      const code = (err as { code?: string })?.code
+      const isAlreadyMember =
+        code === 'P2002' ||
+        (err instanceof LeagueError && err.code === LEAGUE_ERRORS.ALREADY_MEMBER.code)
+
+      if (isAlreadyMember) {
+        return { status: 'ALREADY_MEMBER', leagueId: league.id }
+      }
+
+      const reason = err instanceof Error ? err.message : 'Erro desconhecido ao inscrever em liga pública'
       console.error('[LeagueAutoEnrollService] Falha ao inscrever usuário em liga pública:', err)
+      return { status: 'FAILED', reason }
     }
   }
 }

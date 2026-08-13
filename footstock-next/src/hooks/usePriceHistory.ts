@@ -10,12 +10,44 @@ export interface OFIData {
   ofi: number
 }
 
+export interface PriceHistoryMeta {
+  ticker: string
+  period: ChartPeriod
+  requestedFrom: string | null
+  requestedTo: string | null
+  effectiveFrom: string | null
+  effectiveTo: string | null
+  count: number
+  bucketSeconds: number
+  granularity: string
+  truncated: boolean
+  isDelayed: boolean
+  delayMinutes: number
+  firstTimestamp: string | null
+  lastTimestamp: string | null
+}
+
 interface RateError extends Error {
   code: 'RATE_001'
   retryAfterSeconds: number
 }
 
-export function usePriceHistory(ticker: string, period: ChartPeriod) {
+export interface UsePriceHistoryResult {
+  candles: Candle[]
+  ofiData: OFIData[]
+  meta: PriceHistoryMeta | null
+  isLoading: boolean
+  isError: boolean
+  isRateLimited: boolean
+  isDelayed: boolean
+  delayMinutes: number
+  isEmpty: boolean
+  rateError: RateError | null
+  error: Error | null
+  refetch: () => void
+}
+
+export function usePriceHistory(ticker: string, period: ChartPeriod): UsePriceHistoryResult {
   const {
     data,
     isLoading,
@@ -48,10 +80,7 @@ export function usePriceHistory(ticker: string, period: ChartPeriod) {
           ofi: number
           source: 'GBM' | 'REAL'
         }>
-        _meta: {
-          delayed?: boolean
-          delayMinutes?: number
-        }
+        _meta: PriceHistoryMeta
       }>
     },
     staleTime: (period === '1H' || period === '1D') ? 60_000 : 300_000,
@@ -73,8 +102,9 @@ export function usePriceHistory(ticker: string, period: ChartPeriod) {
   const ofiData: OFIData[] =
     data?.data?.map((p) => ({ timestamp: p.timestamp, ofi: p.ofi })) ?? []
 
-  const isDelayed = data?._meta?.delayed ?? false
-  const delayMinutes = data?._meta?.delayMinutes ?? 0
+  const meta = data?._meta ?? null
+  const isDelayed = meta?.isDelayed ?? false
+  const delayMinutes = meta?.delayMinutes ?? 0
 
   const rateError =
     isError && error && (error as RateError).code === 'RATE_001'
@@ -82,17 +112,20 @@ export function usePriceHistory(ticker: string, period: ChartPeriod) {
       : null
 
   const isRateLimited = !!rateError
+  const isEmpty = !isLoading && !isError && candles.length === 0
 
   return {
     candles,
     ofiData,
+    meta,
     isLoading,
     isError,
     isRateLimited,
     isDelayed,
     delayMinutes,
+    isEmpty,
     rateError,
-    error,
+    error: error as Error | null,
     refetch,
   }
 }

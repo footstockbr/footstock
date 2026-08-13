@@ -18,8 +18,10 @@ import { NextRequest } from 'next/server'
 jest.mock('@/lib/prisma', () => ({
   prisma: {
     asset: { findMany: jest.fn(), findUnique: jest.fn() },
+    assetAlias: { findUnique: jest.fn() },
     order: { create: jest.fn(), findMany: jest.fn() },
-    user: { findUnique: jest.fn() },
+    transaction: { findMany: jest.fn(), count: jest.fn() },
+    user: { findUnique: jest.fn(), update: jest.fn() },
     subscription: { findUnique: jest.fn() },
     notification: { findMany: jest.fn(), update: jest.fn(), updateMany: jest.fn(), count: jest.fn() },
     forumPost: { findMany: jest.fn(), create: jest.fn(), delete: jest.fn() },
@@ -43,6 +45,12 @@ jest.mock('@/lib/ratelimit', () => ({
   getApiRateLimit: jest.fn().mockReturnValue({
     limit: jest.fn().mockResolvedValue({ success: true, reset: Date.now() + 60000 }),
   }),
+}))
+
+jest.mock('@/services/AliasService', () => ({
+  AliasService: {
+    resolve: jest.fn().mockImplementation((ticker: string) => Promise.resolve(ticker.toUpperCase())),
+  },
 }))
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -81,379 +89,144 @@ function mockAuthUser(overrides?: {
   })
 }
 
-function mockHasPlan(result: boolean) {
-  const { hasPlan } = require('@/lib/auth')
-  hasPlan.mockReturnValue(result)
-}
+// ─── Contrato das APIs alteradas pelas tasks 12-17 ───────────────────────────
+// Testes focados em validar que OpenAPI, DTOs e respostas refletem os contratos
+// de histórico, transações, ligas e tour. Nao dependem de banco real.
 
-function mockHasAdminRole(result: boolean) {
-  const { hasAdminRole } = require('@/lib/auth')
-  hasAdminRole.mockReturnValue(result)
-}
-
-// ─── ST001: Schema ApiResponse<T> ────────────────────────────────────────────
-
-describe.skip('ST001: Schema ApiResponse<T> — Resposta padronizada', () => {
+describe('Contrato das APIs alteradas (tasks 12-17)', () => {
   beforeEach(() => {
     jest.clearAllMocks()
   })
 
-  test('GET /api/v1/health retorna status ok sem auth', async () => {
-    const { prisma } = require('@/lib/prisma')
-    prisma.$queryRaw.mockResolvedValue([{ '?column?': 1 }])
+  test('OpenAPI reflete metadados de delay/buffering no Asset e no historico', () => {
+    const fs = require('fs')
+    const path = require('path')
+    const yamlPath = path.resolve(__dirname, '../../../../../docs/foot-stock/project/openapi.yaml')
+    const yaml = fs.readFileSync(yamlPath, 'utf8')
 
-    const { GET } = await import('@/app/api/v1/health/route')
-    const res = await GET()
-    const body = await res.json()
-
-    expect(res.status).toBe(200)
-    expect(body).toHaveProperty('status', 'ok')
-    expect(body).toHaveProperty('services')
-    expect(body.services).toHaveProperty('database', 'ok')
+    expect(yaml).toContain('changePercent:')
+    expect(yaml).toContain('_meta:')
+    expect(yaml).toContain('bucketSeconds:')
+    expect(yaml).toContain('granularity:')
+    expect(yaml).toContain('isDelayed:')
+    expect(yaml).toContain('delayMinutes:')
   })
 
-  test('GET /api/v1/health retorna 503 quando DB offline', async () => {
-    const { prisma } = require('@/lib/prisma')
-    prisma.$queryRaw.mockRejectedValue(new Error('Connection refused'))
+  test('OpenAPI reflete campos canonicos de Transaction', () => {
+    const fs = require('fs')
+    const path = require('path')
+    const yamlPath = path.resolve(__dirname, '../../../../../docs/foot-stock/project/openapi.yaml')
+    const yaml = fs.readFileSync(yamlPath, 'utf8')
 
-    const { GET } = await import('@/app/api/v1/health/route')
-    const res = await GET()
-    const body = await res.json()
-
-    expect(res.status).toBe(503)
-    expect(body.status).toBe('degraded')
-    expect(body.services.database).toBe('error')
+    expect(yaml).toContain('grossAmount:')
+    expect(yaml).toContain('cashDelta:')
+    expect(yaml).toContain('timestampSource:')
+    expect(yaml).toContain('ORDER_EXECUTED_AT')
+    expect(yaml).toContain('TRANSACTION_CREATED_AT')
   })
 
-  test('GET /api/v1/assets autenticado retorna data array', async () => {
-    mockAuthUser({ planType: 'CRAQUE' })
+  test('serializeTransaction expoe ticker, executedAt, grossAmount, cashDelta e timestampSource', () => {
+    const { serializeTransaction } = require('@/lib/contracts/transaction-contract')
+
+    const tx = {
+      id: 'tx-1',
+      userId: 'user-1',
+      orderId: 'order-1',
+      assetId: 'asset-1',
+      type: 'MARKET',
+      financialType: 'TRADE',
+      side: 'BUY',
+      quantity: 10,
+      price: { toNumber: () => 25.755 },
+      fee: { toNumber: () => 0.5 },
+      totalAmount: { toNumber: () => 257.55 },
+      fsAmount: { toNumber: () => -257.55 },
+      balanceBefore: { toNumber: () => 1000 },
+      balanceAfter: { toNumber: () => 742.45 },
+      createdAt: new Date('2026-08-13T12:00:00Z'),
+      asset: { ticker: 'POR3', displayName: 'Porto Alegre FC' },
+      order: { type: 'MARKET', executedAt: new Date('2026-08-13T12:00:30Z') },
+    }
+
+    const dto = serializeTransaction(tx as never)
+
+    expect(dto.ticker).toBe('POR3')
+    expect(dto.displayName).toBe('Porto Alegre FC')
+    expect(dto.orderType).toBe('MARKET')
+    expect(dto.timestampSource).toBe('ORDER_EXECUTED_AT')
+    expect(dto.grossAmount).toBe(257.55)
+    expect(dto.cashDelta).toBe(-257.55)
+  })
+
+  test('GET /assets/{ticker}/history retorna metadata e Cache-Control privado', async () => {
+    mockAuthUser({ planType: 'JOGADOR' })
     const { prisma } = require('@/lib/prisma')
-    prisma.asset.findMany.mockResolvedValue([
+    prisma.asset.findUnique.mockResolvedValue({ id: 'asset-1', ticker: 'URU3', isActive: true })
+    prisma.assetAlias = { findUnique: jest.fn().mockResolvedValue(null) }
+    prisma.$queryRaw.mockResolvedValue([
       {
-        id: '1',
-        ticker: 'FLA',
-        name: 'Flamengo',
-        division: 'SERIE_A',
-        currentPrice: { toNumber: () => 25.50 },
-        openPrice: { toNumber: () => 24.00 },
-        fairValue: { toNumber: () => 28.00 },
-        volume: BigInt(500000),
-        marketCap: { toNumber: () => 25500000 },
-        currentSupply: BigInt(1000000),
-        totalShares: BigInt(10000000),
-        isHalted: false,
-        haltReason: null,
-        colorPrimary: '#E40000',
-        colorSecondary: '#000000',
-        financials: null,
-        sentiment: 'BULLISH',
-        updatedAt: new Date(),
+        timestamp: new Date('2026-08-13T10:00:00Z'),
+        open: 10,
+        high: 11,
+        low: 9,
+        close: 10.5,
+        volume: 100,
+        source: 'REAL',
       },
     ])
 
-    const { GET } = await import('@/app/api/v1/assets/route')
-    const req = createRequest('GET', '/api/v1/assets', undefined, {
-      'x-user-id': 'user-test-001',
-    })
-    const res = await GET(req)
-    const body = await res.json()
+    const { GET } = await import('@/app/api/v1/assets/[ticker]/history/route')
+    const req = createRequest('GET', '/api/v1/assets/URU3/history?period=1D')
+    const res = await GET(req, { params: Promise.resolve({ ticker: 'URU3' }) })
 
     expect(res.status).toBe(200)
-    // Schema real: { data: T[], pagination: {...} } via list()
-    expect(body).toBeDefined()
-  })
-
-  test('POST /api/v1/auth/login sem body retorna erro de validação', async () => {
-    const { POST } = await import('@/app/api/v1/auth/login/route')
-    const req = createRequest('POST', '/api/v1/auth/login', {})
-    const res = await POST(req)
     const body = await res.json()
-
-    expect(res.status).toBe(422)
-    expect(body.error).toBeDefined()
-    expect(body.error.code).toBe('VAL_001')
+    expect(body._meta).toBeDefined()
+    expect(body._meta.isDelayed).toBe(true)
+    expect(body._meta.bucketSeconds).toBeDefined()
+    expect(body._meta.granularity).toBeDefined()
+    expect(res.headers.get('cache-control')).toContain('private')
   })
 
-  test('Resposta de erro segue formato { error: { code, message } }', async () => {
-    const { POST } = await import('@/app/api/v1/auth/login/route')
-    const req = createRequest('POST', '/api/v1/auth/login', { email: 'invalid', password: '' })
-    const res = await POST(req)
-    const body = await res.json()
-
-    expect(body.error).toBeDefined()
-    expect(typeof body.error.code).toBe('string')
-    expect(typeof body.error.message).toBe('string')
-  })
-})
-
-// ─── ST002: Autenticação por nível ────────────────────────────────────────────
-
-describe.skip('ST002: Autenticação — Endpoints protegidos retornam 401 sem sessão', () => {
-  beforeEach(() => {
-    jest.clearAllMocks()
-    const { getAuthUser } = require('@/lib/auth')
-    getAuthUser.mockResolvedValue(null) // sem sessão
-  })
-
-  test('GET /api/v1/notifications retorna 401 sem auth', async () => {
-    const { GET } = await import('@/app/api/v1/notifications/route')
-    const req = createRequest('GET', '/api/v1/notifications')
-    const res = await GET(req)
-    const body = await res.json()
-
-    expect(res.status).toBe(401)
-    expect(body.error.code).toBe('AUTH_001')
-  })
-
-  test('GET /api/v1/subscriptions/me retorna 401 sem auth', async () => {
-    const { GET } = await import('@/app/api/v1/subscriptions/me/route')
-    const req = createRequest('GET', '/api/v1/subscriptions/me')
-    const res = await GET()
-    const body = await res.json()
-
-    expect(res.status).toBe(401)
-    expect(body.error.code).toBe('AUTH_001')
-  })
-
-  test('GET /api/v1/portfolio retorna 401 sem auth', async () => {
-    const { GET } = await import('@/app/api/v1/portfolio/route')
-    const res = await GET()
-    const body = await res.json()
-
-    expect(res.status).toBe(401)
-    expect(body.error.code).toBe('AUTH_001')
-  })
-
-  test('POST /api/v1/leagues retorna 401 sem auth', async () => {
-    const { POST } = await import('@/app/api/v1/leagues/route')
-    const req = createRequest('POST', '/api/v1/leagues', { name: 'Test' })
-    const res = await POST(req)
-    const body = await res.json()
-
-    expect(res.status).toBe(401)
-    expect(body.error.code).toBe('AUTH_001')
-  })
-
-  test('GET /api/v1/ai/analyze retorna 401 sem auth', async () => {
-    const { GET } = await import('@/app/api/v1/ai/analyze/route')
-    const req = createRequest('GET', '/api/v1/ai/analyze?ticker=FLA')
-    const res = await GET(req)
-    const body = await res.json()
-
-    expect(res.status).toBe(401)
-    expect(body.error.code).toBe('AUTH_001')
-  })
-})
-
-// ─── ST003: Auth por plano — Craque+ / Lenda ──────────────────────────────────
-
-describe.skip('ST003: Autenticação por plano — JOGADOR bloqueado em recursos Craque+', () => {
-  beforeEach(() => {
-    jest.clearAllMocks()
+  test('GET /transactions retorna DTO canônico e meta de auditoria', async () => {
     mockAuthUser({ planType: 'JOGADOR' })
-    mockHasPlan(false) // JOGADOR não tem acesso a Craque+
-  })
-
-  test('GET /api/v1/ai/analyze como JOGADOR retorna 403 (AI_050)', async () => {
-    const { GET } = await import('@/app/api/v1/ai/analyze/route')
-    const req = createRequest('GET', '/api/v1/ai/analyze?ticker=FLA', undefined, {
-      'x-user-id': 'user-test-001',
-    })
-    const res = await GET(req)
-    const body = await res.json()
-
-    expect(res.status).toBe(403)
-    expect(body.error).toBeDefined()
-  })
-
-  test('POST /api/v1/leagues (criar) como JOGADOR pode ser bloqueado (LEAGUE_050)', async () => {
-    // O comportamento exato depende da implementação de leagues
-    // Verificamos que a rota existe e retorna JSON válido
-    const { POST } = await import('@/app/api/v1/leagues/route')
-    const req = createRequest('POST', '/api/v1/leagues', {
-      name: 'Liga Test',
-      type: 'AMIGOS',
-    }, { 'x-user-id': 'user-test-001' })
-    const res = await POST(req)
-    const body = await res.json()
-
-    expect(res.status).toBeGreaterThanOrEqual(400)
-    expect(body.error).toBeDefined()
-  })
-})
-
-// ─── ST004: Rate Limiting ─────────────────────────────────────────────────────
-
-describe.skip('ST004: Rate Limiting — Endpoints críticos', () => {
-  test('Módulo @/lib/ratelimit existe e exporta helpers', async () => {
-    // Verificamos se o módulo existe no filesystem
-    const fs = require('fs')
-    const path = require('path')
-    const rateLimitPath = path.resolve(__dirname, '../../src/lib/ratelimit.ts')
-    expect(fs.existsSync(rateLimitPath)).toBe(true)
-  })
-
-  test('POST /api/v1/auth/login usa rate limiter', async () => {
-    const { getAuthRateLimit } = require('@/lib/ratelimit')
-    // Mock retorna rate limit atingido
-    getAuthRateLimit.mockReturnValue({
-      limit: jest.fn().mockResolvedValue({
-        success: false,
-        reset: Date.now() + 300000,
-      }),
-    })
-
-    const { POST } = await import('@/app/api/v1/auth/login/route')
-    const req = createRequest('POST', '/api/v1/auth/login', {
-      email: 'test@test.com',
-      password: 'Senha123!',
-    })
-    const res = await POST(req)
-    const body = await res.json()
-
-    expect(res.status).toBe(429)
-    expect(body.error.code).toBe('RATE_001')
-  })
-
-  test('Rate limit permite requests dentro do limite', async () => {
-    const { getAuthRateLimit } = require('@/lib/ratelimit')
-    getAuthRateLimit.mockReturnValue({
-      limit: jest.fn().mockResolvedValue({ success: true, reset: Date.now() + 60000 }),
-    })
-
-    // Apenas verifica que rate limit não bloqueia (response pode ser 401/422 por outras razões)
-    expect(getAuthRateLimit).toBeDefined()
-  })
-})
-
-// ─── ST005: Error Catalog — Cobertura ─────────────────────────────────────────
-
-describe.skip('ST005: Error Catalog — Formato e Prefixos', () => {
-  test('Arquivo @/lib/api.ts exporta função error() com parâmetros corretos', async () => {
-    const api = await import('@/lib/api')
-    expect(typeof api.error).toBe('function')
-    expect(typeof api.errors).toBe('object')
-  })
-
-  test('errors.unauthorized() retorna código AUTH_001', async () => {
-    const { errors } = await import('@/lib/api')
-    const res = errors.unauthorized()
-    const body = await res.json()
-    expect(body.error.code).toBe('AUTH_001')
-    expect(res.status).toBe(401)
-  })
-
-  test('errors.validation() retorna código VAL_001', async () => {
-    const { errors } = await import('@/lib/api')
-    const res = errors.validation()
-    const body = await res.json()
-    expect(body.error.code).toBe('VAL_001')
-    expect(res.status).toBe(422)
-  })
-
-  test('errors.rateLimit() retorna código RATE_001 e status 429', async () => {
-    const { errors } = await import('@/lib/api')
-    const res = errors.rateLimit()
-    const body = await res.json()
-    expect(body.error.code).toBe('RATE_001')
-    expect(res.status).toBe(429)
-  })
-
-  test('errors.server() retorna código SYS_001 e status 500', async () => {
-    const { errors } = await import('@/lib/api')
-    const res = errors.server()
-    const body = await res.json()
-    expect(body.error.code).toBe('SYS_001')
-    expect(res.status).toBe(500)
-  })
-
-  test('errors.forbidden() retorna código AUTH_003 e status 403', async () => {
-    const { errors } = await import('@/lib/api')
-    const res = errors.forbidden()
-    const body = await res.json()
-    expect(body.error.code).toBe('AUTH_003')
-    expect(res.status).toBe(403)
-  })
-
-  test('Todos os erros têm formato { error: { code, message } }', async () => {
-    const { errors } = await import('@/lib/api')
-    const errorList = [
-      errors.unauthorized(),
-      errors.forbidden(),
-      errors.validation(),
-      errors.rateLimit(),
-      errors.server(),
-    ]
-    for (const res of errorList) {
-      const body = await res.json()
-      expect(body.error).toBeDefined()
-      expect(typeof body.error.code).toBe('string')
-      expect(typeof body.error.message).toBe('string')
-    }
-  })
-})
-
-// ─── ST006: Endpoints Públicos sem Auth ───────────────────────────────────────
-
-describe.skip('ST006: Endpoints públicos — sem auth retornam dados válidos', () => {
-  beforeEach(() => {
-    jest.clearAllMocks()
-  })
-
-  test('GET /api/v1/health retorna 200 sem Authorization header', async () => {
     const { prisma } = require('@/lib/prisma')
-    prisma.$queryRaw.mockResolvedValue([{ '?column?': 1 }])
+    prisma.transaction.findMany.mockResolvedValue([
+      {
+        id: 'tx-1',
+        userId: 'user-1',
+        orderId: 'order-1',
+        assetId: 'asset-1',
+        type: 'MARKET',
+        financialType: 'TRADE',
+        side: 'BUY',
+        quantity: 10,
+        price: { toNumber: () => 25.755 },
+        fee: { toNumber: () => 0.5 },
+        totalAmount: { toNumber: () => 257.55 },
+        fsAmount: { toNumber: () => -257.55 },
+        balanceBefore: { toNumber: () => 1000 },
+        balanceAfter: { toNumber: () => 742.45 },
+        createdAt: new Date('2026-08-13T12:00:00Z'),
+        asset: { id: 'asset-1', ticker: 'POR3', displayName: 'Porto Alegre FC' },
+        order: { id: 'order-1', type: 'MARKET', executedAt: new Date('2026-08-13T12:00:30Z') },
+      },
+    ])
+    prisma.transaction.count.mockResolvedValue(1)
 
-    const { GET } = await import('@/app/api/v1/health/route')
-    const res = await GET()
+    const { GET } = await import('@/app/api/v1/transactions/route')
+    const req = createRequest('GET', '/api/v1/transactions')
+    const res = await GET(req)
+
     expect(res.status).toBe(200)
-  })
-})
-
-// ─── ST007: Endpoints de Notificação ──────────────────────────────────────────
-
-describe.skip('ST007: Endpoints de Notificação', () => {
-  beforeEach(() => {
-    jest.clearAllMocks()
-  })
-
-  test('GET /api/v1/notifications retorna 401 sem auth', async () => {
-    const { getAuthUser } = require('@/lib/auth')
-    getAuthUser.mockResolvedValue(null)
-
-    const { GET } = await import('@/app/api/v1/notifications/route')
-    const req = createRequest('GET', '/api/v1/notifications')
-    const res = await GET(req)
-    expect(res.status).toBe(401)
-  })
-
-  test('GET /api/v1/notifications autenticado retorna data', async () => {
-    mockAuthUser({ planType: 'CRAQUE' })
-    const { prisma } = require('@/lib/prisma')
-    prisma.notification.findMany.mockResolvedValue([])
-    prisma.notification.count.mockResolvedValue(0)
-
-    const { GET } = await import('@/app/api/v1/notifications/route')
-    const req = createRequest('GET', '/api/v1/notifications', undefined, {
-      'x-user-id': 'user-test-001',
+    const body = await res.json()
+    expect(body.data[0]).toHaveProperty('ticker', 'POR3')
+    expect(body.data[0]).toHaveProperty('grossAmount', 257.55)
+    expect(body.data[0]).toHaveProperty('cashDelta', -257.55)
+    expect(body.meta).toEqual({
+      missingAssetCount: 0,
+      missingOrderCount: 0,
+      cashDeltaDivergenceCount: 0,
     })
-    const res = await GET(req)
-    expect(res.status).toBeLessThan(500)
-  })
-
-  test('GET /api/v1/notifications/unread-count retorna count', async () => {
-    mockAuthUser()
-    const { prisma } = require('@/lib/prisma')
-    prisma.notification = {
-      ...prisma.notification,
-      count: jest.fn().mockResolvedValue(3),
-    }
-
-    const { GET } = await import('@/app/api/v1/notifications/unread-count/route')
-    const req = createRequest('GET', '/api/v1/notifications/unread-count', undefined, {
-      'x-user-id': 'user-test-001',
-    })
-    const res = await GET()
-    expect(res.status).toBeLessThan(500)
   })
 })

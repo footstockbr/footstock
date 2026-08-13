@@ -26,6 +26,7 @@ export interface TourState {
   steps: TourStepDef[]
   targetRect: DOMRect | null
   investorProfile: string | null
+  tourError: string | null
 }
 
 export interface UseTourReturn extends TourState {
@@ -33,6 +34,9 @@ export interface UseTourReturn extends TourState {
   back: () => void
   skip: () => void
   complete: () => void
+  retrySkip: () => void
+  retryComplete: () => void
+  clearTourError: () => void
 }
 
 // ── Constantes ─────────────────────────────────────────────────────────────────
@@ -52,6 +56,7 @@ export function useOnboardingTour(): UseTourReturn {
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null)
   const [investorProfile, setInvestorProfile] = useState<string | null>(null)
   const [userPlan, setUserPlan] = useState<string>('JOGADOR')
+  const [tourError, setTourError] = useState<string | null>(null)
 
   const { track } = useAnalytics()
   const isMutating = useRef(false)
@@ -194,52 +199,63 @@ export function useOnboardingTour(): UseTourReturn {
     setCurrentStep((prev) => Math.max(0, prev - 1))
   }, [])
 
-  const skip = useCallback(async () => {
-    if (isMutating.current) return
-    isMutating.current = true
+  const submitTourAction = useCallback(
+    async (endpoint: 'tour-skip' | 'tour-completed', eventName: 'onboarding_tour_skipped' | 'onboarding_tour_completed') => {
+      if (isMutating.current) return
+      isMutating.current = true
 
-    // EVT-010: Tour de Onboarding Pulado
-    track('onboarding_tour_skipped', {
-      step_when_skipped: currentStep + 1,
-      plan: userPlan as 'JOGADOR' | 'CRAQUE' | 'LENDA',
-    })
+      track(eventName, {
+        ...(endpoint === 'tour-skip'
+          ? { step_when_skipped: currentStep + 1 }
+          : { steps_completed: steps.length }),
+        plan: userPlan as 'JOGADOR' | 'CRAQUE' | 'LENDA',
+      })
 
-    setIsActive(false)
+      setIsActive(false)
 
-    try {
-      await fetch(`${API_BASE}/tour-skip`, { method: 'PATCH' })
-    } catch {
-      // best-effort
-    } finally {
-      isMutating.current = false
-    }
-  }, [currentStep, steps, investorProfile, track, userPlan])
+      try {
+        const res = await fetch(`${API_BASE}/${endpoint}`, { method: 'PATCH' })
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          setTourError(body?.error?.message ?? `Falha ao ${endpoint === 'tour-skip' ? 'pular' : 'concluir'} o tour. Tente novamente.`)
+          return
+        }
+        setTourError(null)
+      } catch {
+        setTourError('Erro de conexão. Tente novamente.')
+      } finally {
+        isMutating.current = false
+      }
+    },
+    [currentStep, steps.length, track, userPlan]
+  )
+
+  const skip = useCallback(() => {
+    submitTourAction('tour-skip', 'onboarding_tour_skipped')
+  }, [submitTourAction])
+
+  const retrySkip = useCallback(() => {
+    setTourError(null)
+    submitTourAction('tour-skip', 'onboarding_tour_skipped')
+  }, [submitTourAction])
+
+  const complete = useCallback(() => {
+    submitTourAction('tour-completed', 'onboarding_tour_completed')
+  }, [submitTourAction])
+
+  const retryComplete = useCallback(() => {
+    setTourError(null)
+    submitTourAction('tour-completed', 'onboarding_tour_completed')
+  }, [submitTourAction])
+
+  const clearTourError = useCallback(() => {
+    setTourError(null)
+  }, [])
 
   // Liga o skipRef ao skip para o listener de ESC
   useEffect(() => {
     skipRef.current = skip
   }, [skip])
-
-  const complete = useCallback(async () => {
-    if (isMutating.current) return
-    isMutating.current = true
-
-    // EVT-009: Tour de Onboarding Concluido
-    track('onboarding_tour_completed', {
-      steps_completed: steps.length,
-      plan: userPlan as 'JOGADOR' | 'CRAQUE' | 'LENDA',
-    })
-
-    setIsActive(false)
-
-    try {
-      await fetch(`${API_BASE}/tour-completed`, { method: 'PATCH' })
-    } catch {
-      // best-effort
-    } finally {
-      isMutating.current = false
-    }
-  }, [investorProfile, steps.length, track, userPlan])
 
   return {
     isActive,
@@ -248,9 +264,13 @@ export function useOnboardingTour(): UseTourReturn {
     steps,
     targetRect,
     investorProfile,
+    tourError,
     advance,
     back,
     skip,
     complete,
+    retrySkip,
+    retryComplete,
+    clearTourError,
   }
 }

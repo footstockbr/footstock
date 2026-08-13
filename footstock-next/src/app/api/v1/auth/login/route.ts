@@ -167,7 +167,6 @@ export async function POST(request: NextRequest) {
     const authjsUser = await authorizeCredentials({ email, password })
 
     let path: LoginPath = 'fail'
-    let backfillApplied = false
 
     if (authjsUser) {
       // ─── 5a. Auth.js path bem-sucedido ──────────────────────────────────────

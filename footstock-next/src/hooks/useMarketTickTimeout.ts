@@ -8,7 +8,7 @@ export function useMarketTickTimeout(
   ticker: string,
   timeoutMs = 10_000
 ): { tick: MarketTick | null; isTimedOut: boolean } {
-  const tick = useMarketTick(ticker)
+  const { tick } = useMarketTick(ticker)
   const [isTimedOut, setIsTimedOut] = useState(false)
   const lastTickTime = useRef<number | null>(null)
 

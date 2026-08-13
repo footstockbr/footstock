@@ -1,7 +1,11 @@
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { list, errors, parsePagination, buildPagination } from '@/lib/api'
+import { errors, parsePagination, buildPagination } from '@/lib/api'
+import {
+  serializeTransaction,
+  buildTransactionMeta,
+} from '@/lib/contracts/transaction-contract'
 
 // Transaction.type uses OrderType enum; Transaction.financialType uses FinancialType enum
 // BONUS inclui créditos de upgrade (T-021), dividendos futuros, etc.
@@ -38,6 +42,10 @@ export async function GET(request: NextRequest) {
     const [txns, total] = await Promise.all([
       prisma.transaction.findMany({
         where,
+        include: {
+          asset: { select: { id: true, ticker: true, displayName: true } },
+          order: { select: { id: true, type: true, executedAt: true } },
+        },
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
@@ -45,25 +53,17 @@ export async function GET(request: NextRequest) {
       prisma.transaction.count({ where }),
     ])
 
-    const serialized = txns.map((t) => ({
-      id: t.id,
-      userId: t.userId,
-      orderId: t.orderId ?? null,
-      assetId: t.assetId ?? null,    // null para lançamentos sem ativo (BONUS, etc.)
-      type: t.type ?? null,
-      financialType: t.financialType,
-      side: t.side ?? null,
-      quantity: t.quantity ?? null,
-      price: t.price?.toNumber() ?? null,
-      fee: t.fee?.toNumber() ?? null,
-      totalAmount: t.totalAmount.toNumber(),
-      fsAmount: t.fsAmount?.toNumber() ?? null,
-      balanceBefore: t.balanceBefore?.toNumber() ?? null,
-      balanceAfter: t.balanceAfter?.toNumber() ?? null,
-      createdAt: t.createdAt.toISOString(),
-    }))
+    const serialized = txns.map(serializeTransaction)
+    const meta = buildTransactionMeta(serialized)
 
-    return list(serialized, buildPagination(page, limit, total))
+    return NextResponse.json(
+      {
+        data: serialized,
+        pagination: buildPagination(page, limit, total),
+        meta,
+      },
+      { status: 200 }
+    )
   } catch {
     return errors.server()
   }

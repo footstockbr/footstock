@@ -34,36 +34,32 @@ interface PriceChartProps {
   onChartReady?: (chart: IChartApi) => void
 }
 
-// Reduz array para no máximo maxPoints por amostragem uniforme
-function downsample<T>(data: T[], maxPoints: number): T[] {
+// Reduz array para no máximo maxPoints preservando obrigatoriamente o primeiro
+// e o último ponto da janela.
+export function downsample<T>(data: T[], maxPoints: number): T[] {
   if (data.length <= maxPoints) return data
-  const step = data.length / maxPoints
-  return Array.from({ length: maxPoints }, (_, i) => data[Math.floor(i * step)])
-}
-
-// Suavização EMA para reduzir ruído visual (alpha ∈ 0-1; menor = mais suave)
-function applyEMA(data: LineData[], alpha: number): LineData[] {
-  if (data.length === 0) return data
-  const out: LineData[] = [data[0]]
-  for (let i = 1; i < data.length; i++) {
-    out.push({
-      time: data[i].time,
-      value: +((alpha * (data[i].value as number)) + ((1 - alpha) * (out[i - 1].value as number))).toFixed(4),
-    })
+  const step = (data.length - 1) / (maxPoints - 1)
+  const result: T[] = []
+  for (let i = 0; i < maxPoints; i++) {
+    const idx = i === maxPoints - 1 ? data.length - 1 : Math.floor(i * step)
+    result.push(data[idx])
   }
-  return out
+  return result
 }
 
-// Em modo comparação: mapeia candles para % de variação usando timestamps de referência.
-// Todos os tickers ficam remapeados ao mesmo eixo X (timestamps do ticker principal),
-// eliminando o problema de ranges de tempo diferentes entre tickers.
-function toCompareSeries(candles: Candle[], refTimestamps: number[]): LineData[] {
-  if (candles.length === 0 || refTimestamps.length === 0) return []
-  const sampled = downsample(candles, refTimestamps.length)
-  const base = sampled[0].close
+// Em modo comparação: normaliza cada série pela sua própria abertura e alinha
+// pontos que compartilham o mesmo bucket/timestamp. Não remapeia posições de
+// arrays de tamanhos diferentes.
+export function toCompareSeries(candles: Candle[], refTimestamps: Set<number>): LineData[] {
+  if (candles.length === 0) return []
+  const base = candles[0].close
   if (base === 0) return []
-  return sampled.map((c, i) => ({
-    time: refTimestamps[i] as unknown as import('lightweight-charts').Time,
+
+  const aligned = candles.filter((c) => refTimestamps.has(c.timestamp))
+  if (aligned.length === 0) return []
+
+  return aligned.map((c) => ({
+    time: c.timestamp as unknown as import('lightweight-charts').Time,
     value: parseFloat(((c.close - base) / base * 100).toFixed(4)),
   }))
 }
@@ -125,11 +121,8 @@ export function PriceChart({
   const bollingerLowerRef = useRef<ISeriesApi<'Line'> | null>(null)
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null)
   const compareSeriesRefs = useRef<Map<string, ISeriesApi<'Line'>>>(new Map())
-  // Timestamps de referência do ticker principal (downsampled) — compartilhados com o effect de comparação
-  // para garantir que todos os tickers usem o mesmo eixo X
-  const compareTimestampsRef = useRef<number[]>([])
 
-  const { candles, isLoading, isError, isRateLimited, isDelayed, delayMinutes, rateError, refetch } =
+  const { candles, isLoading, isError, isRateLimited, isDelayed, delayMinutes, meta, rateError, refetch } =
     usePriceHistory(ticker, activePeriod)
   const { isHalted, estimatedResume } = useAssetStatus(ticker)
   const { plan } = usePlanGuard()
@@ -159,6 +152,9 @@ export function PriceChart({
   const compareDataKey = compareQueries
     .map((q) => (q.data ? q.data.length : -1))
     .join(',')
+
+  // Conjunto de timestamps de referência do ticker principal para alinhamento
+  const refTimestamps = new Set(candles.map((c) => c.timestamp))
 
   // Rate limit countdown (deve estar antes de early returns — Rules of Hooks)
   const [rateLimitCountdown, setRateLimitCountdown] = useState(0)
@@ -250,10 +246,7 @@ export function PriceChart({
     if (!chart || !series || candles.length === 0) return
 
     if (isCompareMode) {
-      // Calcula timestamps de referência (300 pts downsampled) e persiste para o effect de comparação
-      const refTimes = downsample(candles, 300).map((c) => c.timestamp)
-      compareTimestampsRef.current = refTimes
-      const pctData = toCompareSeries(candles, refTimes)
+      const pctData = toCompareSeries(candles, refTimestamps)
       if (pctData.length > 0) {
         ;(series as ISeriesApi<'Line'>).setData(pctData)
       }
@@ -265,13 +258,13 @@ export function PriceChart({
         } as CandlestickData))
       )
     } else {
+      // Linha canônica de preço: close sem suavização. O último ponto exibido
+      // é exatamente o último close elegível entregue pelo servidor.
       const raw = candles.map((c) => ({
         time: c.timestamp as unknown as import('lightweight-charts').Time,
         value: c.close,
       }))
-      // Suaviza quando há dados densos (sub-minuto) para evitar linha irregular
-      const display = raw.length > 300 ? applyEMA(downsample(raw, 300), 0.15) : raw
-      ;(series as ISeriesApi<'Line'>).setData(display)
+      ;(series as ISeriesApi<'Line'>).setData(raw)
     }
   }, [candles, chartType, isCompareMode])
 
@@ -299,18 +292,13 @@ export function PriceChart({
       }
     }
 
-    // Usa os timestamps de referência calculados em Effect 2 (eixo X compartilhado)
-    const refTimes = compareTimestampsRef.current
-    if (refTimes.length === 0) return // Effect 2 ainda não rodou; aguarda próxima execução
-
-    // Adiciona/atualiza séries com dados disponíveis
+    // Adiciona/atualiza séries com dados disponíveis, alinhadas por timestamp
     let anyDataSet = false
     compareTickers.forEach(({ ticker: ct, color }, idx) => {
       const queryData = compareQueries[idx]?.data
       if (!queryData || queryData.length === 0) return
 
-      // Remapeia os dados do ticker comparado para o mesmo eixo X do ticker principal
-      const normalizedData = toCompareSeries(queryData, refTimes)
+      const normalizedData = toCompareSeries(queryData, refTimestamps)
       if (normalizedData.length === 0) return
 
       let series = compareSeriesRefs.current.get(ct)
@@ -332,7 +320,7 @@ export function PriceChart({
       // Re-popula o ticker principal (mesmo eixo X) para garantir que está visible após fitContent
       const mainSeries = mainSeriesRef.current
       if (mainSeries && candles.length > 0) {
-        const pctData = toCompareSeries(candles, refTimes)
+        const pctData = toCompareSeries(candles, refTimestamps)
         if (pctData.length > 0) {
           ;(mainSeries as ISeriesApi<'Line'>).setData(pctData)
         }
@@ -435,10 +423,9 @@ export function PriceChart({
   const showLoadingOverlay = isLoading
   const showRateLimitOverlay = isRateLimited && !!rateError
   const showErrorOverlay = isError && !isRateLimited
-  // Janela vazia (200 sem candles) nao pode virar um quadrado preto silencioso (Zero Estados
-  // Indefinidos): mostrar overlay explicito de "sem dados" em vez de um canvas vazio.
   const showEmptyOverlay = !isLoading && !isError && !isRateLimited && candles.length === 0
   const showOverlay = showLoadingOverlay || showRateLimitOverlay || showErrorOverlay || showEmptyOverlay
+  const showDelayOverlay = isDelayed && !showOverlay
 
   return (
     <div
@@ -453,9 +440,13 @@ export function PriceChart({
       )}
 
       {/* Badge de delay para JOGADOR — TASK-011 */}
-      {isDelayed && !showOverlay && (
-        <span className="absolute top-2 left-2 z-10 bg-[#F59E0B]/20 text-[#F59E0B] text-[10px] font-semibold px-2 py-0.5 rounded-full border border-[#F59E0B]/30">
+      {showDelayOverlay && (
+        <span
+          data-testid="price-chart-delay"
+          className="absolute top-2 left-2 z-10 bg-[#F59E0B]/20 text-[#F59E0B] text-[10px] font-semibold px-2 py-0.5 rounded-full border border-[#F59E0B]/30"
+        >
           Dados com {delayMinutes >= 60 ? `${Math.round(delayMinutes / 60)}h` : `${delayMinutes}min`} de atraso
+          {meta?.effectiveTo ? ` (até ${new Date(meta.effectiveTo).toLocaleString('pt-BR')})` : ''}
         </span>
       )}
 
@@ -485,6 +476,7 @@ export function PriceChart({
         {/* Overlays ficam sobre o canvas sem desmontá-lo */}
         {showLoadingOverlay && (
           <div
+            data-testid="price-chart-loading"
             className="absolute inset-0 flex items-center justify-center bg-[#1E2329] rounded-lg z-10"
             style={{ height: 300 }}
             aria-busy="true"
@@ -507,6 +499,7 @@ export function PriceChart({
         )}
         {showErrorOverlay && (
           <div
+            data-testid="price-chart-error"
             className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#1E2329] rounded-lg p-4 z-10"
             style={{ height: 300 }}
           >
@@ -521,10 +514,16 @@ export function PriceChart({
         )}
         {showEmptyOverlay && (
           <div
-            className="absolute inset-0 flex items-center justify-center bg-[#1E2329] rounded-lg p-4 z-10"
+            data-testid="price-chart-empty"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#1E2329] rounded-lg p-4 z-10"
             style={{ height: 300 }}
           >
-            <p className="text-sm text-[#929AA5]">Sem dados para o periodo selecionado.</p>
+            <p className="text-sm text-[#929AA5]">Sem dados para o período selecionado.</p>
+            {meta?.effectiveTo && (
+              <p className="text-xs text-[#707A8A]">
+                Janela consultada: até {new Date(meta.effectiveTo).toLocaleString('pt-BR')}
+              </p>
+            )}
           </div>
         )}
       </div>

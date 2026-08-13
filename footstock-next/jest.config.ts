@@ -8,6 +8,8 @@ export default createJestConfig({
   testEnvironment: 'node',
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    '^react$': '<rootDir>/node_modules/react',
+    '^react-dom$': '<rootDir>/node_modules/react-dom',
   },
   testMatch: [
     '<rootDir>/tests/**/*.test.ts',
@@ -15,7 +17,6 @@ export default createJestConfig({
   ],
   collectCoverageFrom: [
     'src/lib/utils/crypto.ts',
-    'src/lib/services/age-verification.ts',
     'src/lib/utils/validators.ts',
     'src/app/api/**/*.ts',
     'src/lib/services/**/*.ts',

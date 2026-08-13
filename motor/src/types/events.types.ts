@@ -49,6 +49,38 @@ export interface NewsInjectEvent {
   curveType?: 'canonical' | 'parameterized'
 }
 
+// ─── SSE market stream payload ───────────────────────────────────────────
+
+export type MarketStreamAvailableTick = MarketTickEvent['ticks'][number] & {
+  state: 'LIVE' | 'DELAYED'
+  delayed: boolean
+  delayMs: number
+  snapshotAgeMs: number
+  bufferVersion: 2
+}
+
+export interface MarketStreamBufferingTick {
+  assetId: string
+  ticker: string
+  state: 'BUFFERING'
+  delayed: boolean
+  delayMs: number
+  price: null
+  change: null
+  changePercent: null
+  timestamp: null
+  snapshotAgeMs: null
+  bufferVersion: 2
+}
+
+export type MarketStreamTick = MarketStreamAvailableTick | MarketStreamBufferingTick
+
+export interface MarketStreamPayload {
+  type: 'TICK'
+  timestamp: number
+  ticks: MarketStreamTick[]
+}
+
 // ─── Union types para serialização Redis ─────────────────────────────────
 
 export type RedisEvent = MarketTickEvent | MotorControlEvent | NewsInjectEvent

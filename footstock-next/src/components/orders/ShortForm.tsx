@@ -40,7 +40,7 @@ interface OpenShortPosition {
 
 export function ShortForm({ ticker, assetName, onSuccess, onClose }: ShortFormProps) {
   const { hasAccess, plan, isError: isPlanError } = usePlanGuard()
-  const tick = useMarketTick(ticker)
+  const { tick } = useMarketTick(ticker)
   const { isOffline: isMotorOffline } = useMotorStatusContext()
   const { track } = useAnalytics()
 

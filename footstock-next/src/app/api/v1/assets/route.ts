@@ -50,14 +50,13 @@ export async function GET(request: NextRequest) {
     const delayedItems = await applyDelayBatch(assetItems, planType)
 
     // Mapear para formato de resposta completo
-    const priceMap = new Map(delayedItems.map((d) => [d.id, d.currentPrice]))
+    const priceMap = new Map(delayedItems.map((d) => [d.id, d]))
 
     const serialized = assets.map((a) => {
-      const currentPrice = priceMap.get(a.id) ?? a.currentPrice.toNumber()
+      const delayed = priceMap.get(a.id)
+      const currentPrice = delayed?.currentPrice ?? a.currentPrice.toNumber()
+      const changePercent = delayed?.changePercent ?? 0
       const openPrice = a.openPrice.toNumber()
-      const change = openPrice > 0
-        ? parseFloat(((currentPrice - openPrice) / openPrice * 100).toFixed(2))
-        : 0
 
       return {
         id: a.id,
@@ -65,7 +64,8 @@ export async function GET(request: NextRequest) {
         displayName: a.displayName,
         division: a.division,
         currentPrice,
-        change,
+        change: changePercent,
+        changePercent,
         openPrice,
         fairValue: a.fairValue.toNumber(),
         volume: Number(a.volume),
@@ -78,6 +78,12 @@ export async function GET(request: NextRequest) {
         financials: a.financials,
         sentiment: a.sentiment,
         updatedAt: a.updatedAt.toISOString(),
+        _meta: {
+          delayed: delayed?.delayStatus === 'AVAILABLE' ? delayed.isDelayed : false,
+          delayMinutes: delayed?.delayMinutes ?? 0,
+          buffering: delayed?.delayStatus === 'BUFFERING',
+          timestamp: delayed?.delayedTimestamp ?? null,
+        },
       }
     })
 

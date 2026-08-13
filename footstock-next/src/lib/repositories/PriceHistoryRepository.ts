@@ -14,67 +14,78 @@ export interface OFIData {
   ofi: number
 }
 
-// Map UI chart period → date range and granularity hint
-function resolvePeriodConfig(period: ChartPeriod, now: Date = new Date()): {
-  granularity: Granularity
-  fromDate: Date | null
-} {
-  switch (period) {
-    case '1H':
-      return {
-        granularity: 'minute',
-        fromDate: new Date(now.getTime() - 60 * 60 * 1000),
-      }
-    case '1D':
-      return {
-        granularity: 'minute',
-        fromDate: new Date(now.getTime() - 24 * 60 * 60 * 1000),
-      }
-    case '1W':
-    case '1S':
-      return {
-        granularity: 'hourly',
-        fromDate: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
-      }
-    case '1M':
-      return {
-        granularity: 'daily',
-        fromDate: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
-      }
-    case '3M':
-      return {
-        granularity: 'daily',
-        fromDate: new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000),
-      }
-    case '1Y':
-      return {
-        granularity: 'weekly',
-        fromDate: new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000),
-      }
-    case 'ALL':
-    default:
-      return { granularity: 'weekly', fromDate: null }
+export interface PriceHistoryCandle {
+  timestamp: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+  ofi: number
+  source: string
+}
+
+// Configuração canônica de buckets (FDD de Mercado).
+// hipotese: H6 — 3M e 1Y não foram especificados no FDD; permanecem desabilitados
+// até decisão registrada de bucket, cardinalidade e orçamento. ALL usa bucket
+// diário com limite de 730 dias (~2 anos), mantido porque é esperado pelos
+// testes de caracterização e pelo contrato de cutoff.
+const BUCKET_CONFIG: Record<
+  ChartPeriod,
+  { bucketSeconds: number; maxBuckets: number; enabled: boolean }
+> = {
+  '1H': { bucketSeconds: 60, maxBuckets: 60, enabled: true },
+  '1D': { bucketSeconds: 300, maxBuckets: 288, enabled: true },
+  '1W': { bucketSeconds: 3600, maxBuckets: 168, enabled: true },
+  '1S': { bucketSeconds: 3600, maxBuckets: 168, enabled: true },
+  '1M': { bucketSeconds: 14400, maxBuckets: 180, enabled: true },
+  '3M': { bucketSeconds: 86400, maxBuckets: 90, enabled: false },
+  '1Y': { bucketSeconds: 604800, maxBuckets: 52, enabled: false },
+  ALL: { bucketSeconds: 86400, maxBuckets: 730, enabled: true },
+}
+
+const ALLOWED_PERIODS = Object.keys(BUCKET_CONFIG) as ChartPeriod[]
+
+function getBucketConfig(period: ChartPeriod) {
+  return BUCKET_CONFIG[period] ?? BUCKET_CONFIG['1M']
+}
+
+function toNumber(value: unknown): number {
+  if (typeof value === 'number') return value
+  if (value && typeof value === 'object' && 'toNumber' in value) {
+    return (value as { toNumber: () => number }).toNumber()
   }
+  return Number(value)
+}
+
+function toDate(value: unknown): Date {
+  if (value instanceof Date) return value
+  return new Date(String(value))
 }
 
 export const PriceHistoryRepository = {
   /**
-   * Find price history by asset ID (resolves ticker to assetId internally).
-   * @param ticker - Asset ticker (e.g. "FLA1")
+   * Find price history by ticker. Aggregates raw snapshots into OHLCV buckets
+   * in PostgreSQL before limiting, preserving the most recent eligible buckets.
    */
   async findByTicker(
     ticker: string,
     filters: HistoryFilters = {}
-  ): Promise<Array<{
-    timestamp: string
-    open: number
-    high: number
-    low: number
-    close: number
-    volume: number
-    ofi: number
-    source: string
-  }>> {
+  ): Promise<PriceHistoryCandle[]> {
+    const startTime = Date.now()
+    const period = filters.period ?? '1M'
+
+    if (!ALLOWED_PERIODS.includes(period)) {
+      throw new Error(`Período não suportado: ${period}`)
+    }
+
+    const config = getBucketConfig(period)
+    if (!config.enabled) {
+      throw new Error(
+        `Período ${period} não está habilitado. Decisão de bucket/cardinalidade/orçamento pendente (hipotese: H6).`
+      )
+    }
+
     // Resolve ticker to assetId
     const asset = await prisma.asset.findUnique({
       where: { ticker: ticker.toUpperCase() },
@@ -82,38 +93,129 @@ export const PriceHistoryRepository = {
     })
     if (!asset) return []
 
-    const period = filters.period ?? '1M'
-    // Ancorar a janela do periodo no limite SUPERIOR efetivo (resolvedTo). Antes, fromDate
-    // era calculado de um `now` proprio enquanto resolvedTo ja vinha atrasado pelo delay do
-    // plano (ex.: JOGADOR no 1H): from = now1 - 1h e to = now0 - 1h (now0 < now1) invertiam a
-    // janela e a query voltava 0 candles, deixando o grafico preto. Agora from = resolvedTo - periodo.
     const resolvedTo = filters.to ?? new Date()
-    const { fromDate } = resolvePeriodConfig(period, resolvedTo)
-    const resolvedFrom = filters.from ?? fromDate
+    const resolvedFrom = filters.from
 
-    const candles = await prisma.priceHistory.findMany({
-      where: {
-        assetId: asset.id,
-        ...(resolvedFrom && { timestamp: { gte: resolvedFrom, lte: resolvedTo } }),
-      },
-      orderBy: { timestamp: 'asc' },
-      take: 5000,
+    // Agregação OHLCV no PostgreSQL. Usa close observado para formar candles,
+    // pois open/high/low persistidos representam acumulados do dia.
+    // Volume é calculado por deltas positivos entre snapshots consecutivos;
+    // reset do contador vira novo baseline.
+    const bucketSeconds = config.bucketSeconds
+    const maxBuckets = config.maxBuckets
+    const fromBoundary = resolvedFrom ?? new Date(0)
+
+    const rows = await prisma.$queryRaw<
+      Array<{
+        timestamp: Date
+        open: unknown
+        high: unknown
+        low: unknown
+        close: unknown
+        volume: unknown
+        source: string
+      }>
+    >`
+      WITH raw AS (
+        SELECT
+          timestamp,
+          close,
+          volume,
+          source,
+          EXTRACT(EPOCH FROM timestamp)::bigint / ${bucketSeconds} AS bucket
+        FROM price_history
+        WHERE asset_id = ${asset.id}
+          AND timestamp <= ${resolvedTo}
+          AND timestamp >= ${fromBoundary}
+      ),
+      ordered AS (
+        SELECT
+          *,
+          LAG(volume) OVER (PARTITION BY bucket ORDER BY timestamp) AS prev_volume
+        FROM raw
+      ),
+      deltas AS (
+        SELECT
+          *,
+          CASE
+            WHEN prev_volume IS NULL THEN volume
+            WHEN volume < prev_volume THEN volume
+            ELSE volume - prev_volume
+          END AS volume_delta
+        FROM ordered
+      ),
+      buckets AS (
+        SELECT
+          bucket,
+          MIN(timestamp) AS bucket_start,
+          (ARRAY_AGG(close ORDER BY timestamp))[1] AS open,
+          MAX(close) AS high,
+          MIN(close) AS low,
+          (ARRAY_AGG(close ORDER BY timestamp DESC))[1] AS close,
+          SUM(GREATEST(volume_delta, 0)) AS volume,
+          (ARRAY_AGG(source ORDER BY timestamp DESC))[1] AS source
+        FROM deltas
+        GROUP BY bucket
+      ),
+      ranked AS (
+        SELECT *
+        FROM buckets
+        ORDER BY bucket DESC
+        LIMIT ${maxBuckets}
+      )
+      SELECT
+        bucket_start AS timestamp,
+        open,
+        high,
+        low,
+        close,
+        volume,
+        source
+      FROM ranked
+      ORDER BY bucket_start ASC
+    `
+
+    const candles = rows.map((r) => ({
+      timestamp: toDate(r.timestamp).toISOString(),
+      open: toNumber(r.open),
+      high: toNumber(r.high),
+      low: toNumber(r.low),
+      close: toNumber(r.close),
+      volume: Number(r.volume ?? 0),
+      ofi: 0, // TECH-DEBT: ofi field not yet in PriceHistory schema — will be added by motor (module-7)
+      source: r.source ?? 'REAL',
+    }))
+
+    const durationMs = Date.now() - startTime
+    console.info('[PriceHistoryRepository] aggregated', {
+      ticker,
+      period,
+      bucketSeconds: config.bucketSeconds,
+      bucketCount: candles.length,
+      effectiveTo: resolvedTo.toISOString(),
+      lastTimestamp: candles[candles.length - 1]?.timestamp ?? null,
+      planDelayMinutes: 0,
+      durationMs,
     })
 
-    return candles.map((c) => ({
-      timestamp: c.timestamp.toISOString(),
-      open: c.open.toNumber(),
-      high: c.high.toNumber(),
-      low: c.low.toNumber(),
-      close: c.close.toNumber(),
-      volume: Number(c.volume),
-      ofi: 0, // TECH-DEBT: ofi field not yet in PriceHistory schema — will be added by motor (module-7)
-      source: (c as unknown as { source: string }).source ?? 'REAL',
-    }))
+    return candles
   },
 
   getGranularity(period: ChartPeriod): Granularity {
-    return resolvePeriodConfig(period).granularity
+    switch (period) {
+      case '1H':
+      case '1D':
+        return 'minute'
+      case '1W':
+      case '1S':
+        return 'hourly'
+      case '1M':
+      case '3M':
+        return 'daily'
+      case '1Y':
+      case 'ALL':
+      default:
+        return 'weekly'
+    }
   },
 
   async findLatestByTickers(
@@ -126,8 +228,8 @@ export const PriceHistoryRepository = {
     })
     if (assets.length === 0) return {}
 
-    const assetIdToTicker = new Map(assets.map(a => [a.id, a.ticker]))
-    const assetIds = assets.map(a => a.id)
+    const assetIdToTicker = new Map(assets.map((a) => [a.id, a.ticker]))
+    const assetIds = assets.map((a) => a.id)
 
     const records = await prisma.priceHistory.findMany({
       where: { assetId: { in: assetIds } },
@@ -141,7 +243,7 @@ export const PriceHistoryRepository = {
       if (ticker && !result[ticker]) {
         result[ticker] = {
           timestamp: r.timestamp.toISOString(),
-          close: r.close.toNumber(),
+          close: toNumber(r.close),
         }
       }
     }

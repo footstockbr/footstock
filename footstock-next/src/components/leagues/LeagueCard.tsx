@@ -1,8 +1,9 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Trophy, Users, Lock, Calendar } from 'lucide-react'
+import { Trophy, Users, Lock, Calendar, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { League } from '@/types'
 import { useJoinLeague } from '@/hooks/useLeagues'
@@ -35,7 +36,8 @@ const DURATION_LABELS: Record<string, string> = {
 
 export function LeagueCard({ league, isMember, currentUserId: _currentUserId, onJoinSuccess }: Props) {
   const router = useRouter()
-  const { mutate: joinLeague, isPending: isJoining } = useJoinLeague()
+  const { mutate: joinLeague, isPending: isJoining, error: joinError, reset: resetJoin } = useJoinLeague()
+  const [joinSuccess, setJoinSuccess] = useState(false)
 
   const isFinished = league.status === 'FINISHED'
   const isAmigos = league.type === 'AMIGOS'
@@ -44,9 +46,20 @@ export function LeagueCard({ league, isMember, currentUserId: _currentUserId, on
   function handleJoin(e: React.MouseEvent) {
     e.preventDefault()
     e.stopPropagation()
+    setJoinSuccess(false)
     joinLeague(league.id, {
-      onSuccess: () => onJoinSuccess?.(),
+      onSuccess: () => {
+        setJoinSuccess(true)
+        onJoinSuccess?.()
+      },
     })
+  }
+
+  function handleRetry(e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    resetJoin()
+    handleJoin(e)
   }
 
   function handleView(e: React.MouseEvent) {
@@ -54,6 +67,8 @@ export function LeagueCard({ league, isMember, currentUserId: _currentUserId, on
     e.stopPropagation()
     router.push(`/ligas/${league.id}`)
   }
+
+  const joinErrorMessage = joinError instanceof Error ? joinError.message : null
 
   return (
     <Link
@@ -158,6 +173,42 @@ export function LeagueCard({ league, isMember, currentUserId: _currentUserId, on
           </button>
         )}
       </div>
+
+      {/* Feedback de erro / sucesso do join */}
+      {joinErrorMessage && !isJoining && (
+        <div
+          data-testid="league-card-join-error"
+          role="alert"
+          className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950"
+        >
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 flex-shrink-0 text-red-600 dark:text-red-300" aria-hidden="true" />
+            <div className="flex-1">
+              <p className="text-xs font-medium text-red-800 dark:text-red-100">
+                {joinErrorMessage}
+              </p>
+              <button
+                type="button"
+                onClick={handleRetry}
+                data-testid="league-card-join-retry"
+                className="mt-2 text-xs font-medium text-red-700 underline hover:text-red-800 dark:text-red-200"
+              >
+                Tentar novamente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {joinSuccess && isMember && (
+        <p
+          data-testid="league-enrollment-feedback"
+          className="mt-3 text-center text-xs font-medium text-[#F0B90B]"
+          role="status"
+        >
+          Voce entrou na liga com sucesso!
+        </p>
+      )}
     </Link>
   )
 }

@@ -81,7 +81,7 @@ interface AssetDetailPageProps {
 }
 
 export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps) {
-  const tick = useMarketTick(asset.ticker)
+  const { tick } = useMarketTick(asset.ticker)
   const [currentPeriod, setCurrentPeriod] = useState<ChartPeriod>('1H')
   const [orderFormOpen, setOrderFormOpen] = useState<{ side: 'BUY' | 'SELL' } | null>(null)
   const [shortFormOpen, setShortFormOpen] = useState(false)

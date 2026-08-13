@@ -64,7 +64,10 @@ export async function GET(
       currentPrice: rawPrice,
     }
     const delayed = await applyPriceDelay(assetItem, planType)
-    const currentPrice = delayed.currentPrice
+
+    const isBuffering = delayed.status === 'BUFFERING'
+    const currentPrice = delayed.status === 'AVAILABLE' ? delayed.currentPrice : 0
+    const changePercent = delayed.status === 'AVAILABLE' ? delayed.changePercent : 0
 
     const marketCap = currentPrice * currentSupply
 
@@ -76,7 +79,6 @@ export async function GET(
 
     const financials = (asset.financials ?? {}) as Record<string, unknown>
 
-    const isDelayed = currentPrice !== rawPrice
     const response = NextResponse.json({
       data: {
         id: asset.id,
@@ -99,9 +101,15 @@ export async function GET(
           totalShares: Number(asset.totalShares),
         },
         fairValuePremium,
+        changePercent,
         sentiment: asset.sentiment,
         updatedAt: asset.updatedAt.toISOString(),
-        _meta: { delayed: isDelayed },
+        _meta: {
+          delayed: delayed.isDelayed,
+          delayMinutes: delayed.delayMinutes,
+          buffering: isBuffering,
+          timestamp: delayed.status === 'AVAILABLE' ? delayed.timestamp : null,
+        },
       },
     })
 

@@ -10,6 +10,10 @@ export const REQUIRED_METRICS = [
   'value_analysis_movements_total',
   'value_analysis_attribution_coverage_pct',
   'news_injection_duplicate_total',
+  'market_stream_tick_emitted_total',
+  'market_stream_buffering_total',
+  'market_stream_delay_fallback_blocked_total',
+  'market_stream_snapshot_age_ms',
 ] as const
 
 export type RequiredMetricName = (typeof REQUIRED_METRICS)[number]

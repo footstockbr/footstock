@@ -66,21 +66,33 @@ test.describe('T-013: Tour de Onboarding — TIER 2', () => {
     await expect(body).not.toBeEmpty()
   })
 
-  test('OB-04: Endpoint de tour-completion responde sem erro 500', async ({ request }) => {
+  test('OB-04: PATCH /api/v1/users/me/tour-completed conclui tour e inscreve em liga publica', async ({ request }) => {
     const loginRes = await request.post('/api/v1/auth/login', {
       data: { email: USERS.jogador.email, password: USERS.jogador.password },
     })
     expect(loginRes.status()).toBe(200)
 
-    // Tentar marcar tour como completo
-    const patchRes = await request.patch('/api/v1/me/tour-completed', {
-      data: { tourCompleted: true },
-      headers: { cookie: loginRes.headers()['set-cookie'] ?? '' },
-    })
+    const cookie = loginRes.headers()['set-cookie'] ?? ''
 
-    // Pode ser 200 (sucesso), 404 (rota nao encontrada — endpoint pode ter nome diferente)
-    // Nunca 500
-    expect(patchRes.status()).not.toBe(500)
+    // Marcar tour como completo pela rota canonica
+    const patchRes = await request.patch('/api/v1/users/me/tour-completed', {
+      headers: { cookie },
+    })
+    expect(patchRes.status()).toBe(200)
+
+    const body = await patchRes.json()
+    const profile = body.data ?? body
+    expect(profile.tourCompleted).toBe(true)
+    expect(profile.leagueEnrollment).toBeDefined()
+    expect(['ENROLLED', 'ALREADY_MEMBER', 'NO_ACTIVE_PUBLIC_LEAGUE', 'FAILED']).toContain(
+      profile.leagueEnrollment.status,
+    )
+
+    // Membership deve ser consultavel (ou status observavel quando nao houver liga ativa)
+    const leaguesRes = await request.get('/api/v1/leagues/me', {
+      headers: { cookie },
+    })
+    expect(leaguesRes.status()).toBe(200)
   })
 
   test('OB-05: Pagina de perfil renderiza sem erro para usuario Jogador', async ({ page }) => {

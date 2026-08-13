@@ -8,29 +8,29 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { useAllMarketTicks } from "@/hooks/useAllMarketTicks";
 import { useBalance } from "@/hooks/useBalance";
 import { useAnalytics } from "@/hooks/useAnalytics";
+import { classifyTrend, type TrendDirection } from "@/lib/market/trend";
 
 type Division = "SERIE_A" | "SERIE_B";
-type SentimentFilter = "positive" | "neutral" | "negative";
+type TrendFilter = "positive" | "stable" | "negative";
 
 export function MarketPageClient() {
   const [baseAssets, setBaseAssets] = useState<AssetData[]>([]);
   const [search, setSearch] = useState("");
   const [divisions, setDivisions] = useState<Set<Division>>(new Set());
-  const [sentiments, setSentiments] = useState<Set<SentimentFilter>>(new Set());
+  const [trends, setTrends] = useState<Set<TrendFilter>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [favoriteClubTicker, setFavoriteClubTicker] = useState<string | null>(null);
   const { track } = useAnalytics();
   const trackedRef = useRef(false);
 
   // Preços em tempo real via SSE (substitui valores do fetch inicial)
-  const tickMap = useAllMarketTicks();
+  const { ticks: tickMap, isBuffering, isOffline, error: streamError } = useAllMarketTicks();
   // T-019: saldo zero bloqueia compras
   const { fsBalance } = useBalance();
   const isBalanceZero = fsBalance !== null && fsBalance <= 0;
 
   // Merge preços e estado de halt em tempo real sobre a lista base
   const assets = useMemo<AssetData[]>(() => {
-    if (Object.keys(tickMap).length === 0) return baseAssets;
     return baseAssets.map((a) => {
       const live = tickMap[a.ticker];
       if (!live) return a;
@@ -40,6 +40,10 @@ export function MarketPageClient() {
         change24h: Math.round(live.change24h * 100) / 100,
         halted: live.isHalted,
         haltedUntil: live.haltedUntil ?? null,
+        state: live.state,
+        delayed: live.delayed,
+        delayMs: live.delayMs,
+        isStale: live.isStale,
       };
     });
   }, [baseAssets, tickMap]);
@@ -103,15 +107,15 @@ export function MarketPageClient() {
     if (trackedRef.current) return;
     trackedRef.current = true;
 
-    const filterApplied = divisions.size > 0 || sentiments.size > 0;
-    const filterType = divisions.size > 0 ? "division" : sentiments.size > 0 ? "sentiment" : undefined;
+    const filterApplied = divisions.size > 0 || trends.size > 0;
+    const filterType = divisions.size > 0 ? "division" : trends.size > 0 ? "trend" : undefined;
 
     track("market_list_viewed", {
       plan: "JOGADOR" as const, // plano real é resolvido pelo provider via identify
       filter_applied: filterApplied,
       filter_type: filterType,
     });
-  }, [track, divisions, sentiments]);
+  }, [track, divisions, trends]);
 
   const toggleDivision = (d: Division) => {
     const newSet = new Set(divisions);
@@ -123,14 +127,14 @@ export function MarketPageClient() {
     setDivisions(newSet);
   };
 
-  const toggleSentiment = (s: SentimentFilter) => {
-    const newSet = new Set(sentiments);
+  const toggleTrend = (s: TrendFilter) => {
+    const newSet = new Set(trends);
     if (newSet.has(s)) {
       newSet.delete(s);
     } else {
       newSet.add(s);
     }
-    setSentiments(newSet);
+    setTrends(newSet);
   };
 
   const filtered = useMemo<AssetData[]>(() => {
@@ -142,13 +146,14 @@ export function MarketPageClient() {
 
       const matchDivision = divisions.size === 0 || divisions.has(a.division as Division);
 
-      const matchSentiment =
-        sentiments.size === 0 ||
-        (sentiments.has("positive") && a.sentiment === "BULLISH") ||
-        (sentiments.has("neutral") && a.sentiment === "NEUTRAL") ||
-        (sentiments.has("negative") && a.sentiment === "BEARISH");
+      const assetTrend = classifyTrend(a.change24h);
+      const matchTrend =
+        trends.size === 0 ||
+        (trends.has("positive") && assetTrend === "up") ||
+        (trends.has("stable") && assetTrend === "stable") ||
+        (trends.has("negative") && assetTrend === "down");
 
-      return matchSearch && matchDivision && matchSentiment;
+      return matchSearch && matchDivision && matchTrend;
     });
 
     if (favoriteClubTicker) {
@@ -160,12 +165,12 @@ export function MarketPageClient() {
     }
 
     return list;
-  }, [assets, search, divisions, sentiments, favoriteClubTicker]);
+  }, [assets, search, divisions, trends, favoriteClubTicker]);
 
   const clearFilters = () => {
     setSearch("");
     setDivisions(new Set());
-    setSentiments(new Set());
+    setTrends(new Set());
   };
 
   return (
@@ -235,33 +240,62 @@ export function MarketPageClient() {
           </div>
         </fieldset>
         <fieldset className="border-0 p-0 m-0">
-          <legend className="sr-only">Filtrar por sentimento</legend>
+          <legend className="sr-only">Filtrar por tendência</legend>
           <div className="flex gap-1.5 flex-wrap justify-end">
-            {(["positive", "neutral", "negative"] as const).map((s) => (
+            {(["positive", "stable", "negative"] as const).map((s) => (
               <button
                 key={s}
-                data-testid={`market-filter-sentiment-${s}`}
-                onClick={() => toggleSentiment(s)}
-                aria-pressed={sentiments.has(s)}
+                data-testid={`market-filter-trend-${s}`}
+                onClick={() => toggleTrend(s)}
+                aria-pressed={trends.has(s)}
                 className={cn(
                   "px-3 py-1 rounded-full text-xs font-medium border transition-all",
-                  sentiments.has(s)
+                  trends.has(s)
                     ? s === "positive"
                       ? "bg-[rgba(34,197,94,.2)] border-[#2EBD85] text-[#2EBD85]"
                       : s === "negative"
                       ? "bg-[rgba(239,68,68,.2)] border-[#F6465D] text-[#F6465D]"
-                      : s === "neutral"
+                      : s === "stable"
                       ? "bg-[rgba(148,163,184,.2)] border-[#94a3b8] text-[#94a3b8]"
                       : "bg-[rgba(46,189,133,.2)] border-[#2EBD85] text-white"
                     : "bg-transparent border-[rgba(240,185,11,.18)] text-[#929AA5] hover:border-[rgba(240,185,11,.35)]"
                 )}
               >
-                {s === "positive" ? "Positivo" : s === "neutral" ? "Neutro" : "Negativo"}
+                {s === "positive" ? "Em alta" : s === "stable" ? "Estável" : "Em baixa"}
               </button>
             ))}
           </div>
         </fieldset>
       </div>
+
+      {/* T9: estados de conexão do stream */}
+      {streamError && (
+        <div
+          role="alert"
+          data-testid="market-error-state"
+          className="mx-4 mt-4 rounded-lg border border-[#F6465D]/30 bg-[#F6465D]/10 px-4 py-3 text-sm text-[#F6465D]"
+        >
+          Erro ao conectar ao streaming de mercado. Tente recarregar a página.
+        </div>
+      )}
+      {isOffline && !streamError && (
+        <div
+          role="alert"
+          data-testid="market-stream-offline"
+          className="mx-4 mt-4 rounded-lg border border-[#707A8A]/30 bg-[#707A8A]/10 px-4 py-3 text-sm text-[#EAECEF]"
+        >
+          Você está offline. As cotações podem estar desatualizadas.
+        </div>
+      )}
+      {isBuffering && !isOffline && (
+        <div
+          role="status"
+          data-testid="market-stream-buffering"
+          className="mx-4 mt-4 rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/10 px-4 py-3 text-sm text-[#F59E0B]"
+        >
+          Cotação em aquecimento. Exibindo o último valor permitido para o seu plano.
+        </div>
+      )}
 
       {/* Asset list */}
       {isLoading ? (
