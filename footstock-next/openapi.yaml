@@ -1,0 +1,3112 @@
+openapi: 3.0.3
+info:
+  title: Foot Stock API
+  description: >
+    Contrato de API gerado pelo SystemForge a partir do LLD.md.
+    Simulador financeiro de futebol brasileiro — 40 ativos, motor de mercado real-time,
+    planos de assinatura e assessor IA.
+  version: "1.0.0"
+  contact:
+    name: Foot Stock Team
+
+servers:
+  - url: "http://localhost:3000/api/v1"
+    description: "Desenvolvimento"
+  - url: "https://foot-stock.vercel.app/api/v1"
+    description: "Produção"
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: auth
+    description: "Autenticação, cadastro e recuperação de senha"
+  - name: users
+    description: "Perfil do usuário e direitos LGPD"
+  - name: assets
+    description: "Ativos negociáveis (40 clubes) e histórico de preços"
+  - name: orders
+    description: "Criação, listagem e cancelamento de ordens"
+  - name: positions
+    description: "Posições abertas do usuário"
+  - name: transactions
+    description: "Extrato de movimentações financeiras"
+  - name: payments
+    description: "Checkout de planos e webhooks de pagamento"
+  - name: subscriptions
+    description: "Gestão de assinatura ativa"
+  - name: notifications
+    description: "Inbox de notificações in-app"
+  - name: news
+    description: "Feed de notícias dos clubes"
+  - name: forum
+    description: "Fórum da comunidade"
+  - name: ai
+    description: "Assessor IA (Claude Sonnet) por ativo"
+  - name: leagues
+    description: "Ligas competitivas"
+  - name: admin
+    description: "Painel administrativo (AdminRole obrigatório)"
+  - name: health
+    description: "Health check da API"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+
+    # ─── Envelope de resposta padrão ────────────────────────────────────────
+    # Todos os endpoints bem-sucedidos retornam { success: true, data: <T> }.
+    # Erros retornam { success: false, error: { code, message } }.
+
+    SuccessEnvelope:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          example: true
+
+    # ─── Entidades principais ───────────────────────────────────────────────
+
+    User:
+      type: object
+      required: [id, email, name, favoriteClub, investorProfile, planType, fsBalance, marginBlocked, tourCompleted, ageVerificationPending, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+          maxLength: 120
+        phone:
+          type: string
+          maxLength: 20
+          nullable: true
+        birthDate:
+          type: string
+          format: date
+        favoriteClub:
+          type: string
+          description: "Ticker do clube favorito (ex: URU3)"
+          maxLength: 10
+        investorProfile:
+          type: string
+          enum: [INICIANTE, INTERMEDIARIO, AVANCADO, FA_FUTEBOL]
+        planType:
+          type: string
+          enum: [JOGADOR, CRAQUE, LENDA]
+        fsBalance:
+          type: number
+          format: double
+          description: "Saldo em FS$"
+        marginBlocked:
+          type: number
+          format: double
+          description: "Margem bloqueada em operações short"
+        tourCompleted:
+          type: boolean
+        ageVerificationPending:
+          type: boolean
+        adminRole:
+          type: string
+          enum: [SUPER_ADMIN, ADMIN, MONITOR, EDITOR, MODERADOR]
+          nullable: true
+          description: "Nulo = usuário comum"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Asset:
+      type: object
+      required: [id, ticker, name, division, currentPrice, fairValue, currentSupply, totalShares, isHalted, colors, financials, sentiment, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticker:
+          type: string
+          description: "Ex: URU3, POR4"
+          maxLength: 10
+        name:
+          type: string
+          description: "Nome fictício do clube"
+          maxLength: 80
+        division:
+          type: string
+          enum: [A, B]
+          description: "A = Série A, B = Série B"
+        currentPrice:
+          type: number
+          format: double
+        fairValue:
+          type: number
+          format: double
+          description: "Valor justo estático (âncora OU)"
+        currentSupply:
+          type: integer
+          format: int64
+        totalShares:
+          type: integer
+          format: int64
+        isHalted:
+          type: boolean
+          description: "Circuit breaker ativado"
+        haltReason:
+          type: string
+          nullable: true
+          maxLength: 100
+        colors:
+          type: object
+          required: [primary, secondary]
+          properties:
+            primary:
+              type: string
+              description: "Cor primária hex"
+            secondary:
+              type: string
+              description: "Cor secundária hex"
+        financials:
+          type: object
+          required: [receita, elenco, marca, divida, freeFloat, multiplicador]
+          properties:
+            receita:
+              type: number
+            elenco:
+              type: number
+            marca:
+              type: number
+            divida:
+              type: number
+            freeFloat:
+              type: number
+            multiplicador:
+              type: number
+        sentiment:
+          type: string
+          enum: [BULLISH, NEUTRO, BEARISH]
+        updatedAt:
+          type: string
+          format: date-time
+        changePercent:
+          type: number
+          format: double
+          nullable: true
+          description: "Variacao percentual do snapshot atrasado (quando disponivel)"
+        _meta:
+          type: object
+          nullable: true
+          description: "Metadados de delay/buffering do snapshot (apenas rotas de consulta)"
+          properties:
+            delayed:
+              type: boolean
+            delayMinutes:
+              type: number
+              format: double
+            buffering:
+              type: boolean
+            timestamp:
+              type: string
+              format: date-time
+              nullable: true
+
+    PriceCandle:
+      type: object
+      required: [ticker, open, high, low, close, volume, timestamp]
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticker:
+          type: string
+        open:
+          type: number
+          format: double
+        high:
+          type: number
+          format: double
+        low:
+          type: number
+          format: double
+        close:
+          type: number
+          format: double
+        volume:
+          type: number
+          format: double
+        period:
+          type: string
+          nullable: true
+        timestamp:
+          type: string
+          format: date-time
+          description: "Abertura/fechamento do candle"
+        source:
+          type: string
+          enum: [REAL, GBM, MOTOR]
+          nullable: true
+
+    Order:
+      type: object
+      required: [id, userId, ticker, type, side, quantity, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        ticker:
+          type: string
+          maxLength: 10
+        type:
+          type: string
+          enum: [MARKET, LIMIT, OCO, SHORT, SCHEDULED]
+        side:
+          type: string
+          enum: [BUY, SELL]
+        quantity:
+          type: number
+          format: double
+        price:
+          type: number
+          format: double
+          nullable: true
+          description: "Nulo = ordem a mercado"
+        status:
+          type: string
+          enum: [PENDING, EXECUTED, CANCELLED, EXPIRED, PARTIAL]
+        stopLossPrice:
+          type: number
+          format: double
+          nullable: true
+        takeProfitPrice:
+          type: number
+          format: double
+          nullable: true
+        scheduledAt:
+          type: string
+          format: date-time
+          nullable: true
+        feeAmount:
+          type: number
+          format: double
+          nullable: true
+        executedAt:
+          type: string
+          format: date-time
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Position:
+      type: object
+      required: [id, userId, ticker, quantity, avgPrice, side, marginBlocked, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        ticker:
+          type: string
+          maxLength: 10
+        quantity:
+          type: number
+          format: double
+          description: "Zerado = posição fechada"
+        avgPrice:
+          type: number
+          format: double
+        side:
+          type: string
+          enum: [LONG, SHORT]
+        marginBlocked:
+          type: number
+          format: double
+        leverageMultiplier:
+          type: number
+          format: double
+          description: "1.0 = normal, 2.0 = alavancado (apenas LONG Lenda)"
+          default: 1.0
+        leverageAmount:
+          type: number
+          format: double
+          description: "Crédito virtual em alavancagem"
+          default: 0.0
+        dailyInterestRate:
+          type: number
+          format: double
+          description: "Taxa de juros diária simulada"
+          default: 0.0
+        interestAccrued:
+          type: number
+          format: double
+          description: "Juros acumulados desde abertura"
+          default: 0.0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Transaction:
+      type: object
+      required: [id, userId, financialType, totalAmount, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "Nulo para lançamentos sem ordem (BONUS, DEPOSIT, WITHDRAWAL)"
+        assetId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "Nulo para lançamentos sem ativo"
+        type:
+          type: string
+          nullable: true
+          enum: [MARKET, LIMIT, STOP_LOSS, TAKE_PROFIT, OCO, SCHEDULED]
+          description: "Tipo de ordem quando aplicável"
+        financialType:
+          type: string
+          enum: [TRADE, FEE, BONUS, DEPOSIT, WITHDRAWAL, SHORT_INTEREST, MARGIN_BLOCKED, SHORT_CLOSE, LEVERAGE_INTEREST]
+        side:
+          type: string
+          nullable: true
+          enum: [BUY, SELL]
+        quantity:
+          type: integer
+          nullable: true
+        price:
+          type: number
+          format: double
+          nullable: true
+        fee:
+          type: number
+          format: double
+          nullable: true
+        totalAmount:
+          type: number
+          format: double
+        fsAmount:
+          type: number
+          format: double
+          nullable: true
+          description: "Valor em FS$ (+crédito, -débito) quando disponível"
+        balanceBefore:
+          type: number
+          format: double
+          nullable: true
+        balanceAfter:
+          type: number
+          format: double
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        # Relações enriquecidas (Task 15)
+        ticker:
+          type: string
+          nullable: true
+          description: "Ticker do ativo relacionado"
+        displayName:
+          type: string
+          nullable: true
+          description: "Nome fictício exibido do ativo"
+        executedAt:
+          type: string
+          format: date-time
+          description: "Data/hora de execução da ordem ou de criação da transação"
+        orderType:
+          type: string
+          nullable: true
+          enum: [MARKET, LIMIT, STOP_LOSS, TAKE_PROFIT, OCO, SCHEDULED]
+        timestampSource:
+          type: string
+          enum: [ORDER_EXECUTED_AT, TRANSACTION_CREATED_AT]
+        # Campos financeiros canonicos (Task 15)
+        grossAmount:
+          type: number
+          format: double
+          nullable: true
+          description: "Subtotal = round(quantity * price, 2)"
+        cashDelta:
+          type: number
+          format: double
+          nullable: true
+          description: "Delta de caixa: balanceAfter - balanceBefore (fallback fsAmount)"
+
+    Subscription:
+      type: object
+      required: [id, userId, planType, status, startsAt, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        planType:
+          type: string
+          enum: [JOGADOR, CRAQUE, LENDA]
+        gateway:
+          type: string
+          enum: [MERCADO_PAGO, PAGSEGURO, PAYPAL]
+          nullable: true
+        period:
+          type: string
+          enum: [MONTHLY, ANNUAL]
+          nullable: true
+        status:
+          type: string
+          enum: [TRIAL, ACTIVE, SUSPENDED, CANCELLED, EXPIRED]
+        startsAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        trialEndsAt:
+          type: string
+          format: date-time
+          nullable: true
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+        bonusAmount:
+          type: number
+          format: double
+          nullable: true
+          description: "FS$ a creditar após período de arrependimento"
+        bonusScheduledAt:
+          type: string
+          format: date-time
+          nullable: true
+        bonusCreditedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Notification:
+      type: object
+      required: [id, userId, type, title, body, read, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [ORDER_EXECUTED, ORDER_CANCELLED, CIRCUIT_BREAKER, NEWS_FAVORITE_CLUB, LEAGUE_RESULT, PAYMENT_CONFIRMED, PAYMENT_FAILED, PLAN_CANCEL_ALERT, MARGIN_CALL_ALERT, ADMIN_BROADCAST, DIVIDEND_CREDITED, BONUS_CREDITED]
+        title:
+          type: string
+        body:
+          type: string
+        read:
+          type: boolean
+        metadata:
+          type: object
+          nullable: true
+          description: "Dados adicionais dependentes do tipo"
+        createdAt:
+          type: string
+          format: date-time
+
+    NewsItem:
+      type: object
+      required: [id, title, source, ticker, sentiment, impactCategory, publishedAt, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        source:
+          type: string
+        url:
+          type: string
+          nullable: true
+        ticker:
+          type: string
+          maxLength: 10
+        sentiment:
+          type: number
+          format: double
+          minimum: -1.0
+          maximum: 1.0
+        impactCategory:
+          type: string
+          enum: [RESULTADO_ESPORTIVO, CONTRATACAO, FINANCEIRO, LESAO, SUSPENSAO, INSTITUCIONAL]
+        publishedAt:
+          type: string
+          format: date-time
+        injectedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    ForumPost:
+      type: object
+      required: [id, userId, content, status, likes, flagged, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        content:
+          type: string
+          maxLength: 280
+        ticker:
+          type: string
+          nullable: true
+          maxLength: 10
+        status:
+          type: string
+          enum: [ACTIVE, REMOVED, FLAGGED]
+        likes:
+          type: integer
+        flagged:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    League:
+      type: object
+      required: [id, name, type, division, duration, status, startsAt, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum: [PUBLICA, AMIGOS, PRO]
+          description: "PUBLICA sem capacidade; AMIGOS com limite maxMembers; PRO paga."
+        division:
+          type: string
+          enum: [BRONZE, PRATA, OURO, OPEN]
+        duration:
+          type: string
+          description: "Duracao da liga (1S, 1M, TEMPORADA)"
+        maxMembers:
+          type: integer
+          nullable: true
+          description: "Aplicavel apenas a ligas AMIGOS. PUBLICA nao possui capacidade."
+        memberCount:
+          type: integer
+          description: "Numero atual de membros"
+        createdById:
+          type: string
+          format: uuid
+          nullable: true
+        sponsorId:
+          type: string
+          format: uuid
+          nullable: true
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum: [PENDING, ACTIVE, FINISHED]
+        createdAt:
+          type: string
+          format: date-time
+
+    LeagueMember:
+      type: object
+      required: [id, leagueId, userId, score, rank, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        leagueId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        score:
+          type: number
+          format: double
+        rank:
+          type: integer
+        scoreBreakdown:
+          type: object
+          nullable: true
+          description: "Pontuação por pilar (rentabilidade, sofisticação, diversificação, consistência, educativo)"
+          properties:
+            rentabilidade:
+              type: number
+            sofisticacao:
+              type: number
+            diversificacao:
+              type: number
+            consistencia:
+              type: number
+            educativo:
+              type: number
+        updatedAt:
+          type: string
+          format: date-time
+
+    AIAnalysis:
+      type: object
+      required: [ticker, clubName, resumo, pontosPositivos, pontosNegativos, sentimentoGeral, recomendacao, nivelRisco, noticiasRecentes]
+      properties:
+        ticker:
+          type: string
+        clubName:
+          type: string
+        resumo:
+          type: string
+        pontosPositivos:
+          type: array
+          items:
+            type: string
+        pontosNegativos:
+          type: array
+          items:
+            type: string
+        sentimentoGeral:
+          type: string
+          enum: [BULLISH, NEUTRO, BEARISH]
+        recomendacao:
+          type: string
+          enum: [COMPRAR, MANTER, VENDER]
+        nivelRisco:
+          type: string
+          enum: [BAIXO, MEDIO, ALTO]
+        noticiasRecentes:
+          type: array
+          items:
+            type: object
+            required: [titulo, sentimento, emoji]
+            properties:
+              titulo:
+                type: string
+              sentimento:
+                type: string
+                enum: [BULLISH, NEUTRO, BEARISH]
+              emoji:
+                type: string
+
+    CheckoutResponse:
+      type: object
+      required: [checkoutUrl, subscriptionId]
+      properties:
+        checkoutUrl:
+          type: string
+          format: uri
+          description: "URL de redirecionamento para o gateway"
+        subscriptionId:
+          type: string
+          format: uuid
+
+    # ─── Schemas de input ────────────────────────────────────────────────────
+
+    RegisterInput:
+      type: object
+      required: [name, email, password, cpf, birthDate, favoriteClub, investorProfile, consentLgpd]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 120
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        cpf:
+          type: string
+          description: "CPF em texto claro — será hashed server-side; nunca persiste"
+          pattern: '^\d{11}$'
+        phone:
+          type: string
+          maxLength: 20
+        birthDate:
+          type: string
+          format: date
+          description: "Data de nascimento (verificação ECA Digital 18+)"
+        favoriteClub:
+          type: string
+          maxLength: 10
+          description: "Ticker do clube favorito"
+        investorProfile:
+          type: string
+          enum: [INICIANTE, INTERMEDIARIO, AVANCADO, FA_FUTEBOL]
+        consentLgpd:
+          type: boolean
+          description: "Consentimento LGPD — obrigatório true para prosseguir"
+
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    ForgotPasswordInput:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    ResetPasswordInput:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+        newPassword:
+          type: string
+          minLength: 8
+
+    UpdateUserInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 120
+        phone:
+          type: string
+          maxLength: 20
+        favoriteClub:
+          type: string
+          maxLength: 10
+        investorProfile:
+          type: string
+          enum: [INICIANTE, INTERMEDIARIO, AVANCADO, FA_FUTEBOL]
+        tourCompleted:
+          type: boolean
+        bio:
+          type: string
+          maxLength: 300
+          nullable: true
+          description: "Biografia opcional do usuário (max 300 chars)"
+
+    CreateOrderInput:
+      type: object
+      required: [ticker, type, side, quantity]
+      properties:
+        ticker:
+          type: string
+          maxLength: 10
+          description: "Ticker do ativo (ex: URU3)"
+        type:
+          type: string
+          enum: [MARKET, LIMIT, OCO, SHORT, SCHEDULED]
+        side:
+          type: string
+          enum: [BUY, SELL]
+        quantity:
+          type: number
+          format: double
+          minimum: 0.0001
+        price:
+          type: number
+          format: double
+          description: "Obrigatório para LIMIT, OCO, SHORT"
+        stopLossPrice:
+          type: number
+          format: double
+          description: "Obrigatório para OCO; stopLossPrice < price"
+        takeProfitPrice:
+          type: number
+          format: double
+          description: "Obrigatório para OCO; takeProfitPrice > price"
+        scheduledAt:
+          type: string
+          format: date-time
+          description: "Obrigatório para SCHEDULED; deve ser futuro"
+
+    CheckoutInput:
+      type: object
+      required: [planType, gateway, period]
+      properties:
+        planType:
+          type: string
+          enum: [CRAQUE, LENDA]
+        gateway:
+          type: string
+          enum: [MERCADO_PAGO, PAGSEGURO, PAYPAL]
+        period:
+          type: string
+          enum: [MONTHLY, ANNUAL]
+
+    CreateForumPostInput:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 280
+        ticker:
+          type: string
+          maxLength: 10
+          description: "Ticker do ativo relacionado (opcional)"
+
+    CreateLeagueInput:
+      type: object
+      required: [name, type, duration]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 60
+        type:
+          type: string
+          enum: [AMIGOS, PRO]
+          description: "Ligas públicas são criadas automaticamente pelo sistema"
+        duration:
+          type: integer
+          minimum: 7
+          description: "Duração em dias"
+
+    InjectNewsInput:
+      type: object
+      required: [title, ticker, impactCategory, sentiment]
+      properties:
+        title:
+          type: string
+          minLength: 5
+          maxLength: 255
+        ticker:
+          type: string
+          maxLength: 10
+        impactCategory:
+          type: string
+          enum: [RESULTADO_ESPORTIVO, CONTRATACAO, FINANCEIRO, LESAO, SUSPENSAO, INSTITUCIONAL]
+        sentiment:
+          type: number
+          format: double
+          minimum: -1.0
+          maximum: 1.0
+
+    AdminUpdateUserInput:
+      type: object
+      properties:
+        planType:
+          type: string
+          enum: [JOGADOR, CRAQUE, LENDA]
+        adminRole:
+          type: string
+          enum: [SUPER_ADMIN, ADMIN, MONITOR, EDITOR, MODERADOR]
+          nullable: true
+
+    AdminAdjustBalanceInput:
+      type: object
+      required: [amount, reason]
+      properties:
+        amount:
+          type: number
+          format: double
+          description: "Valor em FS$ a adicionar (positivo) ou subtrair (negativo)"
+        reason:
+          type: string
+          minLength: 5
+          maxLength: 255
+
+    HaltAssetInput:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 5
+          maxLength: 100
+
+    # ─── Schemas compartilhados ──────────────────────────────────────────────
+
+    Pagination:
+      type: object
+      required: [page, limit, total, hasNext]
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        total:
+          type: integer
+        hasNext:
+          type: boolean
+
+    ErrorResponse:
+      type: object
+      required: [success, error]
+      properties:
+        success:
+          type: boolean
+          example: false
+          description: "Sempre false em respostas de erro"
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: "Código de erro único no formato {MODULO}-{NNN} (ex: AUTH-001, ORD-002)"
+              example: "ORD-001"
+            message:
+              type: string
+              description: "Mensagem legível do erro em pt-BR"
+              example: "Saldo insuficiente para realizar a operação."
+            details:
+              type: string
+              nullable: true
+              description: "Informações adicionais"
+            available:
+              type: number
+              nullable: true
+              description: "Saldo disponível (apenas INSUFFICIENT_BALANCE)"
+            requiredPlan:
+              type: string
+              nullable: true
+              description: "Plano necessário (apenas PLAN_RESTRICTION)"
+            limit:
+              type: integer
+              nullable: true
+              description: "Limite do plano (apenas ORDER_LIMIT_REACHED)"
+            resetAt:
+              type: string
+              format: date-time
+              nullable: true
+              description: "Quando o limite reseta (apenas ORDER_LIMIT_REACHED)"
+            ticker:
+              type: string
+              nullable: true
+              description: "Ticker do ativo (apenas ASSET_HALTED)"
+            estimatedResume:
+              type: string
+              format: date-time
+              nullable: true
+              description: "Estimativa de retorno do halt (apenas ASSET_HALTED)"
+
+    AuthTokens:
+      type: object
+      required: [accessToken, refreshToken, user]
+      properties:
+        accessToken:
+          type: string
+          description: "JWT com TTL 1 hora"
+        refreshToken:
+          type: string
+          description: "JWT com TTL 30 dias"
+        user:
+          $ref: '#/components/schemas/User'
+
+  responses:
+    UnauthorizedError:
+      description: "Não autenticado — token ausente, inválido ou expirado (401)"
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "AUTH-001"
+              message: "Sessão expirada. Faça login novamente."
+
+    ForbiddenError:
+      description: "Sem permissão para este recurso (403)"
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "AUTH-003"
+              message: "Seu plano não permite esta operação."
+
+    NotFoundError:
+      description: "Recurso não encontrado (404)"
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "SYS-005"
+              message: "Recurso não encontrado."
+
+    ValidationError:
+      description: "Dados de entrada inválidos (422)"
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "VAL-001"
+              message: "Dados inválidos. Verifique os campos e tente novamente."
+
+    RateLimitError:
+      description: "Limite de requisições atingido (429)"
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "SYS-004"
+              message: "Limite de requisições atingido. Tente novamente em instantes."
+
+    ServerError:
+      description: "Erro interno do servidor (500)"
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "SYS-001"
+              message: "Erro interno. Nossa equipe foi notificada."
+
+paths:
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # AUTH
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: "Cadastrar novo usuário"
+      description: >
+        Wizard de 4 etapas consolidado em um único payload. Valida CPF via FlagCheck API
+        (verificação de idade ECA Digital 18+). CPF é hashed SHA-256 server-side; nunca persiste
+        em texto claro. Em caso de timeout do FlagCheck, conta é criada com `ageVerificationPending=true`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterInput'
+      responses:
+        '201':
+          description: "Usuário criado com sucesso"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AuthTokens'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          description: "CPF ou e-mail já cadastrado (409)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "AUTH-005"
+                  message: "Já existe uma conta com este CPF."
+        '403':
+          description: "Menor de 18 anos — bloqueado pelo ECA Digital (403)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "AUTH-006"
+                  message: "É necessário ter 18 anos ou mais para se cadastrar."
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: "Autenticar usuário"
+      description: "Login com e-mail e senha via Supabase Auth. Rate limit: 5 tentativas / 15 min por e-mail."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginInput'
+      responses:
+        '200':
+          description: "Login realizado com sucesso"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AuthTokens'
+        '401':
+          description: "Credenciais inválidas (401)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "AUTH-002"
+                  message: "E-mail ou senha incorretos."
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: "Encerrar sessão"
+      description: "Invalida o token atual via Supabase Auth."
+      responses:
+        '204':
+          description: "Sessão encerrada com sucesso"
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /auth/forgot-password:
+    post:
+      tags: [auth]
+      summary: "Solicitar redefinição de senha"
+      description: "Envia link de reset por e-mail. Sempre retorna 200 para evitar enumeração de usuários."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordInput'
+      responses:
+        '200':
+          description: "Se o e-mail estiver cadastrado, o link foi enviado"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message:
+                    type: string
+                    example: "Se o e-mail estiver cadastrado, você receberá as instruções em breve."
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /auth/reset-password:
+    post:
+      tags: [auth]
+      summary: "Redefinir senha"
+      description: "Aplica nova senha com token de reset."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordInput'
+      responses:
+        '200':
+          description: "Senha redefinida com sucesso"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message:
+                    type: string
+                    example: "Senha redefinida com sucesso. Faça login para continuar."
+        '400':
+          description: "Token inválido ou expirado (400)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # USERS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  /me:
+    get:
+      tags: [users]
+      summary: "Obter perfil do usuário autenticado"
+      # EP006 — implementado em app/api/v1/me/route.ts (GET)
+      responses:
+        '200':
+          description: "Perfil do usuário"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required: [data]
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    patch:
+      tags: [users]
+      summary: "Atualizar perfil do usuário autenticado"
+      # EP007 — implementado em app/api/v1/me/route.ts (PATCH)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserInput'
+      responses:
+        '200':
+          description: "Perfil atualizado"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required: [data]
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    delete:
+      tags: [users]
+      summary: "Solicitar exclusão e anonimização da conta (LGPD)"
+      description: >
+        Inicia processo de anonimização + remoção cascateada conforme LGPD.
+        Prazo de execução: até 15 dias. Registrado em `data_access_logs`.
+      responses:
+        '202':
+          description: "Solicitação de exclusão registrada"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message:
+                    type: string
+                    example: "Sua solicitação de exclusão foi registrada. Os dados serão removidos em até 15 dias."
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /users/me/tour-completed:
+    patch:
+      tags: [users]
+      summary: "Concluir tour de onboarding e inscrever em liga publica"
+      description: |
+        Marca `tourCompleted=true` e executa auto-enroll idempotente na liga
+        publica da divisao correspondente ao plano. Retorna status da inscricao.
+      responses:
+        '200':
+          description: "Tour concluido com status da inscricao em liga"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    allOf:
+                      - $ref: '#/components/schemas/User'
+                      - type: object
+                        required: [leagueEnrollment]
+                        properties:
+                          leagueEnrollment:
+                            type: object
+                            required: [status]
+                            properties:
+                              status:
+                                type: string
+                                enum: [ENROLLED, ALREADY_MEMBER, NO_ACTIVE_PUBLIC_LEAGUE, FAILED]
+                              leagueId:
+                                type: string
+                                format: uuid
+                                nullable: true
+                              reason:
+                                type: string
+                                nullable: true
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /users/me/tour-skip:
+    patch:
+      tags: [users]
+      summary: "Pular tour de onboarding e inscrever em liga publica"
+      description: |
+        Marca `tourCompleted=true` com `tourSkippedAt` e executa auto-enroll
+        idempotente na liga publica da divisao. Retorna status da inscricao.
+      responses:
+        '200':
+          description: "Tour pulado com status da inscricao em liga"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    allOf:
+                      - $ref: '#/components/schemas/User'
+                      - type: object
+                        required: [leagueEnrollment]
+                        properties:
+                          tourSkippedAt:
+                            type: string
+                            format: date-time
+                          leagueEnrollment:
+                            type: object
+                            required: [status]
+                            properties:
+                              status:
+                                type: string
+                                enum: [ENROLLED, ALREADY_MEMBER, NO_ACTIVE_PUBLIC_LEAGUE, FAILED]
+                              leagueId:
+                                type: string
+                                format: uuid
+                                nullable: true
+                              reason:
+                                type: string
+                                nullable: true
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /users/me/data:
+    get:
+      tags: [users]
+      summary: "Exportar dados pessoais em JSON (LGPD)"
+      description: "Retorna export JSON completo dos dados do titular. Auditado em `data_access_logs`."
+      responses:
+        '200':
+          description: "Export JSON dos dados do usuário"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    description: "Todos os dados pessoais do titular em formato estruturado"
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /users/me/export:
+    get:
+      tags: [users]
+      summary: "Download de dados em CSV/JSON (portabilidade LGPD)"
+      description: "Gera arquivo para download com todos os dados portáveis do titular."
+      parameters:
+        - name: format
+          in: query
+          description: "Formato do arquivo"
+          schema:
+            type: string
+            enum: [json, csv]
+            default: json
+      responses:
+        '200':
+          description: "Arquivo de portabilidade"
+          content:
+            application/json:
+              schema:
+                type: object
+            text/csv:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # ASSETS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  /assets:
+    get:
+      tags: [assets]
+      summary: "Listar todos os ativos negociáveis"
+      description: "Retorna os 40 ativos (20 Série A + 20 Série B) com preços atuais. Nota: usuários do plano Jogador recebem cotações com atraso de 60 minutos."
+      parameters:
+        - name: division
+          in: query
+          description: "Filtrar por divisão"
+          schema:
+            type: string
+            enum: [A, B]
+        - name: sentiment
+          in: query
+          description: "Filtrar por sentimento"
+          schema:
+            type: string
+            enum: [BULLISH, NEUTRO, BEARISH]
+        - name: isHalted
+          in: query
+          description: "Filtrar ativos em halt"
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: "Lista de ativos"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Asset'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /assets/{ticker}:
+    get:
+      tags: [assets]
+      summary: "Obter detalhe de um ativo"
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+          description: "Ticker do ativo (ex: URU3)"
+      responses:
+        '200':
+          description: "Detalhe do ativo"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Asset'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /assets/{ticker}/history:
+    get:
+      tags: [assets]
+      summary: "Histórico OHLC de preços de um ativo"
+      description: |
+        Retorna candles OHLCV do price_history para gráficos. Respeita o cutoff
+        comercial do plano do usuário. Cache-Control: private, no-store.
+        Parametros `period` e o par absoluto `from`/`to` sao mutuamente exclusivos.
+        Periodos 3M, 1Y e ALL so ficam habilitados quando documentados com bucket,
+        limite e orcamento (hipotese: H6).
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+          description: "Ticker do ativo"
+        - name: period
+          in: query
+          description: |
+            Período do candle (mutuamente exclusivo com from/to).
+            `3M` e `1Y` estão desabilitados até decisão registrada de bucket,
+            cardinalidade e orçamento (hipotese: H6).
+          schema:
+            type: string
+            enum: [1H, 1D, 1S, 1W, 1M, ALL]
+        - name: from
+          in: query
+          description: "Inicio absoluto (ISO 8601). Exige `to`."
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: "Fim absoluto (ISO 8601). Exige `from`."
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          description: "Número maximo de candles a retornar"
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 500
+      responses:
+        '200':
+          description: "Candles OHLCV com metadata temporal"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PriceCandle'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+                  meta:
+                    type: object
+                    properties:
+                      requestedFrom:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      requestedTo:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      effectiveFrom:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      effectiveTo:
+                        type: string
+                        format: date-time
+                      bucketSeconds:
+                        type: integer
+                      granularity:
+                        type: string
+                        enum: [minute, hourly, daily, weekly]
+                        nullable: true
+                      firstTimestamp:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      lastTimestamp:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      count:
+                        type: integer
+                      truncated:
+                        type: boolean
+                      isDelayed:
+                        type: boolean
+                      delayMinutes:
+                        type: integer
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # ORDERS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  /orders:
+    get:
+      tags: [orders]
+      summary: "Listar ordens do usuário autenticado"
+      description: "Listagem paginada de ordens. Rate limit: 100 req/60s por userId."
+      parameters:
+        - name: status
+          in: query
+          description: "Filtrar por status"
+          schema:
+            type: string
+            enum: [PENDING, EXECUTED, CANCELLED, EXPIRED, PARTIAL]
+        - name: ticker
+          in: query
+          description: "Filtrar por ativo"
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: "Lista paginada de ordens"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Order'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    post:
+      tags: [orders]
+      summary: "Criar nova ordem"
+      description: >
+        Valida plano, saldo e halt. Debita saldo via lock otimista (`version`).
+        Motor de mercado executa ordens PENDING a cada tick (2s).
+        Rate limit: 100 req/60s por userId.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderInput'
+      responses:
+        '201':
+          description: "Ordem criada com sucesso"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Order'
+        '400':
+          description: "Payload inválido (400)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "VAL-001"
+                  message: "Dados inválidos. Verifique os campos e tente novamente."
+        '402':
+          description: "Saldo insuficiente (402)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "ORD-002"
+                  message: "Saldo insuficiente para realizar a operação."
+                  available: 850.00
+        '403':
+          description: "Tipo de ordem não permitido pelo plano (403)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "ORD-003"
+                  message: "Seu plano não permite ordens do tipo OCO."
+                  requiredPlan: "LENDA"
+        '409':
+          description: "Conflito de versão — lock otimista (409). Cliente deve fazer retry."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "ORD-004"
+                  message: "Atualização concorrente detectada. Recarregue e tente novamente."
+        '423':
+          description: "Ativo em halt — circuit breaker ativo (423)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "ORD-005"
+                  message: "Negociação suspensa para URU3. Retorno estimado em breve."
+                  ticker: "URU3"
+        '429':
+          description: "Limite diário de ordens do plano atingido (429)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "ORD-001"
+                  message: "Limite de 2 ordens/dia do plano Jogador atingido. Faça upgrade para mais."
+                  limit: 2
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /orders/{id}:
+    get:
+      tags: [orders]
+      summary: "Obter detalhe de uma ordem"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: "Detalhe da ordem"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    delete:
+      tags: [orders]
+      summary: "Cancelar ordem (apenas PENDING)"
+      description: "Cancela a ordem e estorna o saldo debitado. Apenas ordens com status PENDING podem ser canceladas."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: "Ordem cancelada com sucesso"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          description: "Ordem não está em status PENDING (409)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "ORD-006"
+                  message: "Apenas ordens pendentes podem ser canceladas."
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # POSITIONS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  /positions:
+    get:
+      tags: [positions]
+      summary: "Listar posições abertas do usuário"
+      description: "Retorna todas as posições abertas (quantidade > 0) do usuário autenticado."
+      parameters:
+        - name: side
+          in: query
+          description: "Filtrar por tipo de posição"
+          schema:
+            type: string
+            enum: [LONG, SHORT]
+        - name: ticker
+          in: query
+          description: "Filtrar por ativo"
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: "Posições abertas"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Position'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # TRANSACTIONS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  /transactions:
+    get:
+      tags: [transactions]
+      summary: "Extrato de movimentações financeiras"
+      description: |
+        Ledger imutável de todas as movimentações do usuário autenticado.
+        Sempre filtra por `userId` da sessão. Paginado por data descendente.
+        Inclui relações `asset` e `order` e devolve campos financeiros canônicos.
+      parameters:
+        - name: type
+          in: query
+          description: "Filtrar por tipo de ordem (MARKET, LIMIT, etc.)"
+          schema:
+            type: string
+            enum: [MARKET, LIMIT, STOP_LOSS, TAKE_PROFIT, OCO, SCHEDULED]
+        - name: financialType
+          in: query
+          description: "Filtrar por tipo financeiro"
+          schema:
+            type: string
+            enum: [TRADE, FEE, BONUS, DEPOSIT, WITHDRAWAL, SHORT_INTEREST, MARGIN_BLOCKED, SHORT_CLOSE, LEVERAGE_INTEREST]
+        - name: assetId
+          in: query
+          description: "Filtrar por ID do ativo"
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: "Extrato paginado"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+                  meta:
+                    type: object
+                    required: [missingAssetCount, missingOrderCount, cashDeltaDivergenceCount]
+                    properties:
+                      missingAssetCount:
+                        type: integer
+                      missingOrderCount:
+                        type: integer
+                      cashDeltaDivergenceCount:
+                        type: integer
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # PAYMENTS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  /payments/checkout:
+    post:
+      tags: [payments]
+      summary: "Iniciar checkout de plano"
+      description: "Cria preferência de pagamento no gateway selecionado e retorna URL de redirecionamento. Bônus FS$ é creditado somente após 7 dias do período de arrependimento."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutInput'
+      responses:
+        '200':
+          description: "Checkout criado — redirecionar para checkoutUrl"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CheckoutResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          description: "Usuário já possui assinatura ativa no mesmo plano (409)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /payments/webhook:
+    post:
+      tags: [payments]
+      summary: "Webhook de confirmação de pagamento"
+      description: >
+        Recebe notificações dos gateways (Mercado Pago, PagSeguro, PayPal).
+        Valida HMAC-SHA256. Idempotente via `gatewayTransactionId` UNIQUE.
+        Rate limit: 1000 req/60s por IP (gateways).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: "Payload variável por gateway (estrutura interna de cada gateway)"
+      responses:
+        '200':
+          description: "Webhook processado com sucesso"
+        '400':
+          description: "HMAC inválido — rejeitado silenciosamente (400)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: "Pagamento já processado — idempotência (409)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # SUBSCRIPTIONS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  /subscriptions/me:
+    get:
+      tags: [subscriptions]
+      summary: "Obter assinatura ativa do usuário"
+      responses:
+        '200':
+          description: "Assinatura ativa"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Subscription'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: "Nenhuma assinatura ativa encontrada (404)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags: [subscriptions]
+      summary: "Cancelar assinatura"
+      description: >
+        Cancela a assinatura ativa. Primeiros 7 dias: reembolso integral.
+        Após 7 dias: shorts liquidados, ordens pendentes canceladas, posições liquidadas,
+        saldo resetado para FS$ 2.000.
+      responses:
+        '200':
+          description: "Assinatura cancelada"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Subscription'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # NOTIFICATIONS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  /notifications:
+    get:
+      tags: [notifications]
+      summary: "Listar notificações do usuário"
+      parameters:
+        - name: read
+          in: query
+          description: "Filtrar por status de leitura"
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: "Notificações paginadas"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Notification'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /notifications/unread-count:
+    get:
+      tags: [notifications]
+      summary: "Contagem de notificações não lidas"
+      description: "Usado para exibir badge no ícone de sino."
+      responses:
+        '200':
+          description: "Quantidade de notificações não lidas"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [count]
+                    properties:
+                      count:
+                        type: integer
+                        minimum: 0
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /notifications/{id}/read:
+    patch:
+      tags: [notifications]
+      summary: "Marcar notificação como lida"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: "Notificação marcada como lida"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Notification'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # NEWS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  /news:
+    get:
+      tags: [news]
+      summary: "Feed de notícias dos clubes"
+      description: "Notícias agregadas de RSS (ESPN Brasil, GloboEsporte, Lance!) classificadas por Claude Sonnet. Cache Redis 5 min."
+      parameters:
+        - name: ticker
+          in: query
+          description: "Filtrar por ativo"
+          schema:
+            type: string
+        - name: impactCategory
+          in: query
+          description: "Filtrar por categoria de impacto"
+          schema:
+            type: string
+            enum: [RESULTADO_ESPORTIVO, CONTRATACAO, FINANCEIRO, LESAO, SUSPENSAO, INSTITUCIONAL]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 50
+      responses:
+        '200':
+          description: "Feed de notícias paginado"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NewsItem'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # FORUM
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  /forum:
+    get:
+      tags: [forum]
+      summary: "Listar posts do fórum"
+      parameters:
+        - name: ticker
+          in: query
+          description: "Filtrar por ativo"
+          schema:
+            type: string
+        - name: sort
+          in: query
+          description: "Ordenação"
+          schema:
+            type: string
+            enum: [recentes, curtidos]
+            default: recentes
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 50
+      responses:
+        '200':
+          description: "Posts do fórum paginados"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ForumPost'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    post:
+      tags: [forum]
+      summary: "Criar post no fórum"
+      description: >
+        Conteúdo sanitizado antes de persistir (remove CPF, CNPJ, telefone, e-mail, URLs).
+        Auto-flagging via lista de palavras bloqueadas.
+        Rate limit: 10 posts/60s por userId.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateForumPostInput'
+      responses:
+        '201':
+          description: "Post criado"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ForumPost'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /forum/{id}/like:
+    post:
+      tags: [forum]
+      summary: "Curtir um post"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: "Post curtido"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [likes]
+                    properties:
+                      likes:
+                        type: integer
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /forum/{id}:
+    delete:
+      tags: [forum]
+      summary: "Remover post (Moderador+)"
+      description: "Remove o post (status REMOVED). Apenas roles MODERADOR, ADMIN e SUPER_ADMIN."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: "Post removido"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ForumPost'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # AI
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  /ai/analyze:
+    get:
+      tags: [ai]
+      summary: "Análise IA de ativo (Assessor Claude Sonnet)"
+      description: >
+        Análise fundamentalista por Claude Sonnet roteada obrigatoriamente via API route (server-side).
+        Versão básica (Craque): sem web_search. Versão VIP (Lenda): com web_search em tempo real.
+        Cache Redis TTL 30 min por ticker+plano.
+        Rate limit: 10 req/hora por userId. Plano mínimo: CRAQUE.
+      parameters:
+        - name: ticker
+          in: query
+          required: true
+          description: "Ticker do ativo a analisar (ex: URU3)"
+          schema:
+            type: string
+      responses:
+        '200':
+          description: "Análise IA do ativo"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AIAnalysis'
+                  cached:
+                    type: boolean
+                    description: "true se veio do cache Redis"
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          description: "Plano insuficiente — necessário CRAQUE ou LENDA (403)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "AUTH-003"
+                  message: "O Assessor IA está disponível a partir do plano Craque."
+                  requiredPlan: "CRAQUE"
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '429':
+          description: "Limite de 10 análises/hora atingido (429)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "AI-050"
+                  message: "Limite de 10 consultas por hora atingido."
+                  resetAt: "2026-03-25T12:00:00Z"
+        '503':
+          description: "Assessor IA temporariamente indisponível (503)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "AI_002"
+                  message: "Assessor indisponível. Tente em breve."
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # LEAGUES
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  /leagues:
+    get:
+      tags: [leagues]
+      summary: "Listar ligas disponíveis, memberships ou ligas criadas pelo usuario"
+      description: |
+        Quando `userId=me`, retorna as ligas em que o usuario autenticado e membro.
+        Quando `createdBy=me`, retorna as ligas criadas pelo usuario autenticado.
+        Quando `type` e/ou `status` sao informados, lista ligas publicas do catalogo.
+      parameters:
+        - name: type
+          in: query
+          description: "Filtrar por tipo"
+          schema:
+            type: string
+            enum: [PUBLICA, AMIGOS, PRO]
+        - name: status
+          in: query
+          description: "Filtrar por status"
+          schema:
+            type: string
+            enum: [PENDING, ACTIVE, FINISHED]
+        - name: userId
+          in: query
+          description: "Use `me` para listar memberships do usuario autenticado"
+          schema:
+            type: string
+            enum: [me]
+        - name: createdBy
+          in: query
+          description: "Use `me` para listar ligas criadas pelo usuario autenticado"
+          schema:
+            type: string
+            enum: [me]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: "Ligas paginadas"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/League'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    post:
+      tags: [leagues]
+      summary: "Criar liga (Craque+ para Amigos; Lenda para PRO)"
+      description: "Cria liga do tipo Amigos ou PRO. Ligas Públicas são gerenciadas automaticamente pelo sistema."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLeagueInput'
+      responses:
+        '201':
+          description: "Liga criada"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/League'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /leagues/{id}:
+    get:
+      tags: [leagues]
+      summary: "Obter detalhe de uma liga"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: "Detalhe da liga"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/League'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /leagues/{id}/join:
+    post:
+      tags: [leagues]
+      summary: "Entrar em uma liga"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: "Entrada confirmada na liga"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/LeagueMember'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          description: "Usuário já é membro desta liga (409)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /leagues/{id}/ranking:
+    get:
+      tags: [leagues]
+      summary: "Ranking de uma liga"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: "Ranking paginado por score"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LeagueMember'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # ADMIN
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  /admin/dashboard:
+    get:
+      tags: [admin]
+      summary: "Métricas do dashboard administrativo"
+      description: "Visível para todos os roles de admin. Inclui DAU/WAU/MAU, ordens/dia, MRR, uptime do motor."
+      responses:
+        '200':
+          description: "Métricas do dashboard"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [dau, wau, mau, ordersToday, mrr, motorStatus]
+                    properties:
+                      dau:
+                        type: integer
+                      wau:
+                        type: integer
+                      mau:
+                        type: integer
+                      ordersToday:
+                        type: integer
+                      mrr:
+                        type: number
+                        format: double
+                      motorStatus:
+                        type: string
+                        enum: [ONLINE, OFFLINE, READONLY]
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  /admin/users:
+    get:
+      tags: [admin]
+      summary: "Listar usuários (admin)"
+      description: "Acesso: ADMIN, SUPER_ADMIN, MONITOR. Registra acesso em `data_access_logs`."
+      parameters:
+        - name: planType
+          in: query
+          schema:
+            type: string
+            enum: [JOGADOR, CRAQUE, LENDA]
+        - name: adminRole
+          in: query
+          schema:
+            type: string
+            enum: [SUPER_ADMIN, ADMIN, MONITOR, EDITOR, MODERADOR]
+        - name: search
+          in: query
+          description: "Busca por nome ou e-mail"
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: "Usuários paginados"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  /admin/users/{id}:
+    get:
+      tags: [admin]
+      summary: "Obter detalhe de usuário (admin)"
+      description: "Acesso: ADMIN+. Registra em `data_access_logs` com action VIEW_SENSITIVE_FIELD."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: "Detalhe do usuário"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    patch:
+      tags: [admin]
+      summary: "Atualizar dados de usuário (admin)"
+      description: "Acesso: ADMIN, SUPER_ADMIN."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUpdateUserInput'
+      responses:
+        '200':
+          description: "Usuário atualizado"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /admin/users/{id}/balance:
+    patch:
+      tags: [admin]
+      summary: "Ajustar saldo FS$ de usuário (ADMIN+)"
+      description: "Registra ação em `admin_market_actions` com action ADJUST_BALANCE."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminAdjustBalanceInput'
+      responses:
+        '200':
+          description: "Saldo ajustado"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /admin/users/{id}/suspend:
+    post:
+      tags: [admin]
+      summary: "Suspender conta de usuário (ADMIN+)"
+      description: "Registra ação em `admin_market_actions` com action SUSPEND_USER."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: "Conta suspensa"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /admin/assets/{ticker}/halt:
+    post:
+      tags: [admin]
+      summary: "Haltar ativo manualmente (ADMIN+)"
+      description: "Ativa circuit breaker manual. Registra em `admin_market_actions` com action HALT_ASSET."
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HaltAssetInput'
+      responses:
+        '200':
+          description: "Ativo haltado"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Asset'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    delete:
+      tags: [admin]
+      summary: "Liberar halt de ativo (ADMIN+)"
+      description: "Remove circuit breaker manual. Registra em `admin_market_actions` com action RELEASE_HALT."
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: "Halt removido — ativo voltou a negociar"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Asset'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /admin/news:
+    post:
+      tags: [admin]
+      summary: "Injetar notícia manualmente no motor (ADMIN+)"
+      description: >
+        Injeção manual via módulo Motor do painel admin (SuperAdmin/Admin).
+        A notícia é publicada no canal Redis `news:inject` e convertida em Pressure Queue
+        pelo motor (10 ticks spread + 40 ticks absorção).
+        Registra em `admin_market_actions` com action INJECT_NEWS.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InjectNewsInput'
+      responses:
+        '201':
+          description: "Notícia injetada com sucesso"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/NewsItem'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /admin/forum/flagged:
+    get:
+      tags: [admin]
+      summary: "Listar posts flagged para moderação (MODERADOR+)"
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: "Posts flagged paginados"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ForumPost'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # HEALTH
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  /health:
+    get:
+      tags: [health]
+      summary: "Health check da API"
+      description: "Verifica status da API, banco de dados e Redis. Usado pelo motor para detectar modo read-only."
+      security: []
+      responses:
+        '200':
+          description: "API operacional"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, services]
+                properties:
+                  status:
+                    type: string
+                    enum: [ok, degraded]
+                  services:
+                    type: object
+                    required: [database, redis, motor]
+                    properties:
+                      database:
+                        type: string
+                        enum: [ok, error]
+                      redis:
+                        type: string
+                        enum: [ok, error]
+                      motor:
+                        type: string
+                        enum: [online, offline, readonly]
+                  timestamp:
+                    type: string
+                    format: date-time
+        '503':
+          description: "API degradada ou indisponível"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, services]
+                properties:
+                  status:
+                    type: string
+                    enum: [error]
+                  services:
+                    type: object

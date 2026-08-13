@@ -1,6 +1,3 @@
-// SKIP via item 015 — migration-exec:fix-failing-tests (PENDING-ACTIONS L728-772). Reativar com Redis testcontainer + Prisma mock completo. Coverage de business logic preservada em unit tests.
-// MIGRATION-EXEC SKIP marker
-
 /**
  * TASK-2 — Auditoria de Contratos de API
  * module-29-integration / FootStock
@@ -101,7 +98,7 @@ describe('Contrato das APIs alteradas (tasks 12-17)', () => {
   test('OpenAPI reflete metadados de delay/buffering no Asset e no historico', () => {
     const fs = require('fs')
     const path = require('path')
-    const yamlPath = path.resolve(__dirname, '../../../../../docs/foot-stock/project/openapi.yaml')
+    const yamlPath = path.resolve(__dirname, '../../openapi.yaml')
     const yaml = fs.readFileSync(yamlPath, 'utf8')
 
     expect(yaml).toContain('changePercent:')
@@ -115,7 +112,7 @@ describe('Contrato das APIs alteradas (tasks 12-17)', () => {
   test('OpenAPI reflete campos canonicos de Transaction', () => {
     const fs = require('fs')
     const path = require('path')
-    const yamlPath = path.resolve(__dirname, '../../../../../docs/foot-stock/project/openapi.yaml')
+    const yamlPath = path.resolve(__dirname, '../../openapi.yaml')
     const yaml = fs.readFileSync(yamlPath, 'utf8')
 
     expect(yaml).toContain('grossAmount:')
