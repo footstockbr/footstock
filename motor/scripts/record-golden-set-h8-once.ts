@@ -14,7 +14,7 @@
 
 import { config as loadEnv } from 'dotenv'
 import { resolve, join } from 'path'
-import { writeFileSync, mkdirSync, existsSync } from 'fs'
+import { writeFileSync, readFileSync, mkdirSync, existsSync } from 'fs'
 import Anthropic from '@anthropic-ai/sdk'
 import { NewsClassifier } from '../src/news/NewsClassifier'
 import type { RawNewsItem } from '../src/news/NewsQueue'
@@ -79,6 +79,49 @@ const statusDefaults: Omit<
 function writeJson(path: string, value: unknown): void {
   if (!existsSync(OUT_DIR)) mkdirSync(OUT_DIR, { recursive: true })
   writeFileSync(path, JSON.stringify(value, null, 2) + '\n', 'utf8')
+}
+
+function readArtifactIfExists(): { cases: RecordedCase[] } | null {
+  if (!existsSync(ARTIFACT_PATH)) return null
+  try {
+    const parsed = JSON.parse(readFileSync(ARTIFACT_PATH, 'utf8')) as {
+      cases?: RecordedCase[]
+    }
+    return { cases: Array.isArray(parsed.cases) ? parsed.cases : [] }
+  } catch {
+    return null
+  }
+}
+
+function appendCaseToArtifact(recordedCase: RecordedCase, currentRequestCount: number): void {
+  const existing = readArtifactIfExists()
+  const cases = existing?.cases ?? []
+  const idx = cases.findIndex((c) => c.id === recordedCase.id)
+  if (idx >= 0) {
+    cases[idx] = recordedCase
+  } else {
+    cases.push(recordedCase)
+  }
+  const artifact = {
+    schema: 'h8-golden-set-recorded/v2',
+    status: 'recording' as RecordingState,
+    h8Decision: 'NOT_VERIFIED' as const,
+    provenance: 'real-http' as const,
+    acquisition: 'provider-http' as const,
+    productionH8Eligible: false,
+    recordedAt: new Date().toISOString(),
+    provider: statusDefaults.provider,
+    model: statusDefaults.model,
+    classifier_output_version_base: 'news-classifier/2026-07-28-multi-team',
+    caseCount: GOLDEN_SET.length,
+    attemptedCount: cases.length,
+    okCount: cases.filter((c) => c.ok).length,
+    failCount: cases.filter((c) => !c.ok).length,
+    requestCount: currentRequestCount,
+    terminalBlock: null,
+    cases,
+  }
+  writeJson(ARTIFACT_PATH, artifact)
 }
 
 function writeStatus(
@@ -281,6 +324,9 @@ async function main(): Promise<void> {
   internal.tickerMapLine = tickerMapLine
   internal.tickerIndex = buildAliasIndex([...GOLDEN_ASSET_ALIASES])
   internal.boundModel = model
+  // Previne que ensureClient() reconstrua o cliente e descarte o wrapper de
+  // interceptação da resposta bruta.
+  internal.boundConfigVersion = 0
   await internal.rebuildStaticPrefix()
 
   const originalCreate = internal.anthropic.messages.create.bind(internal.anthropic.messages)
@@ -294,10 +340,10 @@ async function main(): Promise<void> {
     requestCount += 1
     try {
       const response = await originalCreate(...args)
-      const textBlock = (
+      const textBlocks = (
         response as { content?: Array<{ type: string; text?: string }> }
-      ).content?.find((block) => block.type === 'text')
-      lastRawText = textBlock?.type === 'text' ? textBlock.text ?? '' : ''
+      ).content?.filter((block) => block.type === 'text') ?? []
+      lastRawText = textBlocks.map((block) => block.text ?? '').join('\n')
       lastHttpError = null
       return response
     } catch (err) {
@@ -307,11 +353,22 @@ async function main(): Promise<void> {
   }) as typeof originalCreate
 
   const recordedAt = new Date().toISOString()
-  const cases: RecordedCase[] = []
-  let okCount = 0
+  const resume = process.env.H8_RESUME === 'true'
+  const existingArtifact = resume ? readArtifactIfExists() : null
+  const alreadyRecorded = new Set(existingArtifact?.cases.map((c) => c.id) ?? [])
+  const cases: RecordedCase[] = existingArtifact?.cases ?? []
+  let okCount = cases.filter((c) => c.ok).length
   let terminalBlock: ReturnType<typeof terminalHttpBlock> = null
 
   for (const gold of GOLDEN_SET) {
+    const existingCase = existingArtifact?.cases.find((c) => c.id === gold.id)
+    if (resume && existingCase?.ok) {
+      console.log(`[H8-record] SKIP ${gold.id} already recorded OK (resume)`)
+      continue
+    }
+    if (resume && existingCase && !existingCase.ok) {
+      console.log(`[H8-record] RETRY ${gold.id} previous fail: ${existingCase.error}`)
+    }
     const item: RawNewsItem = {
       url: `https://ge.globo.com/h8-record/${gold.id}`,
       title: gold.title,
@@ -329,28 +386,33 @@ async function main(): Promise<void> {
 
       const latencyMs = Date.now() - startedAt
       const llm = parseLlmJson(lastRawText)
+      const recordedCase: RecordedCase = !llm
+        ? {
+            id: gold.id,
+            title: gold.title,
+            ok: false,
+            error: `parse_failed raw_len=${lastRawText.length}`,
+            rawText: lastRawText.slice(0, 2000),
+            classified,
+            recordedAt,
+            latencyMs,
+          }
+        : {
+            id: gold.id,
+            title: gold.title,
+            ok: true,
+            llm,
+            classified,
+            recordedAt,
+            latencyMs,
+          }
+      const existingIdx = cases.findIndex((c) => c.id === recordedCase.id)
+      if (existingIdx >= 0) cases[existingIdx] = recordedCase
+      else cases.push(recordedCase)
+      appendCaseToArtifact(recordedCase, requestCount)
       if (!llm) {
-        cases.push({
-          id: gold.id,
-          title: gold.title,
-          ok: false,
-          error: `parse_failed raw_len=${lastRawText.length}`,
-          rawText: lastRawText.slice(0, 2000),
-          classified,
-          recordedAt,
-          latencyMs,
-        })
         console.error(`[H8-record] FAIL ${gold.id} parse_failed latency=${latencyMs}ms`)
       } else {
-        cases.push({
-          id: gold.id,
-          title: gold.title,
-          ok: true,
-          llm,
-          classified,
-          recordedAt,
-          latencyMs,
-        })
         okCount += 1
         console.log(
           `[H8-record] OK ${gold.id} teams=${llm.teams.length} latency=${latencyMs}ms ` +
@@ -361,7 +423,7 @@ async function main(): Promise<void> {
       const latencyMs = Date.now() - startedAt
       const message = err instanceof Error ? err.message : String(err)
       const httpStatus = extractHttpStatus(err)
-      cases.push({
+      const recordedCase: RecordedCase = {
         id: gold.id,
         title: gold.title,
         ok: false,
@@ -370,7 +432,11 @@ async function main(): Promise<void> {
         rawText: lastRawText.slice(0, 2000),
         recordedAt,
         latencyMs,
-      })
+      }
+      const existingIdx = cases.findIndex((c) => c.id === recordedCase.id)
+      if (existingIdx >= 0) cases[existingIdx] = recordedCase
+      else cases.push(recordedCase)
+      appendCaseToArtifact(recordedCase, requestCount)
       console.error(`[H8-record] FAIL ${gold.id} ${message} latency=${latencyMs}ms`)
 
       terminalBlock = terminalHttpBlock(err)
@@ -382,7 +448,7 @@ async function main(): Promise<void> {
       }
     }
 
-    await new Promise((done) => setTimeout(done, 1200))
+    await new Promise((done) => setTimeout(done, 200))
   }
 
   const complete = okCount === GOLDEN_SET.length && cases.length === GOLDEN_SET.length

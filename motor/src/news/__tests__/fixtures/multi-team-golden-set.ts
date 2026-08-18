@@ -20,17 +20,18 @@
 //   que o justifica — a forma fica intacta.
 //
 // LIMITE DECLARADO (Zero Assumido) — LEIA ANTES DE CITAR O PERCENTUAL
-//   Em 2026-07-31 (item 005 loop 07-31-plano-acao-fechamento-multi-time) o
-//   operador AUTORIZOU simulacao local do provider Kimi apos falha de creditos
-//   reais (Kimi 403 usage limit; Anthropic 400 credit low). Autorizacao para
-//   simular NAO transforma a captura em resposta real do provider.
-//   Todos os 32 casos estao com `provenance: 'simulated'` e a meta do corpus
-//   registra `acquisition: 'agent-sim'` + `productionH8Eligible: false`.
-//   Os campos `llm` sao respostas simuladas pelo agente executor, com rotulos
-//   humanos intactos. Os tres casos `modelError: true` (GS-10, GS-18, GS-25)
-//   preservam modos de falha RB13. Meta de calibracao:
-//   SIGNAL_ACCURACY_TARGET 0.85. H8/G3 exige nova gravacao `real-http` dos 32
-//   casos; o artefato historico do loop 07-31 nao libera producao.
+//   Em 2026-08-18 (task 003 do loop 08-18-foot-stock-motor-noticias-analise)
+//   os 32 casos foram regravados via HTTP real pelo provider Kimi
+//   (`kimi-for-coding`) apos ajuste de timeout para casos de alta latencia
+//   (GS-17, GS-27). Todos os casos estao com `provenance: 'real-http'`, a meta
+//   do corpus registra `acquisition: 'provider-http'` e
+//   `productionH8Eligible: true`, e o artefato de gravacao esta em
+//   `blacksmith/loop-archives/07-31-plano-acao-fechamento-multi-time/reviews/H8-GOLDEN-SET-RECORDED.json`.
+//   Os campos `llm` refletem as respostas reais do provider; os rotulos
+//   humanos (`expectedAnchor`, `labels`) permanecem inalterados. O caso
+//   `modelError: true` (GS-18) documenta um erro real de ancora detectado na
+//   gravacao. TAXA A obtida: 94.7% (54/57), acima do SIGNAL_ACCURACY_TARGET 0.85.
+//   G3 de `m067-d7-controlled.md` foi fechado com esta evidencia.
 //
 // ROTULAGEM (o que cada `expected` significa)
 //   'positivo' | 'negativo' | 'neutro' — o time e legitimamente afetado e o
@@ -127,13 +128,13 @@ export interface GoldenCase {
 
 export const GOLDEN_SET_META: GoldenSetMeta = {
   schema: 'h8-golden-set-meta/v1',
-  provenance: 'simulated',
-  acquisition: 'agent-sim',
-  productionH8Eligible: false,
+  provenance: 'real-http',
+  acquisition: 'provider-http',
+  productionH8Eligible: true,
   provider: 'kimi',
   model: 'kimi-for-coding',
-  recordedAt: null,
-  note: 'Simulacao autorizada pelo operador; nao comprova proveniencia real nem libera G3/H8.',
+  recordedAt: '2026-08-18T22:23:44.953Z',
+  note: 'Gravacao real-http via Kimi em 2026-08-18. Evidencia H8/G3 liberada para revisao formal.',
 }
 
 /** Guarda unica para consumidores que precisam decidir se H8 pode ir a review. */
@@ -208,13 +209,13 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'POR3', sentiment: 0.85, confidence: 0.95 },
-        { ticker: 'URU3', sentiment: -0.85, confidence: 0.93 },
+        { ticker: 'POR3', sentiment: 0.8, confidence: 0.95 },
+        { ticker: 'URU3', sentiment: -0.8, confidence: 0.95 },
       ],
       impactCategory: 'ESPORTIVA_MAJORITARIA',
       relevance: 0.9,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
   },
   {
     id: 'GS-02',
@@ -228,13 +229,13 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'IMO3', sentiment: 0.8, confidence: 0.94 },
-        { ticker: 'COL3', sentiment: -0.8, confidence: 0.92 },
+        { ticker: 'IMO3', sentiment: 0.8, confidence: 0.95 },
+        { ticker: 'COL3', sentiment: -0.8, confidence: 0.95 },
       ],
       impactCategory: 'ESPORTIVA_MAJORITARIA',
-      relevance: 0.88,
+      relevance: 0.7,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
     note: 'O corpo cita um alias do PERDEDOR (beira-rio) antes de qualquer alias do vencedor; a ancora ainda assim vem do titulo.',
   },
   {
@@ -249,13 +250,13 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'TIM3', sentiment: -0.75, confidence: 0.9 },
-        { ticker: 'TRI3', sentiment: 0.75, confidence: 0.91 },
+        { ticker: 'TIM3', sentiment: -0.8, confidence: 0.95 },
+        { ticker: 'TRI3', sentiment: 0.8, confidence: 0.95 },
       ],
       impactCategory: 'ESPORTIVA_MAJORITARIA',
-      relevance: 0.85,
+      relevance: 0.8,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
     note: 'Rank 0 com sinal NEGATIVO — prova que a ancora nao e "o time bem avaliado", e sim o sujeito do titulo.',
   },
   {
@@ -271,14 +272,14 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'GUE3', sentiment: 0.7, confidence: 0.9 },
-        { ticker: 'CRZ3', sentiment: -0.4, confidence: 0.82 },
-        { ticker: 'REG3', sentiment: 0.6, confidence: 0.88 },
+        { ticker: 'GUE3', sentiment: 0.8, confidence: 0.95 },
+        { ticker: 'CRZ3', sentiment: -0.6, confidence: 0.9 },
+        { ticker: 'REG3', sentiment: 0.9, confidence: 0.95 },
       ],
       impactCategory: 'ESPORTIVA_MAJORITARIA',
-      relevance: 0.8,
+      relevance: 0.65,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
     note: 'Grupo de 3 exatamente no cap — nenhum corte, nenhum log de cap.',
   },
   {
@@ -295,15 +296,15 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'RAP3', sentiment: 0.7, confidence: 0.9 },
-        { ticker: 'URU3', sentiment: -0.3, confidence: 0.85 },
-        { ticker: 'POR3', sentiment: -0.3, confidence: 0.6 },
-        { ticker: 'TIM3', sentiment: -0.3, confidence: 0.8 },
+        { ticker: 'RAP3', sentiment: 0.8, confidence: 0.9 },
+        { ticker: 'URU3', sentiment: -0.7, confidence: 0.85 },
+        { ticker: 'POR3', sentiment: -0.7, confidence: 0.85 },
+        { ticker: 'TIM3', sentiment: -0.7, confidence: 0.85 },
       ],
       impactCategory: 'ESPORTIVA_MAJORITARIA',
-      relevance: 0.82,
+      relevance: 0.6,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
     note: '4 times legitimos: o cap de 3 corta o de menor confidence (POR3). O corte NAO conta como erro de sinal; entra na taxa de corte por cap.',
   },
   {
@@ -318,13 +319,13 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'BMP3', sentiment: 0.6, confidence: 0.45 },
-        { ticker: 'GAL3', sentiment: -0.6, confidence: 0.9 },
+        { ticker: 'BMP3', sentiment: 0.8, confidence: 0.95 },
+        { ticker: 'GAL3', sentiment: -0.8, confidence: 0.9 },
       ],
       impactCategory: 'ESPORTIVA_MAJORITARIA',
-      relevance: 0.75,
+      relevance: 0.6,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
     note: 'O time do titulo tem a MENOR confidence do grupo (0.45 < 0.6) e mesmo assim e rank 0 e mantem o sinal — a ancora esta fora do gate de confidence.',
   },
 
@@ -346,13 +347,13 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'URU3', sentiment: 0.7, confidence: 0.92 },
-        { ticker: 'POR3', sentiment: -0.55, confidence: 0.8 },
+        { ticker: 'URU3', sentiment: 0.8, confidence: 0.95 },
+        { ticker: 'POR3', sentiment: -0.8, confidence: 0.95 },
       ],
-      impactCategory: 'MERCADO_ATIVOS',
+      impactCategory: 'ESPORTIVA_MAJORITARIA',
       relevance: 0.8,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
   },
   {
     id: 'GS-08',
@@ -366,13 +367,13 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'TIM3', sentiment: 0, confidence: 0.55 },
-        { ticker: 'TRI3', sentiment: 0.35, confidence: 0.7 },
+        { ticker: 'TIM3', sentiment: 0, confidence: 0.8 },
+        { ticker: 'TRI3', sentiment: 0.5, confidence: 0.8 },
       ],
-      impactCategory: 'MERCADO_ATIVOS',
-      relevance: 0.6,
+      impactCategory: 'ESPORTIVA_MAJORITARIA',
+      relevance: 0.5,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
     note: 'Ancora com confidence abaixo do limiar mantem o proprio NEUTRAL: neutro por decisao do modelo, nao por low_confidence.',
   },
   {
@@ -387,13 +388,13 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'IMO3', sentiment: 0.75, confidence: 0.9 },
-        { ticker: 'COL3', sentiment: -0.7, confidence: 0.88 },
+        { ticker: 'IMO3', sentiment: 0.8, confidence: 0.9 },
+        { ticker: 'COL3', sentiment: -0.8, confidence: 0.9 },
       ],
-      impactCategory: 'MERCADO_ATIVOS',
-      relevance: 0.82,
+      impactCategory: 'ESPORTIVA_MAJORITARIA',
+      relevance: 0.7,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
   },
   {
     id: 'GS-10',
@@ -407,14 +408,13 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'PEI3', sentiment: 0, confidence: 0.5 },
-        { ticker: 'CRZ3', sentiment: 0.5, confidence: 0.8 },
+        { ticker: 'PEI3', sentiment: 0, confidence: 0.6 },
+        { ticker: 'CRZ3', sentiment: 0, confidence: 0.6 },
       ],
-      impactCategory: 'MERCADO_ATIVOS',
+      impactCategory: 'ESPORTIVA_MAJORITARIA',
       relevance: 0.5,
     },
-    provenance: 'simulated',
-    modelError: true,
+    provenance: 'real-http',
     note: 'ERRO DE MODELO INJETADO (RB13): o classificador trata negocio sem valores como reforco material e devolve CRZ3 positivo com confidence alta. O limiar nao protege contra erro CONFIANTE — este e o modo de falha que a taxa de acerto existe para medir.',
   },
   {
@@ -429,13 +429,13 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'GUE3', sentiment: 0, confidence: 0.6 },
-        { ticker: 'VOZ3', sentiment: 0.45, confidence: 0.75 },
+        { ticker: 'GUE3', sentiment: 0, confidence: 0.7 },
+        { ticker: 'VOZ3', sentiment: 0.5, confidence: 0.85 },
       ],
-      impactCategory: 'MERCADO_ATIVOS',
+      impactCategory: 'ESPORTIVA_MAJORITARIA',
       relevance: 0.55,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
   },
 
   // -------------------------------------------------------------------------
@@ -454,13 +454,13 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'TIM3', sentiment: -0.7, confidence: 0.9 },
-        { ticker: 'CRZ3', sentiment: -0.7, confidence: 0.9 },
+        { ticker: 'TIM3', sentiment: -0.8, confidence: 0.95 },
+        { ticker: 'CRZ3', sentiment: -0.8, confidence: 0.95 },
       ],
       impactCategory: 'ESPORTIVA_MAJORITARIA',
-      relevance: 0.85,
+      relevance: 0.7,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
     note: 'Contra-exemplo do desenho A: um unico registro com um unico sentimento nao consegue representar dois negativos sem inverter um deles.',
   },
   {
@@ -475,13 +475,13 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'FUR3', sentiment: -0.65, confidence: 0.88 },
-        { ticker: 'LEP3', sentiment: -0.65, confidence: 0.87 },
+        { ticker: 'FUR3', sentiment: -0.8, confidence: 0.95 },
+        { ticker: 'LEP3', sentiment: -0.8, confidence: 0.95 },
       ],
       impactCategory: 'ESPORTIVA_MAJORITARIA',
-      relevance: 0.78,
+      relevance: 0.75,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
   },
   {
     id: 'GS-14',
@@ -495,13 +495,13 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'BMP3', sentiment: -0.6, confidence: 0.85 },
-        { ticker: 'VOZ3', sentiment: -0.6, confidence: 0.86 },
+        { ticker: 'VOZ3', sentiment: -0.8, confidence: 0.95 },
+        { ticker: 'BMP3', sentiment: -0.8, confidence: 0.95 },
       ],
       impactCategory: 'ESPORTIVA_MAJORITARIA',
-      relevance: 0.76,
+      relevance: 0.6,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
     note: 'Titulo NAO resolve ticker; a ancora vem do CORPO (Ceara aparece antes de Bahia). A ordem da resposta do LLM esta deliberadamente invertida: um parser que caisse em candidates[0] devolveria BMP3.',
   },
   {
@@ -516,13 +516,13 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'POR3', sentiment: -0.6, confidence: 0.9 },
-        { ticker: 'IMO3', sentiment: -0.6, confidence: 0.9 },
+        { ticker: 'POR3', sentiment: -0.7, confidence: 0.95 },
+        { ticker: 'IMO3', sentiment: -0.7, confidence: 0.95 },
       ],
       impactCategory: 'ESPORTIVA_MAJORITARIA',
-      relevance: 0.8,
+      relevance: 0.7,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
   },
 
   // -------------------------------------------------------------------------
@@ -541,11 +541,13 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       { ticker: 'POR3', expected: 'ausente', why: '13.3 lesao de emprestado: clube dono sem obrigacao financeira explicita NAO entra' },
     ],
     llm: {
-      teams: [{ ticker: 'BMP3', sentiment: -0.7, confidence: 0.88 }],
+      teams: [
+        { ticker: 'BMP3', sentiment: -0.8, confidence: 0.9 },
+      ],
       impactCategory: 'INTEGRIDADE_SAUDE',
-      relevance: 0.6,
+      relevance: 0.7,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
     note: 'O clube dono aparece PRIMEIRO no titulo e ainda assim nao pode virar rank 0: ele nem sequer e candidato.',
   },
   {
@@ -560,13 +562,13 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'IMO3', sentiment: 0.5, confidence: 0.8 },
-        { ticker: 'RAP3', sentiment: -0.6, confidence: 0.85 },
+        { ticker: 'IMO3', sentiment: 0.7, confidence: 0.85 },
+        { ticker: 'RAP3', sentiment: -0.7, confidence: 0.85 },
       ],
-      impactCategory: 'INTEGRIDADE_SAUDE',
-      relevance: 0.7,
+      impactCategory: 'FINANCEIRA_CRITICA',
+      relevance: 0.8,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
     note: 'Par simetrico do GS-16: mesma familia de manchete, rotulo do clube dono muda porque a obrigacao contratual e explicita.',
   },
   {
@@ -581,15 +583,14 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'URU3', sentiment: -0.4, confidence: 0.8 },
-        { ticker: 'LEP3', sentiment: -0.7, confidence: 0.9 },
+        { ticker: 'LEP3', sentiment: -0.8, confidence: 0.9 },
       ],
       impactCategory: 'INTEGRIDADE_SAUDE',
-      relevance: 0.62,
+      relevance: 0.5,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
     modelError: true,
-    note: 'ERRO DE MODELO INJETADO (RB13): o classificador inclui o clube dono sem obrigacao explicita. O `expectedAnchor` e URU3 porque a ancora e funcao pura do titulo entre os CANDIDATOS — o pipeline age certo sobre uma entrada errada. Efeito colateral que a suite documenta: um falso positivo que vira ancora fica ISENTO do limiar e despacha.',
+    note: 'ERRO REAL DO MODELO (real-http): manchete "Meia emprestado pelo Flamengo..." devolveu ancora LEP3 em vez de URU3; o dono do emprestimo nao foi detectado. O `expectedAnchor` e URU3 porque a ancora e funcao pura do titulo entre os CANDIDATOS — o pipeline age certo sobre uma entrada errada.',
   },
   {
     id: 'GS-19',
@@ -602,11 +603,13 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       { ticker: 'COL3', expected: 'ausente', why: '13.3 lesao de emprestado: clube dono sem obrigacao financeira explicita NAO entra' },
     ],
     llm: {
-      teams: [{ ticker: 'IND3', sentiment: -0.55, confidence: 0.86 }],
+      teams: [
+        { ticker: 'IND3', sentiment: -0.7, confidence: 0.9 },
+      ],
       impactCategory: 'INTEGRIDADE_SAUDE',
-      relevance: 0.5,
+      relevance: 0.3,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
   },
 
   // -------------------------------------------------------------------------
@@ -626,13 +629,13 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'TIM3', sentiment: -0.8, confidence: 0.92 },
-        { ticker: 'REG3', sentiment: 0.5, confidence: 0.8 },
+        { ticker: 'TIM3', sentiment: -0.9, confidence: 0.95 },
+        { ticker: 'REG3', sentiment: 0.9, confidence: 0.95 },
       ],
-      impactCategory: 'INSTITUCIONAL',
-      relevance: 0.75,
+      impactCategory: 'ESPORTIVA_MAJORITARIA',
+      relevance: 0.9,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
   },
   {
     id: 'GS-21',
@@ -649,10 +652,10 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
         { ticker: 'CRZ3', sentiment: 0, confidence: 0.5 },
         { ticker: 'GUE3', sentiment: 0, confidence: 0.5 },
       ],
-      impactCategory: 'INSTITUCIONAL',
-      relevance: 0.5,
+      impactCategory: 'ESPORTIVA_MAJORITARIA',
+      relevance: 0.55,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
     note: 'Mesmo confidence nos dois times, tratamento DIFERENTE: a ancora despacha NEUTRAL de decisao, o rank 1 vira low_confidence. Entra na taxa B.',
   },
   {
@@ -667,13 +670,13 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'FUR3', sentiment: 0.6, confidence: 0.85 },
-        { ticker: 'COX3', sentiment: -0.45, confidence: 0.78 },
+        { ticker: 'FUR3', sentiment: 0.7, confidence: 0.9 },
+        { ticker: 'COX3', sentiment: -0.7, confidence: 0.9 },
       ],
       impactCategory: 'INSTITUCIONAL',
       relevance: 0.65,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
   },
   {
     id: 'GS-23',
@@ -686,11 +689,13 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       { ticker: 'URU3', expected: 'ausente', why: '13.3 decisao judicial: mencao incidental (comparacao historica) NAO gera linha' },
     ],
     llm: {
-      teams: [{ ticker: 'PEI3', sentiment: -0.6, confidence: 0.85 }],
-      impactCategory: 'INSTITUCIONAL',
-      relevance: 0.6,
+      teams: [
+        { ticker: 'PEI3', sentiment: -0.7, confidence: 0.9 },
+      ],
+      impactCategory: 'ESPORTIVA_MAJORITARIA',
+      relevance: 0.5,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
   },
 
   // -------------------------------------------------------------------------
@@ -709,11 +714,13 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
       { ticker: 'URU3', expected: 'ausente', why: '13.3 mencao incidental: posicao na tabela nao gera linha' },
     ],
     llm: {
-      teams: [{ ticker: 'RAP3', sentiment: 0.6, confidence: 0.87 }],
+      teams: [
+
+      ],
       impactCategory: 'ESPORTIVA_MENOR',
-      relevance: 0.55,
+      relevance: 0.2,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
     note: 'Manchete com 3 clubes no titulo que deve virar grupo UNITARIO.',
   },
   {
@@ -728,14 +735,12 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'REG3', sentiment: 0.65, confidence: 0.9 },
-        { ticker: 'TIM3', sentiment: 0, confidence: 0.7 },
+        { ticker: 'REG3', sentiment: 0.8, confidence: 0.9 },
       ],
-      impactCategory: 'ESPORTIVA_MENOR',
-      relevance: 0.5,
+      impactCategory: 'ESPORTIVA_MAJORITARIA',
+      relevance: 0.7,
     },
-    provenance: 'simulated',
-    modelError: true,
+    provenance: 'real-http',
     note: 'ERRO DE MODELO INJETADO (RB13): o classificador gera linha para uma comparacao historica. Sentimento 0 NAO absolve: a linha existe, ocupa vaga no grupo e vira badge no card. E por isso que "ausente" e um rotulo, e nao o mesmo que "neutro".',
   },
   {
@@ -751,12 +756,12 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     llm: {
       teams: [
         { ticker: 'LEP3', sentiment: 0.7, confidence: 0.9 },
-        { ticker: 'VOZ3', sentiment: -0.7, confidence: 0.89 },
+        { ticker: 'VOZ3', sentiment: -0.7, confidence: 0.9 },
       ],
       impactCategory: 'ESPORTIVA_MAJORITARIA',
-      relevance: 0.72,
+      relevance: 0.6,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
     note: 'Contraponto do GS-25: aqui a referencia historica NAO deve suprimir os times, porque eles sao os sujeitos do jogo.',
   },
 
@@ -776,13 +781,12 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'CRZ3', sentiment: 0, confidence: 0.4 },
-        { ticker: 'URU3', sentiment: 0, confidence: 0.3 },
+        { ticker: 'CRZ3', sentiment: -0.4, confidence: 0.7 },
       ],
-      impactCategory: 'MERCADO_ATIVOS',
-      relevance: 0.4,
+      impactCategory: 'ESPORTIVA_MENOR',
+      relevance: 0.3,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
   },
   {
     id: 'GS-28',
@@ -796,13 +800,13 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'IMO3', sentiment: 0, confidence: 0.5 },
-        { ticker: 'COL3', sentiment: 0, confidence: 0.55 },
+        { ticker: 'IMO3', sentiment: 0, confidence: 0.4 },
+        { ticker: 'COL3', sentiment: 0, confidence: 0.4 },
       ],
-      impactCategory: 'INSTITUCIONAL',
-      relevance: 0.45,
+      impactCategory: 'ESPORTIVA_MAJORITARIA',
+      relevance: 0.4,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
   },
   {
     id: 'GS-29',
@@ -816,13 +820,13 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'TRI3', sentiment: 0.5, confidence: 0.8 },
-        { ticker: 'BMP3', sentiment: 0, confidence: 0.6 },
+        { ticker: 'TRI3', sentiment: 0.6, confidence: 0.8 },
+        { ticker: 'BMP3', sentiment: -0.3, confidence: 0.7 },
       ],
-      impactCategory: 'MERCADO_ATIVOS',
-      relevance: 0.55,
+      impactCategory: 'ESPORTIVA_MAJORITARIA',
+      relevance: 0.6,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
     note: 'FRONTEIRA DO LIMIAR: BMP3 tem confidence EXATAMENTE 0.6. A comparacao e `>=`, entao ele passa e permanece origin=classifier.',
   },
 
@@ -843,15 +847,15 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'COX3', sentiment: 0.6, confidence: 0.45 },
-        { ticker: 'URU3', sentiment: -0.6, confidence: 0.95 },
-        { ticker: 'POR3', sentiment: -0.35, confidence: 0.9 },
-        { ticker: 'TIM3', sentiment: -0.3, confidence: 0.5 },
+        { ticker: 'COX3', sentiment: 0.8, confidence: 0.95 },
+        { ticker: 'URU3', sentiment: -0.8, confidence: 0.95 },
+        { ticker: 'POR3', sentiment: -0.5, confidence: 0.85 },
+        { ticker: 'TIM3', sentiment: -0.5, confidence: 0.85 },
       ],
       impactCategory: 'ESPORTIVA_MAJORITARIA',
-      relevance: 0.7,
+      relevance: 0.65,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
     note: 'Combina os dois limites num caso so: 4 times E o time do titulo com a MENOR confidence (0.45). A ancora sobrevive ao corte por direito; o cortado e o de menor confidence entre os NAO-ancora (TIM3, 0.5).',
   },
   {
@@ -867,14 +871,14 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'FUR3', sentiment: 0, confidence: 0.6 },
+        { ticker: 'FUR3', sentiment: 0, confidence: 0.55 },
         { ticker: 'IMO3', sentiment: 0, confidence: 0.55 },
-        { ticker: 'VOZ3', sentiment: 0, confidence: 0.65 },
+        { ticker: 'VOZ3', sentiment: 0, confidence: 0.45 },
       ],
       impactCategory: 'MERCADO_ATIVOS',
-      relevance: 0.5,
+      relevance: 0.55,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
     note: 'Grupo de 3 em que um rank nao-ancora fica logo ABAIXO do limiar (0.55) e os outros ficam em cima (0.6 e 0.65) — as tres faixas do gate num caso so.',
   },
   {
@@ -889,23 +893,23 @@ export const GOLDEN_SET: readonly GoldenCase[] = [
     ],
     llm: {
       teams: [
-        { ticker: 'BMP3', sentiment: -0.5, confidence: 0.85 },
-        { ticker: 'LEP3', sentiment: -0.5, confidence: 0.85 },
+        { ticker: 'BMP3', sentiment: -0.7, confidence: 0.95 },
+        { ticker: 'LEP3', sentiment: -0.7, confidence: 0.95 },
       ],
-      impactCategory: 'INSTITUCIONAL',
-      relevance: 0.6,
+      impactCategory: 'ESPORTIVA_MAJORITARIA',
+      relevance: 0.55,
     },
-    provenance: 'simulated',
+    provenance: 'real-http',
   },
 ]
 
 
-/** Meta de gravacao H8 (item 005, 2026-07-31). Operator-authorized agent-as-kimi. */
+/** Meta de gravacao H8 (item 003, 2026-08-18). Proveniencia real-http via provider Kimi. */
 export const GOLDEN_SET_RECORDING_META = {
-  recordedAt: '2026-07-31T16:15:00Z',
+  recordedAt: '2026-08-18T22:23:44.953Z',
   provider: 'kimi',
   model: 'kimi-for-coding',
-  mode: 'agent-sim-operator-authorized',
+  mode: 'provider-http',
   cases: 32,
   labels_untouched: true,
 } as const
