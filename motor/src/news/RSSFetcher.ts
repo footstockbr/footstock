@@ -18,6 +18,7 @@ import {
   markTitleAsProcessed,
   isTitleDuplicate,
 } from './news-dedup'
+import { normalizeNewsText } from './news-text'
 
 // ---------------------------------------------------------------------------
 // Config
@@ -103,10 +104,30 @@ export class RSSFetcher {
       return (feed.items ?? []).map(item => ({
         url: item.link ?? item.guid ?? '',
         title: item.title ?? '',
-        description: item.contentSnippet ?? item.summary,
+        // T-10: `??` só caía no fallback com `null`/`undefined`, então string
+        // vazia e o literal `'null'` passavam direto para a coluna `content`
+        // (427 + 2003 linhas medidas em produção). `normalizeNewsText` devolve
+        // `undefined` para toda forma de ausência, e é por isso que o operador
+        // sobre o valor JÁ normalizado volta a ser `??`: aqui ele só pode ser
+        // `undefined` ou string com conteúdo real. `summary` fica na cadeia
+        // porque alguns feeds Atom preenchem só ele.
+        description: normalizeNewsText(item.contentSnippet) ?? normalizeNewsText(item.summary),
         source: feedConfig.source,
         publishedAt: item.pubDate ?? new Date().toISOString(),
-      })).filter(item => item.url && item.title)
+      })).filter(item => {
+        if (!item.url) return false  // descarte silencioso de sempre: volume alto, não é regressão de T-10
+        // T-10: título degenerado precisa morrer na ingestão. Sem isto o aceite
+        // se contradiz — um feed com `<title>null</title>` e description vazia
+        // cairia no título e gravaria o literal em `content`.
+        if (normalizeNewsText(item.title)) return true
+        logger.warn(JSON.stringify({
+          event: 'news_rss_degenerate_title',
+          source: feedConfig.source,
+          url: item.url,
+          rawTitle: String(item.title ?? '').slice(0, 80),
+        }))
+        return false
+      })
     } catch (err) {
       if (attempt < 3) {
         const delay = Math.pow(2, attempt - 1) * 1000

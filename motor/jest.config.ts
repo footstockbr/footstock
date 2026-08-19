@@ -21,6 +21,7 @@ const config: Config = {
     'src/news/RSSFetcher.ts': { lines: 100, functions: 100, branches: 90 },
     'src/news/NewsClassifier.ts': { lines: 100, functions: 100, branches: 90 },
     'src/news/NewsPublisher.ts': { lines: 100, functions: 100, branches: 90 },
+    'src/news/news-text.ts': { lines: 100, functions: 100, branches: 90 },
     'src/contracts/news-inject-contract.ts': { lines: 100, functions: 100, branches: 90 },
     'src/engine/OrderExecutor.ts': { lines: 90, functions: 90, branches: 80 },
     'src/engine/OrderMatcher.ts': { lines: 90, functions: 90, branches: 80 },

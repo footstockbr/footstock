@@ -29,6 +29,7 @@ import { decideEditorialPublication } from './editorial-gate'
 import type { EditorialDecision } from './editorial-gate'
 import { logger } from '../utils/logger'
 import type { RawNewsItem } from './NewsQueue'
+import { normalizeNewsText } from './news-text'
 import type { ClassifiedNews } from './NewsClassifier'
 import {
   NEWS_INJECT_CHANNEL,
@@ -567,6 +568,41 @@ export class NewsPublisher {
     return { rows: persisted, groupId }
   }
 
+  /**
+   * Conteúdo da linha: description normalizada, senão título normalizado,
+   * senão o título cru.
+   *
+   * T-10. Este é o ÚNICO ponto do motor que escreve a coluna `content` de
+   * `news`, então é aqui que a garantia "content nunca é vazio nem literal
+   * degenerado" tem que valer. O `??` de antes deixava passar string vazia
+   * (427 linhas de "O Gol" em produção, produtor ainda ativo na medição de
+   * 2026-08-19) e o literal `'null'` (2003 linhas da ESPN Brasil), que é
+   * truthy e nem o `||` pegaria.
+   *
+   * O terceiro ramo é defensivo e, pelo pipeline atual, INALCANÇÁVEL: as três
+   * portas de entrada da fila (ingestão RSS, `FallbackPool.getRandom` e o
+   * requeue pós-rate-limit) só entregam item cujo título já passou pelo filtro
+   * de `RSSFetcher.fetchFeed`. Ele existe para não introduzir `throw` novo no
+   * caminho de persistência — a coluna é NOT NULL e o publisher não tem hoje
+   * um caminho de rejeição de item — e é BARULHENTO em vez de silencioso.
+   * Descartada a alternativa de gravar um placeholder ("Sem descrição"), que
+   * seria copy nova que ninguém pediu.
+   */
+  private resolveContent(raw: RawNewsItem): string {
+    const description = normalizeNewsText(raw.description)
+    if (description !== undefined) return description
+
+    const title = normalizeNewsText(raw.title)
+    if (title !== undefined) return title
+
+    logger.error(JSON.stringify({
+      event: 'news_content_degenerate_at_publisher',
+      url: raw.url,
+      source: raw.source,
+    }))
+    return raw.title
+  }
+
   /** Payload de uma linha. `extra` carrega os campos de grupo quando aplicável. */
   private rowData(
     row: PlannedRow,
@@ -581,7 +617,7 @@ export class NewsPublisher {
   ): Record<string, unknown> {
     return {
       title: ctx.raw.title,
-      content: ctx.raw.description ?? ctx.raw.title,
+      content: this.resolveContent(ctx.raw),
       // Critério 3: `impact` é da NOTÍCIA, não do time — as N linhas compartilham
       // a categoria, logo a magnitude absoluta dos N eventos é idêntica e apenas
       // o sinal difere.
