@@ -57,5 +57,7 @@ SELECT n.id,
 
 \echo '== modo PRE-FLIGHT: news_content_backfill_t11 ainda nao existe =='
 \echo '== (diagnostico temporal e amostra so fazem sentido depois do backfill) =='
+\echo '== ATENCAO: neste modo a asercao primaria acima NAO distingue "backfill funcionou" =='
+\echo '== de "nao havia passivo". Rodar este arquivo de novo apos ST003 para o veredito. =='
 
 \endif
