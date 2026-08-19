@@ -31,7 +31,44 @@ import { prisma } from '@/lib/prisma'
 import { GET } from '@/app/api/v1/news/route'
 import { PATCH } from '@/app/api/v1/admin/news/[id]/route'
 
+/**
+ * Nome de banco EXIGIDO. `wipe()` roda `deleteMany` de verdade, entao o guard
+ * `T05_REAL_DB=1` sozinho e fraco: bastaria um `DATABASE_URL` de dev/producao
+ * no ambiente para o teste apagar linhas fora do escopo. Aqui a execucao e
+ * fail-closed — so roda contra um banco cujo nome contenha `t05verify`, que por
+ * definicao e descartavel e criado para esta conferencia.
+ */
+const REQUIRED_DB_MARKER = 't05verify'
+
+/** Nome do banco no DSN, sem credenciais nem querystring. '' se ilegivel. */
+function targetDbName(): string {
+  const url = process.env.DATABASE_URL
+  if (!url) return ''
+  try {
+    // pathname = "/<database>"; ignora querystring (?schema=public) e credenciais.
+    return new URL(url).pathname.slice(1)
+  } catch {
+    return ''
+  }
+}
+
+function targetsDisposableDb(): boolean {
+  // Normaliza separadores: `footstock_t05_verify` e `footstock-t05-verify`
+  // devem casar com o marcador `t05verify`.
+  return targetDbName().replace(/[^a-z0-9]/gi, '').toLowerCase().includes(REQUIRED_DB_MARKER)
+}
+
 const REAL_DB = process.env.T05_REAL_DB === '1'
+
+if (REAL_DB && !targetsDisposableDb()) {
+  throw new Error(
+    `[T-05] Recusado: T05_REAL_DB=1 exige DATABASE_URL apontando para um banco ` +
+      `descartavel cujo nome contenha "${REQUIRED_DB_MARKER}". Este teste apaga ` +
+      `linhas; rodar contra dev/producao destruiria dados. ` +
+      `Banco alvo: "${targetDbName() || '(DATABASE_URL ausente ou ilegivel)'}".`
+  )
+}
+
 const d = REAL_DB ? describe : describe.skip
 
 const mockGetAuthUser = getAuthUser as jest.Mock
@@ -242,6 +279,16 @@ d('T-05 conferencia real: arquivar remove do feed publico (banco de verdade)', (
   })
 
   it('DEPOIS de arquivar: alvo some dos tres caminhos; controle permanece', async () => {
+    // Este caso depende do anterior (que arquiva). A pre-condicao e afirmada
+    // explicitamente para que rodar fora de ordem (`-t`) falhe dizendo o motivo,
+    // em vez de falhar como se o filtro do handler estivesse quebrado.
+    const pre = await prisma.news.findMany({
+      where: { groupId: G1 },
+      select: { isArchived: true },
+    })
+    expect(pre.length).toBeGreaterThan(0)
+    expect(pre.every((r) => r.isArchived)).toBe(true)
+
     const anchors = await feed()
     expect(anchors.status).toBe(200)
     evidence('DEPOIS / feed sem filtro', { total: anchors.total, ids: visibleIds(anchors.items) })
@@ -258,5 +305,8 @@ d('T-05 conferencia real: arquivar remove do feed publico (banco de verdade)', (
     const byTicker = await feed(`?ticker=${TICKER}`)
     evidence('DEPOIS / feed com ticker', { total: byTicker.total, ids: visibleIds(byTicker.items) })
     expect(visibleIds(byTicker.items)).not.toContain(G1_ANCHOR)
+    // Sem esta linha, uma regressao que zerasse o feed inteiro passaria
+    // despercebida: "o alvo sumiu" tambem e verdade quando NADA sobra.
+    expect(visibleIds(byTicker.items)).toContain(CONTROL)
   })
 })

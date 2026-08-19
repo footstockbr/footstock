@@ -112,6 +112,30 @@ verde. Na mesma passada os casos 3 e 4 do teste unitario deixaram de ser
 tautologicos: antes so afirmavam `data.length === 0` sobre um mock vazio; agora
 avaliam o `where` realmente enviado ao banco (`rowPassesWhere`).
 
+## 4b. Guard de seguranca do proprio teste
+
+Revisao adversarial (Codex) apontou que `T05_REAL_DB=1` sozinho seria um guard
+fraco: `wipe()` executa `deleteMany` real, entao um `DATABASE_URL` de dev ou
+producao no ambiente faria o teste apagar linhas fora do escopo. Corrigido com
+guard **fail-closed** no nome do banco: a suite so executa contra um banco cujo
+nome (normalizado, ignorando `_`/`-`) contenha `t05verify`.
+
+Comprovado nos dois sentidos:
+
+| `DATABASE_URL` -> banco | Resultado |
+|---|---|
+| `footstock_t05_verify` | `Tests: 3 passed, 3 total` |
+| `foot_stock_dev` | recusa antes de qualquer query — `Tests: 0 total`, com a mensagem `[T-05] Recusado: ... Banco alvo: "foot_stock_dev".` |
+
+Como a recusa acontece no carregamento do modulo, `wipe()` nunca chega a rodar
+no banco errado.
+
+Outros dois pontos da mesma revisao tambem foram aplicados: o caminho `?ticker`
+passou a afirmar que o controle **permanece** (senao uma regressao que zerasse o
+feed inteiro passaria como "o alvo sumiu"), e o caso "DEPOIS de arquivar" ganhou
+assercao de pre-condicao, para que rodar fora de ordem falhe dizendo o motivo em
+vez de acusar o filtro do handler.
+
 ## 5. Gates e pendencias
 
 - `npx tsc --noEmit` **no commit `8f3a08b` (HEAD limpo, worktree isolado): zero
