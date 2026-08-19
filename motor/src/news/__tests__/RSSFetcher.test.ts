@@ -8,6 +8,7 @@ import type Redis from 'ioredis'
 import { RSSFetcher } from '../RSSFetcher'
 import { NewsQueue, newsQueue } from '../NewsQueue'
 import { FallbackPool } from '../FallbackPool'
+import { NEWS_URLS_KEY } from '../news-dedup'
 import { logger } from '../../utils/logger'
 
 // ---------------------------------------------------------------------------
@@ -152,6 +153,28 @@ describe('RSSFetcher', () => {
   test('[INFRA — stop sem interval] stop sem start não lança erro', () => {
     // Nenhum start() chamado — _interval é null
     expect(() => fetcher.stop()).not.toThrow()
+  })
+
+  test('[SUCCESS — T-07] título duplicado desmarca a URL: item não enfileirado não fica bloqueado 48h', async () => {
+    const url = 'https://feed.com/noticia/titulo-repetido'
+    const titulo = 'Mesmo fato, outra URL'
+
+    // Primeiro ciclo: item entra normalmente e marca titulo + URL.
+    mockParseURL.mockResolvedValue({
+      items: [{ link: 'https://feed.com/noticia/original', title: titulo, pubDate: new Date().toISOString() }],
+    })
+    expect(await fetcher.fetchAll()).toBeGreaterThan(0)
+
+    // Segundo ciclo: URL nova, mesmo titulo -> descartado por dedup de titulo.
+    while (!newsQueue.isEmpty()) newsQueue.dequeue()
+    mockParseURL.mockResolvedValue({
+      items: [{ link: url, title: titulo, pubDate: new Date().toISOString() }],
+    })
+    expect(await fetcher.fetchAll()).toBe(0)
+
+    // A URL NAO pode ter ficado no set: o item nunca foi enfileirado. Se ficasse,
+    // uma republicacao com titulo corrigido seria descartada em silencio por 48h.
+    expect(await redis.sismember(NEWS_URLS_KEY, url)).toBe(0)
   })
 
   test('[SUCCESS — Dedup atômico entre processos] apenas uma instância enfileira a mesma URL', async () => {

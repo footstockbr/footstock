@@ -14,7 +14,6 @@ import { FallbackPool } from './FallbackPool'
 import {
   NEWS_URLS_KEY,
   URL_TTL_SECONDS,
-  markAsProcessed as markUrlAsProcessed,
   unmarkAsProcessed as unmarkUrlAsProcessed,
   markTitleAsProcessed,
   isTitleDuplicate,
@@ -155,10 +154,6 @@ export class RSSFetcher {
     }
   }
 
-  async markAsProcessed(url: string): Promise<void> {
-    await markUrlAsProcessed(this.redis, url)
-  }
-
   /**
    * Dedup por assinatura de título. Fail-open igual ao de URL: Redis fora do ar
    * não pode travar a ingestão — o pior caso é uma duplicata a mais, e o admin
@@ -238,6 +233,10 @@ export class RSSFetcher {
             url: item.url,
             title: item.title.slice(0, 80),
           }))
+          // T-07: isDuplicate ja marcou a URL no set. Como o item NAO foi enfileirado,
+          // desmarcamos — senao a URL fica bloqueada por 48h sem ter sido processada e
+          // uma republicacao com titulo corrigido seria descartada em silencio.
+          await unmarkUrlAsProcessed(this.redis, item.url)
           continue
         }
 

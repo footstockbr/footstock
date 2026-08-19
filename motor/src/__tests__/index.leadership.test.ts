@@ -44,6 +44,7 @@ jest.mock('../leader/LeaderElection', () => ({
 jest.mock('../news/NewsPipelineLifecycle', () => ({
   startNewsPipeline: jest.fn().mockResolvedValue(mockPipeline),
   stopNewsPipeline: jest.fn(),
+  disposeNewsPipeline: jest.fn().mockResolvedValue(undefined),
 }))
 
 const mockRedis = {
@@ -141,11 +142,14 @@ describe('index — leadership lifecycle (T-07)', () => {
     jest.resetModules()
     jest.clearAllMocks()
     capturedOnLeadershipLost = undefined
+    loggerCalls.length = 0
+    mockLeader.tryAcquire.mockReset()
     mockLeader.tryAcquire.mockResolvedValue(true)
     jest.spyOn(process, 'exit').mockImplementation((() => undefined) as unknown as (code?: number | string | null) => never)
   })
 
   afterEach(() => {
+    jest.useRealTimers()
     jest.restoreAllMocks()
   })
 
@@ -160,12 +164,65 @@ describe('index — leadership lifecycle (T-07)', () => {
     exitSpy.mockRestore()
   })
 
-  test('onLeadershipLost para o pipeline RSS (fetcher + classifier)', async () => {
+  test('onLeadershipLost descarta o pipeline RSS (fetcher + classifier + Prisma)', async () => {
     await import('../index')
     await new Promise(r => setTimeout(r, 50))
     expect(capturedOnLeadershipLost).toBeDefined()
     capturedOnLeadershipLost!()
-    const { stopNewsPipeline } = await import('../news/NewsPipelineLifecycle')
-    expect(stopNewsPipeline).toHaveBeenCalled()
+    const { disposeNewsPipeline } = await import('../news/NewsPipelineLifecycle')
+    // dispose (nao stop) — a referencia ao pipeline e descartada logo em seguida,
+    // entao o PrismaClient precisa ser fechado junto para nao vazar o pool PG.
+    expect(disposeNewsPipeline).toHaveBeenCalledWith(mockPipeline)
+  })
+
+  test('erro injetado no poll de lideranca: loga, nao encerra o processo e reagenda', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] })
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation((() => undefined) as unknown as (code?: number | string | null) => never)
+
+    mockLeader.tryAcquire
+      .mockResolvedValueOnce(false)                          // startup: nao e lider -> startPolling
+      .mockRejectedValueOnce(new Error('redis blip no poll')) // 1o poll: erro injetado
+      .mockResolvedValue(false)                              // polls seguintes
+
+    await import('../index')
+    await jest.advanceTimersByTimeAsync(0)
+    expect(mockLeader.tryAcquire).toHaveBeenCalledTimes(1)
+
+    // Primeiro poll acontece em baseDelay (5s) — nao em 10s.
+    await jest.advanceTimersByTimeAsync(5_000)
+    expect(mockLeader.tryAcquire).toHaveBeenCalledTimes(2)
+
+    const erroLogado = loggerCalls.find(
+      c => c.level === 'error' && String(c.args[0]).includes('Erro no polling de lideranca')
+    )
+    expect(erroLogado).toBeDefined()
+    // Nunca sair em silencio por causa de um erro no poll.
+    expect(exitSpy).not.toHaveBeenCalled()
+
+    // Apos o erro o ciclo continua: o primeiro retry tambem usa baseDelay (5s).
+    await jest.advanceTimersByTimeAsync(5_000)
+    expect(mockLeader.tryAcquire).toHaveBeenCalledTimes(3)
+    expect(exitSpy).not.toHaveBeenCalled()
+
+    exitSpy.mockRestore()
+  })
+
+  test('startPolling nao acumula timers concorrentes entre flaps de lideranca', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] })
+    mockLeader.tryAcquire.mockResolvedValue(true)
+
+    await import('../index')
+    await jest.advanceTimersByTimeAsync(0)
+    expect(capturedOnLeadershipLost).toBeDefined()
+
+    // Startup adquiriu a lideranca (1 chamada). Dois flaps seguidos disparam
+    // startPolling duas vezes; o timer da rodada anterior deve ser cancelado.
+    mockLeader.tryAcquire.mockResolvedValue(false)
+    capturedOnLeadershipLost!()
+    capturedOnLeadershipLost!()
+
+    await jest.advanceTimersByTimeAsync(5_000)
+    // 1 do startup + 1 unico poll (nao 2) = 2. Com timers acumulados seriam 3.
+    expect(mockLeader.tryAcquire).toHaveBeenCalledTimes(2)
   })
 })

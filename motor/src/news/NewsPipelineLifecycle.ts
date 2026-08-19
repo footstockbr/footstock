@@ -46,6 +46,25 @@ export function stopNewsPipeline(pipeline: NewsPipeline | null): void {
   if (!pipeline) return
   pipeline.rssFetcher.stop()
   pipeline.newsClassifier.stopClassifying()
-  // Nao desconecta o Prisma aqui; o shutdown global gerencia isso.
+  // Apenas para os loops. Quem descarta o pipeline deve usar disposeNewsPipeline,
+  // que tambem fecha o PrismaClient — ver comentario abaixo.
   logger.info('[motor] Pipeline RSS parado')
+}
+
+/**
+ * Para o pipeline E fecha o PrismaClient criado por startNewsPipeline.
+ *
+ * OBRIGATORIO sempre que a referencia ao pipeline for descartada (perda de
+ * lideranca ou shutdown). startNewsPipeline instancia um PrismaClient novo a
+ * cada became-leader; se a referencia for perdida sem $disconnect, o pool PG
+ * fica orfao e nenhum caminho consegue mais fecha-lo — um vazamento por flap
+ * de lideranca.
+ */
+export async function disposeNewsPipeline(pipeline: NewsPipeline | null): Promise<void> {
+  if (!pipeline) return
+  stopNewsPipeline(pipeline)
+  await pipeline.newsPrisma.$disconnect().catch(err =>
+    logger.error('[motor] Erro ao desconectar Prisma do pipeline RSS:', err)
+  )
+  logger.info('[motor] Pipeline RSS descartado (Prisma desconectado)')
 }

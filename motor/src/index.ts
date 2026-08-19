@@ -16,7 +16,7 @@ import { MarketEngine } from './engine/MarketEngine'
 import { RedisClientService } from './services/RedisClientService'
 import { MotorHealthService } from './services/MotorHealthService'
 import { AdminChannel } from './broadcast/AdminChannel'
-import { startNewsPipeline, stopNewsPipeline, type NewsPipeline } from './news/NewsPipelineLifecycle'
+import { startNewsPipeline, disposeNewsPipeline, type NewsPipeline } from './news/NewsPipelineLifecycle'
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 
@@ -161,6 +161,10 @@ async function main() {
   // Pipeline RSS — inicializado apenas na instância líder
   let newsPipeline: NewsPipeline | null = null
 
+  // Handle do timer de polling de lideranca — mantido no escopo de main para que
+  // um novo ciclo de startPolling possa cancelar o ciclo anterior.
+  let pollTimer: ReturnType<typeof setTimeout> | null = null
+
   /**
    * Inicializa tudo que precisa rodar quando esta instância se torna líder.
    * Chamado tanto no startup direto quanto ao adquirir liderança via polling.
@@ -194,8 +198,13 @@ async function main() {
       _engineReady = false  // R2: deixou de ser lider -> nao pronto ate re-adquirir
       engine.stop(false).catch(err => logger.error('[motor] Erro ao parar engine:', err))
       // T-07: parar fetcher e classifier para evitar split-brain (duas instancias buscando feeds).
-      stopNewsPipeline(newsPipeline)
+      // disposeNewsPipeline (nao stopNewsPipeline) porque a referencia e descartada logo
+      // abaixo: sem $disconnect o pool PG do PrismaClient vaza a cada flap de lideranca.
+      const lostPipeline = newsPipeline
       newsPipeline = null
+      void disposeNewsPipeline(lostPipeline).catch(err =>
+        logger.error('[motor] Erro ao descartar pipeline RSS:', err)
+      )
       startPolling()
     }
   }
@@ -207,23 +216,30 @@ async function main() {
     const maxDelay = 60_000
     let attempt = 0
     let delay = baseDelay
-    let timer: ReturnType<typeof setTimeout> | null = null
+
+    // Flaps sucessivos chamam startPolling varias vezes; sem limpar o timer da
+    // rodada anterior os ciclos acumulam e passam a disputar tryAcquire em paralelo.
+    if (pollTimer) {
+      clearTimeout(pollTimer)
+      pollTimer = null
+    }
 
     const scheduleNext = () => {
-      timer = setTimeout(async () => {
+      pollTimer = setTimeout(async () => {
         try {
-          attempt++
           const acquired = await leader.tryAcquire()
           if (acquired) {
+            pollTimer = null
             await onBecameLeader()
             return
           }
-          // Backoff exponencial com teto
-          delay = Math.min(maxDelay, baseDelay * Math.pow(2, attempt))
         } catch (err) {
           logger.error('[motor] Erro no polling de lideranca:', err)
-          delay = Math.min(maxDelay, baseDelay * Math.pow(2, attempt))
         }
+        // Backoff exponencial com teto. attempt e incrementado DEPOIS do calculo
+        // para que o primeiro retry use baseDelay (5s) e nao 2x baseDelay.
+        delay = Math.min(maxDelay, baseDelay * Math.pow(2, attempt))
+        attempt++
         scheduleNext()
       }, delay)
     }
@@ -257,9 +273,9 @@ async function main() {
     if (adminSubscriber) {
       await adminSubscriber.quit().catch(() => null)
     }
-    // Parar pipeline RSS
-    stopNewsPipeline(newsPipeline)
-    if (newsPipeline) await newsPipeline.newsPrisma.$disconnect().catch(() => null)
+    // Parar e descartar pipeline RSS (inclui $disconnect do PrismaClient)
+    await disposeNewsPipeline(newsPipeline)
+    newsPipeline = null
     // Shutdown definitivo: desconectar Prisma (disconnectPrisma=true)
     await engine.stop(true)
     await leader.release()
@@ -274,7 +290,7 @@ async function main() {
     void shutdown('uncaughtException')
   })
   // T-07: handler global de unhandledRejection evita exit 0 silencioso em blip de Redis.
-  process.on('unhandledRejection', (reason, promise) => {
+  process.on('unhandledRejection', reason => {
     logger.error('[motor] Unhandled rejection:', reason)
   })
 }

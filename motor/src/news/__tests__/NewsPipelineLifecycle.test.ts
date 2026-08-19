@@ -5,7 +5,7 @@
 
 import RedisMock from 'ioredis-mock'
 import type Redis from 'ioredis'
-import { startNewsPipeline, stopNewsPipeline } from '../NewsPipelineLifecycle'
+import { startNewsPipeline, stopNewsPipeline, disposeNewsPipeline } from '../NewsPipelineLifecycle'
 import { RSSFetcher } from '../RSSFetcher'
 import { NewsClassifier } from '../NewsClassifier'
 import { newsQueue } from '../NewsQueue'
@@ -68,5 +68,29 @@ describe('NewsPipelineLifecycle', () => {
 
   test('[SUCCESS — T-07] stopNewsPipeline com null e no-op', () => {
     expect(() => stopNewsPipeline(null)).not.toThrow()
+  })
+
+  test('[SUCCESS — T-07] disposeNewsPipeline fecha o PrismaClient alem de parar o pipeline', async () => {
+    const pipeline = await startNewsPipeline(redis)
+    await disposeNewsPipeline(pipeline)
+    expect(pipeline.rssFetcher.stop).toHaveBeenCalled()
+    expect(pipeline.newsClassifier.stopClassifying).toHaveBeenCalled()
+    // Sem este $disconnect o pool PG vaza a cada flap de lideranca: index.ts
+    // descarta a referencia ao pipeline logo apos parar o fetcher/classifier.
+    expect(pipeline.newsPrisma.$disconnect).toHaveBeenCalledTimes(1)
+  })
+
+  test('[SUCCESS — T-07] cada startNewsPipeline cria um PrismaClient novo que precisa ser descartado', async () => {
+    const primeiro = await startNewsPipeline(redis)
+    const segundo = await startNewsPipeline(redis)
+    expect(primeiro.newsPrisma).not.toBe(segundo.newsPrisma)
+    await disposeNewsPipeline(primeiro)
+    await disposeNewsPipeline(segundo)
+    expect(primeiro.newsPrisma.$disconnect).toHaveBeenCalledTimes(1)
+    expect(segundo.newsPrisma.$disconnect).toHaveBeenCalledTimes(1)
+  })
+
+  test('[SUCCESS — T-07] disposeNewsPipeline com null e no-op', async () => {
+    await expect(disposeNewsPipeline(null)).resolves.toBeUndefined()
   })
 })
