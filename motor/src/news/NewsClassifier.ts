@@ -175,9 +175,50 @@ function resolveTimeoutMs(): number {
 // Rate limit config
 // ---------------------------------------------------------------------------
 
-const RATE_LIMIT_KEY = 'news:sonnet:tokens'
-const RATE_LIMIT_MAX = 60
-const RATE_LIMIT_TTL = 60 // segundos
+export const RATE_LIMIT_KEY = 'news:sonnet:tokens'
+export const RATE_LIMIT_MAX = 60
+export const RATE_LIMIT_TTL = 60 // segundos
+
+// Lua script: atomic check-init-decrement with TTL guarantee.
+// Fixes race condition where key expires between EXISTS and DECR, causing
+// DECR to recreate key at -1 without TTL, leading to permanent lockout.
+// Also fixes initialization race (M4) via SET NX (only first instance wins).
+export const RATE_LIMIT_CHECK_DECR_SCRIPT = `
+local key = KEYS[1]
+local max = tonumber(ARGV[1])
+local ttl = tonumber(ARGV[2])
+
+if redis.call('SET', key, max, 'EX', ttl, 'NX') then
+  return redis.call('DECR', key)
+end
+
+if redis.call('TTL', key) == -1 then
+  redis.call('EXPIRE', key, ttl)
+end
+
+local tokens = redis.call('DECR', key)
+
+if redis.call('TTL', key) == -1 then
+  redis.call('EXPIRE', key, ttl)
+end
+
+return tokens
+`
+
+// Lua script: atomic increment-revert with TTL guarantee.
+// Used when tokens < 0 to revert the decrement and ensure TTL is restored.
+export const RATE_LIMIT_REVERT_INCR_SCRIPT = `
+local key = KEYS[1]
+local ttl = tonumber(ARGV[1])
+
+redis.call('INCR', key)
+
+if redis.call('TTL', key) == -1 then
+  redis.call('EXPIRE', key, ttl)
+end
+
+return 1
+`
 
 // Recarga periódica do mapa de tickers (resolve mapa-velho-carregado-no-boot)
 const ALIAS_RELOAD_INTERVAL_MS = 60_000
@@ -493,15 +534,25 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
   // ---------------------------------------------------------------------------
 
   async checkRateLimit(): Promise<void> {
-    // Garantir que o bucket existe
-    const exists = await this.redis.exists(RATE_LIMIT_KEY)
-    if (!exists) {
-      await this.redis.set(RATE_LIMIT_KEY, RATE_LIMIT_MAX, 'EX', RATE_LIMIT_TTL)
-    }
+    // Atomic check-init-decrement via Lua script.
+    // Fixes: (1) race where key expires between EXISTS and DECR causing permanent
+    // lockout at -1/0 without TTL; (2) initialization race (M4) via SET NX.
+    const tokens = await this.redis.eval(
+      RATE_LIMIT_CHECK_DECR_SCRIPT,
+      1,
+      RATE_LIMIT_KEY,
+      RATE_LIMIT_MAX,
+      RATE_LIMIT_TTL,
+    ) as number
 
-    const tokens = await this.redis.decr(RATE_LIMIT_KEY)
     if (tokens < 0) {
-      await this.redis.incr(RATE_LIMIT_KEY) // reverter decrement
+      // Atomic revert with TTL guarantee
+      await this.redis.eval(
+        RATE_LIMIT_REVERT_INCR_SCRIPT,
+        1,
+        RATE_LIMIT_KEY,
+        RATE_LIMIT_TTL,
+      )
       throw new RateLimitError('RATE_001', 'Rate limit Sonnet excedido (60 req/min)')
     }
   }
