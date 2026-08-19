@@ -214,13 +214,22 @@ export async function GET(request: NextRequest) {
     // quantos times o grupo tem. Sem `isPublished` no filtro de proposito: o admin
     // enxerga rascunho e arquivada, ao contrario do feed publico.
     const groupIds = anchors.map(anchorGroupKey)
+    const siblingGroupWhere = {
+      OR: [
+        { groupId: { in: groupIds } },
+        { AND: [{ groupId: null }, { id: { in: groupIds } }] },
+      ],
+    }
+    // Espelha o filtro da ancora tambem nos irmaos. Hoje `editorialBlockReason` e
+    // uniforme por grupo (escritor unico: NewsPublisher.rowData, chamada com o
+    // mesmo ctx para ancora e irmaos), entao este AND e defesa em profundidade:
+    // se um dia surgir escrita por linha, o default nao passa a vazar irmao
+    // barrado por baixo de uma ancora limpa.
+    const siblingWhere = includeQuarantine
+      ? siblingGroupWhere
+      : { AND: [siblingGroupWhere, { editorialBlockReason: null }] }
     const siblingRows = (await prisma.news.findMany({
-      where: {
-        OR: [
-          { groupId: { in: groupIds } },
-          { AND: [{ groupId: null }, { id: { in: groupIds } }] },
-        ],
-      },
+      where: siblingWhere,
       select: {
         id: true,
         groupId: true,

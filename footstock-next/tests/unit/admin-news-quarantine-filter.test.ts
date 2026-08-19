@@ -27,12 +27,24 @@ jest.mock('@/app/api/middleware', () => ({
 
 const findManyNews = jest.fn()
 const countNews = jest.fn()
+// Metodos de escrita EXPOSTOS de proposito: sem eles o teste de nao-escrita
+// provaria apenas que o mock e incompleto, nao que a rota nao escreve.
+const updateNews = jest.fn()
+const updateManyNews = jest.fn()
+const deleteNews = jest.fn()
+const deleteManyNews = jest.fn()
+const createNews = jest.fn()
 
 jest.mock('@/lib/prisma', () => ({
   prisma: {
     news: {
       findMany: (...a: unknown[]) => findManyNews(...a),
       count: (...a: unknown[]) => countNews(...a),
+      update: (...a: unknown[]) => updateNews(...a),
+      updateMany: (...a: unknown[]) => updateManyNews(...a),
+      delete: (...a: unknown[]) => deleteNews(...a),
+      deleteMany: (...a: unknown[]) => deleteManyNews(...a),
+      create: (...a: unknown[]) => createNews(...a),
     },
   },
 }))
@@ -80,6 +92,18 @@ function listArg() {
   }
 }
 
+/** Argumento da 2a chamada: hidratacao de irmaos por groupId. */
+function siblingArg() {
+  return findManyNews.mock.calls[1][0] as { where: Record<string, unknown> }
+}
+
+const SIBLING_GROUP_WHERE = {
+  OR: [
+    { groupId: { in: ['g-ok-1'] } },
+    { AND: [{ groupId: null }, { id: { in: ['g-ok-1'] } }] },
+  ],
+}
+
 beforeEach(() => {
   jest.clearAllMocks()
   mockGetAuthUser.mockResolvedValue(AUTH)
@@ -108,12 +132,15 @@ describe('T-08 — default esconde a quarentena editorial', () => {
     expect(res.headers.get('X-Quarantine-Count')).toBe('3')
   })
 
-  test('valor falsy explicito (0) tambem esconde', async () => {
+  test('valor falsy explicito (0) tambem esconde e mantem o contador', async () => {
     findManyNews.mockResolvedValueOnce([CLEAN_ANCHOR]).mockResolvedValueOnce([])
+    countNews.mockResolvedValue(4)
 
-    await adminNewsGET(listReq({ includeQuarantine: '0' }))
+    const res = await adminNewsGET(listReq({ includeQuarantine: '0' }))
 
     expect(listArg().where).toEqual({ groupRank: 0, editorialBlockReason: null })
+    // O contador acompanha TODA variante do parametro, nao so a ausencia dele.
+    expect(res.headers.get('X-Quarantine-Count')).toBe('4')
   })
 
   test('valor irreconhecivel cai no default e loga, sem 500', async () => {
@@ -124,7 +151,12 @@ describe('T-08 — default esconde a quarentena editorial', () => {
 
     expect(res.status).toBe(200)
     expect(listArg().where).toEqual({ groupRank: 0, editorialBlockReason: null })
-    expect(warn).toHaveBeenCalled()
+    // Assercao especifica: o log tem que nomear o parametro e o valor recusado,
+    // senao qualquer warn alheio do runtime satisfaria o teste.
+    expect(warn).toHaveBeenCalledTimes(1)
+    const warned = String(warn.mock.calls[0][0])
+    expect(warned).toContain('includeQuarantine="sim"')
+    expect(warned).toContain('quarentena oculta')
     warn.mockRestore()
   })
 
@@ -189,12 +221,42 @@ describe('T-08 — nenhuma linha e apagada ou despublicada', () => {
 
     await adminNewsGET(listReq())
 
-    // O contador e a listagem sao as unicas queries; o mock de prisma nao expoe
-    // update/updateMany/delete, entao qualquer escrita quebraria o teste.
+    // O contador e a listagem sao as unicas queries. Os metodos de escrita estao
+    // disponiveis no mock: se a rota chamasse qualquer um, os expects abaixo
+    // falhariam em vez de estourar TypeError por metodo ausente.
     expect(countNews).toHaveBeenCalledTimes(1)
     expect(countNews.mock.calls[0][0]).toEqual({
       where: { groupRank: 0, editorialBlockReason: { not: null } },
     })
     expect(findManyNews).toHaveBeenCalledTimes(2)
+    expect(updateNews).not.toHaveBeenCalled()
+    expect(updateManyNews).not.toHaveBeenCalled()
+    expect(deleteNews).not.toHaveBeenCalled()
+    expect(deleteManyNews).not.toHaveBeenCalled()
+    expect(createNews).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// T-08 — o filtro tambem vale para a hidratacao de irmaos
+// ---------------------------------------------------------------------------
+
+describe('T-08 — irmaos herdam o filtro da ancora', () => {
+  test('no default, a query de irmaos exige editorialBlockReason null', async () => {
+    findManyNews.mockResolvedValueOnce([CLEAN_ANCHOR]).mockResolvedValueOnce([])
+
+    await adminNewsGET(listReq())
+
+    expect(siblingArg().where).toEqual({
+      AND: [SIBLING_GROUP_WHERE, { editorialBlockReason: null }],
+    })
+  })
+
+  test('com includeQuarantine=1, a query de irmaos volta a ser so por grupo', async () => {
+    findManyNews.mockResolvedValueOnce([CLEAN_ANCHOR]).mockResolvedValueOnce([])
+
+    await adminNewsGET(listReq({ includeQuarantine: '1' }))
+
+    expect(siblingArg().where).toEqual(SIBLING_GROUP_WHERE)
   })
 })
