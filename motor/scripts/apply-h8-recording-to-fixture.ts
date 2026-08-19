@@ -1,8 +1,15 @@
 /**
  * Apply H8 real-http recording artifact to multi-team-golden-set.ts fixture.
  * Updates GOLDEN_SET_META and each GOLDEN_SET case with recorded llm responses,
- * sets provenance to 'real-http', acquisition to 'provider-http', and clears
- * simulated modelError flags.
+ * sets provenance to 'real-http' and acquisition to 'provider-http'.
+ *
+ * modelError: PRESERVED, never silently cleared. The flag is a curator
+ * annotation (a case where the model got the anchor wrong) and is the only
+ * honesty counterweight the corpus carries; the [H8/CI] assertion in
+ * NewsClassifier.golden-set.test.ts depends on it. A re-recording replaces the
+ * responses, so any pre-existing modelError must be RE-REVIEWED against the new
+ * ones -- this script keeps the flag and prints a loud RE-REVIEW REQUIRED list
+ * instead of deleting it. Deleting it silently was the 2026-08-18 W3 finding.
  */
 import * as fs from 'fs'
 import * as path from 'path'
@@ -81,6 +88,7 @@ function updateFixture(artifact: RecordedArtifact): void {
 
   const caseById = new Map(artifact.cases.map((c) => [c.id, c]))
   const edits: Array<{ start: number; end: number; text: string }> = []
+  const preservedModelErrorIds: string[] = []
 
   function visit(node: ts.Node) {
     // Update GOLDEN_SET_META object literal
@@ -156,7 +164,11 @@ function updateFixture(artifact: RecordedArtifact): void {
       }
     }
 
-    // Remove modelError property assignments inside golden cases
+    // modelError is PRESERVED (never edited away). It is a curator annotation,
+    // not recorded data: the artifact carries no modelError field, so deleting
+    // it here would silently destroy human judgement. Collect the affected ids
+    // and report them so the annotation is re-reviewed against the new
+    // responses. See the W3 finding of 2026-08-18.
     if (
       ts.isPropertyAssignment(node) &&
       node.name.getText(sourceFile) === 'modelError'
@@ -171,17 +183,8 @@ function updateFixture(artifact: RecordedArtifact): void {
       if (!idProp || !ts.isStringLiteral(idProp.initializer)) return
 
       const id = idProp.initializer.text
-      if (caseById.has(id)) {
-        // Remove the whole line including trailing comma and newline
-        let start = node.getFullStart()
-        let end = node.getEnd()
-        // Extend end to consume trailing comma
-        if (sourceText[end] === ',') end += 1
-        // Extend to consume trailing newline(s) but preserve one for spacing
-        while (end < sourceText.length && sourceText[end] === '\n') end += 1
-        // Pull start back to consume leading whitespace/newline to keep clean
-        while (start > 0 && sourceText[start - 1] === '\n') start -= 1
-        edits.push({ start, end, text: '\n' })
+      if (caseById.has(id) && node.initializer.getText(sourceFile) === 'true') {
+        preservedModelErrorIds.push(id)
       }
     }
 
@@ -200,6 +203,15 @@ function updateFixture(artifact: RecordedArtifact): void {
   fs.writeFileSync(FIXTURE_PATH, result, 'utf8')
   console.log(`Updated fixture: ${FIXTURE_PATH}`)
   console.log(`Cases updated: ${caseById.size}`)
+  if (preservedModelErrorIds.length > 0) {
+    console.warn(
+      `\nRE-REVIEW REQUIRED: modelError: true preserved on ${preservedModelErrorIds.length} case(s): ${preservedModelErrorIds.join(', ')}.\n` +
+        'These annotations describe the PREVIOUS responses. Re-check each one against the freshly recorded response and\n' +
+        'remove the flag by hand only if the model no longer gets that anchor wrong. Never let this script clear it for you.',
+    )
+  } else {
+    console.log('No modelError annotations present in the fixture.')
+  }
 }
 
 function main(): void {
