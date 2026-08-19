@@ -77,6 +77,21 @@ function request(qs = '') {
   return new NextRequest(`http://localhost:3000/api/v1/news${qs}`)
 }
 
+/**
+ * Avalia o `where` REALMENTE enviado ao banco contra o estado da linha da
+ * fixture. Sem isto os casos 3 e 4 seriam tautologicos: o mock devolve `[]`
+ * para o caminho ancora, entao `data.length === 0` passaria mesmo se o handler
+ * nao filtrasse nada. Aqui a exclusao e provada pelo predicado, nao pelo mock.
+ */
+function rowPassesWhere(
+  state: { isPublished: boolean; isArchived: boolean },
+  where: { isPublished?: boolean; isArchived?: boolean }
+): boolean {
+  if (where.isPublished !== undefined && where.isPublished !== state.isPublished) return false
+  if (where.isArchived !== undefined && where.isArchived !== state.isArchived) return false
+  return true
+}
+
 async function body(res: Response) {
   return (await res.json()) as {
     data?: Array<Record<string, unknown>>
@@ -165,6 +180,9 @@ describe('T-05: feed publico exclui noticias arquivadas', () => {
 
     expect(res.status).toBe(200)
     expect(json.data).toHaveLength(0)
+    const where3 = findManyNews.mock.calls[0][0].where
+    expect(where3).toEqual({ isPublished: true, isArchived: false, groupRank: 0 })
+    expect(rowPassesWhere({ isPublished: false, isArchived: false }, where3)).toBe(false)
   })
 
   it('4. nao publicada e arquivada -> NAO retorna no feed (caminho ancora)', async () => {
@@ -182,6 +200,9 @@ describe('T-05: feed publico exclui noticias arquivadas', () => {
 
     expect(res.status).toBe(200)
     expect(json.data).toHaveLength(0)
+    const where4 = findManyNews.mock.calls[0][0].where
+    expect(where4).toEqual({ isPublished: true, isArchived: false, groupRank: 0 })
+    expect(rowPassesWhere({ isPublished: false, isArchived: true }, where4)).toBe(false)
   })
 
   it('filtro por assetId tambem exclui arquivadas (caminho SQL raw)', async () => {
