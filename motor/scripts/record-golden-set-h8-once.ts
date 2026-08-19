@@ -320,6 +320,7 @@ async function main(): Promise<void> {
     rebuildStaticPrefix: () => Promise<void>
     anthropic: Anthropic
     boundModel: string
+    boundConfigVersion: number
   }
   internal.tickerMapLine = tickerMapLine
   internal.tickerIndex = buildAliasIndex([...GOLDEN_ASSET_ALIASES])
