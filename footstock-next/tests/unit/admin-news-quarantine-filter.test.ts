@@ -221,12 +221,19 @@ describe('T-08 — nenhuma linha e apagada ou despublicada', () => {
 
     await adminNewsGET(listReq())
 
-    // O contador e a listagem sao as unicas queries. Os metodos de escrita estao
-    // disponiveis no mock: se a rota chamasse qualquer um, os expects abaixo
-    // falhariam em vez de estourar TypeError por metodo ausente.
-    expect(countNews).toHaveBeenCalledTimes(1)
+    // Duas contagens e a listagem sao as unicas queries. A segunda contagem
+    // entrou com o T-09 (item 010): e o `total` do bloco `pagination`, contado
+    // sobre o MESMO where da listagem. O contador da quarentena continua sendo o
+    // primeiro do `Promise.all` e nao mudou de shape.
+    // Os metodos de escrita estao disponiveis no mock: se a rota chamasse
+    // qualquer um, os expects abaixo falhariam em vez de estourar TypeError por
+    // metodo ausente.
+    expect(countNews).toHaveBeenCalledTimes(2)
     expect(countNews.mock.calls[0][0]).toEqual({
       where: { groupRank: 0, editorialBlockReason: { not: null } },
+    })
+    expect(countNews.mock.calls[1][0]).toEqual({
+      where: { groupRank: 0, editorialBlockReason: null },
     })
     expect(findManyNews).toHaveBeenCalledTimes(2)
     expect(updateNews).not.toHaveBeenCalled()

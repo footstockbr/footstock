@@ -80,8 +80,28 @@ interface NewsTeamLine {
 
 type FilterType = 'todas' | 'publicada' | 'rascunho' | 'arquivada'
 
-/** Espelha o `take: 100` do GET /api/v1/admin/news. */
-const NEWS_WINDOW_SIZE = 100
+/** Espelha o `limit` default do GET /api/v1/admin/news (T-09). Deixou de ser um
+ * teto de janela: e o tamanho de pagina pedido a cada requisicao. */
+const NEWS_PAGE_SIZE = 100
+
+/** Bloco `pagination` do GET (contrato `list()` de `@/lib/api`). */
+interface NewsPagination {
+  page: number
+  limit: number
+  total: number
+  totalPages: number
+  hasNext: boolean
+}
+
+/** Default usado antes da primeira resposta e quando a resposta vem sem
+ * `pagination` (mock antigo, proxy). Nunca `undefined` no render. */
+const EMPTY_PAGINATION: NewsPagination = {
+  page: 1,
+  limit: NEWS_PAGE_SIZE,
+  total: 0,
+  totalPages: 1,
+  hasNext: false,
+}
 
 /** Contrato com o GET /api/v1/admin/news (T-08): parâmetro que reexibe a
  * quarentena e header que traz quantas âncoras estão em quarentena. */
@@ -180,8 +200,13 @@ export default function NoticiasPage() {
   // Erro de ação de card (publicar/arquivar/deletar). Antes era `alert()`, que o
   // Playwright não vê e o operador dispensa sem ler.
   const [actionError, setActionError] = useState<string | null>(null)
-  // Janela cheia: o GET devolve no máximo 100 grupos.
-  const [windowSaturated, setWindowSaturated] = useState(false)
+
+  // Paginação (T-09). Antes a tela mostrava só os 100 grupos mais recentes e
+  // avisava que o resto existia mas não aparecia; agora o resto é alcançável.
+  // `page` é o que a tela pediu, `pagination` é o que o servidor respondeu — os
+  // dois só divergem entre o clique e a chegada da resposta.
+  const [page, setPage] = useState(1)
+  const [pagination, setPagination] = useState<NewsPagination>(EMPTY_PAGINATION)
 
   // Quarentena editorial (T-08). Por default a lista NÃO traz linha barrada pelo
   // gate do motor nem o passivo `backfill_no_local_team`: o filtro é do lado do
@@ -231,14 +256,19 @@ export default function NoticiasPage() {
     setEditNotice(null)
   }, [highlightedNewsId, news, editingItem])
 
-  const fetchNews = async (includeQuarantine: boolean = showQuarantine) => {
+  const fetchNews = async (
+    includeQuarantine: boolean = showQuarantine,
+    targetPage: number = page
+  ) => {
     try {
       setLoading(true)
       setError(null)
-      const url = includeQuarantine
-        ? `/api/v1/admin/news?${QUARANTINE_QUERY_PARAM}=1`
-        : '/api/v1/admin/news'
-      const res = await fetch(url, { credentials: 'include' })
+      const query = new URLSearchParams({
+        page: String(targetPage),
+        limit: String(NEWS_PAGE_SIZE),
+      })
+      if (includeQuarantine) query.set(QUARANTINE_QUERY_PARAM, '1')
+      const res = await fetch(`/api/v1/admin/news?${query.toString()}`, { credentials: 'include' })
       if (!res.ok) throw new Error('Erro ao carregar noticias')
       const data = await res.json()
       const payload: NewsItem[] = data.data || []
@@ -272,9 +302,31 @@ export default function NoticiasPage() {
       }
 
       setNews(anchors)
-      // A janela é fechada em 100 grupos no servidor. Sem este sinal o operador
-      // acha que a notícia dele não foi criada, quando ela só caiu fora da página.
-      setWindowSaturated(payload.length >= NEWS_WINDOW_SIZE)
+
+      // Bloco `pagination` da mesma resposta. Ausente (mock antigo, proxy que
+      // reescreve o body) cai num default derivado da própria página e LOGA —
+      // mesmo padrão do header da quarentena. Nunca `undefined` no render, nunca
+      // silêncio.
+      const rawPagination = (data as { pagination?: Partial<NewsPagination> }).pagination
+      if (!rawPagination || typeof rawPagination.totalPages !== 'number') {
+        console.warn(
+          '[admin/noticias] resposta do GET sem bloco `pagination`; navegação limitada à página atual.'
+        )
+        setPagination({
+          ...EMPTY_PAGINATION,
+          page: targetPage,
+          total: anchors.length,
+          hasNext: false,
+        })
+      } else {
+        setPagination({
+          page: rawPagination.page ?? targetPage,
+          limit: rawPagination.limit ?? NEWS_PAGE_SIZE,
+          total: rawPagination.total ?? anchors.length,
+          totalPages: Math.max(1, rawPagination.totalPages),
+          hasNext: Boolean(rawPagination.hasNext),
+        })
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro desconhecido')
     } finally {
@@ -285,10 +337,25 @@ export default function NoticiasPage() {
   // Recarrega do servidor porque o filtro é do `where` do GET, não do cliente.
   // O estado só vira depois de disparar o fetch com o valor novo, então não há
   // janela em que o rótulo diz uma coisa e a lista mostra outra.
+  // Volta para a página 1: ligar ou desligar a quarentena muda o tamanho do
+  // acervo, então continuar na página 7 poderia cair fora do intervalo (mesmo
+  // reset que `handleFilterChange` faz em `UserList.tsx`).
   const toggleQuarantine = () => {
     const next = !showQuarantine
     setShowQuarantine(next)
-    fetchNews(next)
+    setPage(1)
+    fetchNews(next, 1)
+  }
+
+  // Navegação de páginas (T-09). Clamp entre 1 e `totalPages` e no-op no alvo
+  // igual ao atual, então nenhum clique dispara requisição inútil nem leva a uma
+  // página inexistente. O estado só vira junto com o fetch do valor novo, mesma
+  // disciplina de `toggleQuarantine`.
+  const goToPage = (target: number) => {
+    const clamped = Math.min(Math.max(1, target), Math.max(1, pagination.totalPages))
+    if (clamped === page) return
+    setPage(clamped)
+    fetchNews(showQuarantine, clamped)
   }
 
   const getFilteredNews = () => {
@@ -578,7 +645,12 @@ export default function NoticiasPage() {
       <div className="section-header" data-testid="admin-noticias-header">
         <div>
           <div className="section-title">Notícias</div>
-          <div className="section-sub">{publishCount} publicadas · {draftCount} rascunhos · {archivedCount} arquivadas</div>
+          {/* Contadores da PÁGINA, não do acervo: `news` agora é uma página e não
+              mais "as 100 mais recentes". Mover o filtro de status para o servidor
+              é trabalho de outro item; aqui o rótulo apenas para de mentir. */}
+          <div className="section-sub" data-testid="admin-noticias-counters">
+            Nesta página: {publishCount} publicadas · {draftCount} rascunhos · {archivedCount} arquivadas
+          </div>
         </div>
         <button
           onClick={() => setCreating(true)}
@@ -616,10 +688,25 @@ export default function NoticiasPage() {
 
       <div className="filter-bar" data-testid="admin-noticias-filter-bar">
         {(['todas', 'publicada', 'rascunho', 'arquivada'] as FilterType[]).map((f) => (
-          <button key={f} onClick={() => setFilter(f)} className={`filter-btn ${filter === f ? 'active' : ''}`} data-testid={`admin-noticias-filter-${f}-button`}>
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`filter-btn ${filter === f ? 'active' : ''}`}
+            data-testid={`admin-noticias-filter-${f}-button`}
+            title="Filtra apenas as notícias da página atual, não o acervo inteiro."
+          >
             {f === 'todas' ? 'Todas' : f === 'publicada' ? 'Publicadas' : f === 'rascunho' ? 'Rascunhos' : 'Arquivadas'}
           </button>
         ))}
+        {/* As abas operam sobre o array já carregado, ou seja sobre a página
+            corrente. Sem esta linha o operador leria "Rascunhos: 0" como "não há
+            rascunho nenhum no acervo". */}
+        <span
+          data-testid="admin-noticias-filter-scope-note"
+          style={{ marginLeft: '8px', alignSelf: 'center', fontSize: '11px', color: '#8f95a5' }}
+        >
+          Filtram apenas a página atual
+        </span>
       </div>
 
       {/* Quarentena editorial (T-08): contador e toggle SEMPRE renderizados,
@@ -695,26 +782,6 @@ export default function NoticiasPage() {
           }}
         >
           {editNotice}
-        </div>
-      )}
-
-      {/* Janela do GET fechada em 100 grupos: sem este aviso o operador conclui
-          que a notícia dele não foi criada quando ela só ficou fora da página. */}
-      {windowSaturated && (
-        <div
-          data-testid="admin-noticias-window-saturated-warning"
-          style={{
-            marginBottom: '12px',
-            padding: '10px 14px',
-            background: 'rgba(240, 185, 11, 0.06)',
-            border: '1px solid rgba(240, 185, 11, 0.15)',
-            borderRadius: '6px',
-            color: '#F0B90B',
-            fontSize: '11px',
-          }}
-        >
-          Lista limitada às {NEWS_WINDOW_SIZE} notícias mais recentes (contando cada notícia multi-time como uma só).
-          Notícias mais antigas existem, mas não aparecem aqui — e os contadores acima também só refletem esta janela.
         </div>
       )}
 
@@ -885,6 +952,68 @@ export default function NoticiasPage() {
           </div>
         )}
       </div>
+
+      {/* Navegação de páginas (T-09). Renderizada mesmo com uma página só, para o
+          total do acervo continuar visível; some apenas quando a listagem falhou,
+          porque aí o erro já é o sinal na tela. Não tem `loading`/`error`
+          próprios: herda os da requisição da listagem, igual ao contador da
+          quarentena. */}
+      {!error && (
+        <nav
+          aria-label="Paginação de notícias"
+          data-testid="admin-noticias-pagination"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            marginTop: '12px',
+            padding: '8px 12px',
+            background: '#181A20',
+            border: '1px solid #2a2d35',
+            borderRadius: '6px',
+            fontSize: '12px',
+            color: '#8f95a5',
+          }}
+        >
+          <span data-testid="admin-noticias-pagination-label">
+            Página {pagination.page} de {pagination.totalPages} · {pagination.total} notícia(s)
+            {showQuarantine ? ' no acervo (quarentena incluída)' : ' no acervo (quarentena oculta)'}
+          </span>
+          <span style={{ display: 'flex', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={() => goToPage(pagination.page - 1)}
+              disabled={loading || pagination.page <= 1}
+              aria-label="Página anterior"
+              data-testid="admin-noticias-pagination-prev"
+              className="btn btn-sm btn-outline"
+              style={{
+                color: pagination.page <= 1 || loading ? '#5b6270' : '#F0B90B',
+                cursor: pagination.page <= 1 || loading ? 'not-allowed' : 'pointer',
+              }}
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              onClick={() => goToPage(pagination.page + 1)}
+              disabled={loading || pagination.page >= pagination.totalPages}
+              aria-label="Próxima página"
+              data-testid="admin-noticias-pagination-next"
+              className="btn btn-sm btn-outline"
+              style={{
+                color:
+                  pagination.page >= pagination.totalPages || loading ? '#5b6270' : '#F0B90B',
+                cursor:
+                  pagination.page >= pagination.totalPages || loading ? 'not-allowed' : 'pointer',
+              }}
+            >
+              Próxima
+            </button>
+          </span>
+        </nav>
+      )}
 
       {/* ── Modal Editar ── */}
       {editingItem && (

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { ok, errors } from '@/lib/api'
+import { ok, list, errors, parsePagination, buildPagination } from '@/lib/api'
 import { resolveTickerFromText } from '@/lib/utils/resolve-ticker'
 import { writeNewsGroup } from '@/lib/services/newsGroupWriter'
 import type { User, AdminRole } from '@/types'
@@ -55,24 +55,36 @@ function withQuarantineCount<T extends NextResponse>(response: T, count: number)
 }
 
 /**
- * Le o parametro de query sem depender de `nextUrl` estar presente: teste unitario
- * monta o request como objeto nu e o runtime entrega `nextUrl`. Valor irreconhecivel
- * cai no default (esconder) e LOGA — Zero Silencio: o operador que digitou
- * `?includeQuarantine=sim` precisa saber por que nada mudou.
+ * Query string do request sem depender de `nextUrl` estar presente: teste unitario
+ * monta o request como objeto nu e o runtime entrega `nextUrl`. Extraido de
+ * `readIncludeQuarantine` (T-09) porque `parsePagination` tambem precisa de um
+ * `URLSearchParams` e os dois leitores tem que enxergar a MESMA query.
+ * Sem query legivel devolve params vazio, nunca `null`: quem le cai no default.
  */
-function readIncludeQuarantine(request: NextRequest): boolean {
-  let params: URLSearchParams | null =
+function readSearchParams(request: NextRequest): URLSearchParams {
+  const fromNextUrl =
     (request as { nextUrl?: { searchParams?: URLSearchParams } }).nextUrl?.searchParams ?? null
+  if (fromNextUrl) return fromNextUrl
 
-  if (!params && typeof request.url === 'string' && request.url.length > 0) {
+  if (typeof request.url === 'string' && request.url.length > 0) {
     try {
-      params = new URL(request.url).searchParams
+      return new URL(request.url).searchParams
     } catch {
-      params = null
+      // URL relativa ou vazia: cai no vazio abaixo em vez de derrubar o request.
     }
   }
 
-  const raw = params?.get(QUARANTINE_QUERY_PARAM)
+  return new URLSearchParams()
+}
+
+/**
+ * Valor irreconhecivel cai no default (esconder) e LOGA — Zero Silencio: o
+ * operador que digitou `?includeQuarantine=sim` precisa saber por que nada mudou.
+ */
+function readIncludeQuarantine(request: NextRequest): boolean {
+  const params = readSearchParams(request)
+
+  const raw = params.get(QUARANTINE_QUERY_PARAM)
   if (raw === null || raw === undefined) return false
 
   const normalized = raw.trim().toLowerCase()
@@ -177,37 +189,62 @@ export async function GET(request: NextRequest) {
     // lista. Sem este filtro um grupo de 3 ocupa 3 dos 100 slots e a janela encolhe
     // ate 3x (RB21). Com acervo unitario pos-backfill (item 008) toda linha tem
     // group_rank 0, entao o resultado e identico ao de antes (criterio 17).
-    // O `take: 100` continua o mesmo de proposito: agora sao 100 grupos de verdade.
+    // O tamanho de pagina default continua 100 de proposito: sao 100 grupos de
+    // verdade, e agora com navegacao (T-09) em vez de janela fechada.
     // Sem `select`: groupId/groupRank seguem no retorno (o item 018 usa groupId no
     // data-testid do badge de grupo).
     // T-08: quarentena fora da listagem por default. O filtro e no `where` e nao
     // no cliente de proposito: com 10.872 linhas do passivo `backfill_no_local_team`
-    // no acervo, filtrar depois do `take: 100` deixaria a janela inteira ocupada
-    // por linha barrada e o operador sem noticia nenhuma para editar.
+    // no acervo, filtrar depois do corte da pagina deixaria a pagina inteira
+    // ocupada por linha barrada e o operador sem noticia nenhuma para editar.
     const includeQuarantine = readIncludeQuarantine(request)
     const anchorWhere = includeQuarantine
       ? { groupRank: 0 }
       : { groupRank: 0, editorialBlockReason: null }
 
-    // Contagem do que a quarentena esconde. Roda nas DUAS variantes do parametro
-    // para a tela desenhar o mesmo contador com o toggle ligado ou desligado
-    // (com zero em quarentena o valor e `0` explicito, nunca ausente). Conta
-    // ANCORAS, igual a listagem: uma noticia multi-time barrada conta 1.
-    // Falha aqui derruba o request inteiro por escolha: o contador e parte da
-    // mesma resposta e a tela reusa o estado de erro da listagem.
-    const quarantineCount = await prisma.news.count({
-      where: { groupRank: 0, editorialBlockReason: { not: null } },
-    })
+    // T-09: paginacao por offset, com os mesmos nomes (`page`/`limit`) e o mesmo
+    // leitor (`parsePagination`) que o feed publico ja usa — introduzir `pageSize`
+    // so nesta rota criaria dois nomes para a mesma coisa. Default 100 = o `take`
+    // que existia antes desta task, entao requisicao sem parametro devolve
+    // exatamente o mesmo conjunto de antes; o cap de 100 do helper mantem o teto
+    // de carga por request.
+    const { page, limit, skip } = parsePagination(readSearchParams(request), 100)
+
+    // Duas contagens, em paralelo para nao somar mais uma ida ao banco em serie:
+    // - `quarantineCount`: ancoras barradas, para o contador do toggle. Roda nas
+    //   DUAS variantes do parametro (com zero em quarentena o valor e `0`
+    //   explicito, nunca ausente). Conta ANCORAS, igual a listagem: uma noticia
+    //   multi-time barrada conta 1.
+    // - `total`: tamanho do acervo navegavel. Usa o MESMO `anchorWhere` do
+    //   `findMany` de proposito — com a quarentena oculta o total e o numero de
+    //   grupos VISIVEIS, senao a ultima pagina prometida por `totalPages` nao
+    //   existiria.
+    // Falha em qualquer uma derruba o request inteiro por escolha: contador e
+    // paginacao sao parte da mesma resposta e a tela reusa o estado de erro da
+    // listagem.
+    const [quarantineCount, total] = await Promise.all([
+      prisma.news.count({
+        where: { groupRank: 0, editorialBlockReason: { not: null } },
+      }),
+      prisma.news.count({ where: anchorWhere }),
+    ])
+
+    const pagination = buildPagination(page, limit, total)
 
     const anchors = await prisma.news.findMany({
       where: anchorWhere,
       // Admin usa createdAt desc para garantir visibilidade de rascunhos,
-      // diferente do feed publico que usa publishedAt.
+      // diferente do feed publico que usa publishedAt. Tambem e o que garante
+      // pagina estavel: sem ordem total nao ha fatia reproduzivel.
       orderBy: { createdAt: 'desc' },
-      take: 100,
+      skip,
+      take: limit,
     })
 
-    if (anchors.length === 0) return withQuarantineCount(ok([]), quarantineCount)
+    // Pagina fora do intervalo (`?page=999`) nao e erro: responde 200 com lista
+    // vazia e o `pagination` correto, mesma semantica do feed publico. A tela usa
+    // `totalPages` para nunca oferecer esse clique.
+    if (anchors.length === 0) return withQuarantineCount(list([], pagination), quarantineCount)
 
     // Hidratacao de irmaos. A lista mostra um card por FATO e precisa exibir todo
     // time envolvido com o sentimento proprio de cada um; a ancora sozinha nao diz
@@ -269,7 +306,7 @@ export async function GET(request: NextRequest) {
       ),
     }))
 
-    return withQuarantineCount(ok(news), quarantineCount)
+    return withQuarantineCount(list(news, pagination), quarantineCount)
   } catch (error) {
     console.error('[news] Error:', error)
     return errors.server()
