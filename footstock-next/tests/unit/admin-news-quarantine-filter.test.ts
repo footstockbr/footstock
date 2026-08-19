@@ -221,19 +221,32 @@ describe('T-08 — nenhuma linha e apagada ou despublicada', () => {
 
     await adminNewsGET(listReq())
 
-    // Duas contagens e a listagem sao as unicas queries. A segunda contagem
+    // Cinco contagens e a listagem sao as unicas queries. A segunda contagem
     // entrou com o T-09 (item 010): e o `total` do bloco `pagination`, contado
-    // sobre o MESMO where da listagem. O contador da quarentena continua sendo o
-    // primeiro do `Promise.all` e nao mudou de shape.
+    // sobre o MESMO where da listagem. As tres ultimas entraram com o criterio 3
+    // do T-06 (contador de status do acervo) e tambem sao leitura. O contador da
+    // quarentena continua sendo o primeiro do `Promise.all` e nao mudou de shape.
     // Os metodos de escrita estao disponiveis no mock: se a rota chamasse
     // qualquer um, os expects abaixo falhariam em vez de estourar TypeError por
     // metodo ausente.
-    expect(countNews).toHaveBeenCalledTimes(2)
+    expect(countNews).toHaveBeenCalledTimes(5)
     expect(countNews.mock.calls[0][0]).toEqual({
       where: { groupRank: 0, editorialBlockReason: { not: null } },
     })
     expect(countNews.mock.calls[1][0]).toEqual({
       where: { groupRank: 0, editorialBlockReason: null },
+    })
+    // Os tres de status partem do MESMO recorte da listagem: com a quarentena
+    // oculta eles contam o acervo VISIVEL, senao o rodape diria uma coisa e a
+    // lista mostraria outra.
+    expect(countNews.mock.calls[2][0]).toEqual({
+      where: { groupRank: 0, editorialBlockReason: null, isPublished: true, isArchived: false },
+    })
+    expect(countNews.mock.calls[3][0]).toEqual({
+      where: { groupRank: 0, editorialBlockReason: null, isPublished: false, isArchived: false },
+    })
+    expect(countNews.mock.calls[4][0]).toEqual({
+      where: { groupRank: 0, editorialBlockReason: null, isArchived: true },
     })
     expect(findManyNews).toHaveBeenCalledTimes(2)
     expect(updateNews).not.toHaveBeenCalled()

@@ -86,17 +86,23 @@ function listArg() {
 }
 
 /**
- * `where` de cada `count`. A rota dispara os dois em `Promise.all`: o da
- * quarentena primeiro, o do total depois. Buscar pelo shape (e nao pelo indice)
- * mantem o teste honesto se a ordem mudar.
+ * `where` de cada `count`. A rota dispara cinco em `Promise.all`: quarentena,
+ * total e os tres contadores de status do acervo (T-06, criterio 3). Buscar pelo
+ * shape (e nao pelo indice) mantem o teste honesto se a ordem mudar.
  */
 function countWheres() {
   return countNews.mock.calls.map((c) => (c[0] as { where: Record<string, unknown> }).where)
 }
 
+/** O `where` do total: o unico sem o filtro de quarentena-positiva E sem recorte
+ * de status. Os tres contadores de status derivam do mesmo `anchorWhere`, entao
+ * excluir `isPublished`/`isArchived` e o que mantem esta busca nao ambigua. */
 function totalCountWhere() {
   return countWheres().find(
-    (w) => !(w.editorialBlockReason && typeof w.editorialBlockReason === 'object')
+    (w) =>
+      !(w.editorialBlockReason && typeof w.editorialBlockReason === 'object') &&
+      !('isPublished' in w) &&
+      !('isArchived' in w)
   )
 }
 
@@ -198,7 +204,8 @@ describe('T-09 — total conta o mesmo recorte da listagem', () => {
     const res = await adminNewsGET(listReq())
     const body = await res.json()
 
-    expect(countNews).toHaveBeenCalledTimes(2)
+    // Cinco contagens: quarentena, total e os tres de status (T-06 criterio 3).
+    expect(countNews).toHaveBeenCalledTimes(5)
     expect(totalCountWhere()).toEqual({ groupRank: 0, editorialBlockReason: null })
     // O total e o where do findMany sao o MESMO recorte: senao a ultima pagina
     // prometida por totalPages nao existiria.

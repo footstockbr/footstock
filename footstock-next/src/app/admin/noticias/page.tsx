@@ -108,6 +108,34 @@ const EMPTY_PAGINATION: NewsPagination = {
 const QUARANTINE_QUERY_PARAM = 'includeQuarantine'
 const QUARANTINE_COUNT_HEADER = 'X-Quarantine-Count'
 
+/** Contadores de status do ACERVO (T-06, criterio 3). Vem da mesma resposta da
+ * listagem; ausencia dos tres derruba o rotulo para o escopo da pagina em vez de
+ * apresentar numero de pagina como se fosse do acervo. */
+const PUBLISHED_COUNT_HEADER = 'X-Published-Count'
+const DRAFT_COUNT_HEADER = 'X-Draft-Count'
+const ARCHIVED_COUNT_HEADER = 'X-Archived-Count'
+
+interface AcervoCounts {
+  published: number
+  draft: number
+  archived: number
+}
+
+/** Le um header de contagem inteira nao-negativa. Devolve `null` quando o header
+ * esta ausente (proxy que remove header custom, mock antigo) ou ilegivel; o
+ * caller decide o fallback e o rotulo. Valor ilegivel LOGA — some do numero mas
+ * nunca do console. */
+function readCountHeader(res: Response, header: string): number | null {
+  const raw = res.headers.get(header)
+  if (raw === null) return null
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    console.warn(`[admin/noticias] header ${header}="${raw}" inválido; contagem tratada como ausente.`)
+    return null
+  }
+  return parsed
+}
+
 /** Cap DB-04 do grupo: 1 time principal + 2 adicionais. */
 const MAX_GROUP_TEAMS = 3
 
@@ -221,6 +249,12 @@ export default function NoticiasPage() {
   const [showQuarantine, setShowQuarantine] = useState(false)
   const [quarantineCount, setQuarantineCount] = useState(0)
 
+  // Contadores de status do acervo (T-06, criterio 3). `null` = o servidor nao
+  // mandou os headers e a tela so sabe o que veio nesta pagina; o rotulo passa a
+  // dizer "Nesta pagina" em vez de mentir "No acervo", mesmo contrato do
+  // `paginationKnown` acima.
+  const [acervoCounts, setAcervoCounts] = useState<AcervoCounts | null>(null)
+
   // Edit modal
   const [editingItem, setEditingItem] = useState<NewsItem | null>(null)
   const [editForm, setEditForm] = useState({ title: '', content: '', impact: 'ESPORTIVA_MAJORITARIA', sentiment: 'NEUTRAL', ticker: '' })
@@ -278,20 +312,22 @@ export default function NoticiasPage() {
       const payload: NewsItem[] = data.data || []
 
       // Contador da quarentena: header da mesma resposta. Ausente ou ilegível
-      // (proxy que remove header custom, mock antigo) cai em 0 e LOGA — o
-      // controle continua renderizado com `0`, nunca some nem mostra vazio.
-      const rawCount = res.headers.get(QUARANTINE_COUNT_HEADER)
-      const parsedCount = rawCount === null ? NaN : Number(rawCount)
-      if (!Number.isFinite(parsedCount) || parsedCount < 0) {
-        if (rawCount !== null) {
-          console.warn(
-            `[admin/noticias] header ${QUARANTINE_COUNT_HEADER}="${rawCount}" inválido; contador da quarentena exibido como 0.`
-          )
-        }
-        setQuarantineCount(0)
-      } else {
-        setQuarantineCount(parsedCount)
-      }
+      // (proxy que remove header custom, mock antigo) cai em 0 — o controle
+      // continua renderizado com `0`, nunca some nem mostra vazio.
+      setQuarantineCount(readCountHeader(res, QUARANTINE_COUNT_HEADER) ?? 0)
+
+      // Contadores de status do acervo (T-06, critério 3). Ou os três vêm, ou
+      // nenhum vale: exibir um número do acervo ao lado de dois da página daria
+      // uma linha com denominadores misturados, pior que a versão honesta de
+      // página. Sem os três, `null` mantém o rótulo "Nesta página".
+      const publishedHeader = readCountHeader(res, PUBLISHED_COUNT_HEADER)
+      const draftHeader = readCountHeader(res, DRAFT_COUNT_HEADER)
+      const archivedHeader = readCountHeader(res, ARCHIVED_COUNT_HEADER)
+      setAcervoCounts(
+        publishedHeader === null || draftHeader === null || archivedHeader === null
+          ? null
+          : { published: publishedHeader, draft: draftHeader, archived: archivedHeader }
+      )
 
       // A rota já filtra `groupRank: 0` (item 017), então cada item aqui é UM
       // grupo, não uma linha. O filtro defensivo abaixo existe porque a lista
@@ -383,9 +419,18 @@ export default function NoticiasPage() {
   // Contadores contam GRUPOS, não linhas: `news` só tem âncoras (a rota filtra
   // `groupRank: 0` e o fetch reforça). Uma notícia de 3 times conta 1 aqui, que é
   // o que o operador vê como "uma notícia" na lista.
-  const publishCount = news.filter((n) => n.isPublished && !n.isArchived).length
-  const draftCount = news.filter((n) => !n.isPublished && !n.isArchived).length
-  const archivedCount = news.filter((n) => n.isArchived).length
+  //
+  // Quando o servidor manda os headers de status (caso normal), os números são do
+  // ACERVO e os predicados abaixo ficam como fallback — são a mesma regra, só que
+  // aplicada ao recorte da página. Manter os dois cálculos com predicados
+  // idênticos é o que permite trocar o rótulo sem trocar o significado.
+  const pageCounts: AcervoCounts = {
+    published: news.filter((n) => n.isPublished && !n.isArchived).length,
+    draft: news.filter((n) => !n.isPublished && !n.isArchived).length,
+    archived: news.filter((n) => n.isArchived).length,
+  }
+  const displayCounts = acervoCounts ?? pageCounts
+  const countsScopeLabel = acervoCounts ? 'No acervo' : 'Nesta página'
 
   const togglePublish = async (id: string, isPublished: boolean) => {
     setActionError(null)
@@ -657,11 +702,13 @@ export default function NoticiasPage() {
       <div className="section-header" data-testid="admin-noticias-header">
         <div>
           <div className="section-title">Notícias</div>
-          {/* Contadores da PÁGINA, não do acervo: `news` agora é uma página e não
-              mais "as 100 mais recentes". Mover o filtro de status para o servidor
-              é trabalho de outro item; aqui o rótulo apenas para de mentir. */}
+          {/* Contadores do ACERVO quando o servidor os manda (headers
+              `X-{Published,Draft,Archived}-Count`), da PÁGINA quando não manda. O
+              rótulo diz qual dos dois está na tela: com `?page=` a lista é uma
+              página e um número de página anunciado como "acervo" subnotifica o
+              operador — foi o sintoma que originou o T-06. */}
           <div className="section-sub" data-testid="admin-noticias-counters">
-            Nesta página: {publishCount} publicadas · {draftCount} rascunhos · {archivedCount} arquivadas
+            {countsScopeLabel}: {displayCounts.published} publicadas · {displayCounts.draft} rascunhos · {displayCounts.archived} arquivadas
           </div>
         </div>
         <button

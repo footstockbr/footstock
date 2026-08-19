@@ -44,13 +44,35 @@ const QUARANTINE_QUERY_PARAM = 'includeQuarantine'
 const QUARANTINE_TRUTHY = new Set(['1', 'true', 'yes'])
 const QUARANTINE_FALSY = new Set(['', '0', 'false', 'no'])
 
-/** Header com a contagem de ancoras em quarentena. Fica fora do `data` de proposito:
- * o body do GET admin e um array e qualquer consumidor existente continua lendo
- * `data[]` sem mudanca de shape. */
+/** Contagens que a tela precisa e que nao cabem no `data`. Ficam em header de
+ * proposito: o body do GET admin e um array e qualquer consumidor existente
+ * continua lendo `data[]` sem mudanca de shape.
+ *
+ * Os tres contadores de status (T-06, criterio 3) entraram junto com a
+ * paginacao: enquanto a lista era "as 100 mais recentes" o contador podia ser
+ * derivado no cliente, mas com `?page=` a tela so enxerga uma pagina e contar
+ * ali passou a subnotificar o operador — exatamente o sintoma que originou esta
+ * task ("o contador de rascunhos fica em zero"). Contam ANCORAS e usam o MESMO
+ * `anchorWhere` da listagem, entao respeitam o toggle da quarentena: com ela
+ * oculta o numero e o do acervo VISIVEL, senao o rodape diria uma coisa e a
+ * lista mostraria outra. */
 const QUARANTINE_COUNT_HEADER = 'X-Quarantine-Count'
+const PUBLISHED_COUNT_HEADER = 'X-Published-Count'
+const DRAFT_COUNT_HEADER = 'X-Draft-Count'
+const ARCHIVED_COUNT_HEADER = 'X-Archived-Count'
 
-function withQuarantineCount<T extends NextResponse>(response: T, count: number): T {
-  response.headers.set(QUARANTINE_COUNT_HEADER, String(count))
+interface AdminNewsCounts {
+  quarantine: number
+  published: number
+  draft: number
+  archived: number
+}
+
+function withCountHeaders<T extends NextResponse>(response: T, counts: AdminNewsCounts): T {
+  response.headers.set(QUARANTINE_COUNT_HEADER, String(counts.quarantine))
+  response.headers.set(PUBLISHED_COUNT_HEADER, String(counts.published))
+  response.headers.set(DRAFT_COUNT_HEADER, String(counts.draft))
+  response.headers.set(ARCHIVED_COUNT_HEADER, String(counts.archived))
   return response
 }
 
@@ -210,7 +232,7 @@ export async function GET(request: NextRequest) {
     // de carga por request.
     const { page, limit, skip } = parsePagination(readSearchParams(request), 100)
 
-    // Duas contagens, em paralelo para nao somar mais uma ida ao banco em serie:
+    // Cinco contagens, em paralelo para nao somar mais idas ao banco em serie:
     // - `quarantineCount`: ancoras barradas, para o contador do toggle. Roda nas
     //   DUAS variantes do parametro (com zero em quarentena o valor e `0`
     //   explicito, nunca ausente). Conta ANCORAS, igual a listagem: uma noticia
@@ -219,15 +241,33 @@ export async function GET(request: NextRequest) {
     //   `findMany` de proposito — com a quarentena oculta o total e o numero de
     //   grupos VISIVEIS, senao a ultima pagina prometida por `totalPages` nao
     //   existiria.
+    // - `published` / `draft` / `archived` (T-06, criterio 3): os mesmos tres
+    //   recortes que a tela fazia no cliente, agora sobre o acervo inteiro. Os
+    //   predicados sao copia literal dos filtros do header do admin
+    //   (`isPublished && !isArchived`, `!isPublished && !isArchived`,
+    //   `isArchived`), entao somam `total` e nao abrem uma quarta categoria
+    //   invisivel. Os tres partem de `anchorWhere` pelo mesmo motivo do `total`.
+    // A ordem do array e contrato com os testes existentes (quarentena primeiro,
+    // total depois); campos novos entram no fim.
     // Falha em qualquer uma derruba o request inteiro por escolha: contador e
     // paginacao sao parte da mesma resposta e a tela reusa o estado de erro da
     // listagem.
-    const [quarantineCount, total] = await Promise.all([
+    const [quarantineCount, total, publishedCount, draftCount, archivedCount] = await Promise.all([
       prisma.news.count({
         where: { groupRank: 0, editorialBlockReason: { not: null } },
       }),
       prisma.news.count({ where: anchorWhere }),
+      prisma.news.count({ where: { ...anchorWhere, isPublished: true, isArchived: false } }),
+      prisma.news.count({ where: { ...anchorWhere, isPublished: false, isArchived: false } }),
+      prisma.news.count({ where: { ...anchorWhere, isArchived: true } }),
     ])
+
+    const counts: AdminNewsCounts = {
+      quarantine: quarantineCount,
+      published: publishedCount,
+      draft: draftCount,
+      archived: archivedCount,
+    }
 
     const pagination = buildPagination(page, limit, total)
 
@@ -250,7 +290,7 @@ export async function GET(request: NextRequest) {
     // Pagina fora do intervalo (`?page=999`) nao e erro: responde 200 com lista
     // vazia e o `pagination` correto, mesma semantica do feed publico. A tela usa
     // `totalPages` para nunca oferecer esse clique.
-    if (anchors.length === 0) return withQuarantineCount(list([], pagination), quarantineCount)
+    if (anchors.length === 0) return withCountHeaders(list([], pagination), counts)
 
     // Hidratacao de irmaos. A lista mostra um card por FATO e precisa exibir todo
     // time envolvido com o sentimento proprio de cada um; a ancora sozinha nao diz
@@ -312,7 +352,7 @@ export async function GET(request: NextRequest) {
       ),
     }))
 
-    return withQuarantineCount(list(news, pagination), quarantineCount)
+    return withCountHeaders(list(news, pagination), counts)
   } catch (error) {
     console.error('[news] Error:', error)
     return errors.server()

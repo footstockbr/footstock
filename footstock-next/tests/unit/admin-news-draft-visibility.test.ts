@@ -46,8 +46,11 @@ const AUTH = {
   userId: 'u1',
 }
 
-function adminListReq(): NextRequest {
-  return {} as unknown as NextRequest
+function adminListReq(params: Record<string, string> = {}): NextRequest {
+  // Sem params o objeto e nu de proposito (a rota tem de sobreviver a request
+  // sem `nextUrl`); com params entra o mesmo shape que o runtime entrega.
+  if (Object.keys(params).length === 0) return {} as unknown as NextRequest
+  return { nextUrl: { searchParams: new URLSearchParams(params) } } as unknown as NextRequest
 }
 
 beforeEach(() => {
@@ -87,8 +90,10 @@ function matchesWhere(row: Row, where: Row | undefined): boolean {
   })
 }
 
-// Semantica de nulos do Postgres: DESC ordena NULLS FIRST e ASC NULLS LAST por
-// default; `nulls` explicito no orderBy do Prisma sobrescreve. Reproduzir isso
+// Semantica de nulos do Postgres — o provider real desta aplicacao
+// (`datasource db { provider = "postgresql" }`), nao uma escolha arbitraria do
+// simulador: DESC ordena NULLS FIRST e ASC NULLS LAST por default; `nulls`
+// explicito no orderBy do Prisma sobrescreve. Reproduzir isso
 // e o que torna o teste capaz de detectar a volta do `publishedAt desc nulls
 // last` (o rascunho tem publishedAt null e afundaria para fora da janela).
 function compareBy(a: Row, b: Row, term: OrderTerm): number {
@@ -210,6 +215,10 @@ describe('T-06 — rascunho recem-criado aparece no topo do admin', () => {
     expect(listArg.orderBy).toEqual([{ createdAt: 'desc' }, { id: 'asc' }])
     expect(listArg.take).toBe(100)
 
+    // O contador da quarentena viaja na mesma resposta (T-08) e o dataset nao
+    // tem linha barrada: `0` explicito, nunca header ausente.
+    expect(res.headers.get('X-Quarantine-Count')).toBe('0')
+
     // O simulador aplica o `take`: a pagina tem 100 dos 102 registros.
     expect(body.data).toHaveLength(100)
     expect(body.data[0].id).toBe('draft-1')
@@ -250,5 +259,83 @@ describe('T-06 — rascunho recem-criado aparece no topo do admin', () => {
     expect(body.data.some((n: { id: string }) => n.id === 'draft-1')).toBe(true)
     expect(body.data[0].id).toBe('draft-1')
     expect(body.data[0].isPublished).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// T-06 criterio 3 — o contador de rascunhos fala do acervo, nao da pagina
+// ---------------------------------------------------------------------------
+
+describe('T-06 criterio 3 — contador de rascunhos reflete o acervo', () => {
+  const yesterday = new Date('2026-08-18T10:00:00.000Z')
+
+  // Pagina 2 de um acervo de 102 grupos (101 publicadas + 1 rascunho), com o
+  // rascunho no topo da pagina 1. A pagina pedida aqui nao tem rascunho nenhum:
+  // se o contador fosse derivado dela, mostraria zero — que e literalmente o
+  // sintoma reportado no M12 ("o contador de rascunhos fica em zero"). Por isso
+  // as contagens sao do servidor e viajam em header.
+  beforeEach(() => {
+    const paginaDois: Row[] = [
+      {
+        id: 'pub-100',
+        groupId: 'g-pub-100',
+        groupRank: 0,
+        isPublished: true,
+        isArchived: false,
+        editorialBlockReason: null,
+        publishedAt: yesterday,
+        createdAt: yesterday,
+        ticker: 'FLA',
+        title: 'Publicada 100',
+      },
+      {
+        id: 'pub-101',
+        groupId: 'g-pub-101',
+        groupRank: 0,
+        isPublished: true,
+        isArchived: false,
+        editorialBlockReason: null,
+        publishedAt: yesterday,
+        createdAt: yesterday,
+        ticker: 'FLA',
+        title: 'Publicada 101',
+      },
+    ]
+    findManyNews.mockResolvedValueOnce(paginaDois).mockResolvedValueOnce([])
+    // Ordem do `Promise.all` da rota: quarentena, total, publicadas, rascunhos,
+    // arquivadas.
+    countNews
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(102)
+      .mockResolvedValueOnce(101)
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(0)
+  })
+
+  test('numa pagina sem rascunho, o header ainda reporta o rascunho do acervo', async () => {
+    const res = await adminNewsGET(adminListReq({ page: '2' }))
+    const body = await res.json()
+
+    // Contra-prova: a pagina realmente nao tem rascunho. Derivar o contador dela
+    // (o que a tela fazia antes) daria 0.
+    const rascunhosNaPagina = body.data.filter(
+      (n: { isPublished: boolean; isArchived: boolean }) => !n.isPublished && !n.isArchived
+    ).length
+    expect(body.data).toHaveLength(2)
+    expect(rascunhosNaPagina).toBe(0)
+
+    // O que o servidor manda e do acervo inteiro.
+    expect(res.headers.get('X-Draft-Count')).toBe('1')
+    expect(res.headers.get('X-Published-Count')).toBe('101')
+    expect(res.headers.get('X-Archived-Count')).toBe('0')
+    expect(res.headers.get('X-Quarantine-Count')).toBe('0')
+
+    // Os tres somam o `total` do bloco de paginacao: nenhum grupo fica fora de
+    // categoria, entao a linha do header nao esconde uma quarta fatia.
+    const soma =
+      Number(res.headers.get('X-Published-Count')) +
+      Number(res.headers.get('X-Draft-Count')) +
+      Number(res.headers.get('X-Archived-Count'))
+    expect(soma).toBe(body.pagination.total)
   })
 })
