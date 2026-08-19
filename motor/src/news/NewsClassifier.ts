@@ -198,6 +198,10 @@ end
 
 local tokens = redis.call('DECR', key)
 
+-- Defesa em profundidade: DECR nao remove TTL, entao esta segunda guarda e
+-- redundante no Redis atual. Mantida de proposito porque o custo e um TTL por
+-- chamada e o modo de falha que ela cobre (chave sem TTL) e exatamente o
+-- lockout permanente que este script existe para eliminar.
 if redis.call('TTL', key) == -1 then
   redis.call('EXPIRE', key, ttl)
 end
@@ -537,13 +541,33 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
     // Atomic check-init-decrement via Lua script.
     // Fixes: (1) race where key expires between EXISTS and DECR causing permanent
     // lockout at -1/0 without TTL; (2) initialization race (M4) via SET NX.
-    const tokens = await this.redis.eval(
+    const rawTokens = await this.redis.eval(
       RATE_LIMIT_CHECK_DECR_SCRIPT,
       1,
       RATE_LIMIT_KEY,
       RATE_LIMIT_MAX,
       RATE_LIMIT_TTL,
-    ) as number
+    )
+
+    // O reply do DECR e integer no protocolo Redis, mas a serializacao varia entre
+    // clientes (ioredis devolve number, alguns wrappers devolvem string/Buffer).
+    // Normalizar em vez de castar: um `as number` sobre string faria `tokens < 0`
+    // comparar lexicograficamente e o guard silenciaria.
+    // `nil` no Lua chega como null: NAO e "zero token", e ausencia de resposta.
+    // Sem este teste explicito o Number(null) === 0 passaria pelo guard abaixo e
+    // seria lido como "ultimo token consumido", liberando a chamada.
+    const tokens = rawTokens === null || rawTokens === undefined ? NaN : Number(rawTokens)
+
+    if (!Number.isFinite(tokens)) {
+      // Reply nao interpretavel: o contador nao pode ser verificado nesta rodada.
+      // Fail-closed deliberado — RateLimitError e retriavel (re-enfileira + 1s de
+      // espera, ver catch de RATE_001), enquanto seguir em frente arriscaria
+      // estourar o limite de 60 req/min da API. Nunca silencioso.
+      logger.warn(
+        `[RATE_001] Reply nao numerico do rate limiter (${typeof rawTokens}: ${String(rawTokens)}) — tratando como esgotado nesta rodada`,
+      )
+      throw new RateLimitError('RATE_001', 'Rate limit Sonnet indeterminado (reply nao numerico)')
+    }
 
     if (tokens < 0) {
       // Atomic revert with TTL guarantee

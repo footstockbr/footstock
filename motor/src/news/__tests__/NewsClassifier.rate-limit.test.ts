@@ -313,4 +313,45 @@ describe('NewsClassifier.checkRateLimit — atomic Lua script', () => {
       }
     })
   })
+
+  // -------------------------------------------------------------------------
+  // Normalizacao do reply do eval (serializacao varia entre clientes Redis)
+  // -------------------------------------------------------------------------
+
+  describe('eval reply normalization', () => {
+    it('accepts a string reply as a number (no lexicographic comparison)', async () => {
+      // Alguns wrappers devolvem o integer do DECR como string. '5' tem de valer
+      // 5 tokens e NAO disparar RateLimitError.
+      jest.spyOn(redis, 'eval').mockResolvedValueOnce('5' as never)
+
+      await expect(classifier.checkRateLimit()).resolves.toBeUndefined()
+    })
+
+    it('treats a negative string reply as exhausted (reverts and throws)', async () => {
+      const evalSpy = jest.spyOn(redis, 'eval')
+      evalSpy.mockResolvedValueOnce('-1' as never)
+
+      await expect(classifier.checkRateLimit()).rejects.toThrow(RateLimitError)
+
+      // Segunda chamada = revert-incr; prova que '-1' entrou no ramo de esgotado.
+      expect(evalSpy).toHaveBeenLastCalledWith(
+        RATE_LIMIT_REVERT_INCR_SCRIPT,
+        1,
+        RATE_LIMIT_KEY,
+        RATE_LIMIT_TTL,
+      )
+    })
+
+    it('fails closed with RateLimitError when the reply is not interpretable', async () => {
+      jest.spyOn(redis, 'eval').mockResolvedValueOnce('PONG' as never)
+
+      await expect(classifier.checkRateLimit()).rejects.toThrow(RateLimitError)
+    })
+
+    it('fails closed when the reply is null', async () => {
+      jest.spyOn(redis, 'eval').mockResolvedValueOnce(null as never)
+
+      await expect(classifier.checkRateLimit()).rejects.toThrow(RateLimitError)
+    })
+  })
 })
