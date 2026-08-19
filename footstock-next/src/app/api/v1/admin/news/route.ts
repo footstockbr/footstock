@@ -128,7 +128,9 @@ export async function GET(request: NextRequest) {
     // data-testid do badge de grupo).
     const anchors = await prisma.news.findMany({
       where: { groupRank: 0 },
-      orderBy: { publishedAt: { sort: 'desc', nulls: 'last' } },
+      // Admin usa createdAt desc para garantir visibilidade de rascunhos,
+      // diferente do feed publico que usa publishedAt.
+      orderBy: { createdAt: 'desc' },
       take: 100,
     })
 
