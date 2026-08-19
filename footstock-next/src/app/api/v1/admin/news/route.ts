@@ -31,6 +31,60 @@ function anchorGroupKey(row: { id: string; groupId: string | null }): string {
   return row.groupId ?? row.id
 }
 
+/**
+ * Quarentena editorial (T-08). Linha com `editorialBlockReason` nao nulo e o que
+ * o gate do motor barrou de proposito (`motor/src/news/editorial-gate.ts`) mais o
+ * passivo `backfill_no_local_team` despublicado em 2026-08-03. Ela continua
+ * gravada como fila de auditoria, mas nao e conteudo: por default ela sai da
+ * listagem admin e so volta com `?includeQuarantine=1`.
+ *
+ * Nada e apagado nem despublicado por este filtro — ele so muda o `where` do GET.
+ */
+const QUARANTINE_QUERY_PARAM = 'includeQuarantine'
+const QUARANTINE_TRUTHY = new Set(['1', 'true', 'yes'])
+const QUARANTINE_FALSY = new Set(['', '0', 'false', 'no'])
+
+/** Header com a contagem de ancoras em quarentena. Fica fora do `data` de proposito:
+ * o body do GET admin e um array e qualquer consumidor existente continua lendo
+ * `data[]` sem mudanca de shape. */
+const QUARANTINE_COUNT_HEADER = 'X-Quarantine-Count'
+
+function withQuarantineCount<T extends NextResponse>(response: T, count: number): T {
+  response.headers.set(QUARANTINE_COUNT_HEADER, String(count))
+  return response
+}
+
+/**
+ * Le o parametro de query sem depender de `nextUrl` estar presente: teste unitario
+ * monta o request como objeto nu e o runtime entrega `nextUrl`. Valor irreconhecivel
+ * cai no default (esconder) e LOGA — Zero Silencio: o operador que digitou
+ * `?includeQuarantine=sim` precisa saber por que nada mudou.
+ */
+function readIncludeQuarantine(request: NextRequest): boolean {
+  let params: URLSearchParams | null =
+    (request as { nextUrl?: { searchParams?: URLSearchParams } }).nextUrl?.searchParams ?? null
+
+  if (!params && typeof request.url === 'string' && request.url.length > 0) {
+    try {
+      params = new URL(request.url).searchParams
+    } catch {
+      params = null
+    }
+  }
+
+  const raw = params?.get(QUARANTINE_QUERY_PARAM)
+  if (raw === null || raw === undefined) return false
+
+  const normalized = raw.trim().toLowerCase()
+  if (QUARANTINE_TRUTHY.has(normalized)) return true
+  if (QUARANTINE_FALSY.has(normalized)) return false
+
+  console.warn(
+    `[news] ${QUARANTINE_QUERY_PARAM}="${raw}" nao reconhecido; usando o default (quarentena oculta). Valores aceitos: ${[...QUARANTINE_TRUTHY].join(', ')} / ${[...QUARANTINE_FALSY].filter(Boolean).join(', ')}.`
+  )
+  return false
+}
+
 const createSchema = z
   .object({
     title: z.string().min(5, 'Titulo deve ter pelo menos 5 caracteres').max(255),
@@ -126,15 +180,34 @@ export async function GET(request: NextRequest) {
     // O `take: 100` continua o mesmo de proposito: agora sao 100 grupos de verdade.
     // Sem `select`: groupId/groupRank seguem no retorno (o item 018 usa groupId no
     // data-testid do badge de grupo).
+    // T-08: quarentena fora da listagem por default. O filtro e no `where` e nao
+    // no cliente de proposito: com 10.872 linhas do passivo `backfill_no_local_team`
+    // no acervo, filtrar depois do `take: 100` deixaria a janela inteira ocupada
+    // por linha barrada e o operador sem noticia nenhuma para editar.
+    const includeQuarantine = readIncludeQuarantine(request)
+    const anchorWhere = includeQuarantine
+      ? { groupRank: 0 }
+      : { groupRank: 0, editorialBlockReason: null }
+
+    // Contagem do que a quarentena esconde. Roda nas DUAS variantes do parametro
+    // para a tela desenhar o mesmo contador com o toggle ligado ou desligado
+    // (com zero em quarentena o valor e `0` explicito, nunca ausente). Conta
+    // ANCORAS, igual a listagem: uma noticia multi-time barrada conta 1.
+    // Falha aqui derruba o request inteiro por escolha: o contador e parte da
+    // mesma resposta e a tela reusa o estado de erro da listagem.
+    const quarantineCount = await prisma.news.count({
+      where: { groupRank: 0, editorialBlockReason: { not: null } },
+    })
+
     const anchors = await prisma.news.findMany({
-      where: { groupRank: 0 },
+      where: anchorWhere,
       // Admin usa createdAt desc para garantir visibilidade de rascunhos,
       // diferente do feed publico que usa publishedAt.
       orderBy: { createdAt: 'desc' },
       take: 100,
     })
 
-    if (anchors.length === 0) return ok([])
+    if (anchors.length === 0) return withQuarantineCount(ok([]), quarantineCount)
 
     // Hidratacao de irmaos. A lista mostra um card por FATO e precisa exibir todo
     // time envolvido com o sentimento proprio de cada um; a ancora sozinha nao diz
@@ -187,7 +260,7 @@ export async function GET(request: NextRequest) {
       ),
     }))
 
-    return ok(news)
+    return withQuarantineCount(ok(news), quarantineCount)
   } catch (error) {
     console.error('[news] Error:', error)
     return errors.server()

@@ -24,11 +24,14 @@ jest.mock('@/app/api/middleware', () => ({
 }))
 
 const findManyNews = jest.fn()
+// T-08: o GET conta as ancoras em quarentena na mesma requisicao da listagem.
+const countNews = jest.fn()
 
 jest.mock('@/lib/prisma', () => ({
   prisma: {
     news: {
       findMany: (...a: unknown[]) => findManyNews(...a),
+      count: (...a: unknown[]) => countNews(...a),
     },
   },
 }))
@@ -50,6 +53,7 @@ function adminListReq(): NextRequest {
 beforeEach(() => {
   jest.clearAllMocks()
   mockGetAuthUser.mockResolvedValue(AUTH)
+  countNews.mockResolvedValue(0)
 })
 
 // ---------------------------------------------------------------------------
@@ -103,8 +107,10 @@ describe('T-06 — rascunho recem-criado aparece no topo do admin', () => {
       take: number
     }
 
-    // O fix: ordenacao do admin por createdAt desc.
-    expect(listArg.where).toEqual({ groupRank: 0 })
+    // O fix: ordenacao do admin por createdAt desc. O `where` ganhou
+    // `editorialBlockReason: null` no T-08 (quarentena oculta por default);
+    // T-06 continua sendo o `orderBy`.
+    expect(listArg.where).toEqual({ groupRank: 0, editorialBlockReason: null })
     expect(listArg.orderBy).toEqual({ createdAt: 'desc' })
     expect(listArg.take).toBe(100)
 

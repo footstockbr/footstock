@@ -83,6 +83,11 @@ type FilterType = 'todas' | 'publicada' | 'rascunho' | 'arquivada'
 /** Espelha o `take: 100` do GET /api/v1/admin/news. */
 const NEWS_WINDOW_SIZE = 100
 
+/** Contrato com o GET /api/v1/admin/news (T-08): parâmetro que reexibe a
+ * quarentena e header que traz quantas âncoras estão em quarentena. */
+const QUARANTINE_QUERY_PARAM = 'includeQuarantine'
+const QUARANTINE_COUNT_HEADER = 'X-Quarantine-Count'
+
 /** Cap DB-04 do grupo: 1 time principal + 2 adicionais. */
 const MAX_GROUP_TEAMS = 3
 
@@ -178,6 +183,15 @@ export default function NoticiasPage() {
   // Janela cheia: o GET devolve no máximo 100 grupos.
   const [windowSaturated, setWindowSaturated] = useState(false)
 
+  // Quarentena editorial (T-08). Por default a lista NÃO traz linha barrada pelo
+  // gate do motor nem o passivo `backfill_no_local_team`: o filtro é do lado do
+  // servidor (`?includeQuarantine=1`), então ligar o toggle é uma nova requisição
+  // e não um filtro sobre o que já veio. O contador vem da MESMA resposta (header
+  // `X-Quarantine-Count`), por isso não tem `loading`/`error` próprios: ele herda
+  // os desta requisição.
+  const [showQuarantine, setShowQuarantine] = useState(false)
+  const [quarantineCount, setQuarantineCount] = useState(0)
+
   // Edit modal
   const [editingItem, setEditingItem] = useState<NewsItem | null>(null)
   const [editForm, setEditForm] = useState({ title: '', content: '', impact: 'ESPORTIVA_MAJORITARIA', sentiment: 'NEUTRAL', ticker: '' })
@@ -217,13 +231,33 @@ export default function NoticiasPage() {
     setEditNotice(null)
   }, [highlightedNewsId, news, editingItem])
 
-  const fetchNews = async () => {
+  const fetchNews = async (includeQuarantine: boolean = showQuarantine) => {
     try {
       setLoading(true)
-      const res = await fetch('/api/v1/admin/news', { credentials: 'include' })
+      setError(null)
+      const url = includeQuarantine
+        ? `/api/v1/admin/news?${QUARANTINE_QUERY_PARAM}=1`
+        : '/api/v1/admin/news'
+      const res = await fetch(url, { credentials: 'include' })
       if (!res.ok) throw new Error('Erro ao carregar noticias')
       const data = await res.json()
       const payload: NewsItem[] = data.data || []
+
+      // Contador da quarentena: header da mesma resposta. Ausente ou ilegível
+      // (proxy que remove header custom, mock antigo) cai em 0 e LOGA — o
+      // controle continua renderizado com `0`, nunca some nem mostra vazio.
+      const rawCount = res.headers.get(QUARANTINE_COUNT_HEADER)
+      const parsedCount = rawCount === null ? NaN : Number(rawCount)
+      if (!Number.isFinite(parsedCount) || parsedCount < 0) {
+        if (rawCount !== null) {
+          console.warn(
+            `[admin/noticias] header ${QUARANTINE_COUNT_HEADER}="${rawCount}" inválido; contador da quarentena exibido como 0.`
+          )
+        }
+        setQuarantineCount(0)
+      } else {
+        setQuarantineCount(parsedCount)
+      }
 
       // A rota já filtra `groupRank: 0` (item 017), então cada item aqui é UM
       // grupo, não uma linha. O filtro defensivo abaixo existe porque a lista
@@ -246,6 +280,15 @@ export default function NoticiasPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Recarrega do servidor porque o filtro é do `where` do GET, não do cliente.
+  // O estado só vira depois de disparar o fetch com o valor novo, então não há
+  // janela em que o rótulo diz uma coisa e a lista mostra outra.
+  const toggleQuarantine = () => {
+    const next = !showQuarantine
+    setShowQuarantine(next)
+    fetchNews(next)
   }
 
   const getFilteredNews = () => {
@@ -577,6 +620,45 @@ export default function NoticiasPage() {
             {f === 'todas' ? 'Todas' : f === 'publicada' ? 'Publicadas' : f === 'rascunho' ? 'Rascunhos' : 'Arquivadas'}
           </button>
         ))}
+      </div>
+
+      {/* Quarentena editorial (T-08): contador e toggle SEMPRE renderizados,
+          inclusive com zero em quarentena — o `0` explícito é a informação de
+          que não há passivo escondido, e suprimir o controle deixaria o operador
+          sem saber que o filtro existe. */}
+      <div
+        data-testid="admin-noticias-quarantine-control"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          marginBottom: '12px',
+          padding: '8px 12px',
+          background: '#181A20',
+          border: '1px solid #2a2d35',
+          borderRadius: '6px',
+          fontSize: '12px',
+          color: '#8f95a5',
+        }}
+      >
+        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={showQuarantine}
+            onChange={toggleQuarantine}
+            data-testid="admin-noticias-quarantine-toggle"
+            style={{ cursor: 'pointer' }}
+          />
+          <span>Mostrar quarentena editorial</span>
+        </label>
+        <span data-testid="admin-noticias-quarantine-count" style={{ color: '#F0B90B', fontWeight: 600 }}>
+          {quarantineCount}
+        </span>
+        <span>
+          {showQuarantine
+            ? 'notícia(s) barrada(s) pelo gate editorial, exibida(s) na lista abaixo.'
+            : 'notícia(s) barrada(s) pelo gate editorial, ocultas da lista. Nada foi apagado nem despublicado.'}
+        </span>
       </div>
 
       {loading && <div data-testid="admin-noticias-loading" style={{ color: '#8f95a5', padding: '20px' }}>Carregando...</div>}

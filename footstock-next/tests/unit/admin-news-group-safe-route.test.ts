@@ -40,6 +40,7 @@ jest.mock('@/lib/utils/resolve-ticker', () => ({
 const findUniqueNews = jest.fn()
 const findFirstNews = jest.fn()
 const findManyNews = jest.fn()
+const countNews = jest.fn()
 const createNews = jest.fn()
 const updateNews = jest.fn()
 const updateManyNews = jest.fn()
@@ -68,6 +69,8 @@ jest.mock('@/lib/prisma', () => ({
       findUnique: (...a: unknown[]) => findUniqueNews(...a),
       findFirst: (...a: unknown[]) => findFirstNews(...a),
       findMany: (...a: unknown[]) => findManyNews(...a),
+      // T-08: contagem da quarentena, feita na mesma requisicao do GET admin.
+      count: (...a: unknown[]) => countNews(...a),
       create: (...a: unknown[]) => createNews(...a),
       update: (...a: unknown[]) => updateNews(...a),
       updateMany: (...a: unknown[]) => updateManyNews(...a),
@@ -148,6 +151,7 @@ beforeEach(() => {
   updateManyNews.mockResolvedValue({ count: 3 })
   findUniqueAsset.mockResolvedValue({ id: 'asset-fla' })
   findManyAsset.mockResolvedValue([])
+  countNews.mockResolvedValue(0)
 })
 
 // ---------------------------------------------------------------------------
@@ -181,7 +185,9 @@ describe('criterio 21 — listagens admin ancoradas em grupo', () => {
     // Duas queries: ancoras (janela) + hidratacao dos irmaos do mesmo fato.
     expect(findManyNews).toHaveBeenCalledTimes(2)
     const arg = findManyNews.mock.calls[0][0] as { where: Record<string, unknown>; take: number }
-    expect(arg.where).toEqual({ groupRank: 0 })
+    // T-08 acrescentou `editorialBlockReason: null` ao default; o criterio 21
+    // (ancoragem em grupo) continua sendo o `groupRank: 0`.
+    expect(arg.where).toEqual({ groupRank: 0, editorialBlockReason: null })
     expect(arg.take).toBe(100)
     expect(body.data).toHaveLength(10)
     // A janela continua contando GRUPOS, mas cada card agora carrega os 3 times.
