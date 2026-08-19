@@ -56,111 +56,199 @@ beforeEach(() => {
   countNews.mockResolvedValue(0)
 })
 
+// --- simulador de findMany -------------------------------------------------
+//
+// Sem ele esta suite seria tautologica: o mock devolvia o array JA na ordem
+// desejada, entao `data[0] === rascunho` passaria mesmo se a rota voltasse a
+// ordenar por `publishedAt desc nulls last` — exatamente o bug que originou o
+// T-06. Aqui o dataset entra DESORDENADO e a ordem do resultado e produzida
+// pelo `orderBy` que a rota realmente enviou, com `skip`/`take` aplicados
+// depois. O teste passa a falhar se o fix for revertido.
+
+type Row = Record<string, unknown>
+
+type OrderTerm = Record<string, 'asc' | 'desc' | { sort: 'asc' | 'desc'; nulls?: 'first' | 'last' }>
+
+type FindManyArgs = {
+  where?: Row
+  orderBy?: OrderTerm[]
+  skip?: number
+  take?: number
+}
+
+function matchesWhere(row: Row, where: Row | undefined): boolean {
+  if (!where) return true
+  return Object.entries(where).every(([field, expected]) => {
+    const actual = row[field] ?? null
+    if (expected !== null && typeof expected === 'object' && 'not' in expected) {
+      return actual !== (expected as { not: unknown }).not
+    }
+    return actual === (expected ?? null)
+  })
+}
+
+// Semantica de nulos do Postgres: DESC ordena NULLS FIRST e ASC NULLS LAST por
+// default; `nulls` explicito no orderBy do Prisma sobrescreve. Reproduzir isso
+// e o que torna o teste capaz de detectar a volta do `publishedAt desc nulls
+// last` (o rascunho tem publishedAt null e afundaria para fora da janela).
+function compareBy(a: Row, b: Row, term: OrderTerm): number {
+  const [field, spec] = Object.entries(term)[0]
+  const direction = typeof spec === 'string' ? spec : spec.sort
+  const nulls =
+    typeof spec === 'string'
+      ? direction === 'desc'
+        ? 'first'
+        : 'last'
+      : (spec.nulls ?? (direction === 'desc' ? 'first' : 'last'))
+
+  const av = a[field] ?? null
+  const bv = b[field] ?? null
+
+  if (av === null && bv === null) return 0
+  if (av === null) return nulls === 'first' ? -1 : 1
+  if (bv === null) return nulls === 'first' ? 1 : -1
+
+  const an = av instanceof Date ? av.getTime() : av
+  const bn = bv instanceof Date ? bv.getTime() : bv
+  const cmp = an < bn ? -1 : an > bn ? 1 : 0
+  return direction === 'desc' ? -cmp : cmp
+}
+
+function simulateFindMany(rows: Row[], args: FindManyArgs): Row[] {
+  const filtered = rows.filter((row) => matchesWhere(row, args.where))
+  const ordered = [...filtered].sort((a, b) => {
+    for (const term of args.orderBy ?? []) {
+      const cmp = compareBy(a, b, term)
+      if (cmp !== 0) return cmp
+    }
+    return 0
+  })
+  const from = args.skip ?? 0
+  const to = typeof args.take === 'number' ? from + args.take : undefined
+  return ordered.slice(from, to)
+}
+
+// `orderBy` que a rota usava ANTES do fix do T-06, mantido aqui como oraculo
+// negativo: o teste de contra-prova roda o simulador com ele para mostrar que a
+// assercao principal e discriminante, e nao um acerto por construcao do mock.
+const ORDER_BY_ANTES_DO_FIX: OrderTerm[] = [
+  { publishedAt: { sort: 'desc', nulls: 'last' } },
+  { id: 'asc' },
+]
+
+let anchorDataset: Row[] = []
+
 // ---------------------------------------------------------------------------
 // T-06 — rascunho visivel no topo do admin
 // ---------------------------------------------------------------------------
 
 describe('T-06 — rascunho recem-criado aparece no topo do admin', () => {
-  test('com mais de 100 grupos publicados, rascunho e o primeiro item retornado', async () => {
-    const now = new Date('2026-08-19T12:00:00.000Z')
-    const yesterday = new Date('2026-08-18T10:00:00.000Z')
+  const now = new Date('2026-08-19T12:00:00.000Z')
+  const yesterday = new Date('2026-08-18T10:00:00.000Z')
 
-    // 101 grupos publicados (publishedAt preenchido, isPublished true).
-    const publishedAnchors = Array.from({ length: 101 }, (_, i) => ({
-      id: `pub-${i}`,
+  function buildDataset(): Row[] {
+    // 101 grupos publicados, com createdAt escalonado para que a ordenacao seja
+    // total e verificavel.
+    const publicadas: Row[] = Array.from({ length: 101 }, (_, i) => ({
+      id: `pub-${String(i).padStart(3, '0')}`,
       groupId: `g-pub-${i}`,
       groupRank: 0,
       isPublished: true,
-      publishedAt: yesterday,
-      createdAt: yesterday,
+      editorialBlockReason: null,
+      publishedAt: new Date(yesterday.getTime() - i * 60_000),
+      createdAt: new Date(yesterday.getTime() - i * 60_000),
       ticker: 'FLA',
       title: `Publicada ${i}`,
     }))
 
-    // 1 rascunho com createdAt mais recente que todas as publicadas.
-    const draftAnchor = {
+    const rascunho: Row = {
       id: 'draft-1',
       groupId: 'g-draft-1',
       groupRank: 0,
       isPublished: false,
+      editorialBlockReason: null,
       publishedAt: null,
       createdAt: now,
       ticker: 'PAL',
       title: 'Rascunho recente',
     }
 
-    // A ordenacao por createdAt desc deve colocar o rascunho primeiro.
-    const anchors = [draftAnchor, ...publishedAnchors]
+    // O rascunho entra NO MEIO do array, nao no topo: a posicao final tem de vir
+    // do orderBy da rota, nunca da ordem de insercao do fixture.
+    return [...publicadas.slice(0, 60), rascunho, ...publicadas.slice(60)]
+  }
 
-    // Primeira chamada: ancoras. Segunda chamada: hidratacao de irmaos (vazio).
-    findManyNews.mockResolvedValueOnce(anchors).mockResolvedValueOnce([])
+  beforeEach(() => {
+    anchorDataset = buildDataset()
+    let call = 0
+    findManyNews.mockImplementation((args: FindManyArgs) => {
+      call += 1
+      // 1a chamada: ancoras (ordenadas/paginadas de verdade).
+      // 2a chamada: hidratacao de irmaos, irrelevante para estas assercoes.
+      if (call === 1) return Promise.resolve(simulateFindMany(anchorDataset, args))
+      return Promise.resolve([])
+    })
+    // 1a contagem: quarentena (zero). 2a: total do acervo navegavel.
+    countNews.mockResolvedValueOnce(0).mockResolvedValueOnce(anchorDataset.length)
+  })
 
+  test('com mais de 100 grupos publicados, rascunho e o primeiro item da pagina', async () => {
     const res = await adminNewsGET(adminListReq())
     const body = await res.json()
 
     // A rota faz duas chamadas: ancoras + irmaos.
     expect(findManyNews).toHaveBeenCalledTimes(2)
 
-    const listArg = findManyNews.mock.calls[0][0] as {
-      where: Record<string, unknown>
-      orderBy: Array<Record<string, unknown>>
-      take: number
-    }
+    const listArg = findManyNews.mock.calls[0][0] as FindManyArgs
 
     // O fix: ordenacao do admin por createdAt desc. O `where` ganhou
     // `editorialBlockReason: null` no T-08 (quarentena oculta por default);
     // T-06 continua sendo o primeiro termo do `orderBy`. O T-09 acrescentou
-    // `id: 'asc'` ATRAS dele como desempate — nao muda o topo da lista (o
-    // rascunho tem createdAt maior que todos), so torna a ordem total.
+    // `id: 'asc'` ATRAS dele como desempate — nao muda o topo da lista, so
+    // torna a ordem total.
     expect(listArg.where).toEqual({ groupRank: 0, editorialBlockReason: null })
     expect(listArg.orderBy).toEqual([{ createdAt: 'desc' }, { id: 'asc' }])
-    expect(listArg.orderBy[0]).toEqual({ createdAt: 'desc' })
     expect(listArg.take).toBe(100)
 
-    // O mock nao aplica `take`, entao todos os 102 ancoras sao retornados;
-    // o importante e que o rascunho esteja no topo por causa do orderBy.
-    expect(body.data).toHaveLength(102)
+    // O simulador aplica o `take`: a pagina tem 100 dos 102 registros.
+    expect(body.data).toHaveLength(100)
     expect(body.data[0].id).toBe('draft-1')
     expect(body.data[0].isPublished).toBe(false)
 
-    // Todas as demais sao publicadas.
+    // Todas as demais da pagina sao publicadas.
     expect(body.data.slice(1).every((n: { isPublished: boolean }) => n.isPublished)).toBe(true)
   })
 
+  test('contra-prova: com o orderBy anterior ao fix o rascunho cai fora da pagina', () => {
+    // Mesmo dataset, mesmo simulador, so muda o orderBy. Se este teste falhasse
+    // (rascunho ainda visivel), a assercao do teste acima nao provaria nada.
+    const antes = simulateFindMany(anchorDataset, {
+      where: { groupRank: 0, editorialBlockReason: null },
+      orderBy: ORDER_BY_ANTES_DO_FIX,
+      skip: 0,
+      take: 100,
+    })
+
+    expect(antes).toHaveLength(100)
+    expect(antes.some((row) => row.id === 'draft-1')).toBe(false)
+
+    const depois = simulateFindMany(anchorDataset, {
+      where: { groupRank: 0, editorialBlockReason: null },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      skip: 0,
+      take: 100,
+    })
+
+    expect(depois[0].id).toBe('draft-1')
+  })
+
   test('rascunho sem publicacao nao some mesmo com acervo grande', async () => {
-    const now = new Date('2026-08-19T12:00:00.000Z')
-    const oldDate = new Date('2026-07-01T10:00:00.000Z')
-
-    // 50 publicadas antigas + 1 rascunho novo.
-    const anchors = [
-      {
-        id: 'draft-only',
-        groupId: 'g-draft-only',
-        groupRank: 0,
-        isPublished: false,
-        publishedAt: null,
-        createdAt: now,
-        ticker: 'VAS',
-        title: 'Rascunho unico',
-      },
-      ...Array.from({ length: 50 }, (_, i) => ({
-        id: `old-${i}`,
-        groupId: `g-old-${i}`,
-        groupRank: 0,
-        isPublished: true,
-        publishedAt: oldDate,
-        createdAt: oldDate,
-        ticker: 'FLA',
-        title: `Antiga ${i}`,
-      })),
-    ]
-
-    findManyNews.mockResolvedValueOnce(anchors).mockResolvedValueOnce([])
-
     const res = await adminNewsGET(adminListReq())
     const body = await res.json()
 
-    expect(body.data[0].id).toBe('draft-only')
+    // Presente na pagina e no topo, com o dataset entregue desordenado.
+    expect(body.data.some((n: { id: string }) => n.id === 'draft-1')).toBe(true)
+    expect(body.data[0].id).toBe('draft-1')
     expect(body.data[0].isPublished).toBe(false)
   })
 })
