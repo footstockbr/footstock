@@ -207,6 +207,10 @@ export default function NoticiasPage() {
   // dois só divergem entre o clique e a chegada da resposta.
   const [page, setPage] = useState(1)
   const [pagination, setPagination] = useState<NewsPagination>(EMPTY_PAGINATION)
+  // O servidor sempre manda `pagination`, mas se um proxy/mock comer o bloco a
+  // tela nao pode inventar um total: `false` aqui significa "so sei o que esta
+  // nesta pagina", e o rotulo passa a dizer isso em vez de mentir "no acervo".
+  const [paginationKnown, setPaginationKnown] = useState(true)
 
   // Quarentena editorial (T-08). Por default a lista NÃO traz linha barrada pelo
   // gate do motor nem o passivo `backfill_no_local_team`: o filtro é do lado do
@@ -312,13 +316,21 @@ export default function NoticiasPage() {
         console.warn(
           '[admin/noticias] resposta do GET sem bloco `pagination`; navegação limitada à página atual.'
         )
+        // `totalPages` acompanha a pagina pedida: com o default 1 do
+        // EMPTY_PAGINATION o rotulo renderizaria "Pagina 3 de 1", um estado
+        // impossivel. Assim "Anterior" continua utilizavel para voltar e
+        // "Proxima" fica desabilitado, que e a verdade: nao da para saber se
+        // existe pagina seguinte.
+        setPaginationKnown(false)
         setPagination({
           ...EMPTY_PAGINATION,
           page: targetPage,
           total: anchors.length,
+          totalPages: Math.max(1, targetPage),
           hasNext: false,
         })
       } else {
+        setPaginationKnown(true)
         setPagination({
           page: rawPagination.page ?? targetPage,
           limit: rawPagination.limit ?? NEWS_PAGE_SIZE,
@@ -977,8 +989,21 @@ export default function NoticiasPage() {
           }}
         >
           <span data-testid="admin-noticias-pagination-label">
-            Página {pagination.page} de {pagination.totalPages} · {pagination.total} notícia(s)
-            {showQuarantine ? ' no acervo (quarentena incluída)' : ' no acervo (quarentena oculta)'}
+            {paginationKnown ? (
+              <>
+                Página {pagination.page} de {pagination.totalPages} · {pagination.total}{' '}
+                notícia(s)
+                {showQuarantine
+                  ? ' no acervo (quarentena incluída)'
+                  : ' no acervo (quarentena oculta)'}
+              </>
+            ) : (
+              <>
+                Página {pagination.page} · {pagination.total} notícia(s) nesta página
+                {showQuarantine ? ' (quarentena incluída)' : ' (quarentena oculta)'} · total do
+                acervo indisponível
+              </>
+            )}
           </span>
           <span style={{ display: 'flex', gap: '8px' }}>
             <button
