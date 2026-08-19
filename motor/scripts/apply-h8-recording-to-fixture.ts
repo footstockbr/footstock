@@ -114,7 +114,8 @@ function updateFixture(artifact: RecordedArtifact): void {
       })
     }
 
-    // Find each GOLDEN_SET case object literal and patch llm + provenance + remove modelError
+    // Find each GOLDEN_SET case object literal and patch llm + provenance.
+    // modelError is NOT touched here (see the preservation note above).
     if (
       ts.isPropertyAssignment(node) &&
       node.name.getText(sourceFile) === 'llm' &&

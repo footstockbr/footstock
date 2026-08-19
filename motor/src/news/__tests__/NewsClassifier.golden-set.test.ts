@@ -20,10 +20,13 @@
 // (mapa por versao, fail-closed, `>=`, rank 0 fora do gate) foi fechada no item
 // 011 e nao se reabre aqui.
 //
-// LIMITE DECLARADO: o corpus e agent-sim com `provenance: 'simulated'` (ver
-// cabecalho/meta da fixture). Este numero mede FIDELIDADE DE PIPELINE, nao a
-// hipotese H8. O teste [H8/CI] no fim do arquivo impede promover esta simulacao
-// a evidencia de producao.
+// PROCEDENCIA (atualizado em 2026-08-18, gravacao real do item T-02): o corpus
+// deixou de ser agent-sim. Hoje e `provenance: 'real-http'` /
+// `acquisition: 'provider-http'`, gravado via Kimi kimi-for-coding, e a meta
+// carrega `productionH8Eligible: true` (ver cabecalho/meta da fixture). Logo
+// estes numeros medem a hipotese H8 sobre resposta real de provider, nao apenas
+// fidelidade de pipeline. O teste [H8/CI] no fim do arquivo e quem TRAVA essa
+// afirmacao: ele falha se a meta regredir para simulacao.
 // ============================================================================
 
 import RedisMock from 'ioredis-mock'
