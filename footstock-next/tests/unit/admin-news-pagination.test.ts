@@ -79,7 +79,7 @@ function anchor(n: number) {
 function listArg() {
   return findManyNews.mock.calls[0][0] as {
     where: Record<string, unknown>
-    orderBy: Record<string, unknown>
+    orderBy: Array<Record<string, unknown>>
     skip: number
     take: number
   }
@@ -122,8 +122,9 @@ describe('T-09 — requisicao sem parametro', () => {
 
     expect(listArg().skip).toBe(0)
     expect(listArg().take).toBe(100)
-    // O T-06 (orderBy createdAt desc) e o filtro de quarentena do T-08 ficam intactos.
-    expect(listArg().orderBy).toEqual({ createdAt: 'desc' })
+    // O T-06 (orderBy createdAt desc) e o filtro de quarentena do T-08 ficam
+    // intactos; `id asc` entra apenas como desempate atras deles.
+    expect(listArg().orderBy).toEqual([{ createdAt: 'desc' }, { id: 'asc' }])
     expect(listArg().where).toEqual({ groupRank: 0, editorialBlockReason: null })
 
     expect(body.data).toHaveLength(1)

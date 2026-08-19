@@ -234,9 +234,15 @@ export async function GET(request: NextRequest) {
     const anchors = await prisma.news.findMany({
       where: anchorWhere,
       // Admin usa createdAt desc para garantir visibilidade de rascunhos,
-      // diferente do feed publico que usa publishedAt. Tambem e o que garante
-      // pagina estavel: sem ordem total nao ha fatia reproduzivel.
-      orderBy: { createdAt: 'desc' },
+      // diferente do feed publico que usa publishedAt. `id` fecha a ordenacao:
+      // `created_at` nao tem UNIQUE no schema e o NewsPublisher grava o grupo
+      // inteiro dentro de uma transacao (CURRENT_TIMESTAMP e constante nela),
+      // entao duas ancoras podem empatar no milissegundo. Sem o desempate a
+      // ordem entre as empatadas fica indefinida e o mesmo grupo podia repetir
+      // ou sumir entre paginas consecutivas (criterio 2 do T-09). Como `id` e
+      // unico, a ordem passa a ser total. Mesmo remedio que o feed publico ja
+      // aplica em src/app/api/v1/news/route.ts.
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
       skip,
       take: limit,
     })

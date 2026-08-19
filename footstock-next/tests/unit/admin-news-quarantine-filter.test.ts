@@ -87,7 +87,7 @@ const QUARANTINED_ANCHOR = {
 function listArg() {
   return findManyNews.mock.calls[0][0] as {
     where: Record<string, unknown>
-    orderBy: Record<string, unknown>
+    orderBy: Array<Record<string, unknown>>
     take: number
   }
 }
@@ -124,7 +124,7 @@ describe('T-08 — default esconde a quarentena editorial', () => {
 
     expect(listArg().where).toEqual({ groupRank: 0, editorialBlockReason: null })
     // O T-06 (orderBy createdAt desc) e a janela de 100 grupos ficam intactos.
-    expect(listArg().orderBy).toEqual({ createdAt: 'desc' })
+    expect(listArg().orderBy).toEqual([{ createdAt: 'desc' }, { id: 'asc' }])
     expect(listArg().take).toBe(100)
 
     expect(body.data).toHaveLength(1)

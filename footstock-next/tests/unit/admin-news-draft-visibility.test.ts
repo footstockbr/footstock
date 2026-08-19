@@ -103,15 +103,18 @@ describe('T-06 — rascunho recem-criado aparece no topo do admin', () => {
 
     const listArg = findManyNews.mock.calls[0][0] as {
       where: Record<string, unknown>
-      orderBy: Record<string, unknown>
+      orderBy: Array<Record<string, unknown>>
       take: number
     }
 
     // O fix: ordenacao do admin por createdAt desc. O `where` ganhou
     // `editorialBlockReason: null` no T-08 (quarentena oculta por default);
-    // T-06 continua sendo o `orderBy`.
+    // T-06 continua sendo o primeiro termo do `orderBy`. O T-09 acrescentou
+    // `id: 'asc'` ATRAS dele como desempate — nao muda o topo da lista (o
+    // rascunho tem createdAt maior que todos), so torna a ordem total.
     expect(listArg.where).toEqual({ groupRank: 0, editorialBlockReason: null })
-    expect(listArg.orderBy).toEqual({ createdAt: 'desc' })
+    expect(listArg.orderBy).toEqual([{ createdAt: 'desc' }, { id: 'asc' }])
+    expect(listArg.orderBy[0]).toEqual({ createdAt: 'desc' })
     expect(listArg.take).toBe(100)
 
     // O mock nao aplica `take`, entao todos os 102 ancoras sao retornados;
