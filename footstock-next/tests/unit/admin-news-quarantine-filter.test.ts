@@ -209,6 +209,27 @@ describe('T-08 — includeQuarantine=1 reexibe a quarentena', () => {
 
     expect(listArg().where).toEqual({ groupRank: 0 })
   })
+
+  test('os contadores de status do acervo acompanham o toggle', async () => {
+    findManyNews.mockResolvedValueOnce([CLEAN_ANCHOR]).mockResolvedValueOnce([])
+
+    await adminNewsGET(listReq({ includeQuarantine: '1' }))
+
+    // Com a quarentena visivel o recorte da listagem perde
+    // `editorialBlockReason: null`, e os tres contadores do rodape TEM de perder
+    // junto: presos ao recorte estreito, o rodape falaria de um acervo e a lista
+    // mostraria outro exatamente no modo em que o operador liga o toggle para
+    // ver o que estava escondido.
+    expect(countNews.mock.calls[2][0]).toEqual({
+      where: { groupRank: 0, isPublished: true, isArchived: false },
+    })
+    expect(countNews.mock.calls[3][0]).toEqual({
+      where: { groupRank: 0, isPublished: false, isArchived: false },
+    })
+    expect(countNews.mock.calls[4][0]).toEqual({
+      where: { groupRank: 0, isArchived: true },
+    })
+  })
 })
 
 // ---------------------------------------------------------------------------

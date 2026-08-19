@@ -324,6 +324,18 @@ describe('T-06 criterio 3 — contador de rascunhos reflete o acervo', () => {
     expect(body.data).toHaveLength(2)
     expect(rascunhosNaPagina).toBe(0)
 
+    // A ordem do `Promise.all` da rota fica travada aqui tambem: sem isto o
+    // mapeamento valor->header vem da sequencia de `mockResolvedValueOnce` e uma
+    // reordem futura silenciosa trocaria os numeros de lugar sem quebrar nada.
+    const statusWheres = countNews.mock.calls
+      .slice(2)
+      .map((c) => (c[0] as { where: Record<string, unknown> }).where)
+    expect(statusWheres).toEqual([
+      { groupRank: 0, editorialBlockReason: null, isPublished: true, isArchived: false },
+      { groupRank: 0, editorialBlockReason: null, isPublished: false, isArchived: false },
+      { groupRank: 0, editorialBlockReason: null, isArchived: true },
+    ])
+
     // O que o servidor manda e do acervo inteiro.
     expect(res.headers.get('X-Draft-Count')).toBe('1')
     expect(res.headers.get('X-Published-Count')).toBe('101')
