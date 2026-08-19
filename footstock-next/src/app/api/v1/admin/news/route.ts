@@ -6,6 +6,13 @@ import { ok, list, errors, parsePagination, buildPagination } from '@/lib/api'
 import { resolveTickerFromText } from '@/lib/utils/resolve-ticker'
 import { writeNewsGroup } from '@/lib/services/newsGroupWriter'
 import type { User, AdminRole } from '@/types'
+import {
+  QUARANTINE_COUNT_HEADER,
+  PUBLISHED_COUNT_HEADER,
+  DRAFT_COUNT_HEADER,
+  ARCHIVED_COUNT_HEADER,
+  type AdminNewsCounts,
+} from '@/lib/admin/news-counts'
 
 // Mensagens do grupo multi-time (M067). Ficam aqui e nao no service porque este
 // POST valida `sentiment` como enum (o injetor valida como numero) e porque o
@@ -56,18 +63,6 @@ const QUARANTINE_FALSY = new Set(['', '0', 'false', 'no'])
  * `anchorWhere` da listagem, entao respeitam o toggle da quarentena: com ela
  * oculta o numero e o do acervo VISIVEL, senao o rodape diria uma coisa e a
  * lista mostraria outra. */
-const QUARANTINE_COUNT_HEADER = 'X-Quarantine-Count'
-const PUBLISHED_COUNT_HEADER = 'X-Published-Count'
-const DRAFT_COUNT_HEADER = 'X-Draft-Count'
-const ARCHIVED_COUNT_HEADER = 'X-Archived-Count'
-
-interface AdminNewsCounts {
-  quarantine: number
-  published: number
-  draft: number
-  archived: number
-}
-
 function withCountHeaders<T extends NextResponse>(response: T, counts: AdminNewsCounts): T {
   response.headers.set(QUARANTINE_COUNT_HEADER, String(counts.quarantine))
   response.headers.set(PUBLISHED_COUNT_HEADER, String(counts.published))

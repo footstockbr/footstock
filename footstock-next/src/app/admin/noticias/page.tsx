@@ -5,6 +5,13 @@ import { useSearchParams } from 'next/navigation'
 import { Lock } from 'lucide-react'
 import { IMPACT_CATEGORY_LABELS, IMPACT_CATEGORY_OPTIONS, SENTIMENT_HEX_COLORS, SENTIMENT_LABELS, SENTIMENT_OPTIONS } from '@/lib/constants/admin-ui'
 import { CLUBS_PUBLIC as CLUBS } from '@/lib/constants/clubs-public'
+import {
+  QUARANTINE_COUNT_HEADER,
+  readAcervoCounts,
+  readCountHeader,
+  resolveDisplayCounts,
+  type AcervoCounts,
+} from '@/lib/admin/news-counts'
 
 // Motivos de bloqueio do gate editorial do motor (`motor/src/news/editorial-gate.ts`).
 // O rotulo explica o "por que" ao operador; o title traz a acao recomendada.
@@ -104,37 +111,9 @@ const EMPTY_PAGINATION: NewsPagination = {
 }
 
 /** Contrato com o GET /api/v1/admin/news (T-08): parâmetro que reexibe a
- * quarentena e header que traz quantas âncoras estão em quarentena. */
+ * quarentena. Os headers de contagem vivem em `@/lib/admin/news-counts`, onde o
+ * produtor da rota lê as mesmas constantes. */
 const QUARANTINE_QUERY_PARAM = 'includeQuarantine'
-const QUARANTINE_COUNT_HEADER = 'X-Quarantine-Count'
-
-/** Contadores de status do ACERVO (T-06, criterio 3). Vem da mesma resposta da
- * listagem; ausencia dos tres derruba o rotulo para o escopo da pagina em vez de
- * apresentar numero de pagina como se fosse do acervo. */
-const PUBLISHED_COUNT_HEADER = 'X-Published-Count'
-const DRAFT_COUNT_HEADER = 'X-Draft-Count'
-const ARCHIVED_COUNT_HEADER = 'X-Archived-Count'
-
-interface AcervoCounts {
-  published: number
-  draft: number
-  archived: number
-}
-
-/** Le um header de contagem inteira nao-negativa. Devolve `null` quando o header
- * esta ausente (proxy que remove header custom, mock antigo) ou ilegivel; o
- * caller decide o fallback e o rotulo. Valor ilegivel LOGA — some do numero mas
- * nunca do console. */
-function readCountHeader(res: Response, header: string): number | null {
-  const raw = res.headers.get(header)
-  if (raw === null) return null
-  const parsed = Number(raw)
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    console.warn(`[admin/noticias] header ${header}="${raw}" inválido; contagem tratada como ausente.`)
-    return null
-  }
-  return parsed
-}
 
 /** Cap DB-04 do grupo: 1 time principal + 2 adicionais. */
 const MAX_GROUP_TEAMS = 3
@@ -255,6 +234,12 @@ export default function NoticiasPage() {
   // `paginationKnown` acima.
   const [acervoCounts, setAcervoCounts] = useState<AcervoCounts | null>(null)
 
+  // Recorte da quarentena da resposta que JA completou. Distinto de
+  // `showQuarantine` (o toggle): entre clicar e a resposta chegar, o toggle ja
+  // virou e os numeros na tela ainda sao do recorte anterior; rotular pelo
+  // toggle faria a tela afirmar um recorte que os numeros exibidos nao tem.
+  const [countsIncludeQuarantine, setCountsIncludeQuarantine] = useState(false)
+
   // Edit modal
   const [editingItem, setEditingItem] = useState<NewsItem | null>(null)
   const [editForm, setEditForm] = useState({ title: '', content: '', impact: 'ESPORTIVA_MAJORITARIA', sentiment: 'NEUTRAL', ticker: '' })
@@ -314,20 +299,13 @@ export default function NoticiasPage() {
       // Contador da quarentena: header da mesma resposta. Ausente ou ilegível
       // (proxy que remove header custom, mock antigo) cai em 0 — o controle
       // continua renderizado com `0`, nunca some nem mostra vazio.
-      setQuarantineCount(readCountHeader(res, QUARANTINE_COUNT_HEADER) ?? 0)
+      setQuarantineCount(readCountHeader(res.headers, QUARANTINE_COUNT_HEADER) ?? 0)
 
-      // Contadores de status do acervo (T-06, critério 3). Ou os três vêm, ou
-      // nenhum vale: exibir um número do acervo ao lado de dois da página daria
-      // uma linha com denominadores misturados, pior que a versão honesta de
-      // página. Sem os três, `null` mantém o rótulo "Nesta página".
-      const publishedHeader = readCountHeader(res, PUBLISHED_COUNT_HEADER)
-      const draftHeader = readCountHeader(res, DRAFT_COUNT_HEADER)
-      const archivedHeader = readCountHeader(res, ARCHIVED_COUNT_HEADER)
-      setAcervoCounts(
-        publishedHeader === null || draftHeader === null || archivedHeader === null
-          ? null
-          : { published: publishedHeader, draft: draftHeader, archived: archivedHeader }
-      )
+      // Contadores de status do acervo (T-06, criterio 3). Tudo-ou-nada dentro
+      // de `readAcervoCounts`; aqui so registramos o recorte que produziu estes
+      // numeros, para o rotulo nunca descrever um recorte diferente do exibido.
+      setAcervoCounts(readAcervoCounts(res.headers))
+      setCountsIncludeQuarantine(includeQuarantine)
 
       // A rota já filtra `groupRank: 0` (item 017), então cada item aqui é UM
       // grupo, não uma linha. O filtro defensivo abaixo existe porque a lista
@@ -429,8 +407,11 @@ export default function NoticiasPage() {
     draft: news.filter((n) => !n.isPublished && !n.isArchived).length,
     archived: news.filter((n) => n.isArchived).length,
   }
-  const displayCounts = acervoCounts ?? pageCounts
-  const countsScopeLabel = acervoCounts ? 'No acervo' : 'Nesta página'
+  const { counts: displayCounts, scopeLabel: countsScopeLabel } = resolveDisplayCounts({
+    acervoCounts,
+    pageCounts,
+    includesQuarantine: countsIncludeQuarantine,
+  })
 
   const togglePublish = async (id: string, isPublished: boolean) => {
     setActionError(null)
