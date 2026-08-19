@@ -75,6 +75,13 @@ function toFeedItem(top: NewsRow, siblings: NewsRow[]): NewsFeedItem {
 }
 
 // GET /api/v1/news
+//
+// DECISAO T-05: arquivar uma noticia (PATCH admin) grava isArchived=true no
+// grupo, mas NAO zera isPublished. O feed publico filtra por isPublished=true
+// E isArchived=false em todos os caminhos (selecao de ancoras, SQL raw filtrado
+// e hidratacao de irmaos). Se um dia a regra de negocio mudar para "arquivar
+// tambem despublica", sera necessario migrar o passivo (UPDATE noticias
+// arquivadas para isPublished=false) e simplificar estes filtros.
 export async function GET(request: NextRequest) {
   const auth = await getAuthUser()
   if (!auth) return errors.unauthorized()
@@ -128,7 +135,7 @@ export async function GET(request: NextRequest) {
     let total: number
 
     if (!hasFilter) {
-      const where = { isPublished: true, groupRank: 0 }
+      const where = { isPublished: true, isArchived: false, groupRank: 0 }
       const [anchors, anchorTotal] = await Promise.all([
         prisma.news.findMany({
           where,
@@ -154,6 +161,7 @@ export async function GET(request: NextRequest) {
       // Predicado parametrizado (nunca interpolacao de string): assetId e ticker
       // vem da query string; impact ja foi validado contra VALID_IMPACTS.
       const conditions: Prisma.Sql[] = [Prisma.sql`n.is_published = true`]
+      conditions.push(Prisma.sql`n.is_archived = false`)
       if (filterAssetId) {
         // Espelha o `assetIds: { has: ... }` do filtro legado.
         conditions.push(Prisma.sql`n.asset_ids @> ARRAY[${filterAssetId}]::text[]`)
@@ -199,6 +207,7 @@ export async function GET(request: NextRequest) {
     const siblingRows = (await prisma.news.findMany({
       where: {
         isPublished: true,
+        isArchived: false,
         OR: [
           { groupId: { in: hydrateIds } },
           { AND: [{ groupId: null }, { id: { in: hydrateIds } }] },

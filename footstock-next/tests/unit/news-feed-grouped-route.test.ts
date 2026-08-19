@@ -130,7 +130,7 @@ describe('[CRITERIO 7] sem filtro, o feed devolve cards (grupos), nao linhas', (
     expect(res.status).toBe(200)
     // 25 linhas ancora + 5 irmas = 30 linhas, mas 20 cards na pagina.
     expect(json.data).toHaveLength(20)
-    expect(findManyNews.mock.calls[0][0].where).toEqual({ isPublished: true, groupRank: 0 })
+    expect(findManyNews.mock.calls[0][0].where).toEqual({ isPublished: true, isArchived: false, groupRank: 0 })
     expect(findManyNews.mock.calls[0][0].take).toBe(20)
     // Multi-time nao vira dois cards: o irmao viaja em teams[].
     expect(json.data![0].teams).toHaveLength(2)
@@ -139,7 +139,7 @@ describe('[CRITERIO 7] sem filtro, o feed devolve cards (grupos), nao linhas', (
 })
 
 describe('[CRITERIO 8] pagination.total conta grupos visiveis', () => {
-  it('total vem do count do MESMO where ancorado (sem is_archived)', async () => {
+  it('total vem do count do MESMO where ancorado (com is_archived)', async () => {
     wireFindMany(
       [{ id: 'n1', groupId: 'g1' }],
       [row({ id: 'n1', groupId: 'g1', groupRank: 0 })]
@@ -149,9 +149,7 @@ describe('[CRITERIO 8] pagination.total conta grupos visiveis', () => {
     const json = await body(await GET(request('?page=1')))
 
     expect(json.pagination!.total).toBe(7)
-    expect(countNews).toHaveBeenCalledWith({ where: { isPublished: true, groupRank: 0 } })
-    // F21: a rota nao filtra is_archived; o teste espelha a query que existe.
-    expect(countNews.mock.calls[0][0].where).not.toHaveProperty('isArchived')
+    expect(countNews).toHaveBeenCalledWith({ where: { isPublished: true, isArchived: false, groupRank: 0 } })
   })
 })
 
@@ -297,6 +295,7 @@ describe('[CRITERIO 11] ?ticker=URU3 devolve a linha do URU3 com os irmaos', () 
     expect(queryRaw).toHaveBeenCalledTimes(2)
     expect(findManyNews).toHaveBeenCalledTimes(1)
     expect(findManyNews.mock.calls[0][0].where.isPublished).toBe(true)
+    expect(findManyNews.mock.calls[0][0].where.isArchived).toBe(false)
     expect(countNews).not.toHaveBeenCalled()
   })
 })
@@ -406,7 +405,10 @@ describe('[RETROCOMPAT] grupo unitario do backfill do item 008', () => {
     expect(json.data).toHaveLength(1)
     expect(json.data![0].groupId).toBe('legado')
     expect(json.data![0].groupRank).toBe(0)
-    const orTerms = findManyNews.mock.calls[1][0].where.OR
+    const hydrateWhere = findManyNews.mock.calls[1][0].where
+    expect(hydrateWhere.isPublished).toBe(true)
+    expect(hydrateWhere.isArchived).toBe(false)
+    const orTerms = hydrateWhere.OR
     expect(orTerms[0]).toEqual({ groupId: { in: ['legado'] } })
     expect(orTerms[1]).toEqual({ AND: [{ groupId: null }, { id: { in: ['legado'] } }] })
   })
