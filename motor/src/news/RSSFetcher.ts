@@ -15,6 +15,7 @@ import {
   NEWS_URLS_KEY,
   URL_TTL_SECONDS,
   markAsProcessed as markUrlAsProcessed,
+  unmarkAsProcessed as unmarkUrlAsProcessed,
   markTitleAsProcessed,
   isTitleDuplicate,
 } from './news-dedup'
@@ -135,10 +136,19 @@ export class RSSFetcher {
   // Deduplicação por URL usando Redis SET
   // ---------------------------------------------------------------------------
 
+  /**
+   * Verifica se a URL ja foi processada usando o retorno atomico do SADD.
+   * Retorna true quando a URL ja existia no set (duplicata).
+   * T-07: substitui o padrao sismember+sadd nao-atomico por SADD com retorno.
+   */
   async isDuplicate(url: string): Promise<boolean> {
     try {
-      const exists = await this.redis.sismember(NEWS_URLS_KEY, url)
-      return exists === 1
+      const added = await this.redis.sadd(NEWS_URLS_KEY, url)
+      if (added === 1) {
+        await this.redis.expire(NEWS_URLS_KEY, URL_TTL_SECONDS)
+        return false
+      }
+      return true
     } catch (err) {
       logger.warn(`[RSS] Redis indisponível em isDuplicate — assumindo não-duplicata: ${(err as Error).message}`)
       return false
@@ -210,8 +220,9 @@ export class RSSFetcher {
           }
         }
 
-        const duplicate = await this.isDuplicate(item.url)
-        if (duplicate) {
+        // Dedup por URL atomico (SADD retorna 0 quando ja existe).
+        const urlDuplicate = await this.isDuplicate(item.url)
+        if (urlDuplicate) {
           duplicateCount++
           continue
         }
@@ -232,13 +243,13 @@ export class RSSFetcher {
 
         const enqueued = newsQueue.enqueue(item)
         if (enqueued) {
-          await this.markAsProcessed(item.url)
           await this.markTitleAsProcessed(item.title)
           newCount++
           totalCount++
         } else {
           logger.warn(`[RSS] Fila cheia — item descartado (será buscado no próximo ciclo): ${item.url}`)
-          // Não marcar como processado — reprocessar no próximo ciclo
+          // T-07: como isDuplicate ja marcou a URL, desmarcamos para nao perder o item.
+          await unmarkUrlAsProcessed(this.redis, item.url)
         }
       }
 

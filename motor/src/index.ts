@@ -16,10 +16,7 @@ import { MarketEngine } from './engine/MarketEngine'
 import { RedisClientService } from './services/RedisClientService'
 import { MotorHealthService } from './services/MotorHealthService'
 import { AdminChannel } from './broadcast/AdminChannel'
-import { RSSFetcher } from './news/RSSFetcher'
-import { NewsClassifier } from './news/NewsClassifier'
-import { NewsLlmRuntimeConfigService, setNewsLlmRuntimeService } from './news/NewsLlmRuntimeConfigService'
-import { NewsPublisher } from './news/NewsPublisher'
+import { startNewsPipeline, stopNewsPipeline, type NewsPipeline } from './news/NewsPipelineLifecycle'
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 
@@ -162,9 +159,7 @@ async function main() {
   let adminSubscriber: ReturnType<typeof RedisClientService.createSubscriber> | null = null
 
   // Pipeline RSS — inicializado apenas na instância líder
-  let rssFetcher: RSSFetcher | null = null
-  let newsClassifier: NewsClassifier | null = null
-  let newsPrisma: PrismaClient | null = null
+  let newsPipeline: NewsPipeline | null = null
 
   /**
    * Inicializa tudo que precisa rodar quando esta instância se torna líder.
@@ -187,46 +182,53 @@ async function main() {
     await engine.start()
     _engineReady = true  // R2: engine ticando -> /ready passa a responder 200
 
-    // Pipeline RSS — inicia junto com o engine
-    if (!rssFetcher) {
-      const newsAdapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! })
-      newsPrisma = new PrismaClient({ adapter: newsAdapter })
-      const publisher = new NewsPublisher(newsPrisma, redis)
-      const llmRuntime = new NewsLlmRuntimeConfigService(newsPrisma, redis)
-      setNewsLlmRuntimeService(llmRuntime)
-      newsClassifier = new NewsClassifier(redis, newsPrisma, llmRuntime)
-      rssFetcher = new RSSFetcher(redis, newsPrisma)
-      newsClassifier.startClassifying(publisher).catch(err =>
-        logger.error('[motor] Classifier error:', err)
-      )
-      rssFetcher.start()
-      // Fetch imediato sem bloquear o startup
-      rssFetcher.fetchAll().catch(err =>
-        logger.error('[motor] Fetch inicial RSS error:', err)
-      )
-      logger.info('[motor] Pipeline RSS iniciado')
+    // Pipeline RSS — inicia junto com o engine (T-07: recria apos perda de lideranca)
+    if (!newsPipeline) {
+      newsPipeline = await startNewsPipeline(redis)
     }
 
-    // Callback ao perder liderança: parar ticks (sem desconectar Prisma) e reiniciar
-    // polling — engine.start() pode ser chamado novamente sem recriar o PrismaClient.
+    // Callback ao perder liderança: parar ticks, pipeline RSS e reiniciar polling.
+    // engine.start() pode ser chamado novamente sem recriar o PrismaClient.
     leader.onLeadershipLost = () => {
-      logger.warn('[motor] Liderança perdida — parando engine e aguardando re-aquisição...')
+      logger.warn('[motor] Liderança perdida — parando engine, fetcher e classifier e aguardando re-aquisição...')
       _engineReady = false  // R2: deixou de ser lider -> nao pronto ate re-adquirir
       engine.stop(false).catch(err => logger.error('[motor] Erro ao parar engine:', err))
+      // T-07: parar fetcher e classifier para evitar split-brain (duas instancias buscando feeds).
+      stopNewsPipeline(newsPipeline)
+      newsPipeline = null
       startPolling()
     }
   }
 
-  /** Polling de 5s para assumir liderança se o líder atual morrer. */
+  /** Polling com backoff para assumir liderança se o líder atual morrer. */
   function startPolling(): void {
     logger.info('[motor] Instância secundária: aguardando liderança...')
-    const interval = setInterval(async () => {
-      const acquired = await leader.tryAcquire()
-      if (acquired) {
-        clearInterval(interval)
-        await onBecameLeader()
-      }
-    }, 5_000)
+    const baseDelay = 5_000
+    const maxDelay = 60_000
+    let attempt = 0
+    let delay = baseDelay
+    let timer: ReturnType<typeof setTimeout> | null = null
+
+    const scheduleNext = () => {
+      timer = setTimeout(async () => {
+        try {
+          attempt++
+          const acquired = await leader.tryAcquire()
+          if (acquired) {
+            await onBecameLeader()
+            return
+          }
+          // Backoff exponencial com teto
+          delay = Math.min(maxDelay, baseDelay * Math.pow(2, attempt))
+        } catch (err) {
+          logger.error('[motor] Erro no polling de lideranca:', err)
+          delay = Math.min(maxDelay, baseDelay * Math.pow(2, attempt))
+        }
+        scheduleNext()
+      }, delay)
+    }
+
+    scheduleNext()
   }
 
   // Tentar ganhar liderança imediatamente
@@ -256,9 +258,8 @@ async function main() {
       await adminSubscriber.quit().catch(() => null)
     }
     // Parar pipeline RSS
-    if (rssFetcher) rssFetcher.stop()
-    if (newsClassifier) newsClassifier.stopClassifying()
-    if (newsPrisma) await newsPrisma.$disconnect().catch(() => null)
+    stopNewsPipeline(newsPipeline)
+    if (newsPipeline) await newsPipeline.newsPrisma.$disconnect().catch(() => null)
     // Shutdown definitivo: desconectar Prisma (disconnectPrisma=true)
     await engine.stop(true)
     await leader.release()
@@ -271,6 +272,10 @@ async function main() {
   process.on('uncaughtException', err => {
     logger.error('[motor] Erro não capturado:', err)
     void shutdown('uncaughtException')
+  })
+  // T-07: handler global de unhandledRejection evita exit 0 silencioso em blip de Redis.
+  process.on('unhandledRejection', (reason, promise) => {
+    logger.error('[motor] Unhandled rejection:', reason)
   })
 }
 

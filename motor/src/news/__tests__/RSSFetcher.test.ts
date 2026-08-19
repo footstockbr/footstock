@@ -154,6 +154,26 @@ describe('RSSFetcher', () => {
     expect(() => fetcher.stop()).not.toThrow()
   })
 
+  test('[SUCCESS — Dedup atômico entre processos] apenas uma instância enfileira a mesma URL', async () => {
+    const url = 'https://feed.com/noticia/atomica'
+    mockParseURL.mockResolvedValue({
+      items: [{ link: url, title: 'Atomica', pubDate: new Date().toISOString() }],
+    })
+
+    // Duas instâncias compartilhando o mesmo Redis (simula dois processos)
+    const fetcherA = new RSSFetcher(redis)
+    const fetcherB = new RSSFetcher(redis)
+
+    const [countA, countB] = await Promise.all([
+      fetcherA.fetchAll(),
+      fetcherB.fetchAll(),
+    ])
+
+    // Apenas uma das duas deve ter enfileirado o item
+    expect(countA + countB).toBe(1)
+    expect(newsQueue.size()).toBe(1)
+  })
+
   test('[ERROR — fetchFeed rejeitado inesperadamente] resultado rejected no allSettled é tratado', async () => {
     // Forçar fetchFeed a rejeitar (ignora o retry interno)
     jest.spyOn(fetcher as unknown as Record<string, jest.Mock>, 'fetchFeed').mockRejectedValue(new Error('unexpected rejection'))
