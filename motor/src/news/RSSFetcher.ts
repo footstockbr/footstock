@@ -12,9 +12,8 @@ import { logger } from '../utils/logger'
 import { newsQueue, type RawNewsItem } from './NewsQueue'
 import { FallbackPool } from './FallbackPool'
 import {
-  NEWS_URLS_KEY,
-  URL_TTL_SECONDS,
   unmarkAsProcessed as unmarkUrlAsProcessed,
+  markAsProcessed,
   markTitleAsProcessed,
   isTitleDuplicate,
 } from './news-dedup'
@@ -33,9 +32,6 @@ const FEEDS_FALLBACK = [
   { url: 'https://www.mercadodabola.com.br/feed/',        source: 'Mercado da Bola'   },
 ]
 
-// `NEWS_URLS_KEY` e `URL_TTL_SECONDS` vivem em `./news-dedup` desde o item 014:
-// o worker de classificação precisa da MESMA chave para desmarcar um item que
-// falhou ao ser persistido (critério 6).
 const NEWS_LAST_FETCH_KEY = 'news:last_fetch'
 const FETCH_INTERVAL_MS = 10 * 60 * 1000  // 10 minutos - FDD canonico
 const NEWS_MAX_AGE_MS = 12 * 60 * 60 * 1000 // 12 horas — INTAKE canônico
@@ -153,22 +149,18 @@ export class RSSFetcher {
   }
 
   // ---------------------------------------------------------------------------
-  // Deduplicação por URL usando Redis SET
+  // Deduplicação por URL usando chave individual (SET NX EX)
   // ---------------------------------------------------------------------------
 
   /**
-   * Verifica se a URL ja foi processada usando o retorno atomico do SADD.
-   * Retorna true quando a URL ja existia no set (duplicata).
-   * T-07: substitui o padrao sismember+sadd nao-atomico por SADD com retorno.
+   * Verifica se a URL ja foi processada via SET NX na chave individual.
+   * Retorna true quando a URL ja existia (duplicata).
+   * T-07/T-15: atomicidade entre processos via NX (equivalente ao retorno do SADD).
    */
   async isDuplicate(url: string): Promise<boolean> {
     try {
-      const added = await this.redis.sadd(NEWS_URLS_KEY, url)
-      if (added === 1) {
-        await this.redis.expire(NEWS_URLS_KEY, URL_TTL_SECONDS)
-        return false
-      }
-      return true
+      const claimed = await markAsProcessed(this.redis, url)
+      return !claimed
     } catch (err) {
       logger.warn(`[RSS] Redis indisponível em isDuplicate — assumindo não-duplicata: ${(err as Error).message}`)
       return false
@@ -236,7 +228,7 @@ export class RSSFetcher {
           }
         }
 
-        // Dedup por URL atomico (SADD retorna 0 quando ja existe).
+        // Dedup por URL atomico (SET NX retorna null quando ja existe).
         const urlDuplicate = await this.isDuplicate(item.url)
         if (urlDuplicate) {
           duplicateCount++

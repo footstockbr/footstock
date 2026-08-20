@@ -8,7 +8,7 @@ import type Redis from 'ioredis'
 import { NewsClassifier, RateLimitError } from '../NewsClassifier'
 import { NewsPersistenceError } from '../NewsPublisher'
 import { newsQueue, NewsQueue, type RawNewsItem } from '../NewsQueue'
-import { NEWS_URLS_KEY } from '../news-dedup'
+import { NEWS_URLS_KEY, markAsProcessed, urlDedupKey } from '../news-dedup'
 import { buildAliasIndex } from '../ticker-fallback'
 import { makeEnabledRuntime } from './helpers/enabled-llm-runtime'
 
@@ -362,6 +362,8 @@ describe('NewsClassifier', () => {
     const item = makeRawItem()
 
     await (redis as any).sadd(NEWS_URLS_KEY, item.url)
+    expect(await markAsProcessed(redis, item.url)).toBe(false)
+    expect(await redis.exists(urlDedupKey(item.url))).toBe(1)
     expect(await (redis as any).sismember(NEWS_URLS_KEY, item.url)).toBe(1)
 
     while (!newsQueue.isEmpty()) newsQueue.dequeue()
@@ -405,6 +407,7 @@ describe('NewsClassifier', () => {
         unmarked_for_retry: true,
       })
 
+      expect(await redis.exists(urlDedupKey(item.url))).toBe(0)
       expect(await (redis as any).sismember(NEWS_URLS_KEY, item.url)).toBe(0)
 
       const remaining: string[] = []
@@ -461,8 +464,10 @@ describe('NewsClassifier', () => {
       ticker: 'FLM', sentiment: 0.4, impactCategory: 'RESULTADO_ESPORTIVO', relevance: 0.8,
     }))
 
-    // Estado do mundo real no momento da falha: a URL já está no set de dedup.
+    // Estado do mundo real no momento da falha: a URL já está no dedup.
     await (redis as any).sadd(NEWS_URLS_KEY, item.url)
+    expect(await markAsProcessed(redis, item.url)).toBe(false)
+    expect(await redis.exists(urlDedupKey(item.url))).toBe(1)
     expect(await (redis as any).sismember(NEWS_URLS_KEY, item.url)).toBe(1)
 
     while (!newsQueue.isEmpty()) newsQueue.dequeue()
@@ -472,6 +477,7 @@ describe('NewsClassifier', () => {
     await classifier.startClassifying(mockPublisher as any)
 
     // O que o próximo ciclo do RSSFetcher enxerga: a URL voltou a ser elegível.
+    expect(await redis.exists(urlDedupKey(item.url))).toBe(0)
     expect(await (redis as any).sismember(NEWS_URLS_KEY, item.url)).toBe(0)
 
     const structured: Array<Record<string, unknown>> = (logger.error as jest.Mock).mock.calls
@@ -509,7 +515,7 @@ describe('NewsClassifier', () => {
     }))
 
     jest
-      .spyOn(redis as unknown as { srem: (...args: unknown[]) => Promise<number> }, 'srem')
+      .spyOn(redis as unknown as { del: (...args: unknown[]) => Promise<number> }, 'del')
       .mockRejectedValue(new Error('Redis Error'))
 
     while (!newsQueue.isEmpty()) newsQueue.dequeue()

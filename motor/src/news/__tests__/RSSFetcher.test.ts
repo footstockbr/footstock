@@ -8,7 +8,7 @@ import type Redis from 'ioredis'
 import { RSSFetcher } from '../RSSFetcher'
 import { NewsQueue, newsQueue } from '../NewsQueue'
 import { FallbackPool } from '../FallbackPool'
-import { NEWS_URLS_KEY } from '../news-dedup'
+import { markAsProcessed, urlDedupKey } from '../news-dedup'
 import { logger } from '../../utils/logger'
 
 // ---------------------------------------------------------------------------
@@ -77,7 +77,7 @@ describe('RSSFetcher', () => {
 
   test('[SUCCESS — Deduplicação] URL duplicada não é enfileirada', async () => {
     const url = 'https://feed.com/noticia/dup'
-    await (redis as unknown as { sadd: (key: string, value: string) => Promise<number> }).sadd('news:urls', url)
+    await markAsProcessed(redis, url)
 
     mockParseURL.mockResolvedValue({
       items: [{ link: url, title: 'Duplicata', pubDate: new Date().toISOString() }],
@@ -125,7 +125,14 @@ describe('RSSFetcher', () => {
       sismember: jest.fn().mockRejectedValue(new Error('Redis offline')),
       sadd: jest.fn().mockResolvedValue(1),
       expire: jest.fn().mockResolvedValue(1),
-      set: jest.fn().mockResolvedValue('OK'),
+      exists: jest.fn().mockRejectedValue(new Error('Redis offline')),
+      del: jest.fn().mockRejectedValue(new Error('Redis offline')),
+      set: jest.fn().mockImplementation((_key: string, _value: string, ...rest: unknown[]) => {
+        if (rest.includes('NX')) {
+          return Promise.reject(new Error('Redis offline'))
+        }
+        return Promise.resolve('OK')
+      }),
       get: jest.fn().mockResolvedValue(null),
     } as unknown as Redis
 
@@ -174,7 +181,8 @@ describe('RSSFetcher', () => {
 
     // A URL NAO pode ter ficado no set: o item nunca foi enfileirado. Se ficasse,
     // uma republicacao com titulo corrigido seria descartada em silencio por 48h.
-    expect(await redis.sismember(NEWS_URLS_KEY, url)).toBe(0)
+    expect(await redis.exists(urlDedupKey(url))).toBe(0)
+    expect(await redis.sismember('news:urls', url)).toBe(0)
   })
 
   test('[SUCCESS — Dedup atômico entre processos] apenas uma instância enfileira a mesma URL', async () => {

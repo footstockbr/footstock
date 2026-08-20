@@ -1,5 +1,5 @@
 // ============================================================================
-// FootStock Motor — Dedup de URLs de notícia (set Redis com TTL de 48h)
+// FootStock Motor — Dedup de URLs de notícia (chave individual com TTL de 48h)
 //
 // Extraído de `RSSFetcher` no item 014 do loop
 // 07-28-noticias-multi-time-linha-por-time. Motivo: a marca de "processado" é
@@ -18,11 +18,27 @@ import { createHash } from 'crypto'
 import type Redis from 'ioredis'
 import { logger } from '../utils/logger'
 
-/** Set Redis das URLs já enfileiradas. */
+/**
+ * Convivencia T-15 (SET legado -> chave individual):
+ *
+ * - Leitura e unmark sao dual (chave nova OU membro do SET). Escrita nova so
+ *   na chave individual. O SET legado deixa de receber sadd/expire a partir
+ *   deste deploy, portanto o TTL residual dele deixa de ser renovado e o SET
+ *   some sozinho no maximo em 48h.
+ * - Limpeza: depois de uma janela URL_TTL_SECONDS sem sadd no SET,
+ *   `DEL news:urls` e `DEL news:title-fingerprints` sao no-op se o expire ja
+ *   os removeu. Se o operador quiser reabrir todas as URLs imediatamente,
+ *   `DEL` agora (aceita o burst de duplicatas). Rollback: `git revert` do
+ *   commit; as chaves `news:urls:*` orfas expiram sozinhas em ate 48h.
+ * - Migracao no avistamento (markAsProcessed): SET NX EX vence + membro
+ *   legado ainda presente => retorna duplicata e grava a chave nova. Nao
+ *   exige script de backfill.
+ */
+/** Set Redis legado das URLs ja enfileiradas. Nao e a chave da marca nova. */
 export const NEWS_URLS_KEY = 'news:urls'
 
 /**
- * Set Redis das ASSINATURAS DE TÍTULO já enfileiradas.
+ * Set Redis legado das ASSINATURAS DE TÍTULO já enfileiradas.
  *
  * Existe porque dedup por URL não cobre o caso real observado em 2026-08-03: o
  * mesmo fato noticioso chegando por duas URLs diferentes (feed da home e feed
@@ -36,7 +52,12 @@ export const NEWS_URLS_KEY = 'news:urls'
  */
 export const NEWS_TITLE_FINGERPRINTS_KEY = 'news:title-fingerprints'
 
-/** Janela de dedup. Passado o TTL, a mesma URL pode voltar a ser enfileirada. */
+/**
+ * Janela de dedup por item. Cada URL (e cada fingerprint de titulo) expira 48h
+ * apos a propria marcacao. Marcar B nao renova A; re-avistamento com NX nao
+ * empurra o TTL. Passado o TTL daquela chave, a mesma URL pode voltar a ser
+ * enfileirada.
+ */
 export const URL_TTL_SECONDS = 48 * 60 * 60
 
 /**
@@ -59,20 +80,44 @@ export function titleFingerprint(title: string): string {
   return createHash('sha256').update(canonical).digest('hex').slice(0, 16)
 }
 
-/** Marca a URL como processada (entra no set de dedup). */
-export async function markAsProcessed(redis: Redis, url: string): Promise<void> {
-  await redis.sadd(NEWS_URLS_KEY, url)
-  await redis.expire(NEWS_URLS_KEY, URL_TTL_SECONDS)
+/** Chave individual da marca de URL. Prefixo derivado de NEWS_URLS_KEY. */
+export function urlDedupKey(url: string): string {
+  return `${NEWS_URLS_KEY}:${url}`
+}
+
+/** Chave individual da marca de titulo. Prefixo derivado de NEWS_TITLE_FINGERPRINTS_KEY. */
+export function titleDedupKey(title: string): string {
+  return `${NEWS_TITLE_FINGERPRINTS_KEY}:${titleFingerprint(title)}`
+}
+
+/**
+ * Marca a URL como processada na chave individual (`SET NX EX`).
+ *
+ * `true` = esta chamada reivindicou a URL como nova.
+ * `false` = duplicata (chave nova ja existia, ou SET NX venceu mas a URL ainda
+ * esta no SET legado). No segundo caso a chave nova fica gravada (migracao no
+ * avistamento) e a janela dessa URL passa a ser 48h a partir deste avistamento,
+ * nao o TTL residual do SET. Aceito como convivencia T-15.
+ *
+ * Nao renova TTL em re-avistamento (`NX`). Nao chama expire no SET legado.
+ */
+export async function markAsProcessed(redis: Redis, url: string): Promise<boolean> {
+  const key = urlDedupKey(url)
+  const claimed = await redis.set(key, '1', 'EX', URL_TTL_SECONDS, 'NX')
+  if (claimed !== 'OK') return false
+  const legacy = await redis.sismember(NEWS_URLS_KEY, url)
+  return legacy !== 1
 }
 
 /** Marca a assinatura do título como processada. Mesma janela de TTL da URL. */
 export async function markTitleAsProcessed(redis: Redis, title: string): Promise<void> {
-  await redis.sadd(NEWS_TITLE_FINGERPRINTS_KEY, titleFingerprint(title))
-  await redis.expire(NEWS_TITLE_FINGERPRINTS_KEY, URL_TTL_SECONDS)
+  await redis.set(titleDedupKey(title), '1', 'EX', URL_TTL_SECONDS, 'NX')
 }
 
 /** `true` quando um título equivalente já foi enfileirado na janela. */
 export async function isTitleDuplicate(redis: Redis, title: string): Promise<boolean> {
+  const fresh = await redis.exists(titleDedupKey(title))
+  if (fresh === 1) return true
   const member = await redis.sismember(NEWS_TITLE_FINGERPRINTS_KEY, titleFingerprint(title))
   return member === 1
 }
@@ -85,6 +130,10 @@ export async function isTitleDuplicate(redis: Redis, title: string): Promise<boo
  * 48h em silêncio: ela estava no set de dedup, então nenhum ciclo seguinte a
  * traria de volta.
  *
+ * Dual-unmark: apaga a chave nova E o membro do SET legado, para URL e (se
+ * `title` veio) para o fingerprint. Sem isso, um lado da convivencia continuaria
+ * barrando a retentativa.
+ *
  * Best-effort de propósito. Redis indisponível aqui é degradação (a notícia se
  * perde nesta janela, exatamente como antes), nunca motivo para derrubar o
  * worker que já está tratando um erro. O resultado fica no retorno para quem
@@ -96,11 +145,13 @@ export async function unmarkAsProcessed(
   title?: string,
 ): Promise<boolean> {
   try {
+    await redis.del(urlDedupKey(url))
     await redis.srem(NEWS_URLS_KEY, url)
     // A assinatura do título precisa sair JUNTO: deixá-la no set faria a
     // retentativa da mesma notícia ser barrada pelo dedup de título mesmo com a
     // URL já liberada — trocando um bug de perda-por-48h por outro idêntico.
     if (title) {
+      await redis.del(titleDedupKey(title))
       await redis.srem(NEWS_TITLE_FINGERPRINTS_KEY, titleFingerprint(title))
     }
     return true
