@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, type ReactNode } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { Lock } from 'lucide-react'
 import { IMPACT_CATEGORY_LABELS, IMPACT_CATEGORY_OPTIONS, SENTIMENT_HEX_COLORS, SENTIMENT_LABELS, SENTIMENT_OPTIONS } from '@/lib/constants/admin-ui'
 import { CLUBS_PUBLIC as CLUBS } from '@/lib/constants/clubs-public'
@@ -198,6 +198,7 @@ const EMPTY_CREATE = {
 
 export default function NoticiasPage() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const highlightedNewsId = searchParams.get('newsId')
   const [news, setNews] = useState<NewsItem[]>([])
   const [filter, setFilter] = useState<FilterType>('todas')
@@ -277,7 +278,13 @@ export default function NoticiasPage() {
     })
     setEditError(null)
     setEditNotice(null)
-  }, [highlightedNewsId, news, editingItem])
+    // Consumir o parâmetro newsId para evitar reabertura do modal ao cancelar (T-17).
+    // Sem isso, fechar o modal zera editingItem, o effect reabre porque highlightedNewsId
+    // ainda está na URL, e o operador fica preso sem conseguir fechar.
+    const url = new URL(window.location.href)
+    url.searchParams.delete('newsId')
+    router.replace(`${url.pathname}${url.search}`, { scroll: false })
+  }, [highlightedNewsId, news, editingItem, router])
 
   const fetchNews = async (
     includeQuarantine: boolean = showQuarantine,
