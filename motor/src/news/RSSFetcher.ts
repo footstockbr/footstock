@@ -312,6 +312,17 @@ export class RSSFetcher {
     }
     logger.info('[RSS] Fetcher parado')
   }
+
+  /**
+   * Delegador: drena a NewsQueue em memoria via unmarkAsProcessed (T-13).
+   *
+   * O RSSFetcher ja retém `this.redis` do construtor, entao nao precisa
+   * receber Redis como parametro — evita propagar o parametro por todos
+   * os call sites de disposeNewsPipeline.
+   */
+  async drainQueue(): Promise<{ drained: number; unmarked: number }> {
+    return newsQueue.drain(this.redis)
+  }
 }
 
 // ---------------------------------------------------------------------------

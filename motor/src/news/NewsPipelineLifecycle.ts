@@ -62,6 +62,23 @@ export function stopNewsPipeline(pipeline: NewsPipeline | null): void {
  */
 export async function disposeNewsPipeline(pipeline: NewsPipeline | null): Promise<void> {
   if (!pipeline) return
+  // Drenar fila em memoria: URLs marcadas como processadas sao liberadas
+  // para que o proximo ciclo as traga de volta (T-13).
+  try {
+    const { drained, unmarked } = await pipeline.rssFetcher.drainQueue()
+    if (drained > 0) {
+      logger.info(JSON.stringify({
+        event: 'news_queue_drained_on_shutdown',
+        drained,
+        unmarked,
+      }))
+    }
+  } catch (err) {
+    logger.warn(JSON.stringify({
+      event: 'news_queue_drain_failed_on_shutdown',
+      error_message: (err as Error).message,
+    }))
+  }
   stopNewsPipeline(pipeline)
   await pipeline.newsPrisma.$disconnect().catch(err =>
     logger.error('[motor] Erro ao desconectar Prisma do pipeline RSS:', err)
