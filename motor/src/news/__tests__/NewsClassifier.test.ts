@@ -7,7 +7,7 @@ import RedisMock from 'ioredis-mock'
 import type Redis from 'ioredis'
 import { NewsClassifier, RateLimitError } from '../NewsClassifier'
 import { NewsPersistenceError } from '../NewsPublisher'
-import { newsQueue, type RawNewsItem } from '../NewsQueue'
+import { newsQueue, NewsQueue, type RawNewsItem } from '../NewsQueue'
 import { NEWS_URLS_KEY } from '../news-dedup'
 import { buildAliasIndex } from '../ticker-fallback'
 import { makeEnabledRuntime } from './helpers/enabled-llm-runtime'
@@ -355,6 +355,69 @@ describe('NewsClassifier', () => {
 
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('RATE_001'))
   }, 5000)
+
+  test('[DEGRADED — RateLimitError com fila no teto] desmarca URL e loga requeue_failed', async () => {
+    const { logger } = require('../../utils/logger')
+    const mockPublisher = { publish: jest.fn() }
+    const item = makeRawItem()
+
+    await (redis as any).sadd(NEWS_URLS_KEY, item.url)
+    expect(await (redis as any).sismember(NEWS_URLS_KEY, item.url)).toBe(1)
+
+    while (!newsQueue.isEmpty()) newsQueue.dequeue()
+    newsQueue.enqueue(item)
+
+    const classifySpy = jest.spyOn(classifier, 'classify').mockImplementation(async () => {
+      while (newsQueue.size() < NewsQueue.MAX_SIZE) {
+        newsQueue.enqueue({
+          url: `http://filler-${newsQueue.size()}.com`,
+          title: 'filler',
+          source: 'test',
+          publishedAt: new Date().toISOString(),
+        })
+      }
+      throw new RateLimitError('RATE_001', 'Rate limit Sonnet excedido (60 req/min)')
+    })
+
+    setTimeout(() => classifier.stopClassifying(), 1500)
+
+    try {
+      await classifier.startClassifying(mockPublisher as any)
+
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('RATE_001'))
+
+      const structured: Array<Record<string, unknown>> = (logger.error as jest.Mock).mock.calls
+        .map((call: unknown[]) => {
+          try {
+            return JSON.parse(call[0] as string) as Record<string, unknown>
+          } catch {
+            return null
+          }
+        })
+        .filter((entry): entry is Record<string, unknown> => entry !== null)
+      const falhas = structured.filter(
+        (entry) => entry.event === 'news_worker_rate_limit_requeue_failed' && entry.url === item.url,
+      )
+      expect(falhas).toHaveLength(1)
+      expect(falhas[0]).toMatchObject({
+        event: 'news_worker_rate_limit_requeue_failed',
+        url: item.url,
+        unmarked_for_retry: true,
+      })
+
+      expect(await (redis as any).sismember(NEWS_URLS_KEY, item.url)).toBe(0)
+
+      const remaining: string[] = []
+      while (!newsQueue.isEmpty()) {
+        remaining.push(newsQueue.dequeue()!.url)
+      }
+      expect(remaining).not.toContain(item.url)
+      expect(mockPublisher.publish).not.toHaveBeenCalled()
+    } finally {
+      classifySpy.mockRestore()
+      while (!newsQueue.isEmpty()) newsQueue.dequeue()
+    }
+  }, 8000)
 
   test('[ERROR — erro inesperado no worker] loga erro e continua', async () => {
     const { logger } = require('../../utils/logger')

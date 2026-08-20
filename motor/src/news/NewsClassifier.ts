@@ -1159,7 +1159,18 @@ Classifique a notícia acima usando as regras e o mapeamento fornecidos.`
       } catch (err) {
         if (err instanceof RateLimitError) {
           logger.warn(`[RATE_001] Rate limit atingido — re-enfileirando item e aguardando 1s`)
-          newsQueue.enqueue(item)
+          const enqueued = newsQueue.enqueue(item)
+          if (!enqueued) {
+            const unmarked = await unmarkAsProcessed(this.redis, item.url, item.title)
+            logger.error(JSON.stringify({
+              event: 'news_worker_rate_limit_requeue_failed',
+              url: item.url,
+              title: item.title.slice(0, 80),
+              source: item.source,
+              unmarked_for_retry: unmarked,
+              error_message: err.message,
+            }))
+          }
           await sleep(1000)
         } else if (err instanceof NewsPersistenceError) {
           // Critério 6 (item 014): a notícia NÃO chegou ao banco, então ela não
