@@ -9,6 +9,23 @@ import type { PlanType } from '@/lib/enums'
 import type { AssetListItem } from '@/types/market'
 import { prisma } from '@/lib/prisma'
 
+// SentimentSnapshot — espelho do tipo do motor (motor/src/types/motor.types.ts).
+// Item 012: gravado em price_history.attribution.sentimentSnapshot.
+interface SentimentSnapshot {
+  sentimentVersion: 1
+  score: number
+  label: string
+  components?: { source: string; rawValue: number; weight: number }[]
+}
+
+export interface DelayedSentimentResult {
+  status: 'AVAILABLE' | 'BUFFERING'
+  sentimentScore: number | null
+  sentimentLabel: string | null
+  isDelayed: boolean
+  delayMinutes: number
+}
+
 function normalizePlanType(planType: PlanType | null | undefined): PlanType {
   return planType === 'CRAQUE' || planType === 'LENDA' || planType === 'JOGADOR'
     ? planType
@@ -227,6 +244,116 @@ export async function applyDelayBatch(
       changePercent,
       delayStatus: 'AVAILABLE' as const,
       delayedTimestamp: current.timestamp.toISOString(),
+      isDelayed,
+      delayMinutes,
+    }
+  })
+}
+
+// ============================================================================
+// Sentimento atrasado (D18, E.7.3)
+// Coerencia temporal: sentimento lido da MESMA linha de price_history que
+// applyDelayBatch usa para o preco. JOGADOR ve 60min atras, CRAQUE 30min,
+// LENDA tempo real. Sem fallback para tempo real quando a linha nao contem
+// sentimentSnapshot (dados anteriores ao item 012).
+// ============================================================================
+
+function extractSentimentFromAttribution(
+  attribution: unknown
+): { sentimentScore: number; sentimentLabel: string } | null {
+  if (!attribution || typeof attribution !== 'object') return null
+  const snapshot = (attribution as Record<string, unknown>).sentimentSnapshot as
+    | SentimentSnapshot
+    | undefined
+  if (!snapshot || typeof snapshot.score !== 'number' || !snapshot.label) return null
+  return { sentimentScore: snapshot.score, sentimentLabel: snapshot.label }
+}
+
+/**
+ * Extrai sentimento atrasado (score + label) da mesma linha de price_history
+ * que applyDelayBatch seleciona para o preco.
+ *
+ * Para JOGADOR/CRAQUE: query price_history com o mesmo cutoff temporal.
+ * Para LENDA (delay=0): sentimento atual da coluna assets (tempo real).
+ * Fallback: linha sem sentimentSnapshot (dado legado) -> null (nao usar tempo real).
+ *
+ * Sentimento coerente com a janela do plano (D18, E.7.3).
+ */
+export async function getDelayedSentimentBatch(
+  assets: AssetListItem[],
+  planType: PlanType | null | undefined
+): Promise<DelayedSentimentResult[]> {
+  const delayMs = DELAY_BY_PLAN[normalizePlanType(planType)]
+  const isDelayed = delayMs > 0
+  const delayMinutes = delayMs / 60_000
+
+  if (assets.length === 0) return []
+
+  // LENDA: sentimento em tempo real (fonte unica — coluna assets.sentiment_score)
+  if (delayMs === 0) {
+    return assets.map((asset) => ({
+      status: 'AVAILABLE' as const,
+      sentimentScore: asset.sentimentScore ?? null,
+      sentimentLabel: asset.sentiment ?? null,
+      isDelayed: false,
+      delayMinutes: 0,
+    }))
+  }
+
+  const cutoff = new Date(Date.now() - delayMs)
+  const assetIds = assets.map((a) => a.id)
+
+  // Mesma janela temporal que applyDelayBatch: linha mais recente de
+  // price_history antes do cutoff. Coerencia estrutural: preco e sentimento
+  // vem da MESMA linha, garantindo timestamp(sentimento) <= timestamp(preco).
+  type SentRow = {
+    asset_id: string
+    attribution: unknown
+  }
+  const records = await prisma.$queryRaw<SentRow[]>`
+    SELECT ph.asset_id, ph.attribution
+    FROM unnest(${assetIds}::text[]) AS u(aid)
+    JOIN LATERAL (
+      SELECT asset_id, attribution
+      FROM price_history
+      WHERE asset_id = u.aid
+        AND timestamp <= ${cutoff}
+      ORDER BY timestamp DESC
+      LIMIT 1
+    ) ph ON true
+  `
+
+  const byAsset = new Map<string, SentRow>()
+  for (const r of records) {
+    byAsset.set(r.asset_id, r)
+  }
+
+  return assets.map((asset) => {
+    const record = byAsset.get(asset.id)
+    if (!record) {
+      return {
+        status: 'BUFFERING' as const,
+        sentimentScore: null,
+        sentimentLabel: null,
+        isDelayed,
+        delayMinutes,
+      }
+    }
+    const extracted = extractSentimentFromAttribution(record.attribution)
+    if (!extracted) {
+      // Dado legado (anterior ao item 012): null, sem fallback para tempo real
+      return {
+        status: 'AVAILABLE' as const,
+        sentimentScore: null,
+        sentimentLabel: null,
+        isDelayed,
+        delayMinutes,
+      }
+    }
+    return {
+      status: 'AVAILABLE' as const,
+      sentimentScore: extracted.sentimentScore,
+      sentimentLabel: extracted.sentimentLabel,
       isDelayed,
       delayMinutes,
     }

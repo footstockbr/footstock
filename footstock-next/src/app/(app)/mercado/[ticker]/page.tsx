@@ -38,23 +38,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
-// Peso por categoria de impacto — notícias críticas pesam mais no score
-const IMPACT_WEIGHT: Record<string, number> = {
-  FINANCEIRA_CRITICA: 1.5,
-  ESPORTIVA_MAJORITARIA: 1.2,
-  MERCADO_ATIVOS: 1.1,
-  INTEGRIDADE_SAUDE: 1.3,
-  INSTITUCIONAL: 0.9,
-  ESPORTIVA_MENOR: 0.7,
-}
-
-// Mapeamento enum → score numérico para o gauge
-const SENTIMENT_SCORE: Record<string, number> = {
-  BULLISH: 0.7,
-  NEUTRAL: 0,
-  BEARISH: -0.7,
-}
-
 export default async function AssetDetailServerPage({ params }: Props) {
   const { ticker: rawTicker } = await params
   const tickerResult = tickerSchema.safeParse(rawTicker)
@@ -112,7 +95,7 @@ export default async function AssetDetailServerPage({ params }: Props) {
       },
       orderBy: { publishedAt: 'desc' },
       take: 5,
-      select: { title: true, sentiment: true, impact: true, publishedAt: true },
+      select: { title: true, sentiment: true, publishedAt: true },
     }),
     prisma.asset.findMany({
       select: { ticker: true, displayName: true, colorPrimary: true, colorSecondary: true },
@@ -123,21 +106,8 @@ export default async function AssetDetailServerPage({ params }: Props) {
 
   const volume24h = Number(volume24hAgg._sum.totalAmount ?? 0)
 
-  // Score ponderado por impacto: BULLISH=+0.7, BEARISH=-0.7, NEUTRAL=0
-  const sentimentScore =
-    recentNewsRows.length > 0
-      ? (() => {
-          let weightedSum = 0
-          let totalWeight = 0
-          for (const n of recentNewsRows) {
-            const w = IMPACT_WEIGHT[n.impact] ?? 1.0
-            weightedSum += (SENTIMENT_SCORE[n.sentiment] ?? 0) * w
-            totalWeight += w
-          }
-          return parseFloat((weightedSum / totalWeight).toFixed(3))
-        })()
-      : // Fallback: score fixo baseado no enum do ativo quando não há notícias
-        (asset.sentiment === 'BULLISH' ? 0.3 : asset.sentiment === 'BEARISH' ? -0.3 : 0)
+  // Task-018: sentimento do motor (coluna assets.sentiment_score produzida pelo SentimentWriter)
+  const sentimentScore = asset.sentimentScore != null ? Number(asset.sentimentScore) : 0
 
   const recentNews = recentNewsRows.map((n) => ({
     title: n.title,

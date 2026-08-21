@@ -413,7 +413,12 @@ model Asset {
   isHalted       Boolean   @default(false) @map("is_halted")
   haltReason     String?   @map("halt_reason")
   haltedUntil    DateTime? @map("halted_until")
-  sentiment      String    @default("NEUTRAL") // BULLISH | BEARISH | NEUTRAL
+  sentiment            String    @default("NEUTRAL") // BULLISH | BEARISH | NEUTRAL
+  sentimentScore       Decimal?  @map("sentiment_score") @db.Decimal(6, 4)
+  sentimentReason      String?   @map("sentiment_reason")
+  sentimentComponents  Json?     @map("sentiment_components") @db.JsonB
+  sentimentUpdatedAt   DateTime? @map("sentiment_updated_at") @db.Timestamptz
+  sentimentLastFlipAt  DateTime? @map("sentiment_last_flip_at") @db.Timestamptz
   financials     Json?     @db.JsonB
   colorPrimary   String    @map("color_primary")
   colorSecondary String    @map("color_secondary")
@@ -797,7 +802,12 @@ model News {
   // Instante em que o gate avaliou a linha. NULL = nunca passou pelo gate (passivo
   // anterior a 2026-08-03) — e o predicado que o backfill usa para achar o passivo.
   editorialCheckedAt    DateTime?      @map("editorial_checked_at")
-
+  // ─── M054 - Flag de publicação degradada (sentimento por heurística) ─────
+  // Migration: footstock-next/prisma/migrations/M054_news_sentiment_degraded/
+  // true quando a notícia foi publicada sem classificação LLM (modo degradado).
+  // A consulta de janela de sentimento (task-007) usa este flag para excluir
+  // notícias não classificadas pelo LLM do cálculo do componente A.
+  sentimentDegraded     Boolean        @default(false) @map("sentiment_degraded")
   // ─── T-23 - Origem do sinal e motivo de fallback ──────────────────────
   // Migration: footstock-next/prisma/migrations/T023_news_origin_fallback_reason/
   // origin: procedência do sinal de sentimento desta linha (classifier,

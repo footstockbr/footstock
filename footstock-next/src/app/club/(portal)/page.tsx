@@ -180,6 +180,7 @@ export default async function ClubPortalPage() {
       currentPrice: true,
       openPrice: true,
       sentiment: true,
+      sentimentScore: true,
       totalShares: true,
     },
   })
@@ -203,8 +204,8 @@ export default async function ClubPortalPage() {
   const pricePositive = priceChange24h >= 0
 
   // ── KPI: Sentimento ──────────────────────────────────────────────
-  const sentimentMap: Record<string, number> = { BULLISH: 0.7, BEARISH: -0.7, NEUTRAL: 0 }
-  const sentimentScore = sentimentMap[asset.sentiment] ?? 0
+  // Task-018 recovery: sentimento do motor (coluna assets.sentiment_score)
+  const sentimentScore = asset.sentimentScore != null ? Number(asset.sentimentScore) : 0
 
   // ── KPI 1: Total de fãs com posição aberta ──────────────────────
   const fansResult = await prisma.position.findMany({

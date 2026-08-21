@@ -12,4 +12,5 @@ export interface AssetListItem {
   isHalted?: boolean
   division?: string
   sentiment?: string
+  sentimentScore?: number | null
 }

@@ -92,15 +92,17 @@ export class AIAdvisorService {
    * News são filtradas por assetIds (array de IDs do ativo, não ticker).
    */
   async fetchContext(ticker: string, userId: string): Promise<AnalysisContext> {
-    // 1. Buscar o asset para obter currentPrice, openPrice e assetId
+    // 1. Buscar o asset para obter currentPrice, openPrice, assetId e sentimentScore (motor)
     const assetRow = await prisma.asset
-      .findFirst({ where: { ticker }, select: { id: true, currentPrice: true, openPrice: true } })
+      .findFirst({ where: { ticker }, select: { id: true, currentPrice: true, openPrice: true, sentimentScore: true } })
       .catch(() => null)
 
     const assetId = assetRow?.id ?? null
     const currentPrice = assetRow?.currentPrice ? Number(assetRow.currentPrice) : 0
     const openPrice = assetRow?.openPrice ? Number(assetRow.openPrice) : 0
     const changePercent = openPrice > 0 ? ((currentPrice - openPrice) / openPrice) * 100 : 0
+    // Task-018: sentimento do motor (coluna assets.sentiment_score)
+    const assetSentimentScore = assetRow?.sentimentScore != null ? Number(assetRow.sentimentScore) : null
 
     // 2. Notícias filtradas pelo assetId (assetIds é array de IDs de ativos)
     const recentNewsRaw = assetId
@@ -117,13 +119,6 @@ export class AIAdvisorService {
           .catch(() => [])
       : []
 
-    // Mapear Sentiment enum para número escalar para o prompt
-    const SENTIMENT_SCORE: Record<string, number> = {
-      BULLISH: 0.7,
-      NEUTRAL: 0,
-      BEARISH: -0.7,
-    }
-
     // 3. Posição do usuário (por assetId)
     const userPositionRaw = assetId
       ? await prisma.position
@@ -137,12 +132,13 @@ export class AIAdvisorService {
     return {
       currentPrice,
       changePercent,
+      assetSentimentScore,
       userPosition: userPositionRaw
         ? { qty: Number(userPositionRaw.quantity), avgPrice: Number(userPositionRaw.avgPrice) }
         : null,
       recentNews: recentNewsRaw.map(n => ({
         title: n.title,
-        sentiment: SENTIMENT_SCORE[String(n.sentiment)] ?? 0,
+        sentiment: String(n.sentiment),
       })),
     }
   }
@@ -298,14 +294,20 @@ Regras do JSON:
       : 'Sem posição aberta'
 
     const noticiasStr = context.recentNews.length
-      ? context.recentNews.map(n => `- ${n.title} (score sentimento: ${n.sentiment.toFixed(2)})`).join('\n')
+      ? context.recentNews.map(n => `- ${n.title} (sentimento: ${n.sentiment})`).join('\n')
       : '- Nenhuma notícia recente disponível para este ativo'
+
+    // Task-018: sentimento do motor (fonte unica)
+    const sentimentStr = context.assetSentimentScore != null
+      ? context.assetSentimentScore.toFixed(2)
+      : 'N/A'
 
     return `Analise o ativo ${ticker} no mercado FootStock.
 
 DADOS DE MERCADO:
 - Preço atual: FS$ ${context.currentPrice.toFixed(2)}
 - Variação hoje: ${context.changePercent >= 0 ? '+' : ''}${context.changePercent.toFixed(2)}%
+- Sentimento do mercado (motor): ${sentimentStr}
 - Posição do investidor: ${posicaoStr}
 
 NOTÍCIAS RECENTES DO ATIVO:
@@ -497,7 +499,8 @@ Com base nos dados acima, nas notícias e no seu conhecimento sobre o clube/sele
    * Evita 500 em dev local e permite testar o fluxo completo do assessor.
    */
   private buildDevMockAnalysis(ticker: string, context: AnalysisContext, plan: PlanType): AIAnalysis {
-    const score = context.changePercent > 0 ? 0.5 : context.changePercent < 0 ? -0.4 : 0.1
+    // Task-018: usar sentimento do motor quando disponivel, mesmo em dev mock
+    const score = context.assetSentimentScore ?? (context.changePercent > 0 ? 0.5 : context.changePercent < 0 ? -0.4 : 0.1)
     return {
       ticker,
       resumo: `[DEV MOCK] Analise simulada para ${ticker}. Preco atual FS$ ${context.currentPrice.toFixed(2)} com variacao de ${context.changePercent >= 0 ? '+' : ''}${context.changePercent.toFixed(2)}% hoje. Resposta gerada localmente em modo de desenvolvimento (API Anthropic indisponivel).`,

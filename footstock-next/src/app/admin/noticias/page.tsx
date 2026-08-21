@@ -234,6 +234,9 @@ export default function NoticiasPage() {
   // Erro de ação de card (publicar/arquivar/deletar). Antes era `alert()`, que o
   // Playwright não vê e o operador dispensa sem ler.
   const [actionError, setActionError] = useState<string | null>(null)
+  // Feedback explícito de sucesso (Zero Silencio). Espelha actionError para o
+  // caminho feliz: o operador vê confirmação visual de arquivar/desarquivar.
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null)
 
   // Paginação (T-09). Antes a tela mostrava só os 100 grupos mais recentes e
   // avisava que o resto existia mas não aparecia; agora o resto é alcançável.
@@ -448,6 +451,7 @@ export default function NoticiasPage() {
 
   const togglePublish = async (id: string, isPublished: boolean) => {
     setActionError(null)
+    setActionSuccess(null)
     try {
       const res = await fetch(`/api/v1/admin/news/${id}`, {
         method: 'PATCH',
@@ -455,7 +459,8 @@ export default function NoticiasPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isPublished: !isPublished }),
       })
-      if (!res.ok) throw new Error('Erro ao atualizar')
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error?.message || 'Erro ao atualizar')
       fetchNews()
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Erro ao atualizar')
@@ -464,6 +469,7 @@ export default function NoticiasPage() {
 
   const archiveNews = async (id: string) => {
     setActionError(null)
+    setActionSuccess(null)
     try {
       const res = await fetch(`/api/v1/admin/news/${id}`, {
         method: 'PATCH',
@@ -471,10 +477,31 @@ export default function NoticiasPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isArchived: true }),
       })
-      if (!res.ok) throw new Error('Erro ao arquivar')
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error?.message || 'Erro ao arquivar')
+      setActionSuccess('Notícia arquivada com sucesso.')
       fetchNews()
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Erro ao arquivar')
+    }
+  }
+
+  const unarchiveNews = async (id: string) => {
+    setActionError(null)
+    setActionSuccess(null)
+    try {
+      const res = await fetch(`/api/v1/admin/news/${id}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isArchived: false }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error?.message || 'Erro ao desarquivar')
+      setActionSuccess('Notícia desarquivada com sucesso.')
+      fetchNews()
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Erro ao desarquivar')
     }
   }
 
@@ -487,6 +514,7 @@ export default function NoticiasPage() {
     if (!deleteTarget) return
     setDeleting(true)
     setDeleteError(null)
+    setActionSuccess(null)
     try {
       const res = await fetch(`/api/v1/admin/news/${deleteTarget.id}`, {
         method: 'DELETE',
@@ -523,7 +551,14 @@ export default function NoticiasPage() {
       const payload: Record<string, unknown> = {
         impact: editForm.impact,
         sentiment: editForm.sentiment,
-        ticker: editForm.ticker,
+      }
+      // T-18 (item 019): ticker so entra no payload quando efetivamente alterado.
+      // Enviar ticker inalterado (vazio para linha de grupo sem time) fazia a rota
+      // tratar string vazia como intencao de limpar, retornando 422 NEWS-003 e
+      // impedindo editar titulo/impacto de linha sem ticker pelo modal.
+      const originalTicker = editingItem.ticker ?? ''
+      if (editForm.ticker !== originalTicker) {
+        payload.ticker = editForm.ticker
       }
       if (!isExternal) {
         payload.title = editForm.title
@@ -841,6 +876,23 @@ export default function NoticiasPage() {
         </div>
       )}
 
+      {actionSuccess && (
+        <div
+          data-testid="admin-noticias-action-success"
+          style={{
+            marginBottom: '12px',
+            padding: '10px 14px',
+            background: 'rgba(46, 189, 133, 0.08)',
+            border: '1px solid rgba(46, 189, 133, 0.2)',
+            borderRadius: '6px',
+            color: '#2EBD85',
+            fontSize: '12px',
+          }}
+        >
+          {actionSuccess}
+        </div>
+      )}
+
       {editNotice && (
         <div
           data-testid="admin-noticias-group-affected-notice"
@@ -1015,6 +1067,16 @@ export default function NoticiasPage() {
                     style={{ background: 'transparent', color: 'var(--muted)', borderColor: 'var(--muted)' }}
                   >
                     Arquivar
+                  </button>
+                )}
+                {item.isArchived && (
+                  <button
+                    onClick={() => unarchiveNews(item.id)}
+                    className="btn btn-sm btn-outline"
+                    data-testid={`admin-noticias-unarchive-button-${item.id}`}
+                    style={{ background: 'transparent', color: 'var(--accent)', borderColor: 'var(--accent)' }}
+                  >
+                    Desarquivar
                   </button>
                 )}
                 <button

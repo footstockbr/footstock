@@ -19,6 +19,9 @@ import { getAuthUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { errors, list } from '@/lib/api'
 import { AliasService } from '@/services/AliasService'
+import { getDelayedSentimentBatch } from '@/lib/services/DelayService'
+import type { PlanType } from '@/lib/enums'
+import type { AssetListItem } from '@/types/market'
 
 const MAX_RESULTS = 10
 
@@ -53,6 +56,7 @@ export async function GET(request: NextRequest) {
           currentPrice: true,
           isHalted: true,
           sentiment: true,
+          sentimentScore: true,
           colorPrimary: true,
           colorSecondary: true,
         },
@@ -61,6 +65,12 @@ export async function GET(request: NextRequest) {
       if (!asset) {
         return list([], { page: 1, limit: MAX_RESULTS, total: 0, totalPages: 0, hasNext: false })
       }
+
+      // Sentimento coerente com a janela do plano (D18, E.7.3).
+      const planType = auth.user.planType as PlanType
+      const assetForDelay: AssetListItem = { id: asset.id, ticker: asset.ticker, displayName: asset.displayName, currentPrice: asset.currentPrice.toNumber(), sentiment: asset.sentiment, sentimentScore: asset.sentimentScore?.toNumber() ?? null }
+      const delayedSents = await getDelayedSentimentBatch([assetForDelay], planType)
+      const dsAlias = delayedSents[0]
 
       return list(
         [
@@ -71,7 +81,8 @@ export async function GET(request: NextRequest) {
             division: asset.division,
             currentPrice: asset.currentPrice.toNumber(),
             isHalted: asset.isHalted,
-            sentiment: asset.sentiment,
+            sentiment: dsAlias?.sentimentLabel ?? null,
+            sentimentScore: dsAlias?.sentimentScore ?? null,
             colors: { primary: asset.colorPrimary, secondary: asset.colorSecondary },
           },
         ],
@@ -99,6 +110,7 @@ export async function GET(request: NextRequest) {
         currentPrice: true,
         isHalted: true,
         sentiment: true,
+        sentimentScore: true,
         colorPrimary: true,
         colorSecondary: true,
       },
@@ -106,16 +118,30 @@ export async function GET(request: NextRequest) {
       take: MAX_RESULTS,
     })
 
-    const serialized = assets.map((a) => ({
-      id: a.id,
-      ticker: a.ticker,
-      displayName: a.displayName,
-      division: a.division,
-      currentPrice: a.currentPrice.toNumber(),
-      isHalted: a.isHalted,
-      sentiment: a.sentiment,
-      colors: { primary: a.colorPrimary, secondary: a.colorSecondary },
+    // Sentimento coerente com a janela do plano (D18, E.7.3).
+    const planType = auth.user.planType as PlanType
+    const searchAssetItems: AssetListItem[] = assets.map((a) => ({
+      id: a.id, ticker: a.ticker, displayName: a.displayName,
+      currentPrice: a.currentPrice.toNumber(), sentiment: a.sentiment,
+      sentimentScore: a.sentimentScore?.toNumber() ?? null,
     }))
+    const delayedSents = await getDelayedSentimentBatch(searchAssetItems, planType)
+    const delayedSentMap = new Map(delayedSents.map((ds, i) => [assets[i].id, ds]))
+
+    const serialized = assets.map((a) => {
+      const ds = delayedSentMap.get(a.id)
+      return {
+        id: a.id,
+        ticker: a.ticker,
+        displayName: a.displayName,
+        division: a.division,
+        currentPrice: a.currentPrice.toNumber(),
+        isHalted: a.isHalted,
+        sentiment: ds?.sentimentLabel ?? null,
+        sentimentScore: ds?.sentimentScore ?? null,
+        colors: { primary: a.colorPrimary, secondary: a.colorSecondary },
+      }
+    })
 
     return list(serialized, {
       page: 1,

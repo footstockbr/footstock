@@ -15,16 +15,6 @@ import type { ClubMetricsData } from '@/types/club'
 
 const CACHE_TTL_SECONDS = 900 // 15 minutos
 
-/** Mapear sentiment string para score numérico (-1.0 a +1.0) */
-function sentimentToScore(sentiment: string): number {
-  switch (sentiment) {
-    case 'BULLISH': return 0.7
-    case 'BEARISH': return -0.7
-    case 'NEUTRAL':
-    default: return 0.0
-  }
-}
-
 export async function GET() {
   try {
     // ---------- Auth — clubId SEMPRE da sessão, nunca de query params ----------
@@ -60,6 +50,7 @@ export async function GET() {
         currentPrice: true,
         openPrice: true,
         sentiment: true,
+        sentimentScore: true,
         totalShares: true,
       },
     })
@@ -167,8 +158,8 @@ export async function GET() {
       ? ((currentPriceNum - openPriceNum) / openPriceNum) * 100
       : 0
 
-    // Sentimento
-    const sentimentScore = sentimentToScore(asset.sentiment)
+    // Task-018: sentimento do motor (coluna assets.sentiment_score)
+    const sentimentScore = asset.sentimentScore != null ? Number(asset.sentimentScore) : 0
 
     // Engajamento em ligas: torcedores do clube participando de ligas ativas
     const leagueEngagement = await prisma.leagueMember.count({

@@ -22,6 +22,23 @@ const NEWS_SENTIMENT_LABEL: Record<string, string> = {
   BEARISH: 'Baixa',
 }
 
+const NEWS_SENTIMENT_UNKNOWN_COLOR = '#F0B90B'
+const NEWS_SENTIMENT_UNKNOWN_LABEL = 'Desconhecido'
+
+function getNewsSentimentColor(sentiment: string): string {
+  const hit = NEWS_SENTIMENT_COLOR[sentiment]
+  if (hit) return hit
+  console.warn(`[SentimentGauge] news sentiment cor fora do rotulo conhecido: "${sentiment}"`)
+  return NEWS_SENTIMENT_UNKNOWN_COLOR
+}
+
+function getNewsSentimentLabel(sentiment: string): string {
+  const hit = NEWS_SENTIMENT_LABEL[sentiment]
+  if (hit) return hit
+  console.warn(`[SentimentGauge] news sentiment label fora do rotulo conhecido: "${sentiment}"`)
+  return NEWS_SENTIMENT_UNKNOWN_LABEL
+}
+
 interface RecentNewsItem {
   title: string
   sentiment: 'BULLISH' | 'NEUTRAL' | 'BEARISH'
@@ -109,7 +126,7 @@ export function SentimentGauge({ sentiment, recentNews = [] }: SentimentGaugePro
       >
         {label}
         <span
-          title="Score agregado de sentimento baseado nas notícias das últimas 24h. Varia de -1 (muito negativo) a +1 (muito positivo)"
+          title="Sentimento do mercado produzido pelo motor (SentimentWriter). Varia de -1 (muito negativo) a +1 (muito positivo)"
           aria-label="Explicação do sentimento"
           className="cursor-help"
         >
@@ -129,11 +146,11 @@ export function SentimentGauge({ sentiment, recentNews = [] }: SentimentGaugePro
               <span
                 className="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 mt-0.5"
                 style={{
-                  color: NEWS_SENTIMENT_COLOR[n.sentiment],
-                  backgroundColor: NEWS_SENTIMENT_COLOR[n.sentiment] + '22',
+                  color: getNewsSentimentColor(n.sentiment),
+                  backgroundColor: getNewsSentimentColor(n.sentiment) + '22',
                 }}
               >
-                {NEWS_SENTIMENT_LABEL[n.sentiment]}
+                {getNewsSentimentLabel(n.sentiment)}
               </span>
               <p className="text-xs text-[#929AA5] leading-snug line-clamp-2">{n.title}</p>
             </div>

@@ -19,8 +19,5 @@ export const TREND_LABELS: Record<TrendDirection, string> = {
   down: 'Em baixa',
 }
 
-export const TREND_SENTIMENT_MAP: Record<TrendDirection, 'BULLISH' | 'NEUTRAL' | 'BEARISH'> = {
-  up: 'BULLISH',
-  stable: 'NEUTRAL',
-  down: 'BEARISH',
-}
+// Task-018: TREND_SENTIMENT_MAP removido — derivava sentimento da variacao de preco,
+// o que violava a fonte unica do motor (assets.sentiment_score / SentimentWriter).

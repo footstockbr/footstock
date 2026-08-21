@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { list, errors } from '@/lib/api'
 import { getAuthUser } from '@/lib/auth'
-import { applyDelayBatch } from '@/lib/services/DelayService'
+import { applyDelayBatch, getDelayedSentimentBatch } from '@/lib/services/DelayService'
 import type { PlanType } from '@/lib/enums'
 import type { AssetListItem } from '@/types/market'
 import type { Division } from '@prisma/client'
@@ -26,7 +26,6 @@ export async function GET(request: NextRequest) {
   try {
     const where = {
       ...(division && { division }),
-      ...(sentiment && { sentiment }),
       ...(isHalted !== null && { isHalted: isHalted === 'true' }),
     }
 
@@ -44,19 +43,37 @@ export async function GET(request: NextRequest) {
       isHalted: a.isHalted,
       division: a.division,
       sentiment: a.sentiment,
+      sentimentScore: a.sentimentScore?.toNumber() ?? null,
     }))
 
     // Aplicar delay de cotação por plano (T-022)
     const delayedItems = await applyDelayBatch(assetItems, planType)
 
+    // Sentimento coerente com a janela do plano (D18, E.7.3).
+    // JOGADOR ve 60min atras, CRAQUE 30min, LENDA tempo real.
+    // Filtro ?sentiment= opera sobre o valor atrasado, nao o tempo real.
+    const delayedSentiments = await getDelayedSentimentBatch(assetItems, planType)
+    const delayedSentimentMap = new Map(delayedSentiments.map((ds, i) => [assetItems[i].id, ds]))
+
+    let serializedAssets = assets
+    if (sentiment) {
+      const filteredIds = new Set(
+        delayedSentiments
+          .filter((ds, i) => ds.sentimentLabel === sentiment)
+          .map((_, i) => assetItems[i].id)
+      )
+      serializedAssets = assets.filter((a) => filteredIds.has(a.id))
+    }
+
     // Mapear para formato de resposta completo
     const priceMap = new Map(delayedItems.map((d) => [d.id, d]))
 
-    const serialized = assets.map((a) => {
+    const serialized = serializedAssets.map((a) => {
       const delayed = priceMap.get(a.id)
       const currentPrice = delayed?.currentPrice ?? a.currentPrice.toNumber()
       const changePercent = delayed?.changePercent ?? 0
       const openPrice = a.openPrice.toNumber()
+      const ds = delayedSentimentMap.get(a.id)
 
       return {
         id: a.id,
@@ -76,7 +93,8 @@ export async function GET(request: NextRequest) {
         haltReason: a.haltReason ?? null,
         colors: { primary: a.colorPrimary, secondary: a.colorSecondary },
         financials: a.financials,
-        sentiment: a.sentiment,
+        sentiment: ds?.sentimentLabel ?? null,
+        sentimentScore: ds?.sentimentScore ?? null,
         updatedAt: a.updatedAt.toISOString(),
         _meta: {
           delayed: delayed?.delayStatus === 'AVAILABLE' ? delayed.isDelayed : false,

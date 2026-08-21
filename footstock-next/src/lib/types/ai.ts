@@ -59,8 +59,10 @@ export interface AIRateLimitStatus {
 export interface AnalysisContext {
   currentPrice: number
   changePercent: number
+  /** Task-018: sentimento do motor (assets.sentiment_score), fonte unica. */
+  assetSentimentScore: number | null
   userPosition: { qty: number; avgPrice: number } | null
-  recentNews: { title: string; sentiment: number }[]
+  recentNews: { title: string; sentiment: string }[]
 }
 
 // ---------------------------------------------------------------------------

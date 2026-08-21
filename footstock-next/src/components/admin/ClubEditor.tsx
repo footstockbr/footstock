@@ -1,13 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ShieldBan, ShieldCheck, Filter, SlidersHorizontal, Tag } from 'lucide-react'
+import { ShieldBan, ShieldCheck, Filter, SlidersHorizontal, Tag, ChevronDown, ChevronUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { AliasManagement } from '@/components/admin/AliasManagement'
+import { SentimentDecomposition } from '@/components/admin/SentimentDecomposition'
 
 interface AssetItem {
   id: string
@@ -21,12 +22,28 @@ interface AssetItem {
   isHalted: boolean
   haltReason: string | null
   sentiment: string
+  sentimentScore: number | null
+  sentimentReason: string | null
+  sentimentComponents: Record<string, { value: number; weight: number }> | null
+  sentimentUpdatedAt: string | null
+  sentimentLastFlipAt: string | null
+  sentimentStaleness: 'FRESCO' | 'OBSOLETO' | 'PAUSADO' | 'NUNCA_ESCRITO'
+  sentimentAgeSeconds: number | null
 }
 
 const SENTIMENT_LABEL: Record<string, { label: string; color: string }> = {
   BULLISH: { label: 'Bullish', color: '#2EBD85' },
   BEARISH: { label: 'Bearish', color: '#F6465D' },
   NEUTRAL: { label: 'Neutro', color: '#929AA5' },
+}
+
+const SENTIMENT_UNKNOWN_FALLBACK = { label: 'Desconhecido', color: '#F0B90B' }
+
+function getSentimentMeta(sentiment: string): { label: string; color: string } {
+  const hit = SENTIMENT_LABEL[sentiment]
+  if (hit) return hit
+  console.warn(`[ClubEditor] sentiment fora do rotulo conhecido: "${sentiment}"`)
+  return SENTIMENT_UNKNOWN_FALLBACK
 }
 
 async function fetchAssets(): Promise<AssetItem[]> {
@@ -52,6 +69,9 @@ export function ClubEditor({ canHalt }: ClubEditorProps) {
 
   // Aliases panel: qual ticker está expandido
   const [aliasTickerOpen, setAliasTickerOpen] = useState<string | null>(null)
+
+  // Sentiment detail panel: qual ticker está expandido
+  const [expandedTicker, setExpandedTicker] = useState<string | null>(null)
 
   const { data: assets, isLoading } = useQuery({
     queryKey: ['admin-assets'],
@@ -142,7 +162,7 @@ export function ClubEditor({ canHalt }: ClubEditorProps) {
 
   if (isLoading) {
     return (
-      <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
+      <div data-testid="admin-motor-club-editor-loading" className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
         <Skeleton className="h-5 w-32 mb-3" />
         {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-9 w-full mb-2" />)}
       </div>
@@ -150,7 +170,7 @@ export function ClubEditor({ canHalt }: ClubEditorProps) {
   }
 
   return (
-    <div className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4 relative">
+    <div data-testid="admin-motor-club-editor" className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4 relative">
       {/* Modal de confirmação de halt */}
       {confirmTicker && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
@@ -273,7 +293,17 @@ export function ClubEditor({ canHalt }: ClubEditorProps) {
               <th className="text-right py-2 px-2 font-medium">Preco</th>
               <th className="text-right py-2 px-2 font-medium">Var%</th>
               <th className="text-right py-2 px-2 font-medium hidden lg:table-cell">Vol 24h</th>
-              <th className="text-center py-2 px-2 font-medium hidden lg:table-cell">Sent.</th>
+              <th className="text-center py-2 px-2 font-medium hidden lg:table-cell">
+                <span className="block">Sent.</span>
+                {/* Divergencia admin/publico (item 022): aviso co-visivel com a coluna de sentimento */}
+                <span
+                  data-testid="admin-motor-club-sentiment-divergence-note"
+                  className="block text-[9px] font-normal text-[#707A8A] leading-tight"
+                  title="Admin ve o sentimento em tempo real. A area publica recebe com atraso conforme o plano: JOGADOR 60min, CRAQUE 30min, LENDA tempo real."
+                >
+                  tempo real (publico: atraso p/ plano)
+                </span>
+              </th>
               <th className="text-center py-2 px-2 font-medium">Status</th>
               <th className="text-right py-2 px-2 font-medium">Halt</th>
               <th className="text-right py-2 px-2 font-medium">Preco</th>
@@ -283,9 +313,11 @@ export function ClubEditor({ canHalt }: ClubEditorProps) {
           <tbody>
             {displayed.map((asset) => {
               const isAliasOpen = aliasTickerOpen === asset.ticker
+              const isSentimentExpanded = expandedTicker === asset.ticker
               return (
+                <React.Fragment key={asset.ticker}>
                 <tr
-                  key={asset.ticker}
+                  data-testid={`admin-motor-club-row-${asset.ticker}`}
                   className="border-b border-[rgba(240,185,11,.06)] last:border-0 hover:bg-[rgba(240,185,11,.03)]"
                 >
                   <td className="py-2.5 px-2">
@@ -311,17 +343,64 @@ export function ClubEditor({ canHalt }: ClubEditorProps) {
                     {(asset.volume24h ?? 0).toLocaleString('pt-BR')}
                   </td>
                   <td className="py-2.5 px-2 text-center hidden lg:table-cell">
-                    <span className="text-[11px] font-medium" style={{ color: (SENTIMENT_LABEL[asset.sentiment] ?? SENTIMENT_LABEL.NEUTRAL).color }}>
-                      {(SENTIMENT_LABEL[asset.sentiment] ?? SENTIMENT_LABEL.NEUTRAL).label}
-                    </span>
+                    {asset.sentimentStaleness === 'NUNCA_ESCRITO' ? (
+                      <span
+                        data-testid={`admin-motor-club-sentiment-${asset.ticker}`}
+                        className="text-[11px] text-[#707A8A]"
+                        title="Motor ainda nao calculou"
+                      >
+                        N/A
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => setExpandedTicker(expandedTicker === asset.ticker ? null : asset.ticker)}
+                        className="flex flex-col items-center gap-0.5 cursor-pointer hover:opacity-80 transition-opacity"
+                        aria-expanded={expandedTicker === asset.ticker}
+                      >
+                        <span
+                          data-testid={`admin-motor-club-sentiment-${asset.ticker}`}
+                          className="text-[11px] font-medium"
+                          style={{ color: getSentimentMeta(asset.sentiment).color }}
+                        >
+                          {getSentimentMeta(asset.sentiment).label}
+                        </span>
+                        {asset.sentimentScore !== null && (
+                          <span
+                            data-testid={`admin-motor-club-sentiment-score-${asset.ticker}`}
+                            className="text-[10px] font-mono text-[#929AA5]"
+                          >
+                            {asset.sentimentScore >= 0 ? '+' : ''}{asset.sentimentScore.toFixed(2)}
+                          </span>
+                        )}
+                        {asset.sentimentStaleness === 'OBSOLETO' && asset.sentimentAgeSeconds !== null && (
+                          <span
+                            data-testid={`admin-motor-club-sentiment-staleness-${asset.ticker}`}
+                            className="text-[9px] text-amber-400"
+                          >
+                            ha {Math.floor(asset.sentimentAgeSeconds / 60)}min
+                          </span>
+                        )}
+                        {asset.isHalted && (
+                          <span className="text-[9px] text-blue-400">Congelado</span>
+                        )}
+                        {expandedTicker === asset.ticker ? (
+                          <ChevronUp className="h-3 w-3 text-[#707A8A]" />
+                        ) : (
+                          <ChevronDown className="h-3 w-3 text-[#707A8A]" />
+                        )}
+                      </button>
+                    )}
                   </td>
                   <td className="py-2.5 px-2 text-center">
-                    <span className={cn(
-                      'text-[11px] font-medium px-1.5 py-0.5 rounded border',
-                      asset.isHalted
-                        ? 'bg-red-500/20 text-red-400 border-red-500/30'
-                        : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                    )}>
+                    <span
+                      data-testid={`admin-motor-club-status-${asset.ticker}`}
+                      className={cn(
+                        'text-[11px] font-medium px-1.5 py-0.5 rounded border',
+                        asset.isHalted
+                          ? 'bg-red-500/20 text-red-400 border-red-500/30'
+                          : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                      )}
+                    >
                       {asset.isHalted ? 'Halted' : 'Ativo'}
                     </span>
                   </td>
@@ -379,6 +458,26 @@ export function ClubEditor({ canHalt }: ClubEditorProps) {
                     </button>
                   </td>
                 </tr>
+                {isSentimentExpanded && (
+                  <tr>
+                    <td colSpan={11} className="px-2 pb-3 pt-0">
+                      <div data-testid={`admin-motor-club-sentiment-detail-${asset.ticker}`}>
+                        <SentimentDecomposition
+                          sentiment={asset.sentiment}
+                          sentimentScore={asset.sentimentScore}
+                          sentimentReason={asset.sentimentReason}
+                          sentimentComponents={asset.sentimentComponents}
+                          sentimentUpdatedAt={asset.sentimentUpdatedAt}
+                          sentimentStaleness={asset.sentimentStaleness}
+                          sentimentAgeSeconds={asset.sentimentAgeSeconds}
+                          isHalted={asset.isHalted}
+                          variant="panel"
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               )
             })}
             {/* Painel de aliases inline (fora do map principal para evitar problemas de aninhamento) */}

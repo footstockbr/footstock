@@ -6,7 +6,7 @@ import { getAuthUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { errors } from '@/lib/api'
 import { tickerSchema } from '@/lib/validators/tickerSchema'
-import { applyPriceDelay } from '@/lib/services/DelayService'
+import { applyPriceDelay, getDelayedSentimentBatch } from '@/lib/services/DelayService'
 import { resolveAlias } from '@/lib/utils/resolve-alias'
 import type { PlanType } from '@/lib/enums'
 import type { AssetListItem } from '@/types/market'
@@ -62,8 +62,14 @@ export async function GET(
       ticker: asset.ticker,
       displayName: asset.displayName,
       currentPrice: rawPrice,
+      sentimentScore: asset.sentimentScore?.toNumber() ?? null,
     }
     const delayed = await applyPriceDelay(assetItem, planType)
+
+    // Sentimento coerente com a janela do plano (D18, E.7.3).
+    // JOGADOR ve 60min atras, CRAQUE 30min, LENDA tempo real.
+    const delayedSentiments = await getDelayedSentimentBatch([assetItem], planType)
+    const ds = delayedSentiments[0]
 
     const isBuffering = delayed.status === 'BUFFERING'
     const currentPrice = delayed.status === 'AVAILABLE' ? delayed.currentPrice : 0
@@ -102,7 +108,8 @@ export async function GET(
         },
         fairValuePremium,
         changePercent,
-        sentiment: asset.sentiment,
+        sentiment: ds?.sentimentLabel ?? null,
+        sentimentScore: ds?.sentimentScore ?? null,
         updatedAt: asset.updatedAt.toISOString(),
         _meta: {
           delayed: delayed.isDelayed,

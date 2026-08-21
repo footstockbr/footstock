@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
+import { classifySentimentStaleness, resolveStalenessThreshold } from '@/lib/sentiment-staleness'
 
 // GET /api/v1/admin/assets — Monitor+ — lista todos os 40 ativos com halt status
 export async function GET() {
@@ -29,16 +30,30 @@ export async function GET() {
         isHalted: true,
         haltReason: true,
         sentiment: true,
+        sentimentScore: true,
+        sentimentReason: true,
+        sentimentComponents: true,
+        sentimentUpdatedAt: true,
+        sentimentLastFlipAt: true,
         updatedAt: true,
       },
       orderBy: { ticker: 'asc' },
     })
+
+    const thresholdSeconds = resolveStalenessThreshold()
+    const now = new Date()
 
     return ok(
       assets.map((a) => {
         const current = a.currentPrice.toNumber()
         const fv = a.fairValue.toNumber()
         const open = a.openPrice ? a.openPrice.toNumber() : current
+        const staleness = classifySentimentStaleness(
+          a.sentimentUpdatedAt,
+          a.isHalted,
+          thresholdSeconds,
+          now
+        )
 
         return {
           id: a.id,
@@ -49,12 +64,10 @@ export async function GET() {
           currentPrice: current,
           fairValue: fv,
           volume24h: Number(a.volume),
-          // Desvio do Fair Value (mantido para compatibilidade)
           priceChange:
             fv > 0
               ? Math.round(((current - fv) / fv) * 10000) / 100
               : 0,
-          // Variação temporal real (current vs open do dia)
           priceChange24h:
             open > 0
               ? Math.round(((current - open) / open) * 10000) / 100
@@ -62,6 +75,13 @@ export async function GET() {
           isHalted: a.isHalted,
           haltReason: a.haltReason ?? null,
           sentiment: a.sentiment,
+          sentimentScore: a.sentimentScore ? Number(a.sentimentScore) : null,
+          sentimentReason: a.sentimentReason ?? null,
+          sentimentComponents: a.sentimentComponents ?? null,
+          sentimentUpdatedAt: a.sentimentUpdatedAt?.toISOString() ?? null,
+          sentimentLastFlipAt: a.sentimentLastFlipAt?.toISOString() ?? null,
+          sentimentStaleness: staleness.state,
+          sentimentAgeSeconds: staleness.ageSeconds,
           updatedAt: a.updatedAt.toISOString(),
         }
       })

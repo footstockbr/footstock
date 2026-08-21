@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ShieldCheck, Zap } from 'lucide-react'
+import { ShieldCheck, Zap, Pause } from 'lucide-react'
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
@@ -21,6 +21,9 @@ interface AssetRow {
   isHalted: boolean
   haltReason: string | null
   sentiment: string
+  sentimentScore: number | null
+  sentimentStaleness: 'FRESCO' | 'OBSOLETO' | 'PAUSADO' | 'NUNCA_ESCRITO'
+  sentimentAgeSeconds: number | null
   updatedAt: string
 }
 
@@ -35,6 +38,15 @@ const SENTIMENT_LABEL: Record<string, { label: string; color: string }> = {
   BULLISH: { label: 'Bullish', color: '#2EBD85' },
   BEARISH: { label: 'Bearish', color: '#F6465D' },
   NEUTRAL: { label: 'Neutro', color: '#929AA5' },
+}
+
+const SENTIMENT_UNKNOWN_FALLBACK = { label: 'Desconhecido', color: '#F0B90B' }
+
+function getSentimentMeta(sentiment: string): { label: string; color: string } {
+  const hit = SENTIMENT_LABEL[sentiment]
+  if (hit) return hit
+  console.warn(`[AssetsTable] sentiment fora do rotulo conhecido: "${sentiment}"`)
+  return SENTIMENT_UNKNOWN_FALLBACK
 }
 
 interface AssetsTableProps {
@@ -104,7 +116,7 @@ export function AssetsTable({ adminRole }: AssetsTableProps) {
 
   if (isLoading) {
     return (
-      <div data-testid="admin-motor-assets-table" className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
+      <div data-testid="admin-motor-assets-table-loading" className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
         <h3 className="text-sm font-semibold text-[#EAECEF] mb-3">Ativos — visão geral</h3>
         <div className="space-y-2">
           {Array.from({ length: 8 }).map((_, i) => (
@@ -117,7 +129,7 @@ export function AssetsTable({ adminRole }: AssetsTableProps) {
 
   if (error) {
     return (
-      <div data-testid="admin-motor-assets-table" className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
+      <div data-testid="admin-motor-assets-table-error" className="bg-[#1E2329] rounded-xl border border-[rgba(240,185,11,.1)] p-4">
         <p className="text-xs text-[#F6465D]">Erro ao carregar ativos</p>
       </div>
     )
@@ -205,11 +217,12 @@ export function AssetsTable({ adminRole }: AssetsTableProps) {
           <tbody>
             {(assets ?? []).map((asset) => {
               const deviationColor = asset.priceChange > 0 ? '#2EBD85' : asset.priceChange < 0 ? '#F6465D' : '#929AA5'
-              const sentimentMeta = SENTIMENT_LABEL[asset.sentiment] ?? SENTIMENT_LABEL.NEUTRAL
+              const sentimentMeta = getSentimentMeta(asset.sentiment)
 
               return (
                 <tr
                   key={asset.id}
+                  data-testid={`admin-motor-assets-row-${asset.ticker}`}
                   className={cn(
                     'border-b border-[rgba(240,185,11,.04)] last:border-0',
                     asset.isHalted ? 'bg-red-900/5' : 'hover:bg-[rgba(240,185,11,.02)]'
@@ -229,9 +242,47 @@ export function AssetsTable({ adminRole }: AssetsTableProps) {
                     {asset.volume24h.toLocaleString('pt-BR')}
                   </td>
                   <td className="py-2 px-2 text-center">
-                    <span className="text-[11px] font-medium" style={{ color: sentimentMeta.color }}>
-                      {sentimentMeta.label}
-                    </span>
+                    {asset.sentimentStaleness === 'NUNCA_ESCRITO' ? (
+                      <span
+                        data-testid={`admin-motor-sentiment-${asset.ticker}`}
+                        className="text-[11px] text-[#707A8A]"
+                        title="Motor ainda nao calculou"
+                      >
+                        N/A
+                      </span>
+                    ) : (
+                      <span className="flex flex-col items-center gap-0.5">
+                        <span
+                          data-testid={`admin-motor-sentiment-${asset.ticker}`}
+                          className="text-[11px] font-medium"
+                          style={{ color: sentimentMeta.color }}
+                        >
+                          {sentimentMeta.label}
+                        </span>
+                        {asset.sentimentScore !== null && (
+                          <span
+                            data-testid={`admin-motor-sentiment-score-${asset.ticker}`}
+                            className="text-[10px] font-mono text-[#929AA5]"
+                          >
+                            {asset.sentimentScore >= 0 ? '+' : ''}{asset.sentimentScore.toFixed(2)}
+                          </span>
+                        )}
+                        {asset.sentimentStaleness === 'OBSOLETO' && asset.sentimentAgeSeconds !== null && (
+                          <span
+                            data-testid={`admin-motor-sentiment-staleness-${asset.ticker}`}
+                            className="text-[9px] text-amber-400"
+                          >
+                            ha {Math.floor(asset.sentimentAgeSeconds / 60)}min
+                          </span>
+                        )}
+                        {(asset.sentimentStaleness === 'PAUSADO' || asset.isHalted) && (
+                          <span className="flex items-center gap-0.5 text-[9px] text-blue-400">
+                            <Pause className="h-2.5 w-2.5" />
+                            Congelado
+                          </span>
+                        )}
+                      </span>
+                    )}
                   </td>
                   <td className="py-2 px-2 text-center">
                     {asset.isHalted ? (

@@ -1,4 +1,4 @@
-import { classifyTrend, TREND_LABELS, TREND_SENTIMENT_MAP } from '@/lib/market/trend'
+import { classifyTrend, TREND_LABELS } from '@/lib/market/trend'
 
 describe('classifyTrend', () => {
   test('valores positivos retornam up', () => {
@@ -25,9 +25,6 @@ describe('classifyTrend', () => {
     expect(TREND_LABELS.down).toBe('Em baixa')
   })
 
-  test('mapeamento para sentimento legado', () => {
-    expect(TREND_SENTIMENT_MAP.up).toBe('BULLISH')
-    expect(TREND_SENTIMENT_MAP.stable).toBe('NEUTRAL')
-    expect(TREND_SENTIMENT_MAP.down).toBe('BEARISH')
-  })
+  // Task-018: teste de TREND_SENTIMENT_MAP removido — o mapa derivava sentimento
+  // da variacao de preco, substituido pela fonte unica do motor (assets.sentiment_score).
 })
