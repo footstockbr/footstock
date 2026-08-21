@@ -130,6 +130,43 @@ Manter long leverage 2x apenas para o plano LENDA, com os seguintes parâmetros 
 
 ---
 
+## ADR-005: Fallback Determinístico Mono-Time (Decisão T-24)
+
+**Contexto:**
+O `NewsClassifier.withTickerFallback()` (linha 1025 de `src/news/NewsClassifier.ts`) é acionado em todos os caminhos onde o LLM não devolve time válido (5 call sites: linhas 639, 652, 744, 786, 800). O fallback resolve pelo título via `resolveFromIndex` e emite exatamente um time com `confidence: 0` e `origin: 'classifier_fallback'`.
+
+Com a feature multi-time (M067, `NEWS_MULTI_TEAM_ENABLED`), surgiu a questão: o fallback deve emitir múltiplos times quando o título contém aliases de mais de um clube, ou deve permanecer mono-time?
+
+**Decisão:**
+Manter o fallback estritamente mono-time. Não estender para múltiplos aliases.
+
+**Justificativa:**
+1. **Precision-first:** o fallback resolve pelo primeiro alias encontrado no título (match mais à esquerda, desempate por alias mais longo). Emitir múltiplos times a partir de aliases soltos no título aumentaria falso-positivo — um título como "Flamengo x Palmeiras: bastidores da final" poderia gerar dois times com confidence zero, mas a notícia pode ser sobre apenas um deles.
+2. **Confidence zero é sinal explícito:** o time emitido já carrega `confidence: 0` e `origin: 'classifier_fallback'`, deixando claro para o gate editorial e para a UI que se trata de classificação degradada, não de veredito do LLM.
+3. **Coerência com M067:** a feature multi-time expande o grupo quando o LLM devolve `teams[]` com múltiplos candidatos válidos (confidence > 0). O fallback é um caminho fundamentalmente diferente (heurística sem LLM) — misturar os dois caminhos diluiria a semântica de `origin`.
+4. **Estado degradado já visível:** o admin (NewsManager.tsx:272-273) exibe o rótulo "Fallback" com tooltip do `fallbackReason` quando `origin === 'classifier_fallback'`. A coluna `fallback_reason` persistida (T-23) permite auditoria em SQL. Não há gap de observabilidade.
+5. **Custo/benefício:** estender o fallback para multi-time exigiria reescrever `resolveFromIndex` para retornar N hits, adicionar lógica de dedup por título, e criar testes de fixtures com dois clubes — todo esse esforço para um caminho que já é sinalizado como degradado e que o operador humano deve revisar.
+
+**Consequências:**
+- (Positivas) Sem complexidade adicional; sem risco de falso-positivo multi-time no fallback; sem mudança no gate editorial; decisão documentada para o cliente.
+- (Negativas) Notícias degradadas com dois clubes no título continuam recebendo apenas um time (o primeiro match). O operador humano deve revisar essas notícias no card admin, onde o rótulo "Fallback" já as identifica.
+
+**Comunicação ao cliente:**
+> "Quando o classificador de IA não consegue identificar o time com segurança (fallback), o sistema atribui o primeiro time encontrado no título da notícia com confiança zero. Esse comportamento é intencional: evita atribuir múltiplos times incorretamente quando a notícia menciona mais de um clube. Todas as notícias classificadas por fallback são identificadas com o rótulo 'Fallback' no painel admin, permitindo revisão manual."
+
+**Divergência de linhas (2026-08-21):** as referências originais do inventário M3 (linhas 946-948, 961, 979-987, 564/577/669/711/725) migraram para (1025, 1040, 1055-1062, 639/652/744/786/800) devido a ~375 linhas de código adicionadas entre a data do inventário e esta decisão. O comportamento é idêntico ao descrito no inventário.
+
+**Referências:**
+- `src/news/NewsClassifier.ts:1025-1063` — `withTickerFallback()`
+- `src/news/types.ts:60,68` — `TeamSignalOrigin`, `ClassifierFallbackReason`
+- `src/news/editorial-gate.ts:155-180` — gate que consome `fallbackReason`
+- `src/news/NewsPublisher.ts:250-291` — persistência de `fallbackReason` e `sentimentDegraded`
+- `footstock-next/src/components/admin/NewsManager.tsx:272-273` — rótulo "Fallback" no admin
+- Task T-24 (item 025 do loop 08-18-foot-stock-motor-noticias-analise)
+- ADR-004 (feature multi-time, `NEWS_MULTI_TEAM_ENABLED`)
+
+---
+
 ## Referências
 
 | Componente | Arquivo | ADR |
@@ -144,3 +181,4 @@ Manter long leverage 2x apenas para o plano LENDA, com os seguintes parâmetros 
 | Order Executor | `src/engine/OrderExecutor.ts` | ADR-004 |
 | Leverage Interest Job | `src/scheduler/jobs/leverageInterest.ts` | ADR-004 |
 | Plan Gating | `src/lib/auth.ts` | ADR-004 |
+| News Fallback Mono-Time | `src/news/NewsClassifier.ts` | ADR-005 |
