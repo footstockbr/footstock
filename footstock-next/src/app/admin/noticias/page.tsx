@@ -74,6 +74,11 @@ interface NewsItem {
   // vende e BEARISH para quem compra). Sempre inclui a propria ancora. Opcional no
   // tipo porque mocks de teste e respostas antigas em cache podem nao trazer.
   teams?: NewsTeamLine[]
+  // T-24b / T-23: origem do sinal e motivo de fallback. Opcionais: mocks antigos
+  // e acervo pre-T-23 nao trazem os campos. Ancoras do GET saem sem `select`,
+  // entao `...anchor` tambem carrega as colunas quando o client Prisma as conhece.
+  origin?: string | null
+  fallbackReason?: string | null
 }
 
 interface NewsTeamLine {
@@ -83,6 +88,8 @@ interface NewsTeamLine {
   sentiment: string
   impact: string
   groupRank: number
+  origin?: string | null
+  fallbackReason?: string | null
 }
 
 type FilterType = 'todas' | 'publicada' | 'rascunho' | 'arquivada'
@@ -117,6 +124,11 @@ const QUARANTINE_QUERY_PARAM = 'includeQuarantine'
 
 /** Cap DB-04 do grupo: 1 time principal + 2 adicionais. */
 const MAX_GROUP_TEAMS = 3
+
+/** T-24b: rotulo do card quando o classificador caiu no fallback deterministico. */
+const CLASSIFIER_FALLBACK_ORIGIN = 'classifier_fallback'
+const CLASSIFIER_FALLBACK_HINT =
+  'Classificacao degradada: o classificador caiu no fallback deterministico.'
 
 interface CreateTeamRow {
   ticker: string
@@ -172,8 +184,22 @@ const resolveTeamLines = (item: NewsItem): NewsTeamLine[] => {
       sentiment: item.sentiment,
       impact: item.impact,
       groupRank: 0,
+      origin: item.origin,
+      fallbackReason: item.fallbackReason,
     },
   ]
+}
+
+function resolveFallbackBadge(item: NewsItem, teamLines: NewsTeamLine[]): {
+  reason: string
+} | null {
+  const degraded =
+    teamLines.find((line) => line.origin === CLASSIFIER_FALLBACK_ORIGIN) ??
+    (item.origin === CLASSIFIER_FALLBACK_ORIGIN ? item : null)
+  if (!degraded) return null
+  const raw = degraded.fallbackReason
+  const reason = typeof raw === 'string' && raw.trim().length > 0 ? raw : CLASSIFIER_FALLBACK_HINT
+  return { reason }
 }
 
 const formatDateTime = (dateStr: string): string => {
@@ -835,6 +861,7 @@ export default function NoticiasPage() {
       <div data-testid="admin-noticias-list">
         {filteredNews.map((item) => {
           const teamLines = resolveTeamLines(item)
+          const fallbackBadge = resolveFallbackBadge(item, teamLines)
           const statusLabel = item.isArchived ? 'ARQUIVADA' : item.isPublished ? 'PUBLICADA' : 'RASCUNHO'
           const statusColor = item.isArchived ? '#929aa5' : item.isPublished ? '#2EBD85' : '#F0B90B'
           const isExternal = isExternalSource(item)
@@ -883,6 +910,16 @@ export default function NoticiasPage() {
                         title={editorialBlock.hint}
                       >
                         {editorialBlock.label}
+                      </span>
+                    )}
+                    {fallbackBadge && (
+                      <span
+                        className="badge"
+                        data-testid={`admin-noticias-fallback-badge-${item.id}`}
+                        style={{ color: '#F0B90B' }}
+                        title={fallbackBadge.reason}
+                      >
+                        Fallback
                       </span>
                     )}
                     {isExternal && (

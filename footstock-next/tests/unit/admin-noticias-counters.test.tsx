@@ -15,6 +15,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 
 jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ replace: jest.fn(), push: jest.fn() }),
 }))
 
 import AdminNoticiasPage from '@/app/admin/noticias/page'
