@@ -47,6 +47,7 @@ export const MOTOR_LAYERS_DEFAULTS: Omit<MotorLayersConfig, 'updatedAt' | 'updat
     pressureQueue:        true,
     velocityCap:          true,
     sessionManagement:    true,
+    sentimentCalc:        true,
   },
 }
 

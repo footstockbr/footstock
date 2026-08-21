@@ -105,6 +105,7 @@ const layersSchema = z.object({
       pressureQueue:        z.boolean().default(true),
       velocityCap:          z.boolean().default(true),
       sessionManagement:    z.boolean().default(true),
+      sentimentCalc:        z.boolean().default(true),
     })
     .default({
       ou: true,
@@ -116,6 +117,7 @@ const layersSchema = z.object({
       pressureQueue: true,
       velocityCap: true,
       sessionManagement: true,
+      sentimentCalc: true,
     }),
 })
 
