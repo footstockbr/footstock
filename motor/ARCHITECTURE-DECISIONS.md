@@ -144,12 +144,12 @@ Manter o fallback estritamente mono-time. Não estender para múltiplos aliases.
 1. **Precision-first:** o fallback resolve pelo primeiro alias encontrado no título (match mais à esquerda, desempate por alias mais longo). Emitir múltiplos times a partir de aliases soltos no título aumentaria falso-positivo — um título como "Flamengo x Palmeiras: bastidores da final" poderia gerar dois times com confidence zero, mas a notícia pode ser sobre apenas um deles.
 2. **Confidence zero é sinal explícito:** o time emitido já carrega `confidence: 0` e `origin: 'classifier_fallback'`, deixando claro para o gate editorial e para a UI que se trata de classificação degradada, não de veredito do LLM.
 3. **Coerência com M067:** a feature multi-time expande o grupo quando o LLM devolve `teams[]` com múltiplos candidatos válidos (confidence > 0). O fallback é um caminho fundamentalmente diferente (heurística sem LLM) — misturar os dois caminhos diluiria a semântica de `origin`.
-4. **Estado degradado já visível:** o admin (NewsManager.tsx:272-273) exibe o rótulo "Fallback" com tooltip do `fallbackReason` quando `origin === 'classifier_fallback'`. A coluna `fallback_reason` persistida (T-23) permite auditoria em SQL. Não há gap de observabilidade.
+4. **Estado degradado visível no card alcancavel:** o admin em `footstock-next/src/app/admin/noticias/page.tsx` (badge `admin-noticias-fallback-badge-*`, T-24b) exibe o rótulo "Fallback" com `title` do `fallbackReason` quando `origin === 'classifier_fallback'`. A coluna `fallback_reason` persistida (T-23) permite auditoria em SQL. A evidencia antiga `NewsManager.tsx:272-273` era morta: o arquivo era orfao; no pai de `e4f12d1` essas linhas eram `NewsStatusToggle`; T-26 removeu o arquivo.
 5. **Custo/benefício:** estender o fallback para multi-time exigiria reescrever `resolveFromIndex` para retornar N hits, adicionar lógica de dedup por título, e criar testes de fixtures com dois clubes — todo esse esforço para um caminho que já é sinalizado como degradado e que o operador humano deve revisar.
 
 **Consequências:**
 - (Positivas) Sem complexidade adicional; sem risco de falso-positivo multi-time no fallback; sem mudança no gate editorial; decisão documentada para o cliente.
-- (Negativas) Notícias degradadas com dois clubes no título continuam recebendo apenas um time (o primeiro match). O operador humano deve revisar essas notícias no card admin, onde o rótulo "Fallback" já as identifica.
+- (Negativas) Notícias degradadas com dois clubes no título continuam recebendo apenas um time (o primeiro match). O operador humano deve revisar essas notícias no card admin de `/admin/noticias`, onde o rótulo "Fallback" as identifica.
 
 **Comunicação ao cliente:**
 > "Quando o classificador de IA não consegue identificar o time com segurança (fallback), o sistema atribui o primeiro time encontrado no título da notícia com confiança zero. Esse comportamento é intencional: evita atribuir múltiplos times incorretamente quando a notícia menciona mais de um clube. Todas as notícias classificadas por fallback são identificadas com o rótulo 'Fallback' no painel admin, permitindo revisão manual."
@@ -161,7 +161,7 @@ Manter o fallback estritamente mono-time. Não estender para múltiplos aliases.
 - `src/news/types.ts:60,68` — `TeamSignalOrigin`, `ClassifierFallbackReason`
 - `src/news/editorial-gate.ts:155-180` — gate que consome `fallbackReason`
 - `src/news/NewsPublisher.ts:250-291` — persistência de `fallbackReason` e `sentimentDegraded`
-- `footstock-next/src/components/admin/NewsManager.tsx:272-273` — rótulo "Fallback" no admin
+- `footstock-next/src/app/admin/noticias/page.tsx` — rótulo "Fallback" no card (`admin-noticias-fallback-badge-*`, T-24b)
 - Task T-24 (item 025 do loop 08-18-foot-stock-motor-noticias-analise)
 - ADR-004 (feature multi-time, `NEWS_MULTI_TEAM_ENABLED`)
 
