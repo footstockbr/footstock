@@ -153,15 +153,9 @@ export interface AdminNewsItem {
   status: string
   publishedAt: string
   injectedAt: string
-}
-
-/** Subconjunto de AdminNewsItem usado pelo formulário de edição */
-export interface AdminNewsFormItem {
-  id: string
-  title: string
-  ticker: string
-  sentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL'
-  category: string
+  // T-23: origem do sinal e motivo de fallback (informacao secundaria no admin).
+  origin?: string | null
+  fallbackReason?: string | null
 }
 
 /** UserItem como retornado pela API admin (campos essenciais para listagem) */
@@ -216,6 +210,7 @@ export type MotorLayerToggleKey =
   | 'pressureQueue'
   | 'velocityCap'
   | 'sessionManagement'
+  | 'sentimentCalc'
 
 export interface MotorLayersConfig {
   ou: { clusters: Record<ClusterKey, OUClusterParams> }
