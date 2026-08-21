@@ -797,6 +797,16 @@ model News {
   // Instante em que o gate avaliou a linha. NULL = nunca passou pelo gate (passivo
   // anterior a 2026-08-03) — e o predicado que o backfill usa para achar o passivo.
   editorialCheckedAt    DateTime?      @map("editorial_checked_at")
+
+  // ─── T-23 - Origem do sinal e motivo de fallback ──────────────────────
+  // Migration: footstock-next/prisma/migrations/T023_news_origin_fallback_reason/
+  // origin: procedência do sinal de sentimento desta linha (classifier,
+  // low_confidence ou classifier_fallback). Permite medir em SQL quanto do
+  // acervo veio de fallback determinístico.
+  origin                String?        @map("origin")
+  // fallbackReason: motivo pelo qual o classificador caiu no fallback
+  // determinístico. NULL quando a classificação veio do LLM sem fallback.
+  fallbackReason        String?        @map("fallback_reason")
   createdAt             DateTime       @default(now()) @map("created_at")
   updatedAt             DateTime       @updatedAt @map("updated_at")
 

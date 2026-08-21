@@ -31,6 +31,9 @@ interface AdminSiblingRow {
   assetIds: string[]
   sentiment: string
   impact: string
+  // T-23b: passivo pre-migration fica null (Zero Estados Indefinidos).
+  origin: string | null
+  fallbackReason: string | null
 }
 
 /** Grupo unitario pre-backfill (item 008) nao tem group_id: o grupo e o proprio id. */
@@ -316,6 +319,9 @@ export async function GET(request: NextRequest) {
         assetIds: true,
         sentiment: true,
         impact: true,
+        // T-23: expor origem do sinal e motivo de fallback no admin.
+        origin: true,
+        fallbackReason: true,
       },
       orderBy: [{ groupId: 'asc' }, { groupRank: 'asc' }],
     })) as unknown as AdminSiblingRow[]
@@ -343,6 +349,9 @@ export async function GET(request: NextRequest) {
           sentiment: row.sentiment,
           impact: row.impact,
           groupRank: row.groupRank ?? 0,
+          // T-23: origem do sinal e motivo de fallback por time.
+          origin: row.origin ?? null,
+          fallbackReason: row.fallbackReason ?? null,
         })
       ),
     }))
