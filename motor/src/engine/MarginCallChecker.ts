@@ -88,12 +88,18 @@ export class MarginCallChecker {
         })
         if (claim.count !== 1) return null  // ja fechada por fluxo concorrente
 
-        const fresh = await tx.position.findUniqueOrThrow({ where: { id: position.id } })
+        const fresh = await tx.position.findUniqueOrThrow({
+          where: { id: position.id },
+          select: { marginBlocked: true, avgPrice: true, quantity: true, interestAccrued: true },
+        })
         const fMarginBlocked = Number(fresh.marginBlocked)
         const fPnl = (Number(fresh.avgPrice) - currentPrice) * fresh.quantity - Number(fresh.interestAccrued)
         const fReturn = fMarginBlocked + fPnl
 
-        const user = await tx.user.findUniqueOrThrow({ where: { id: position.userId } })
+        const user = await tx.user.findUniqueOrThrow({
+          where: { id: position.userId },
+          select: { fsBalance: true, marginBlocked: true },
+        })
         const balanceBefore = Number(user.fsBalance)
         // Guard: saldo nunca negativo — perda além da margem é registrada como loss absorvida
         const newBalance = Math.max(0, balanceBefore + fReturn)

@@ -1,0 +1,23 @@
+# ============================================================================
+# Watchdog Sentiment — Railway Service
+#
+# Observa frescor do sentimento via GET /api/cron/sentiment-staleness.
+# Imagem enxuta (Alpine + curl), sem porta exposta, restart NEVER
+# (cron loop interno; se o container morrer, Railway reinicia o servico).
+#
+# Painel Railway:
+#   Root Directory     = watchdog-sentiment
+#   WATCHDOG_TARGET_URL = https://www.footstock.com.br
+#   CRON_SECRET         = <mesmo segredo do Next.js>
+# ============================================================================
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "./entrypoint.sh"
+healthcheckPath = ""
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+numReplicas = 1

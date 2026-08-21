@@ -10,6 +10,8 @@ on:
       - '.github/workflows/motor-deploy.yml'
       - 'prisma/schema.prisma'
       - 'scripts/check-news-schema-drift.js'
+      - 'scripts/check-ticker-parity.sh'
+      - 'scripts/ticker-parity-baseline.json'
   workflow_dispatch:
 
 jobs:
@@ -34,6 +36,16 @@ jobs:
       # noticias (NewsPublisher.ts engole PrismaClientValidationError).
       - name: Guard de drift do model News (prisma/ vs footstock-next/prisma/)
         run: node scripts/check-news-schema-drift.js
+
+      # Guard bloqueante T-12 (loop 08-18, secao 10.4): TICKERS_40 (motor) e
+      # CLUBS_PUBLIC (front) sao duas listas manuais dos mesmos 40 clubes, sem
+      # validacao cruzada. Um clube presente em `assets`/CLUBS_PUBLIC mas ausente
+      # de TICKERS_40 e DESCARTADO pelo filtro de aceitacao do classificador
+      # (normalizeCandidates), com apenas um logger.warn. O guard tambem congela a
+      # paridade semantica entre ticker-fallback.ts (motor) e
+      # ticker-resolver-core.ts (front), que sao copias espelhadas.
+      - name: Guard de paridade de tickers (TICKERS_40 vs CLUBS_PUBLIC vs core)
+        run: bash scripts/check-ticker-parity.sh
 
       - name: Instalar dependências motor
         working-directory: motor

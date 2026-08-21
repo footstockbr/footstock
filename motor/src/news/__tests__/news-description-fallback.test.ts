@@ -19,7 +19,6 @@ import RedisMock from 'ioredis-mock'
 import type Redis from 'ioredis'
 import { RSSFetcher } from '../RSSFetcher'
 import { newsQueue, type RawNewsItem } from '../NewsQueue'
-import { FallbackPool } from '../FallbackPool'
 import { NewsPublisher } from '../NewsPublisher'
 import { ImpactCategory } from '../types'
 import type { ClassifiedNews } from '../NewsClassifier'
@@ -86,8 +85,6 @@ describe('RSSFetcher.fetchFeed - fallback de description', () => {
     while (!newsQueue.isEmpty()) newsQueue.dequeue()
     mockParseURL.mockReset()
     mockedLogger.warn.mockClear()
-    jest.spyOn(FallbackPool, 'isActivated').mockResolvedValue(false)
-    jest.spyOn(FallbackPool, 'getRandom').mockReturnValue([])
   })
 
   afterEach(() => {

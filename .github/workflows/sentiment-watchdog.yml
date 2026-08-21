@@ -1,0 +1,55 @@
+name: Sentiment Watchdog (backup diario)
+
+# BACKUP diario do watchdog de frescor do sentimento.
+# PRIMARIO: service Railway `watchdog-sentiment` (Alpine+curl, loop interno 60s).
+# Este workflow e o BACKUP: varredura diaria profunda + workflow_dispatch manual.
+# O schedule do GitHub Actions para crons frequentes provou-se atrasado/nao-confiavel
+# (incidente 2026-07-03: nenhum disparo em 1h+ apos criacao).
+
+on:
+  schedule:
+    - cron: '23 4 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: sentiment-watchdog
+  cancel-in-progress: false
+
+jobs:
+  watchdog:
+    name: Watchdog frescor do sentimento
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Chamar endpoint do watchdog de frescor
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "::error::secret CRON_SECRET ausente no repositorio"
+            exit 1
+          fi
+          response=$(curl -fsS --max-time 120 \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "https://www.footstock.com.br/api/cron/sentiment-staleness")
+          echo "${response}"
+          status=$(echo "${response}" | jq -r '.status // "UNKNOWN"')
+          cold=$(echo "${response}" | jq -r '.coldStart // false')
+          obsoleto=$(echo "${response}" | jq -r '.summary.OBSOLETO // 0')
+          nunca=$(echo "${response}" | jq -r '.summary.NUNCA_ESCRITO // 0')
+
+          # Cold start (partida a frio) nao e erro — estado legitimo.
+          if [ "${cold}" = "true" ]; then
+            echo "::notice::cold start: sentimento ainda nao foi escrito para nenhum ativo"
+            exit 0
+          fi
+
+          # Status DEGRADED com ativos OBSOLETO e alerta acionavel.
+          if [ "${status}" = "DEGRADED" ]; then
+            echo "::error::sentimento obsoleto: ${obsoleto} ativo(s) OBSOLETO, ${nunca} NUNCA_ESCRITO — investigar motor/Redis leader lock"
+            exit 1
+          fi
+
+          echo "Watchdog OK: sentimento fresco"

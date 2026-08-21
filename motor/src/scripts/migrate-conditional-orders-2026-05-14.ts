@@ -57,6 +57,11 @@ async function main(): Promise<void> {
 
     for (const order of candidates) {
       const planType = order.user.planType
+      if (planType == null) {
+        logger.warn(`[${MIGRATION_ID}] skip orderId=${order.id} (planType is null)`)
+        counts.skipped += 1
+        continue
+      }
       counts.byPlan[planType] = (counts.byPlan[planType] ?? 0) + 1
       counts.byType[order.type] = (counts.byType[order.type] ?? 0) + 1
 

@@ -147,9 +147,10 @@ const MAX_TOKENS = resolveMaxTokens()
 
 // Mínimo cacheável do Anthropic para Sonnet. Prefixos abaixo disso fazem o
 // cache_control ser IGNORADO silenciosamente (sem erro, sem cache, custo cheio).
-// Usamos margem (1100) porque a contagem inclui overhead de mensagem.
+// Margem de 26 tokens (1050 - 1024) para absorver overhead de mensagem sem
+// excluir o prefixo estático real (~1000-1050 tok sem mapa, ~1200+ com mapa).
 const CACHE_MIN_PREFIX_TOKENS = 1024
-const CACHE_PROBE_MARGIN_TOKENS = 1100
+const CACHE_PROBE_MARGIN_TOKENS = 1050
 
 type CacheMode = 'off' | '5m' | '1h'
 type PromptFormat = 'legacy' | 'split'
@@ -449,6 +450,17 @@ Regras de decisão (obrigatórias):
 Campos da notícia inteira (não por clube):
 - impactCategory: uma das categorias listadas acima
 - relevance: 0.0 a 1.0 — quão relevante é para o mercado financeiro
+
+Exemplos de classificação (use como referência, não copie):
+
+Notícia: "Urubu da Gávea FC vence o Águia de Belo Horizonte por 2 a 0"
+→ {"teams":[{"ticker":"FLA3","sentiment":0.7,"confidence":0.9},{"ticker":"CAM3","sentiment":-0.7,"confidence":0.9}],"impactCategory":"ESPORTIVA_MAJORITARIA","relevance":0.8}
+
+Notícia: "Jogador do Tubarão da Vila se machuca no treino"
+→ {"teams":[{"ticker":"SAN3","sentiment":-0.4,"confidence":0.7}],"impactCategory":"LESAO","relevance":0.5}
+
+Notícia: "Seleção brasileira anuncia convocação para eliminatórias"
+→ {"teams":[],"impactCategory":"ESPORTIVA_SECUNDARIA","relevance":0.2}
 
 Responda SOMENTE com JSON no formato:
 {"teams":[{"ticker":"URU3","sentiment":0.8,"confidence":0.95},{"ticker":"POR3","sentiment":-0.8,"confidence":0.9}],"impactCategory":"ESPORTIVA_MAJORITARIA","relevance":0.9}

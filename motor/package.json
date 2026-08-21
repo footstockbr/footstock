@@ -12,7 +12,8 @@
     "typecheck:all": "npm run typecheck && npm run typecheck:scripts",
     "ab:local": "ts-node src/harness/runBaseline.ts",
     "test": "jest --config jest.config.ts",
-    "test:coverage": "jest --config jest.config.ts --coverage"
+    "test:coverage": "jest --config jest.config.ts --coverage",
+    "check:ticker-parity": "bash ../scripts/check-ticker-parity.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

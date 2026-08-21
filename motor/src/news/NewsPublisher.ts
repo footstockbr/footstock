@@ -273,7 +273,16 @@ export class NewsPublisher {
       }))
 
       const grouped = withAssets.length > 1
-      const persistCtx = { raw, impact, publishedAt, sentimentClassifiedAt, grouped, editorial }
+      const persistCtx = {
+        raw,
+        impact,
+        publishedAt,
+        sentimentClassifiedAt,
+        grouped,
+        editorial,
+        // T-23: thread fallbackReason ate rowData() para gravar na coluna news.
+        fallbackReason: classified.fallbackReason ?? null,
+      }
 
       // M054: persistir flag de publicação degradada. Quando editorial.degraded
       // é true, a notícia foi publicada sem classificação LLM (heurística
@@ -543,6 +552,8 @@ export class NewsPublisher {
       sentimentClassifiedAt: Date
       grouped: boolean
       editorial: EditorialDecision
+      // T-23: motivo do fallback deterministico (null quando veio do LLM).
+      fallbackReason: string | null
     }
   ): Promise<{ rows: PersistedRow[]; groupId: string }> {
     const ordered = [...rows].sort((a, b) => a.rank - b.rank)
@@ -618,6 +629,8 @@ export class NewsPublisher {
       publishedAt: Date
       sentimentClassifiedAt: Date
       editorial: EditorialDecision
+      // T-23: motivo do fallback deterministico (null quando veio do LLM).
+      fallbackReason: string | null
     },
     extra: Record<string, unknown>
   ): Record<string, unknown> {
@@ -652,6 +665,12 @@ export class NewsPublisher {
       // sem classificação LLM (heurística determinística). A consulta de janela
       // de sentimento (task-007) usa este flag para excluir notícias degradadas.
       sentimentDegraded: ctx.editorial.degraded,
+      // T-23: origem do sinal e motivo de fallback. origin diz de onde veio o
+      // sinal (classifier, low_confidence, classifier_fallback); fallbackReason
+      // diz por que o LLM nao respondeu (null quando veio do LLM normalmente).
+      // Juntos permitem medir em SQL quanto do acervo veio de fallback.
+      origin: row.origin,
+      fallbackReason: ctx.fallbackReason,
       ...extra,
     }
   }

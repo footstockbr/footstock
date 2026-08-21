@@ -66,6 +66,10 @@ export function buildHaltTick(
     bookPressure: state.bookPressure,
     pendingBuyVolume: state.pendingBuyVolume,
     pendingSellVolume: state.pendingSellVolume,
+    // M063-halt — Sentimento congelado do AssetState (sempre sentimentFrozen=true no tick de halt)
+    sentimentScore: state.sentimentFrozenScore ?? state.sentimentScore ?? 0,
+    sentimentLabel: state.sentimentFrozenLabel ?? state.sentimentLabel ?? 'NEUTRAL',
+    sentimentFrozen: true,
   }
 }
 

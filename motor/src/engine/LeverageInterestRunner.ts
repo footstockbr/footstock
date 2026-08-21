@@ -72,7 +72,10 @@ export class LeverageInterestRunner {
     const dailyInterest = leverageAmount * DAILY_INTEREST_RATE
 
     await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const user = await tx.user.findUniqueOrThrow({ where: { id: position.userId } })
+      const user = await tx.user.findUniqueOrThrow({
+        where: { id: position.userId },
+        select: { fsBalance: true },
+      })
       const currentBalance = Number(user.fsBalance)
 
       if (currentBalance >= dailyInterest) {

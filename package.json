@@ -38,6 +38,7 @@
     "db:down": "docker compose -f docker-compose.dev.yml down",
     "db:reset": "docker compose -f docker-compose.dev.yml down -v && docker compose -f docker-compose.dev.yml up -d",
     "staging:validate": "bash scripts/staging-validate.sh",
+    "check:ticker-parity": "bash scripts/check-ticker-parity.sh",
     "preflight:news-schema": "node scripts/check-news-schema-drift.js",
     "test:integration": "jest --config jest.integration.config.ts --runInBand",
     "test:integration:watch": "jest --config jest.integration.config.ts --watch",

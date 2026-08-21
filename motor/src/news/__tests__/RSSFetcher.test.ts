@@ -7,7 +7,6 @@ import RedisMock from 'ioredis-mock'
 import type Redis from 'ioredis'
 import { RSSFetcher } from '../RSSFetcher'
 import { NewsQueue, newsQueue } from '../NewsQueue'
-import { FallbackPool } from '../FallbackPool'
 import { markAsProcessed, urlDedupKey } from '../news-dedup'
 import { logger } from '../../utils/logger'
 
@@ -57,10 +56,6 @@ describe('RSSFetcher', () => {
     // Esvaziar a fila antes de cada teste
     while (!newsQueue.isEmpty()) newsQueue.dequeue()
     mockParseURL.mockReset()
-    jest.spyOn(FallbackPool, 'isActivated').mockResolvedValue(false)
-    jest.spyOn(FallbackPool, 'getRandom').mockReturnValue([
-      { url: 'https://fallback.com/1', title: 'Fallback 1', source: 'ESPN Brasil', publishedAt: new Date().toISOString() },
-    ])
   })
 
   afterEach(() => {
@@ -98,15 +93,6 @@ describe('RSSFetcher', () => {
       expect.stringContaining('SYS_001')
     )
   }, 15_000) // retry delay = 1+2+4s
-
-  test('[ERROR — Fallback ativado quando count=0]', async () => {
-    mockParseURL.mockResolvedValue({ items: [] });
-    (FallbackPool.isActivated as jest.Mock).mockResolvedValue(true)
-
-    await fetcher.fetchAll()
-    expect(FallbackPool.getRandom).toHaveBeenCalled()
-    expect(newsQueue.size()).toBeGreaterThan(0)
-  })
 
   test('[EDGE — Fila cheia] item descartado e não marcado como processado', async () => {
     // Encher a fila

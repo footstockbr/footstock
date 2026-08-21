@@ -1,0 +1,7 @@
+{
+  "loader_block_sha256": "d1674df8959d972aa6a818feff0574ccd5e357374702e16584582b0982a35570",
+  "loader_block_lines": 36,
+  "source": "motor/src/news/NewsClassifier.ts",
+  "anchor": "private async loadTickerAliases(): Promise<void> {",
+  "note": "Baseline do C2 de scripts/check-ticker-parity.sh. Regravar com --update-baseline SOMENTE apos revisar a mudanca no loader."
+}

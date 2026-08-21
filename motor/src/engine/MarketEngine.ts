@@ -7,7 +7,7 @@ import type Redis from 'ioredis'
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { PriceCalculator } from './PriceCalculator'
-import { buildPriceAttributionV2, mergePriceAttributions, parsePriceAttribution } from './PriceAttribution'
+import { attachSentimentSnapshot, buildPriceAttributionV2, mergePriceAttributions, parsePriceAttribution } from './PriceAttribution'
 import { MotorLayerRuntimeConfigService } from './MotorLayerRuntimeConfig'
 import { OrderFlowSnapshotService } from './OrderFlowSnapshotService'
 import { AttributionPreflightService } from './AttributionPreflightService'
@@ -26,6 +26,7 @@ import { OrderMatcher } from './OrderMatcher'
 import { ScheduledOrderRunner } from './ScheduledOrderRunner'
 import { MarginCallChecker } from './MarginCallChecker'
 import { LeverageInterestRunner } from './LeverageInterestRunner'
+import { SentimentWriter } from './SentimentWriter'
 import { CLUB_STATE_BY_TICKER } from '../microstructure/clubStates'
 import type { PreviousTickDelta } from '../types/motor.types'
 import { NUDGE_MIN_PRICE } from './nudge-constants'
@@ -176,6 +177,7 @@ export class MarketEngine {
   private scheduledOrderRunner: ScheduledOrderRunner
   private marginCallChecker: MarginCallChecker
   private leverageInterestRunner: LeverageInterestRunner
+  private sentimentWriter: SentimentWriter
   /** Deltas percentuais do tick anterior — alimenta L10_Correlation. */
   private previousTickDeltas = new Map<string, PreviousTickDelta>()
   /**
@@ -206,6 +208,7 @@ export class MarketEngine {
     this.scheduledOrderRunner = new ScheduledOrderRunner(this.prisma, redis, sessionManager)
     this.marginCallChecker = new MarginCallChecker(this.prisma, redis)
     this.leverageInterestRunner = new LeverageInterestRunner(this.prisma, redis)
+    this.sentimentWriter = new SentimentWriter({ prisma: this.prisma, assetStates: this.assetStates })
   }
 
   async start(): Promise<void> {
@@ -297,6 +300,10 @@ export class MarketEngine {
       state.isPaused = false
       state.haltReason = null
       state.haltResumeAt = null
+      // M063-halt — Limpar campos de congelamento de sentimento na retomada
+      state.sentimentFrozenAtTick = undefined
+      state.sentimentFrozenScore = undefined
+      state.sentimentFrozenLabel = undefined
       // T4.2: NÃO re-ancorar closePrice na retomada. A âncora do dia é preservada
       // da pré-halt. O L9/L10 travam o movimento que excederia a banda, então na
       // retomada currentPrice está logo abaixo de 8% da âncora e o CB não
@@ -446,6 +453,17 @@ export class MarketEngine {
         dailyVolAccum: 0,          // L9_DailyVolTarget: acumulador diário de variação
         dailySigmaMultiplier: 1.0, // L9_DailyVolTarget: multiplicador sigma (1.0 = normal)
         volatilityMultiplier: 1.0, // SessionManager: multiplicador por sessão (setado a cada tick)
+        // M063 — Hidratação de sentimento do DB: rótulo e score sobrevivem a restart.
+        // sentimentLastFlipTick inicia em 0 — o tick exato do flip não é persistido,
+        // mas o rótulo/score restaurados mantêm a histerese até o próximo tick de cálculo.
+        // (bracket notation: campos adicionados ao schema pela migration 002; o type
+        // do Prisma client do motor será sincronizado no próximo install.)
+        sentimentScore: (asset as Record<string, unknown>).sentimentScore != null
+          ? Number((asset as Record<string, unknown>).sentimentScore) : 0,
+        sentimentLabel: asset.sentiment ?? 'NEUTRAL',
+        sentimentReason: ((asset as Record<string, unknown>).sentimentReason as string | null) ?? null,
+        sentimentComponents: ((asset as Record<string, unknown>).sentimentComponents as Record<string, unknown> | null) ?? null,
+        sentimentLastFlipTick: 0,
       }
 
       this.assetStates.set(asset.id, state)
@@ -524,6 +542,8 @@ export class MarketEngine {
     const runtimeConfig = await this.layerRuntimeConfig.getConfig()
     const volatilityMultiplier =
       runtimeConfig.sessionMultipliers[sessionType] ?? sessionManager.getVolatilityMultiplier(sessionType)
+    const layersEnabled = runtimeConfig.clusterParams.A_TOP.layersEnabled
+    if (layersEnabled) this.sentimentWriter.updateLayersEnabled(layersEnabled)
     const ticks: MotorTick[] = []
     const orderFlowSnapshots = await this.orderFlowSnapshotService.capture([...this.assetStates.keys()], tickStartedAt)
 
@@ -560,6 +580,12 @@ export class MarketEngine {
     // Incluir ticks de halt para ativos suspensos (frontend precisa saber do halt em tempo real)
     for (const [, state] of this.assetStates) {
       if (!state.isPaused) continue
+      // M063-halt — Congelar sentimento na primeira iteracao de halt (idempotente)
+      if (state.sentimentFrozenAtTick === undefined) {
+        state.sentimentFrozenAtTick = this.tickCount
+        state.sentimentFrozenScore = state.sentimentScore ?? 0
+        state.sentimentFrozenLabel = state.sentimentLabel ?? 'NEUTRAL'
+      }
       // Usa haltReason e haltResumeAt persistidos no estado (evita hardcode e preserva estimativa)
       ticks.push(buildHaltTick(state, sessionType, state.haltReason ?? 'CIRCUIT_BREAKER', state.haltResumeAt))
     }
@@ -868,6 +894,10 @@ export class MarketEngine {
     if (this.tickCount % 10 === 0) {
       this.updateAssetPrices().catch(console.error)
     }
+
+    // SentimentWriter: cadencia propria (~6 ticks, ~60s). Independente do
+    // updateAssetPrices (colunas disjuntas, sem transacao cruzada).
+    this.sentimentWriter.tick().catch(console.error)
     motorMetrics.observe('motor_tick_duration_ms', Date.now() - tickStartedMs)
   }
 
@@ -921,6 +951,17 @@ export class MarketEngine {
             generatedAt: new Date(tick.timestamp).toISOString(),
           }
         }
+      }
+      // Task-012: enriquece o attribution com snapshot de sentimento antes de
+      // gravar em price_history.attribution. O tick carrega sentimentScore e
+      // sentimentLabel do AssetState (congelados em halt). A funcao decide
+      // internamente se ha folga de bytes para componentes.
+      if (attribution) {
+        attribution = attachSentimentSnapshot(
+          attribution,
+          tick.sentimentScore ?? 0,
+          tick.sentimentLabel ?? 'NEUTRAL',
+        )
       }
       await this.createPriceHistory(tick, attribution)
     } catch (err) {
@@ -1204,6 +1245,10 @@ export class MarketEngine {
       state.isPaused = false
       state.haltReason = null
       state.haltResumeAt = null
+      // M063-halt — Limpar campos de congelamento de sentimento na retomada admin
+      state.sentimentFrozenAtTick = undefined
+      state.sentimentFrozenScore = undefined
+      state.sentimentFrozenLabel = undefined
     }
   }
 
@@ -1276,6 +1321,10 @@ export class MarketEngine {
         state.isPaused = false
         state.haltReason = null
         state.haltResumeAt = null
+        // M063-halt — Limpar campos de congelamento de sentimento na retomada global
+        state.sentimentFrozenAtTick = undefined
+        state.sentimentFrozenScore = undefined
+        state.sentimentFrozenLabel = undefined
         count++
       }
     }
@@ -1316,6 +1365,10 @@ export class MarketEngine {
         variance:         state.variance,
         halted:           result.halted,
         layers:           result.layerResults,
+        // M063-halt — Sentimento na resposta da API (congelado quando ativo pausado)
+        sentimentScore:   state.sentimentFrozenScore ?? state.sentimentScore,
+        sentimentLabel:   state.sentimentFrozenLabel ?? state.sentimentLabel,
+        sentimentFrozen:  state.sentimentFrozenAtTick !== undefined,
       }
     }
 
@@ -1343,6 +1396,10 @@ export class MarketEngine {
         variance:        state?.variance,
         halted:          result.halted,
         layers:          result.layerResults,
+        // M063-halt — Sentimento na resposta da API (congelado quando ativo pausado)
+        sentimentScore:  state ? (state.sentimentFrozenScore ?? state.sentimentScore) : undefined,
+        sentimentLabel:  state ? (state.sentimentFrozenLabel ?? state.sentimentLabel) : undefined,
+        sentimentFrozen: state ? state.sentimentFrozenAtTick !== undefined : false,
       }
     }
     return out

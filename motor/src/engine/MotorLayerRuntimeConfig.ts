@@ -23,6 +23,7 @@ export const CANONICAL_LAYER_TOGGLE_KEYS = [
   'pressureQueue',
   'velocityCap',
   'sessionManagement',
+  'sentimentCalc',
 ] as const
 
 type AdminMotorLayersConfig = {
@@ -133,7 +134,7 @@ function parseConfig(raw: string | null): ParsedConfig {
   }
 }
 
-function normalizeLayerToggles(raw: AdminMotorLayersConfig['layerToggles']): {
+export function normalizeLayerToggles(raw: AdminMotorLayersConfig['layerToggles']): {
   values: Record<(typeof CANONICAL_LAYER_TOGGLE_KEYS)[number], boolean>
   diagnostics: string[]
 } {

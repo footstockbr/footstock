@@ -547,12 +547,18 @@ describe('NewsPublisher', () => {
         // --- divergências do gate editorial (2026-08-03) ---
         editorialBlockReason: null,
         editorialCheckedAt: expect.any(Date),
+        // --- M054: flag de publicação degradada (task-007) ---
+        sentimentDegraded: false,
+        // --- T-23: origem do sinal e motivo de fallback ---
+        origin: 'classifier',
+        fallbackReason: null,
       })
       // `toEqual` acima já rejeita chave extra; explicitado para o leitor.
       expect(Object.keys(written).sort()).toEqual([
         'assetIds', 'content', 'editorialBlockReason', 'editorialCheckedAt',
-        'impact', 'isPublished', 'publishedAt', 'sentiment',
-        'sentimentClassifiedAt', 'source', 'ticker', 'title',
+        'fallbackReason', 'impact', 'isPublished', 'origin', 'publishedAt',
+        'sentiment', 'sentimentClassifiedAt', 'sentimentDegraded', 'source',
+        'ticker', 'title',
       ])
     })
 

@@ -59,6 +59,10 @@ export interface MotorTick {
   bookPressure?: number
   pendingBuyVolume?: number
   pendingSellVolume?: number
+  // M063-halt — Sentimento transportado no tick (congelado quando sentimentFrozen=true)
+  sentimentScore?: number
+  sentimentLabel?: string
+  sentimentFrozen?: boolean          // true quando o sentimento esta congelado por halt
 }
 
 // ─── Session ──────────────────────────────────────────────────────────────
@@ -119,6 +123,16 @@ export interface AssetState {
   // de previousTickDeltas (mesmo retorno tick-a-tick de T3.1), NÃO do retorno vs close
   // diário. Ausente no primeiro tick pós-restart => tratado como 0 por L3.
   lastTickReturn?: number
+  // M063 — Sentimento do ativo (hidratado do DB no boot para histerese sobreviver a restart)
+  sentimentScore?: number                        // Score normalizado (-1.0 a 1.0); 0.0 quando ausente
+  sentimentLabel?: string                        // 'BULLISH' | 'BEARISH' | 'NEUTRAL'
+  sentimentReason?: string | null                // Razão textual do sentimento atual
+  sentimentComponents?: Record<string, unknown> | null  // Componentes do cálculo (camadas que contribuíram)
+  sentimentLastFlipTick?: number                 // Tick em que o rótulo flipou pela última vez; 0 no boot
+  // M063-halt — Congelamento de sentimento por halt (idempotente: setado na 1a iteracao)
+  sentimentFrozenAtTick?: number                 // Tick em que o sentimento foi congelado por halt; undefined quando nao congelado
+  sentimentFrozenScore?: number                  // Score congelado (copia de sentimentScore no momento do halt)
+  sentimentFrozenLabel?: string                  // Rotulo congelado (copia de sentimentLabel no momento do halt)
 }
 
 // ─── Correlação Inter-Ativos ─────────────────────────────────────────────────
@@ -358,6 +372,34 @@ export interface PriceAttributionV2 {
   qualityFlags: QualityFlag[]
   payloadBytes: number
   generatedAt: string
+  sentimentSnapshot?: SentimentSnapshot
+}
+
+// ─── Sentiment Snapshot (price_history.attribution) ─────────────────────
+// Task-012: bloco compacto de sentimento gravado junto ao attribution no
+// price_history. Versionamento proprio para evoluir sem tocar no schema
+// principal do PriceAttributionV2.
+//
+// Orcamento medido (2026-08-18):
+//   V2 tipico            ~1 634 bytes
+//   MAX_PAYLOAD_BYTES       65 536 bytes
+//   Folga (slack)         ~63 902 bytes
+//   score+label           ~52 bytes
+//   score+label+components ~178 bytes (3 componentes)
+//   Decisao: ha folga para o bloco completo; a funcao attachSentimentSnapshot
+//   grava componentes apenas quando cabem na folga restante.
+
+export interface SentimentSnapshotComponent {
+  source: string      // ex: 'L7_PressureQueue', 'activeNews', 'frozen'
+  rawValue: number    // direcao do sentimento (-1.0 a +1.0)
+  weight: number      // peso relativo no score final (0.0 a 1.0)
+}
+
+export interface SentimentSnapshot {
+  sentimentVersion: 1
+  score: number       // score normalizado (-1.0 a 1.0); 0.0 quando ausente
+  label: string       // 'BULLISH' | 'BEARISH' | 'NEUTRAL'
+  components?: SentimentSnapshotComponent[]
 }
 
 export type AnyPriceAttribution = PriceAttribution | PriceAttributionV2

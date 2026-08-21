@@ -42,7 +42,6 @@ enum FinancialType {
   MARGIN_BLOCKED
   SHORT_CLOSE
   LEVERAGE_INTEREST
-  BALANCE_RESET
   FEE
 }
 
@@ -205,7 +204,7 @@ model User {
   phone           String?
   cpfHash         String           @unique @map("cpf_hash")
   birthDate       DateTime?        @map("birth_date") @db.Date
-  planType        PlanType         @default(JOGADOR) @map("plan_type")
+  planType        PlanType?        @map("plan_type")
   status          UserStatus       @default(ACTIVE)
   adminRole       AdminRole?       @map("admin_role")
   investorProfile InvestorProfile? @map("investor_profile")
@@ -267,7 +266,12 @@ model Asset {
   isHalted       Boolean   @default(false) @map("is_halted")
   haltReason     String?   @map("halt_reason")
   haltedUntil    DateTime? @map("halted_until")
-  sentiment      String    @default("NEUTRAL") // BULLISH | BEARISH | NEUTRAL
+  sentiment            String    @default("NEUTRAL") // BULLISH | BEARISH | NEUTRAL
+  sentimentScore       Decimal?  @map("sentiment_score") @db.Decimal(6, 4)
+  sentimentReason      String?   @map("sentiment_reason")
+  sentimentComponents  Json?     @map("sentiment_components") @db.JsonB
+  sentimentUpdatedAt   DateTime? @map("sentiment_updated_at") @db.Timestamptz
+  sentimentLastFlipAt  DateTime? @map("sentiment_last_flip_at") @db.Timestamptz
   financials     Json?    @db.JsonB
   colorPrimary   String   @map("color_primary")
   colorSecondary String   @map("color_secondary")
@@ -365,7 +369,8 @@ model Position {
 model Transaction {
   id             String        @id @default(cuid())
   userId         String        @map("user_id")
-  assetId        String        @map("asset_id")
+  // Nullable para lancamentos sem ativo (BONUS, DIVIDEND, DEPOSIT, WITHDRAWAL)
+  assetId        String?       @map("asset_id")
   orderId        String?       @map("order_id")
   type           OrderType
   financialType  FinancialType @default(TRADE) @map("financial_type")
@@ -380,7 +385,7 @@ model Transaction {
   createdAt      DateTime      @default(now()) @map("created_at")
 
   user  User   @relation(fields: [userId], references: [id])
-  asset Asset  @relation(fields: [assetId], references: [id])
+  asset Asset? @relation(fields: [assetId], references: [id])
   order Order? @relation(fields: [orderId], references: [id])
 
   @@index([userId])
@@ -543,7 +548,12 @@ model News {
   // com as colunas ja existindo no banco.
   editorialBlockReason  String?        @map("editorial_block_reason")
   editorialCheckedAt    DateTime?      @map("editorial_checked_at")
-
+  // ─── M054 - Flag de publicação degradada (sentimento por heurística) ─────
+  // Migration: prisma/migrations/M054_news_sentiment_degraded/
+  // true quando a notícia foi publicada sem classificação LLM (modo degradado).
+  // A consulta de janela de sentimento (task-007) usa este flag para excluir
+  // notícias não classificadas pelo LLM do cálculo do componente A.
+  sentimentDegraded     Boolean        @default(false) @map("sentiment_degraded")
   // ─── T-23 - Origem do sinal e motivo de fallback ──────────────────────
   // Migration: prisma/migrations/T023_news_origin_fallback_reason/
   // origin: procedência do sinal de sentimento desta linha (classifier,
@@ -981,19 +991,20 @@ model PushSubscription {
 
 // T-019: Registro de resets de saldo pelo administrador
 model BalanceResetLog {
-  id              String   @id @default(cuid())
-  userId          String   @map("user_id")
-  adminId         String   @map("admin_id")
-  previousBalance Decimal  @map("previous_balance") @db.Decimal(18, 2)
-  newBalance      Decimal  @map("new_balance") @db.Decimal(18, 2)
-  planType        PlanType @map("plan_type")
-  createdAt       DateTime @default(now()) @map("created_at")
+  id              String    @id @default(cuid())
+  userId          String    @map("user_id")
+  adminId         String    @map("admin_id")
+  previousBalance Decimal   @map("previous_balance") @db.Decimal(18, 2)
+  newBalance      Decimal   @map("new_balance") @db.Decimal(18, 2)
+  planType        PlanType  @map("plan_type")
+  createdAt       DateTime  @default(now()) @map("created_at")
 
   user  User @relation("BalanceResetTarget", fields: [userId], references: [id])
   admin User @relation("BalanceResetAdmin", fields: [adminId], references: [id])
 
   @@index([userId])
   @@index([adminId])
+  @@index([createdAt])
   @@map("balance_reset_logs")
 }
 

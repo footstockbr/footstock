@@ -570,7 +570,7 @@ describe('NewsClassifier', () => {
   })
 
   test('[CACHE — elegível] countTokens >= margem habilita cache_control no bloco estático', async () => {
-    // Acima da margem (1100); mock no factory sobrevive a rebuild do client (hot switch).
+    // Acima da margem (1050); mock no factory sobrevive a rebuild do client (hot switch).
     mockCountTokens.mockResolvedValue({ input_tokens: 1500 })
 
     mockCreate.mockResolvedValue(sonnetsResponse({
@@ -589,7 +589,7 @@ describe('NewsClassifier', () => {
     expect(params.messages[0].content[1].cache_control).toBeUndefined()
   })
 
-  test('[CACHE — abaixo da margem] countTokens < 1100 NÃO habilita cache (gate)', async () => {
+  test('[CACHE — abaixo da margem] countTokens < 1050 NÃO habilita cache (gate)', async () => {
     mockCountTokens.mockResolvedValue({ input_tokens: 800 })
 
     mockCreate.mockResolvedValue(sonnetsResponse({

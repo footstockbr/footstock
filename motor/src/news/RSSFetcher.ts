@@ -1,7 +1,7 @@
 // ============================================================================
 // FootStock Motor — RSSFetcher
 // Fetch periódico de feeds RSS com deduplicação Redis (TTL 48h),
-// retry exponencial (1s→2s→4s) e fallback pool automático.
+// retry exponencial (1s→2s→4s) e enfileiramento com dedup Redis.
 // Rastreabilidade: INT-046, INT-048, INT-128
 // ============================================================================
 
@@ -10,7 +10,6 @@ import type Redis from 'ioredis'
 import type { PrismaClient } from '@prisma/client'
 import { logger } from '../utils/logger'
 import { newsQueue, type RawNewsItem } from './NewsQueue'
-import { FallbackPool } from './FallbackPool'
 import {
   unmarkAsProcessed as unmarkUrlAsProcessed,
   markAsProcessed,
@@ -271,15 +270,6 @@ export class RSSFetcher {
     // Atualizar timestamp do último fetch
     await this.redis.set(NEWS_LAST_FETCH_KEY, Date.now().toString())
 
-    // Ativar fallback se nenhum item novo
-    if (totalCount === 0 && await FallbackPool.isActivated(this.redis)) {
-      const fallbackItems = FallbackPool.getRandom(5)
-      for (const item of fallbackItems) {
-        newsQueue.enqueue(item)
-      }
-      logger.info(`[RSS] Fallback ativado — feeds offline há > 15min. Usando ${fallbackItems.length} itens do pool estático.`)
-    }
-
     const elapsed = Date.now() - startTime
     logger.info(`[RSS] Ciclo concluído: ${totalCount} novos itens enfileirados em ${elapsed}ms`)
 
@@ -294,7 +284,7 @@ export class RSSFetcher {
     this._interval = setInterval(() => {
       this.fetchAll().catch(err => logger.error('[RSS] Erro não capturado no ciclo:', err))
     }, FETCH_INTERVAL_MS)
-    logger.info('[RSS] Fetcher iniciado — ciclo a cada 5min')
+    logger.info('[RSS] Fetcher iniciado — ciclo a cada 10min')
   }
 
   stop(): void {

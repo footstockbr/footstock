@@ -10,6 +10,8 @@ import type {
   PriceAttribution,
   PriceAttributionV2,
   QualityFlag,
+  SentimentSnapshot,
+  SentimentSnapshotComponent,
   SessionType,
   TickInputSnapshot,
 } from '../types/motor.types'
@@ -40,6 +42,12 @@ const EPSILON = 0.00000001
 const MAX_PAYLOAD_BYTES = 64 * 1024
 const MAX_CAUSAL_EVENTS = 20
 const MAX_ORDER_IDS = 10
+// Task-012: folga minima reservada para o bloco sentimentSnapshot (score+label).
+// Medicao 2026-08-18: V2 tipico ~1634 bytes, MAX 65536, folga ~63902 bytes.
+// score+label custa ~52 bytes; com 3 componentes ~178 bytes.
+// O bloco completo (com componentes) so e gravado quando a folga restante
+// comporta; caso contrario, grava-se apenas score+label.
+const SENTIMENT_BLOCK_MIN_SLACK = 256
 
 export const QUALITY_FLAGS: readonly QualityFlag[] = [
   'ATTRIBUTION_COLUMN_MISSING',
@@ -633,6 +641,41 @@ export function parsePriceAttribution(value: unknown): AttributionParseResult {
     evidenceGrade: 'DEGRADED',
     qualityFlags: ['ATTRIBUTION_PARSE_FAILED'],
   }
+}
+
+// Task-012: enriquece o attribution com bloco compacto de sentimento antes
+// da persistencia em price_history.attribution. A decisao entre gravar
+// componentes ou apenas score+label e explicita: componentes entram so
+// quando a folga restante comporta SENTIMENT_BLOCK_MIN_SLACK bytes.
+// Nao altera V1 (legacy); V1 continua legivel sem sentimento.
+export function attachSentimentSnapshot(
+  attribution: AnyPriceAttribution,
+  score: number,
+  label: string,
+  components?: SentimentSnapshotComponent[],
+): AnyPriceAttribution {
+  if (attribution.version !== 2) return attribution
+
+  const baseSize = attribution.payloadBytes || byteSize(attribution)
+  const slack = MAX_PAYLOAD_BYTES - baseSize
+
+  const snapshot: SentimentSnapshot = {
+    sentimentVersion: 1,
+    score,
+    label,
+  }
+
+  // So grava componentes quando ha folga suficiente para o bloco completo.
+  // A medicao de 2026-08-18 mostrou folga de ~63KB com V2 tipico de ~1.6KB,
+  // entao na pratica os componentes sempre cabem; o guard existe para o caso
+  // de payloads ja truncados ou futuros aumentos de tamanho.
+  if (components && components.length > 0 && slack >= SENTIMENT_BLOCK_MIN_SLACK) {
+    snapshot.components = components
+  }
+
+  const enriched: PriceAttributionV2 = { ...attribution, sentimentSnapshot: snapshot }
+  enriched.payloadBytes = byteSize(enriched)
+  return enriched
 }
 
 export function mergePriceAttributions(attributions: AnyPriceAttribution[], generatedAt: Date): AnyPriceAttribution | null {
