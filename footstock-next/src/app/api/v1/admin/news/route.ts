@@ -389,10 +389,14 @@ export async function POST(request: NextRequest) {
   try {
     const { title, content, impact, sentiment, ticker, source, isPublished, additionalTeams } = parsed.data
 
+    // T-19: normalizar ticker para uppercase (simetrico ao PATCH e aos additionalTeams).
+    const normalizedTickerInput = ticker ? ticker.toUpperCase() : ''
+
     // Auto-detect ticker from title+content when not explicitly provided
-    let resolvedTicker = ticker || null
+    let resolvedTicker = normalizedTickerInput || null
     if (!resolvedTicker && (title || content)) {
-      resolvedTicker = await resolveTickerFromText(`${title} ${content}`)
+      const detected = await resolveTickerFromText(`${title} ${content}`)
+      resolvedTicker = detected ? detected.toUpperCase() : null
     }
 
     // ADR Opcao A (blacksmith/adr/adr-news-ticker-assetids-sync.md): resolver Asset.id para manter ticker e assetIds sincronizados
@@ -403,6 +407,21 @@ export async function POST(request: NextRequest) {
         select: { id: true },
       })
       resolvedAssetId = asset?.id ?? null
+    }
+
+    // T-19: ticker fornecido explicitamente que nao corresponde a nenhum Asset -> 422 NEWS-004.
+    // Simetrico ao PATCH ([id]/route.ts). Ticker auto-detectado nao entra neste gate
+    // (best-effort: o usuario nao pediu esse ticker especificamente).
+    if (normalizedTickerInput && resolvedAssetId === null) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'NEWS-004',
+            message: 'Ticker invalido: nenhum ativo corresponde a este ticker.',
+          },
+        },
+        { status: 422 }
+      )
     }
 
     // Caminho de linha unica: create direto, sem transacao e sem group_id/rank —
