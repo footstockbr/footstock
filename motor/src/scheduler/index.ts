@@ -35,6 +35,7 @@ import { sessionTransitionJob } from './jobs/sessionTransition'
 import { reconcilePaymentsJob } from './jobs/reconcilePayments'
 import { classifyNewsSentimentJob } from './jobs/classifyNewsSentiment'
 import { reconcileNullTickersJob } from './jobs/reconcileNullTickers'
+import { reconcileImpactDispatchJob } from './jobs/reconcileImpactDispatch'
 
 interface Job {
   name: string
@@ -86,6 +87,10 @@ export function registerAllJobs(): void {
   registerJob('classify-news-sentiment', '*/15 * * * *', classifyNewsSentimentJob)
   // Safety-net: re-resolve ticker de noticias publicadas ainda "sem time". Diario 02h UTC.
   registerJob('reconcile-null-tickers', '0 2 * * *', reconcileNullTickersJob)
+  // T-22: reconciliador de impacto nao despachado. Varre news com impactDispatchedAt
+  // NULL e reenvia o evento no Redis. Kill switch: IMPACT_RECONCILER_ENABLED=false.
+  // Schedule: a cada 5 minutos.
+  registerJob('reconcile-impact-dispatch', '*/5 * * * *', reconcileImpactDispatchJob)
 }
 
 /**

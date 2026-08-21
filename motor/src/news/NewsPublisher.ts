@@ -275,6 +275,12 @@ export class NewsPublisher {
       const grouped = withAssets.length > 1
       const persistCtx = { raw, impact, publishedAt, sentimentClassifiedAt, grouped, editorial }
 
+      // M054: persistir flag de publicação degradada. Quando editorial.degraded
+      // é true, a notícia foi publicada sem classificação LLM (heurística
+      // determinística). O flag sentimentDegraded permite que a consulta de
+      // janela de sentimento (task-007) exclua essas notícias do cálculo.
+      const sentimentDegraded = editorial.degraded
+
       // Grupo de N linhas: transação única (critério 1). Grupo unitário (flag
       // desligado, ou uma única linha elegível): `create` direto, SEM transação.
       // Uma escrita só já é atômica no Postgres, e abrir `$transaction`
@@ -580,7 +586,7 @@ export class NewsPublisher {
    * truthy e nem o `||` pegaria.
    *
    * O terceiro ramo é defensivo e, pelo pipeline atual, INALCANÇÁVEL: as três
-   * portas de entrada da fila (ingestão RSS, `FallbackPool.getRandom` e o
+   * portas de entrada da fila (ingestão RSS e o
    * requeue pós-rate-limit) só entregam item cujo título já passou pelo filtro
    * de `RSSFetcher.fetchFeed`. Ele existe para não introduzir `throw` novo no
    * caminho de persistência — a coluna é NOT NULL e o publisher não tem hoje
@@ -642,6 +648,10 @@ export class NewsPublisher {
       editorialBlockReason: ctx.editorial.blockReason,
       editorialCheckedAt: ctx.sentimentClassifiedAt,
       sentimentClassifiedAt: ctx.sentimentClassifiedAt,
+      // M054: flag de publicação degradada. true quando a notícia foi publicada
+      // sem classificação LLM (heurística determinística). A consulta de janela
+      // de sentimento (task-007) usa este flag para excluir notícias degradadas.
+      sentimentDegraded: ctx.editorial.degraded,
       ...extra,
     }
   }
@@ -674,9 +684,9 @@ export class NewsPublisher {
         threshold: RELEVANCE_THRESHOLD,
       })
       // `relevance` não é persistido em `news`. Sem este marcador o reconciliador
-      // (item 029) tentaria reenviar para sempre uma notícia que nunca deveria
-      // impactar preço, porque ele drena por `impact_dispatched_at IS NULL` e não
-      // tem como reavaliar o gate (seção 10.6).
+      // (impact-reconciler.ts, T-22) tentaria reenviar para sempre uma notícia que
+      // nunca deveria impactar preço, porque ele drena por `impact_dispatched_at IS NULL`
+      // e não tem como reavaliar o gate (seção 10.6).
       await this.markImpactDispatched(
         ctx.groupId,
         ctx.rows.map((row) => ({ newsId: row.newsId, outcome: 'relevance_gate' as const })),
@@ -719,7 +729,8 @@ export class NewsPublisher {
         // Também terminal. A seção 10.6 foi escrita antes de o gate de confidence
         // existir (item 011), mas o motivo é o mesmo dos outros dois: a linha tem
         // ticker não nulo, entraria na contagem de pendentes do critério 4 e o
-        // reconciliador não tem como reavaliar `origin`, que não é persistido.
+        // reconciliador (impact-reconciler.ts, T-22) não tem como reavaliar `origin`,
+        // que não é persistido.
         settled.push({ newsId: row.newsId, outcome: 'low_confidence' })
         continue
       }
@@ -756,8 +767,8 @@ export class NewsPublisher {
         //
         // Deliberadamente NÃO entra em `settled`: esta é a única linha que sai
         // daqui com `impact_dispatched_at IS NULL`, e é exatamente o que o
-        // critério 29 pede — o reconciliador do item 029 drena por esse predicado
-        // e reenvia. Marcar aqui apagaria o impacto em silêncio.
+        // critério 29 pede — o reconciliador (impact-reconciler.ts, T-22) drena
+        // por esse predicado e reenvia. Marcar aqui apagaria o impacto em silêncio.
       }
     }
 
@@ -776,10 +787,10 @@ export class NewsPublisher {
    * commit (critério 2), então o marcador é necessariamente uma segunda escrita.
    *
    * NÃO propaga erro. Se este UPDATE falhar, as linhas ficam com o marcador nulo
-   * e o reconciliador do item 029 as drena — o pior caso é um reenvio, não uma
-   * perda. Propagar aqui seria pior: o worker desmarcaria a URL do dedup e a
-   * notícia, JÁ commitada e JÁ despachada, seria gravada de novo no ciclo
-   * seguinte.
+   * e o reconciliador (impact-reconciler.ts, T-22) as drena — o pior caso é um
+   * reenvio, não uma perda. Propagar aqui seria pior: o worker desmarcaria a URL
+   * do dedup e a notícia, JÁ commitada e JÁ despachada, seria gravada de novo no
+   * ciclo seguinte.
    */
   private async markImpactDispatched(
     groupId: string,
