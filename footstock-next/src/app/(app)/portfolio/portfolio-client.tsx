@@ -17,7 +17,8 @@ import { GlossaryInfoIcon } from "@/components/ui/glossary-info-icon";
 
 interface PortfolioPosition {
   ticker: string;
-  name: string;
+  // `GET /api/v1/portfolio` serializa `displayName` (route.ts:55); `name` nunca existiu no payload.
+  displayName: string;
   quantity: number;
   avgPrice: number;
   currentPrice: number;
@@ -31,6 +32,7 @@ interface PortfolioData {
   totalValue: number;
   pnl: number;
   pnlToday: number;
+  pnlTodayUnavailableCount: number;
   todayTransactionsCount: number;
   positions: PortfolioPosition[];
 }
@@ -104,9 +106,14 @@ export function PortfolioClient() {
             <StatCard
               label={<>P&L Hoje <GlossaryInfoIcon fieldKey="pnl" size={12} /></>}
               value={isLoading ? "" : `${pnlTodaySign}${formatFS(Math.abs(data?.pnlToday ?? 0))}`}
-              subValue={isLoading ? "" : `${data?.todayTransactionsCount ?? 0} operações`}
+              subValue={isLoading ? "" : [
+                `${data?.todayTransactionsCount ?? 0} operações`,
+                (data?.pnlTodayUnavailableCount ?? 0) > 0
+                  ? `${data!.pnlTodayUnavailableCount} sem snapshot`
+                  : null,
+              ].filter(Boolean).join(" · ")}
               subValueColor={pnlTodayColor}
-              tooltip="Lucro ou prejuízo acumulado nas operações do dia (Profit & Loss)"
+              tooltip="Resultado realizado bruto de taxas das negociações do dia. Taxas são contabilizadas em separado."
               isLoading={isLoading}
             />
             <StatCard
@@ -170,7 +177,7 @@ export function PortfolioClient() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-sm font-mono font-bold text-[#EAECEF]">{pos.ticker}</span>
-                          <span className="text-xs text-[#929AA5] truncate">{pos.name}</span>
+                          <span className="text-xs text-[#929AA5] truncate">{pos.displayName}</span>
                         </div>
                         <div className="flex items-center gap-3 text-xs text-[#929AA5]">
                           <span>{pos.quantity} cotas</span>

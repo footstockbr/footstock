@@ -15,8 +15,6 @@ services:
       POSTGRES_DB: foot_stock_test
     ports:
       - '5433:5432'
-    volumes:
-      - postgres_test_data:/var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U postgres']
       interval: 5s
@@ -26,6 +24,3 @@ services:
     # Sem volume persistente para testes — dados efêmeros
     tmpfs:
       - /var/lib/postgresql/data
-
-volumes:
-  postgres_test_data:

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { AlertCircle, Clock, WalletMinimal } from 'lucide-react'
@@ -18,8 +18,14 @@ import { usePlanGuard, type PlanTier } from '@/hooks/usePlanGuard'
 import { useBalance } from '@/hooks/useBalance'
 import { useAnalytics } from '@/hooks/useAnalytics'
 import { calculateFee } from '@/lib/constants/limits'
+import { validateOcoPriceRelation, OCO_VIOLATION_MESSAGES } from '@/lib/validators/order'
+import {
+  LEVERAGE_DAILY_INTEREST_PERCENT_LABEL,
+  LEVERAGE_REQUIRED_PLAN,
+} from '@/lib/constants/leverage'
 import { MarketSession } from '@/lib/constants/market'
 import type { OrderType } from '@/lib/analytics'
+import type { SellPreviewDto } from '@/lib/contracts/sell-preview-contract'
 
 // ── Constants mirrored from lib/services/plan-order-limits.ts ────────────────
 const ALLOWED_ORDER_TYPES: Record<PlanTier, string[]> = {
@@ -57,6 +63,79 @@ const ORDER_ERROR_MESSAGES: Record<string, string> = {
   STAFF_CANNOT_TRADE: 'Contas administrativas/institucionais não podem operar ordens.',
 }
 
+// Rotulos de status de ordem para o feedback de sucesso do envio (UX-005).
+// OrderHistory.tsx mantem o proprio mapa para a listagem; a consolidacao dos dois
+// acontece no contrato de historico de ordens.
+const ORDER_STATUS_LABELS: Record<string, string> = {
+  OPEN: 'Aberta',
+  PARTIAL: 'Parcial',
+  FILLED: 'Executada',
+  EXECUTED: 'Executada',
+  CANCELLED: 'Cancelada',
+  EXPIRED: 'Expirada',
+  SCHEDULED: 'Agendada',
+}
+
+// ── Preview de venda (inventario + preco) ────────────────────────────────────
+// Recuperabilidade por codigo de erro (UX-006): oferecer "tentar novamente" em
+// erro que retry nao resolve (403/404/422) so frustra o usuario. Cada codigo
+// declara a acao que de fato o desbloqueia.
+type SellPreviewRecovery = 'retry' | 'reauth' | 'none'
+
+const SELL_PREVIEW_ERRORS: Record<string, { message: string; recovery: SellPreviewRecovery }> = {
+  'AUTH-001': {
+    message: 'Sessão expirada. Faça login novamente para carregar sua posição.',
+    recovery: 'reauth',
+  },
+  STAFF_CANNOT_TRADE: {
+    message: 'Contas administrativas/institucionais não podem operar ordens.',
+    recovery: 'none',
+  },
+  ASSET_080: {
+    message: 'Ativo não encontrado. Volte ao mercado e escolha outro ativo.',
+    recovery: 'none',
+  },
+  ASSET_051: {
+    message: 'Ativo inválido. Volte ao mercado e escolha outro ativo.',
+    recovery: 'none',
+  },
+  PRICE_BUFFERING: {
+    message: 'A cotação do seu plano ainda não está disponível. O sistema está aquecendo o buffer de preços.',
+    recovery: 'retry',
+  },
+  'SYS-001': {
+    message: 'Não foi possível carregar sua posição agora.',
+    recovery: 'retry',
+  },
+}
+
+const SELL_PREVIEW_FALLBACK_ERROR: { message: string; recovery: SellPreviewRecovery } = {
+  message: 'Não foi possível carregar sua posição agora. Verifique a conexão e tente novamente.',
+  recovery: 'retry',
+}
+
+// Horario de referencia da cotacao. O fuso canonico do Foot Stock e BRT; o
+// timestamp chega em UTC e e convertido na exibicao.
+function formatPriceTime(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  return date.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Sao_Paulo',
+  })
+}
+
+function formatSignedFs(value: number): string {
+  const sign = value >= 0 ? '+' : '-'
+  return `${sign}FS$ ${Math.abs(value).toFixed(2)}`
+}
+
+type SellPreviewState =
+  | { status: 'loading' }
+  | { status: 'error'; code: string; message: string; recovery: SellPreviewRecovery }
+  | { status: 'success'; data: SellPreviewDto }
+
 type OrderApiErrorBody = {
   error?: {
     code?: string
@@ -66,9 +145,14 @@ type OrderApiErrorBody = {
   message?: string
 }
 
+function getOrderApiErrorCode(body: OrderApiErrorBody): string | undefined {
+  const nestedError = typeof body.error === 'object' ? body.error : null
+  return nestedError?.code ?? body.code ?? (typeof body.error === 'string' ? body.error : undefined)
+}
+
 function getOrderApiErrorMessage(body: OrderApiErrorBody, status: number): string {
   const nestedError = typeof body.error === 'object' ? body.error : null
-  const code = nestedError?.code ?? body.code ?? (typeof body.error === 'string' ? body.error : undefined)
+  const code = getOrderApiErrorCode(body)
   const serverMessage = nestedError?.message ?? body.message
 
   if (code && ORDER_ERROR_MESSAGES[code]) return ORDER_ERROR_MESSAGES[code]
@@ -86,10 +170,17 @@ interface OrderFormProps {
   dailyOrdersUsed?: number
   /** Saldo FS$ atual do usuário. Se omitido, o componente busca via /api/v1/me (T-019) */
   fsBalance?: number
+  /**
+   * Oculta o titulo interno quando o container ja nomeia o dialogo (UX-004: o
+   * `Modal` com `title` renderiza `#modal-title` e o botao de fechar; repetir o
+   * mesmo texto aqui duplicaria o cabecalho na tela).
+   */
+  showHeading?: boolean
 }
 
-export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 0, fsBalance: fsBalanceProp }: OrderFormProps) {
+export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 0, fsBalance: fsBalanceProp, showHeading = true }: OrderFormProps) {
   const queryClient = useQueryClient()
+  const isSell = side === 'SELL'
   const { plan, hasAccess } = usePlanGuard()
   const { isOffline } = useMotorStatusContext()
   const { session } = useMarketSession()
@@ -99,9 +190,14 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
   // Usar prop se fornecida (evita fetch extra); caso contrário usar hook
   const fsBalance = fsBalanceProp !== undefined ? fsBalanceProp : (fsBalanceFetched ?? null)
 
-  const allowedTypes = ALLOWED_ORDER_TYPES[plan]
+  // OCO e venda protetiva de posicao LONG: o validador (`src/lib/validators/order.ts`)
+  // rejeita OCO BUY, entao o tipo nem chega a ser oferecido no lado da compra.
+  const allowedTypes = useMemo(
+    () => ALLOWED_ORDER_TYPES[plan].filter((t) => !(t === 'OCO' && side === 'BUY')),
+    [plan, side],
+  )
   const dailyLimit = DAILY_ORDER_LIMITS[plan]
-  const isLenda = hasAccess('LENDA')
+  const isLenda = hasAccess(LEVERAGE_REQUIRED_PLAN)
 
   const [orderType, setOrderType] = useState(allowedTypes[0])
   const [quantity, setQuantity] = useState('1')
@@ -113,6 +209,9 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const submitInFlightRef = useRef(false)
+  // Inventario e preco do lado SELL vem exclusivamente do preview (criterio 1 da
+  // fonte): o modal precisa mostrar posicao, reservas e P/L antes do envio.
+  const [sellPreview, setSellPreview] = useState<SellPreviewState>({ status: 'loading' })
 
   // Contador de ordens restantes — inicializado pelo prop; auto-buscado se prop for 0 (valor default)
   const initialRemaining = dailyLimit === Infinity ? Infinity : Math.max(0, dailyLimit - dailyOrdersUsed)
@@ -142,7 +241,46 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const currentPrice = tick?.lastPrice ?? 0
+  const loadSellPreview = useCallback(async () => {
+    setSellPreview({ status: 'loading' })
+    try {
+      const res = await fetch(`/api/v1/positions/${encodeURIComponent(ticker)}/sell-preview`)
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        const code = getOrderApiErrorCode(body as OrderApiErrorBody) ?? 'SYS-001'
+        const mapped = SELL_PREVIEW_ERRORS[code] ?? SELL_PREVIEW_FALLBACK_ERROR
+        setSellPreview({ status: 'error', code, message: mapped.message, recovery: mapped.recovery })
+        return
+      }
+      setSellPreview({ status: 'success', data: (body as { data: SellPreviewDto }).data })
+    } catch {
+      setSellPreview({
+        status: 'error',
+        code: 'NETWORK',
+        message: SELL_PREVIEW_FALLBACK_ERROR.message,
+        recovery: SELL_PREVIEW_FALLBACK_ERROR.recovery,
+      })
+    }
+  }, [ticker])
+
+  useEffect(() => {
+    if (!isSell) return
+    void loadSellPreview()
+  }, [isSell, loadSellPreview])
+
+  const preview = sellPreview.status === 'success' ? sellPreview.data : null
+
+  // UX-001: no lado SELL nenhum valor monetario deriva do tick. O tick e um canal
+  // de tempo real sem o atraso por plano; misturar as duas fontes faz o modal
+  // mostrar um preco e a execucao usar outro.
+  const tickPrice = tick?.lastPrice ?? 0
+  const currentPrice = isSell ? (preview?.currentPrice ?? 0) : tickPrice
+  const availableQty = preview?.availableQty ?? 0
+  const quantityExceedsAvailable =
+    isSell && preview !== null && Number(quantity) > preview.availableQty
+  // Sem preview carregado o modal nao sabe quanto pode ser vendido; enviar assim
+  // so produziria ORDER_050 do backend (Zero Assumido).
+  const sellPreviewBlocking = isSell && (sellPreview.status !== 'success' || availableQty === 0)
   // MARKET orders aceitos em TRADING e CLOSING_CALL (call de fechamento também é pregão aberto)
   const isMarketClosed = session !== MarketSession.TRADING && session !== MarketSession.CLOSING_CALL
   const isMarketDisabled = orderType === 'MARKET' && isMarketClosed
@@ -162,12 +300,33 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
     return { operationValue, fee, total: ownCapital + fee, leverageEnabled }
   }, [quantity, price, orderType, currentPrice, leverageEnabled, side])
 
+  // P/L estimado da venda: resultado bruto pelo preco medio menos a taxa estimada.
+  // O extrato registra o resultado realizado BRUTO de taxas, entao os dois numeros
+  // diferem exatamente pela taxa; o bloco explicita isso em tela (Zero Assumido).
+  const estimatedPnl = useMemo(() => {
+    if (!isSell || !preview || preview.avgPrice === null || !estimatedCost) return null
+    const qty = Number(quantity)
+    if (!qty || qty <= 0) return null
+    const referencePrice = orderType === 'MARKET' ? currentPrice : Number(price)
+    if (!referencePrice || referencePrice <= 0) return null
+    const gross = (referencePrice - preview.avgPrice) * qty
+    const fee = estimatedCost.fee
+    return { referencePrice, gross, fee, net: gross - fee }
+  }, [isSell, preview, estimatedCost, quantity, orderType, currentPrice, price])
+
   function validate(): boolean {
     const errs: Record<string, string> = {}
     const qty = Number(quantity)
 
     if (!qty || qty < 1 || !Number.isInteger(qty)) {
       errs.quantity = 'Quantidade deve ser um número inteiro de no mínimo 1 cota.'
+    } else if (isSell && preview && qty > preview.availableQty) {
+      errs.quantity = `Você tem ${preview.availableQty} cota(s) disponível(is) para venda.`
+    }
+
+    // Guarda de submit programatico: sem preview carregado o POST nao sai daqui.
+    if (isSell && sellPreview.status !== 'success') {
+      errs.quantity = 'Aguarde o carregamento da sua posição antes de enviar a ordem.'
     }
 
     if (orderType === 'LIMIT') {
@@ -177,19 +336,24 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
     }
 
     if (orderType === 'OCO') {
-      if (!Number(price) || Number(price) <= 0) errs.price = 'Preço obrigatório.'
-      if (!Number(stopLossPrice) || Number(stopLossPrice) <= 0) errs.stopLossPrice = 'Stop Loss obrigatório.'
-      if (!Number(takeProfitPrice) || Number(takeProfitPrice) <= 0) errs.takeProfitPrice = 'Take Profit obrigatório.'
+      // Fonte unica da relacao de precos, compartilhada com o validador Zod do backend.
+      const oco = validateOcoPriceRelation({
+        side,
+        price: Number(price),
+        stopLossPrice: Number(stopLossPrice),
+        takeProfitPrice: Number(takeProfitPrice),
+      })
 
-      if (Number(price) > 0 && Number(stopLossPrice) > 0 && Number(takeProfitPrice) > 0) {
-        if (side === 'BUY') {
-          if (!(Number(stopLossPrice) < Number(price) && Number(price) < Number(takeProfitPrice))) {
-            errs.stopLossPrice = 'BUY OCO: Stop Loss < Preço < Take Profit.'
-          }
+      if (!oco.valid) {
+        if (oco.code === 'SIDE_NOT_SELL') {
+          errs.side = OCO_VIOLATION_MESSAGES.SIDE_NOT_SELL
+        } else if (oco.code === 'MISSING_PRICES') {
+          // Detalha campo a campo para o usuario saber qual preco falta.
+          if (!Number(price) || Number(price) <= 0) errs.price = 'Preço obrigatório.'
+          if (!Number(stopLossPrice) || Number(stopLossPrice) <= 0) errs.stopLossPrice = 'Stop Loss obrigatório.'
+          if (!Number(takeProfitPrice) || Number(takeProfitPrice) <= 0) errs.takeProfitPrice = 'Take Profit obrigatório.'
         } else {
-          if (!(Number(takeProfitPrice) < Number(price) && Number(price) < Number(stopLossPrice))) {
-            errs.stopLossPrice = 'SELL OCO: Take Profit < Preço < Stop Loss.'
-          }
+          errs.stopLossPrice = oco.message ?? OCO_VIOLATION_MESSAGES.INVALID_RELATION
         }
       }
     }
@@ -246,8 +410,20 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
 
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as OrderApiErrorBody
+        // ORDER_050 significa que a posicao mudou entre a abertura do modal e o
+        // envio (execucao de OCO, outra aba). Recarregar o preview antes de
+        // relancar deixa os numeros da tela corretos sem fechar o modal.
+        if (getOrderApiErrorCode(data) === 'ORDER_050' && isSell) {
+          await loadSellPreview()
+        }
         throw new Error(getOrderApiErrorMessage(data, res.status))
       }
+
+      const payload = (await res.json().catch(() => ({}))) as {
+        data?: { order?: { status?: string } }
+      }
+      const orderStatus = payload.data?.order?.status
+      const statusLabel = orderStatus ? (ORDER_STATUS_LABELS[orderStatus] ?? orderStatus) : null
 
       // EVT-012: rastrear ordem enviada com sucesso
       const estValue = estimatedCost?.operationValue ?? 0
@@ -272,10 +448,21 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
       await queryClient.invalidateQueries({ queryKey: ['portfolio'] })
       await queryClient.invalidateQueries({ queryKey: ['portfolio-history'] })
 
+      // UX-005: o usuario precisa saber em que estado a ordem ficou e ter um
+      // caminho para acompanha-la, em vez de so um "enviada!" sem continuacao.
+      const successMessage = side === 'BUY'
+        ? `Ordem de compra de ${ticker} enviada!`
+        : `Ordem de venda de ${ticker} enviada!`
       toast.success(
-        side === 'BUY'
-          ? `Ordem de compra de ${ticker} enviada!`
-          : `Ordem de venda de ${ticker} enviada!`
+        statusLabel ? `${successMessage} Status: ${statusLabel}.` : successMessage,
+        {
+          action: {
+            label: 'Ver ordem',
+            // Navegacao por location e nao por useRouter: o OrderForm e montado
+            // isolado (fora de um app-router context) e o hook lancaria invariant.
+            onClick: () => { window.location.assign('/ordens') },
+          },
+        },
       )
       onSuccess?.()
       onClose?.()
@@ -293,10 +480,12 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
     <form onSubmit={handleSubmit} className="space-y-4" data-testid="order-form" data-tour="order-form">
       {/* Header */}
       <div className="flex flex-col gap-1 min-[380px]:flex-row min-[380px]:items-start min-[380px]:justify-between">
-        <h2 className="text-[#EAECEF] font-semibold text-lg">
-          {isBuy ? 'Comprar' : 'Vender'}{' '}
-          <span className={isBuy ? 'text-[#2EBD85]' : 'text-[#F6465D]'}>{ticker}</span>
-        </h2>
+        {showHeading && (
+          <h2 className="text-[#EAECEF] font-semibold text-lg">
+            {isBuy ? 'Comprar' : 'Vender'}{' '}
+            <span className={isBuy ? 'text-[#2EBD85]' : 'text-[#F6465D]'}>{ticker}</span>
+          </h2>
+        )}
         {currentPrice > 0 && (
           <span className="text-sm text-[#929AA5]">
             Preço atual: <span className="text-[#EAECEF] font-mono">FS$ {currentPrice.toFixed(2)}</span>
@@ -329,6 +518,111 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
         )}
       </div>
 
+      {/* Inventario de venda: posicao, reservas e preco de referencia (criterio 1
+          da fonte). Renderizado apenas no lado SELL. */}
+      {isSell && (
+        <div
+          data-testid="order-sell-inventory"
+          className="space-y-2 rounded-lg border border-border bg-card p-3"
+        >
+          {sellPreview.status === 'loading' && (
+            <div data-testid="order-sell-inventory-loading" role="status" aria-live="polite" className="space-y-2">
+              <span className="sr-only">Carregando sua posição em {ticker}.</span>
+              <div className="h-3 w-2/3 rounded bg-elevated animate-pulse" aria-hidden="true" />
+              <div className="h-3 w-1/2 rounded bg-elevated animate-pulse" aria-hidden="true" />
+              <div className="h-3 w-3/5 rounded bg-elevated animate-pulse" aria-hidden="true" />
+            </div>
+          )}
+
+          {sellPreview.status === 'error' && (
+            <div data-testid="order-sell-inventory-error" role="alert" className="space-y-2">
+              <p className="flex items-start gap-2 text-md text-primary">
+                <AlertCircle className="h-4 w-4 flex-shrink-0 text-error" aria-hidden="true" />
+                <span>{sellPreview.message}</span>
+              </p>
+              {sellPreview.recovery === 'retry' && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  data-testid="order-sell-inventory-retry"
+                  onClick={() => { void loadSellPreview() }}
+                >
+                  Tentar novamente
+                </Button>
+              )}
+              {sellPreview.recovery === 'reauth' && (
+                <a
+                  href="/login"
+                  data-testid="order-sell-inventory-reauth"
+                  className="inline-block min-h-[44px] text-md font-medium text-primary underline"
+                >
+                  Fazer login novamente
+                </a>
+              )}
+            </div>
+          )}
+
+          {preview && (
+            <>
+              <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-md">
+                <dt className="text-primary">Cotas possuídas</dt>
+                <dd data-testid="order-sell-owned-qty" className="text-right font-mono text-primary">{preview.ownedQty}</dd>
+                <dt className="text-primary">Reservadas em ordens abertas</dt>
+                <dd data-testid="order-sell-reserved-qty" className="text-right font-mono text-primary">{preview.reservedQty}</dd>
+                <dt className="text-primary">Disponíveis para venda</dt>
+                <dd data-testid="order-sell-available-qty" className="text-right font-mono text-primary">{preview.availableQty}</dd>
+                <dt className="text-primary">Preço médio de compra</dt>
+                <dd data-testid="order-sell-avg-price" className="text-right font-mono text-primary">
+                  {preview.avgPrice !== null ? `FS$ ${preview.avgPrice.toFixed(2)}` : 'sem posição'}
+                </dd>
+                <dt className="text-primary">Preço corrente</dt>
+                <dd data-testid="order-sell-current-price" className="text-right font-mono text-primary">
+                  FS$ {preview.currentPrice.toFixed(2)}
+                </dd>
+              </dl>
+
+              <p data-testid="order-sell-price-as-of" className="flex items-start gap-1 text-base leading-relaxed text-primary">
+                <Clock className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
+                <span>
+                  Cotação de {formatPriceTime(preview.currentPriceAsOf)}
+                  {preview.isPriceDelayed
+                    ? `. Seu plano tem atraso de ${preview.priceDelayMinutes} min, então o P/L estimado não usa o preço de agora.`
+                    : '. Cotação em tempo real.'}
+                </span>
+              </p>
+
+              {!preview.hasPosition && (
+                <p data-testid="order-sell-inventory-empty" className="text-md text-primary">
+                  Você ainda não tem cotas de {ticker}. Compre cotas antes de vender.
+                </p>
+              )}
+
+              {preview.availableQty === 0 && (
+                <div
+                  role="alert"
+                  data-testid="order-sell-unavailable"
+                  className="flex items-start gap-2 rounded-lg border border-error bg-card p-2 text-md text-primary"
+                >
+                  <AlertCircle className="h-4 w-4 flex-shrink-0 text-error" aria-hidden="true" />
+                  <span>
+                    {preview.hasPosition ? (
+                      <>
+                        Venda indisponível: suas {preview.ownedQty} cota(s) já estão reservadas em ordens de venda abertas.
+                        Cancele uma delas para liberar cotas.{' '}
+                        <a href="/ordens" className="font-medium underline">Ver minhas ordens</a>
+                      </>
+                    ) : (
+                      <>Venda indisponível: você não tem cotas de {ticker} para vender.</>
+                    )}
+                  </span>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {/* T-019: banner saldo zerado — visivel apenas em BUY */}
       {isBalanceZero && (
         <div
@@ -359,6 +653,12 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
           </button>
         ))}
       </div>
+
+      {errors.side && (
+        <p role="alert" data-testid="order-oco-side-error" className="text-sm text-[#F6465D]">
+          {errors.side}
+        </p>
+      )}
 
       {/* Quantity — cota livre com atalhos -100 / -10 / +10 / +100 */}
       <div className="flex flex-col gap-1">
@@ -429,6 +729,25 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
             +100
           </button>
         </div>
+        {isSell && preview && (
+          <div className="flex items-center justify-between gap-2 text-md">
+            <span className="text-primary">Disponível: {preview.availableQty} cota(s)</span>
+            <button
+              type="button"
+              data-testid="order-sell-max"
+              disabled={preview.availableQty === 0}
+              onClick={() => setQuantity(String(preview.availableQty))}
+              className="inline-flex min-h-[44px] items-center rounded-md border border-border bg-card px-3 font-semibold text-primary transition-colors hover:bg-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Máx.
+            </button>
+          </div>
+        )}
+        {quantityExceedsAvailable && (
+          <p role="alert" data-testid="order-sell-exceeds" className="text-md text-primary">
+            Você tem {availableQty} cota(s) disponível(is) para venda.
+          </p>
+        )}
         {errors.quantity && (
           <p id="order-quantity-error" role="alert" className="text-sm text-[#F6465D]">{errors.quantity}</p>
         )}
@@ -514,21 +833,21 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
 
       {/* Estimated cost */}
       {estimatedCost && (
-        <div className="bg-[#1E2329] rounded-lg p-3 space-y-1 text-sm">
-          <div className="flex items-start justify-between gap-3 text-[#929AA5]">
+        <div className="space-y-1 rounded-lg border border-border bg-card p-3 text-md">
+          <div className="flex items-start justify-between gap-3 text-primary">
             <span className="flex min-w-0 items-center gap-1">Valor da operação <InfoTip text="Quantidade x preço unitário (sem taxas)" /></span>
-            <span className="shrink-0 text-right font-mono text-[#EAECEF]">FS$ {estimatedCost.operationValue.toFixed(2)}</span>
+            <span className="shrink-0 text-right font-mono text-primary">FS$ {estimatedCost.operationValue.toFixed(2)}</span>
           </div>
           {estimatedCost.leverageEnabled && (
-            <div className="flex items-start justify-between gap-3 text-[#929AA5]">
+            <div className="flex items-start justify-between gap-3 text-primary">
               <span className="flex min-w-0 items-center gap-1">
                 Crédito da plataforma (2x)
-                <InfoTip text="A plataforma financia 50% do nocional. Sobre este valor incidem juros diários de 0,2%." />
+                <InfoTip text={`A plataforma financia 50% do nocional. Sobre este valor incidem juros diários de ${LEVERAGE_DAILY_INTEREST_PERCENT_LABEL}.`} />
               </span>
-              <span className="shrink-0 text-right font-mono text-[#F0B90B]">FS$ {(estimatedCost.operationValue / 2).toFixed(2)}</span>
+              <span className="shrink-0 text-right font-mono text-primary">FS$ {(estimatedCost.operationValue / 2).toFixed(2)}</span>
             </div>
           )}
-          <div className="flex items-start justify-between gap-3 text-[#929AA5]">
+          <div className="flex items-start justify-between gap-3 text-primary">
             <span className="flex min-w-0 items-center gap-1">
               Taxa estimada
               <InfoTip text={
@@ -537,15 +856,15 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
                   : 'Taxa fixa cobrada pela plataforma sobre o valor da operação'
               } />
             </span>
-            <span className="shrink-0 text-right font-mono text-[#EAECEF]">FS$ {estimatedCost.fee.toFixed(2)}</span>
+            <span className="shrink-0 text-right font-mono text-primary">FS$ {estimatedCost.fee.toFixed(2)}</span>
           </div>
           {side === 'SELL' && (
-            <p className="text-[10px] text-[#707A8A] leading-relaxed">
+            <p className="text-base leading-relaxed text-primary">
               Taxa deduzida dos rendimentos. Você receberá FS$ {(estimatedCost.operationValue - estimatedCost.fee).toFixed(2)}.
             </p>
           )}
           {side === 'BUY' && (
-            <div className="flex items-start justify-between gap-3 border-t border-[#2B3139] pt-1 font-medium text-[#EAECEF]">
+            <div className="flex items-start justify-between gap-3 border-t border-border pt-1 font-medium text-primary">
               <span className="flex min-w-0 items-center gap-1">
                 {estimatedCost.leverageEnabled ? 'Capital próprio necessário' : 'Total estimado'}
                 <InfoTip text={estimatedCost.leverageEnabled
@@ -556,6 +875,45 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
               <span className="shrink-0 text-right font-mono">FS$ {estimatedCost.total.toFixed(2)}</span>
             </div>
           )}
+        </div>
+      )}
+
+      {/* P/L estimado da venda, decomposto para reconciliar com o extrato (UX-002) */}
+      {estimatedPnl && (
+        <div data-testid="order-sell-estimated-pnl" className="space-y-1 rounded-lg border border-border bg-card p-3 text-md">
+          <p className="flex min-w-0 items-center gap-1 font-medium text-primary">
+            P/L estimado
+            <InfoTip text="Estimativa pelo preço médio de compra da sua posição. Não considera a taxa paga na compra." />
+          </p>
+          <div className="flex items-start justify-between gap-3 text-primary">
+            <span className="min-w-0">Resultado bruto</span>
+            <span
+              data-testid="order-sell-pnl-gross"
+              className={`shrink-0 text-right font-mono ${estimatedPnl.gross >= 0 ? 'text-success' : 'text-error'}`}
+            >
+              {formatSignedFs(estimatedPnl.gross)}
+            </span>
+          </div>
+          <div className="flex items-start justify-between gap-3 text-primary">
+            <span className="min-w-0">Taxa estimada da venda</span>
+            <span data-testid="order-sell-pnl-fee" className="shrink-0 text-right font-mono text-primary">
+              FS$ {estimatedPnl.fee.toFixed(2)}
+            </span>
+          </div>
+          <div className="flex items-start justify-between gap-3 border-t border-border pt-1 font-medium text-primary">
+            <span className="min-w-0">Resultado após a taxa</span>
+            <span
+              data-testid="order-sell-pnl-net"
+              className={`shrink-0 text-right font-mono ${estimatedPnl.net >= 0 ? 'text-success' : 'text-error'}`}
+            >
+              {formatSignedFs(estimatedPnl.net)}
+            </span>
+          </div>
+          <p className="text-base leading-relaxed text-primary">
+            Estimativa pelo preço médio de compra, sem a taxa histórica da compra. O resultado realizado
+            que aparece no extrato é bruto de taxas, então ele fica FS$ {estimatedPnl.fee.toFixed(2)} acima
+            do resultado após a taxa mostrado aqui.
+          </p>
         </div>
       )}
 
@@ -592,13 +950,13 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
           type="submit"
           fullWidth
           isLoading={isSubmitting}
-          disabled={isOffline || isMarketDisabled || atDailyLimit || isBalanceZero}
+          disabled={isOffline || isMarketDisabled || atDailyLimit || isBalanceZero || sellPreviewBlocking || quantityExceedsAvailable}
           className={isBuy
             ? 'bg-[#2EBD85] hover:bg-[#33d498] text-[#0B0E11] shadow-none'
             : 'bg-[#F6465D] hover:bg-[#ff5a70] text-white shadow-none'
           }
           data-testid="order-submit"
-          aria-disabled={isBalanceZero}
+          aria-disabled={isBalanceZero || sellPreviewBlocking || quantityExceedsAvailable}
         >
           {isBuy ? 'Confirmar Compra' : 'Confirmar Venda'}
         </Button>

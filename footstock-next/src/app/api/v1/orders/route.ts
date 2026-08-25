@@ -11,6 +11,7 @@ import { checkDailyOrderLimit, type DailyLimitInfo } from '@/lib/middleware/chec
 import { getOrdersRateLimit } from '@/lib/ratelimit'
 import { applyRateLimitHeaders, msToResetSeconds, retryAfterFromReset } from '@/middleware/rateLimit'
 import { AliasService } from '@/services/AliasService'
+import { serializeOrderHistory } from '@/lib/contracts/order-history-contract'
 import type { RateLimitInfo } from '@/middleware/rateLimit'
 import type { PlanType } from '@/lib/enums'
 
@@ -170,7 +171,14 @@ export async function GET(request: NextRequest) {
     }
 
     const result = await orderService.getOrders(userId, filters)
-    return list(result.data, result.pagination)
+
+    // Contrato unico do historico: preco/hora solicitados separados de
+    // preco/hora executados e taxa lida da liquidacao (nunca somada duas vezes).
+    // A relation `asset` continua propagada explicitamente: sem ela a UI
+    // renderiza ticker vazio.
+    const payload = result.data.map((order) => serializeOrderHistory(order))
+
+    return list(payload, result.pagination)
   } catch (err: unknown) {
     if (err instanceof AppError) {
       return error(err.code, err.message, err.statusCode)

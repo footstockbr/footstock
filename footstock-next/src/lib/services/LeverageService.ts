@@ -114,7 +114,7 @@ export class LeverageService {
    *
    * Lógica:
    * - Base de cobrança: leverageAmount (crédito tomado da plataforma)
-   * - Taxa: LEVERAGE_DAILY_INTEREST_RATE (0,2%/dia)
+   * - Taxa: LEVERAGE_DAILY_INTEREST_RATE (fallback quando a posicao nao tem taxa gravada)
    * - Cobrança máxima = saldo disponível (nunca fica negativo)
    * - Após cobrança, verifica limiar de liquidação
    */

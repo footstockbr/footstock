@@ -18,6 +18,7 @@ export const BASE_NAV_ITEMS = [
   { href: ROUTES.COMUNIDADE, label: "Comunidade" },
   { href: ROUTES.ASSESSOR, label: "Assessor IA" },
   { href: ROUTES.GLOSSARIO, label: "Glossário" },
+  { href: ROUTES.RELATORIOS, label: "Relatórios" },
   { href: ROUTES.PLANOS, label: "Planos" },
   { href: ROUTES.PERFIL, label: "Perfil" },
 ];

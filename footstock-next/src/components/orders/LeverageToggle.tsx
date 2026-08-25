@@ -10,7 +10,10 @@
 import { useEffect } from 'react'
 import { AlertTriangle, TrendingUp, Lock } from 'lucide-react'
 import Link from 'next/link'
-import { LEVERAGE_DAILY_INTEREST_RATE } from '@/lib/constants/leverage'
+import {
+  LEVERAGE_DAILY_INTEREST_PERCENT_LABEL,
+  LEVERAGE_DAILY_INTEREST_RATE,
+} from '@/lib/constants/leverage'
 import { useAnalytics } from '@/hooks/useAnalytics'
 
 interface LeverageToggleProps {
@@ -130,7 +133,7 @@ export function LeverageToggle({
           </div>
           <div className="flex justify-between text-xs text-[#929AA5]">
             <span>
-              Juros diários estimados ({(LEVERAGE_DAILY_INTEREST_RATE * 100).toFixed(1)}%/dia):
+              Juros diários estimados ({LEVERAGE_DAILY_INTEREST_PERCENT_LABEL}/dia):
             </span>
             <span className="font-mono text-[#F6465D]">
               -FS$ {dailyInterestEstimate.toFixed(4)}

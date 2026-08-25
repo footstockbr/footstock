@@ -522,6 +522,7 @@ model Position {
 
   user  User  @relation(fields: [userId], references: [id])
   asset Asset @relation(fields: [assetId], references: [id])
+  transactions Transaction[]
 
   @@index([userId])
   @@index([userId, status])
@@ -545,15 +546,21 @@ model Transaction {
   fsAmount      Decimal?      @map("fs_amount") @db.Decimal(18, 2)
   balanceBefore Decimal?      @map("balance_before") @db.Decimal(18, 2)
   balanceAfter  Decimal?      @map("balance_after") @db.Decimal(18, 2)
+  positionId          String?       @map("position_id")
+  avgPriceAtExecution Decimal?      @map("avg_price_at_execution") @db.Decimal(18, 8)
+  costBasisAmount     Decimal?      @map("cost_basis_amount") @db.Decimal(18, 2)
+  realizedPnl         Decimal?      @map("realized_pnl") @db.Decimal(18, 2)
   createdAt     DateTime      @default(now()) @map("created_at")
 
   user  User   @relation(fields: [userId], references: [id])
   asset Asset? @relation(fields: [assetId], references: [id])
   order Order? @relation(fields: [orderId], references: [id])
+  position Position? @relation(fields: [positionId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([assetId])
   @@index([userId, createdAt])
+  @@index([positionId, createdAt])
   @@map("transactions")
 }
 

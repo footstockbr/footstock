@@ -42,6 +42,40 @@ export interface SettleResult {
 }
 
 /**
+ * Snapshot de custo gravado na transacao TRADE (decisao 8 do detalhamento
+ * 2026-08-24, opcao B: custo medio ponderado SEM a taxa de compra).
+ *
+ *  - `avgPriceAtExecution` e o `Position.avgPrice` vigente no instante do
+ *    settlement, antes de a venda alterar a posicao.
+ *  - `costBasisAmount = avgPriceAtExecution * quantidade vendida`.
+ *  - `realizedPnl = (executionPrice - avgPriceAtExecution) * quantidade vendida`,
+ *    BRUTO de taxas: a taxa da venda vive na transacao FEE propria e nunca e
+ *    descontada aqui, sob pena de contar a mesma taxa duas vezes.
+ *
+ * BUY nao produz resultado realizado: grava apenas `positionId` e deixa os tres
+ * campos financeiros nulos. Nulo aqui significa "sem apuracao", nunca zero — a
+ * UI le a ausencia como proveniencia UNAVAILABLE.
+ */
+interface TradeCostSnapshot {
+  positionId: string | null
+  avgPriceAtExecution: number | null
+  costBasisAmount: number | null
+  realizedPnl: number | null
+}
+
+const EMPTY_COST_SNAPSHOT: TradeCostSnapshot = {
+  positionId: null,
+  avgPriceAtExecution: null,
+  costBasisAmount: null,
+  realizedPnl: null,
+}
+
+/** Colunas cost_basis_amount e realized_pnl sao DECIMAL(18,2): arredonda em centavos. */
+function roundCents(value: number): number {
+  return Math.round(value * 100) / 100
+}
+
+/**
  * Liquida uma ordem (fill) dentro de uma transação Prisma.
  * Deve ser chamada DENTRO de um `prisma.$transaction(...)`.
  *
@@ -96,6 +130,7 @@ export async function settleOrderFill(
     const existing = await tx.position.findFirst({
       where: { userId: order.userId, assetId: order.assetId, side: 'LONG', status: 'OPEN' },
     })
+    let positionId: string | null = null
     if (existing) {
       const newQty = existing.quantity + order.quantity
       const newAvg = (existing.quantity * Number(existing.avgPrice) + order.quantity * executionPrice) / newQty
@@ -103,11 +138,12 @@ export async function settleOrderFill(
         where: { id: existing.id },
         data: { quantity: newQty, avgPrice: newAvg, totalInvested: { increment: operationValue } },
       })
+      positionId = existing.id
     } else {
       // Alavancagem 2x (Lenda): parte emprestada = metade do valor operado.
       const leverageAmount = leverageDiv === 2 ? operationValue / 2 : 0
       const dailyInterestRate = leverageDiv === 2 ? LEVERAGE_DAILY_INTEREST_RATE : 0
-      await tx.position.create({
+      const created = await tx.position.create({
         data: {
           userId: order.userId, assetId: order.assetId,
           quantity: order.quantity, avgPrice: executionPrice,
@@ -117,9 +153,13 @@ export async function settleOrderFill(
           openedAt: new Date(),
         },
       })
+      positionId = created?.id ?? null
     }
 
-    await _recordTradeAndFee(tx, order, executionPrice, feeAmount, -totalCost, balanceBefore, newBalance)
+    await _recordTradeAndFee(tx, order, executionPrice, feeAmount, -totalCost, balanceBefore, newBalance, {
+      ...EMPTY_COST_SNAPSHOT,
+      positionId,
+    })
     return { settled: true, newBalance, feeAmount, fsDelta: -totalCost }
   }
 
@@ -133,15 +173,33 @@ export async function settleOrderFill(
   const existing = await tx.position.findFirst({
     where: { userId: order.userId, assetId: order.assetId, side: 'LONG', status: 'OPEN' },
   })
+  let costSnapshot: TradeCostSnapshot = { ...EMPTY_COST_SNAPSHOT }
   if (existing) {
+    // avgPrice VIGENTE (antes desta venda): base do custo e do resultado realizado.
+    const avgPriceAtExecution = Number(existing.avgPrice)
+    const costBasisAmount = roundCents(avgPriceAtExecution * order.quantity)
+    const realizedPnl = roundCents((executionPrice - avgPriceAtExecution) * order.quantity)
+    costSnapshot = { positionId: existing.id, avgPriceAtExecution, costBasisAmount, realizedPnl }
+
     const newQty = existing.quantity - order.quantity
-    await tx.position.update({
-      where: { id: existing.id },
-      data: newQty > 0 ? { quantity: newQty } : { quantity: 0, status: 'CLOSED' },
-    })
+    if (newQty > 0) {
+      // Venda parcial: sai da posicao o CUSTO da parcela vendida, nao o valor
+      // recebido. Piso em zero para que arredondamento nunca deixe custo negativo.
+      const remainingInvested = Math.max(0, roundCents(Number(existing.totalInvested) - costBasisAmount))
+      await tx.position.update({
+        where: { id: existing.id },
+        data: { quantity: newQty, totalInvested: remainingInvested },
+      })
+    } else {
+      // Venda total: nao sobra custo nem quantidade na posicao.
+      await tx.position.update({
+        where: { id: existing.id },
+        data: { quantity: 0, totalInvested: 0, status: 'CLOSED' },
+      })
+    }
   }
 
-  await _recordTradeAndFee(tx, order, executionPrice, feeAmount, proceeds, balanceBefore, newBalance)
+  await _recordTradeAndFee(tx, order, executionPrice, feeAmount, proceeds, balanceBefore, newBalance, costSnapshot)
   return { settled: true, newBalance, feeAmount, fsDelta: proceeds }
 }
 
@@ -158,6 +216,7 @@ async function _recordTradeAndFee(
   fsDelta: number,
   balanceBefore: number,
   balanceAfter: number,
+  costSnapshot: TradeCostSnapshot,
 ): Promise<void> {
   await tx.transaction.create({
     data: {
@@ -167,6 +226,11 @@ async function _recordTradeAndFee(
       totalAmount: Math.abs(fsDelta),
       fsAmount: fsDelta,
       balanceBefore, balanceAfter,
+      // Snapshot de custo: so a linha TRADE carrega. A FEE e memorando.
+      positionId: costSnapshot.positionId,
+      avgPriceAtExecution: costSnapshot.avgPriceAtExecution,
+      costBasisAmount: costSnapshot.costBasisAmount,
+      realizedPnl: costSnapshot.realizedPnl,
     },
   })
 

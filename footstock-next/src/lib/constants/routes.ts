@@ -22,6 +22,7 @@ export const ROUTES = {
   PLANOS: "/planos",
   INBOX: "/inbox",
   DIVIDENDOS: "/dividendos",
+  RELATORIOS: "/relatorios",
 
   // Admin
   ADMIN: "/admin",

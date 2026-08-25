@@ -351,12 +351,21 @@ export function AssetDetailPage({ asset, allAssets = [] }: AssetDetailPageProps)
 
       {/* OrderForm modal (module-14) */}
       {orderFormOpen && (
-        <Modal isOpen onClose={() => setOrderFormOpen(null)}>
+        // UX-004: sem `title` o Modal deixa `aria-labelledby` indefinido e nao
+        // renderiza o cabecalho com o botao de fechar, entao o dialogo de ordem
+        // ficava sem nome acessivel e sem saida visivel.
+        <Modal
+          isOpen
+          onClose={() => setOrderFormOpen(null)}
+          title={`${orderFormOpen.side === 'BUY' ? 'Comprar' : 'Vender'} ${asset.ticker}`}
+          description={asset.displayName}
+        >
           <OrderForm
             ticker={asset.ticker}
             side={orderFormOpen.side}
             onClose={() => setOrderFormOpen(null)}
             fsBalance={fsBalance ?? undefined}
+            showHeading={false}
           />
         </Modal>
       )}

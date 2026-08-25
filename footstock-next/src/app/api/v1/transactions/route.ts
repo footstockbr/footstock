@@ -5,12 +5,9 @@ import { errors, parsePagination, buildPagination } from '@/lib/api'
 import {
   serializeTransaction,
   buildTransactionMeta,
+  buildTransactionFiltersMeta,
+  parseTransactionFilters,
 } from '@/lib/contracts/transaction-contract'
-
-// Transaction.type uses OrderType enum; Transaction.financialType uses FinancialType enum
-// BONUS inclui créditos de upgrade (T-021), dividendos futuros, etc.
-const VALID_TYPES = ['MARKET', 'LIMIT', 'STOP_LOSS', 'TAKE_PROFIT', 'OCO', 'SCHEDULED']
-const VALID_FINANCIAL_TYPES = ['TRADE', 'BONUS', 'DEPOSIT', 'WITHDRAWAL', 'SHORT_INTEREST', 'MARGIN_BLOCKED', 'SHORT_CLOSE', 'LEVERAGE_INTEREST', 'FEE']
 
 // GET /api/v1/transactions
 export async function GET(request: NextRequest) {
@@ -18,25 +15,30 @@ export async function GET(request: NextRequest) {
   if (!auth) return errors.unauthorized()
 
   const { searchParams } = request.nextUrl
-  const type = searchParams.get('type')
-  const financialType = searchParams.get('financialType')
-  const assetId = searchParams.get('assetId')
-  const { page, limit, skip } = parsePagination(searchParams)
+  // Relatorio do jogador pede ate 200 linhas (Task 18). O cap global permanece 100.
+  const { page, limit, skip } = parsePagination(searchParams, 20, 200)
 
-  if (type && !VALID_TYPES.includes(type)) {
-    return errors.validation('Tipo de transação inválido.')
-  }
-
-  if (financialType && !VALID_FINANCIAL_TYPES.includes(financialType)) {
-    return errors.validation('Tipo financeiro inválido.')
-  }
+  // Validacao unica dos filtros (tipo, tipo financeiro, ativo e periodo).
+  // Erro aqui e sempre 422/VAL-001: o pedido chegou bem formado em HTTP, o que
+  // esta errado e o conteudo do filtro.
+  const parsed = parseTransactionFilters(searchParams)
+  if (!parsed.ok) return errors.validation(parsed.message)
+  const filters = parsed.filters
 
   try {
     const where = {
       userId: auth.user.id,
-      ...(type && { type: type as never }),
-      ...(financialType && { financialType: financialType as never }),
-      ...(assetId && { assetId }),
+      ...(filters.type && { type: filters.type as never }),
+      ...(filters.financialType && { financialType: filters.financialType as never }),
+      ...(filters.assetId && { assetId: filters.assetId }),
+      // `from` inclusivo (gte) e `to` exclusivo (lt): o extrato de um dia inteiro
+      // nao depende de acertar o ultimo milissegundo da virada.
+      ...((filters.from || filters.to) && {
+        createdAt: {
+          ...(filters.from && { gte: filters.from }),
+          ...(filters.to && { lt: filters.to }),
+        },
+      }),
     }
 
     const [txns, total] = await Promise.all([
@@ -54,7 +56,10 @@ export async function GET(request: NextRequest) {
     ])
 
     const serialized = txns.map(serializeTransaction)
-    const meta = buildTransactionMeta(serialized)
+    const meta = {
+      ...buildTransactionMeta(serialized),
+      filters: buildTransactionFiltersMeta(filters),
+    }
 
     return NextResponse.json(
       {

@@ -22,6 +22,10 @@ export interface ApiError {
   details?: string | null
   available?: number | null
   requiredPlan?: string | null
+  /** Feature gated when the error is an entitlement denial (Task 17). */
+  feature?: string | null
+  /** Minimum plan that satisfies the gated feature (Task 17). */
+  minPlan?: string | null
   limit?: number | null
   resetAt?: string | null
   ticker?: string | null

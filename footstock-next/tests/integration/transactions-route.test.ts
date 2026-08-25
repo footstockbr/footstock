@@ -26,6 +26,24 @@ function decimal(value: number) {
   return { toNumber: () => value }
 }
 
+// Replica a semantica do filtro do Prisma (`gte` inclusivo, `lt` exclusivo)
+// para provar o criterio de limite sem precisar de banco real.
+function matchesWindow(createdAt: Date, window: { gte?: Date; lt?: Date } | undefined) {
+  if (!window) return true
+  if (window.gte && createdAt.getTime() < window.gte.getTime()) return false
+  if (window.lt && createdAt.getTime() >= window.lt.getTime()) return false
+  return true
+}
+
+async function whereOf(search: string) {
+  mockGetAuthUser.mockResolvedValue({ user: { id: 'user-1' } })
+  mockFindMany.mockResolvedValue([])
+  mockCount.mockResolvedValue(0)
+  const res = await GET(makeRequest(search))
+  expect(res.status).toBe(200)
+  return mockFindMany.mock.calls[0][0].where
+}
+
 describe('GET /api/v1/transactions', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -110,6 +128,13 @@ describe('GET /api/v1/transactions', () => {
       missingAssetCount: 0,
       missingOrderCount: 0,
       cashDeltaDivergenceCount: 0,
+      filters: {
+        type: null,
+        financialType: null,
+        assetId: null,
+        from: null,
+        to: null,
+      },
     })
   })
 
@@ -159,5 +184,162 @@ describe('GET /api/v1/transactions', () => {
     const res = await GET(makeRequest())
     const body = await res.json()
     expect(body.meta.cashDeltaDivergenceCount).toBe(1)
+  })
+
+  test('aplica from inclusivo e to exclusivo sobre createdAt', async () => {
+    const where = await whereOf(
+      'from=2026-08-01T00:00:00.000Z&to=2026-08-31T00:00:00.000Z'
+    )
+
+    expect(where.createdAt.gte).toEqual(new Date('2026-08-01T00:00:00.000Z'))
+    expect(where.createdAt.lt).toEqual(new Date('2026-08-31T00:00:00.000Z'))
+
+    // Limite inicial entra, limite final fica de fora.
+    expect(matchesWindow(new Date('2026-08-01T00:00:00.000Z'), where.createdAt)).toBe(true)
+    expect(matchesWindow(new Date('2026-08-31T00:00:00.000Z'), where.createdAt)).toBe(false)
+    // Um milissegundo antes do fim ainda entra.
+    expect(matchesWindow(new Date('2026-08-30T23:59:59.999Z'), where.createdAt)).toBe(true)
+    // Um milissegundo antes do inicio fica de fora.
+    expect(matchesWindow(new Date('2026-07-31T23:59:59.999Z'), where.createdAt)).toBe(false)
+  })
+
+  test('data nua e lida no fuso do produto (America/Sao_Paulo)', async () => {
+    const where = await whereOf('from=2026-08-01')
+
+    // 2026-08-01 00:00 BRT = 2026-08-01 03:00 UTC.
+    expect(where.createdAt.gte.toISOString()).toBe('2026-08-01T03:00:00.000Z')
+    expect(where.createdAt.lt).toBeUndefined()
+  })
+
+  test('aplica apenas o limite informado', async () => {
+    const somenteTo = await whereOf('to=2026-08-31T00:00:00.000Z')
+    expect(somenteTo.createdAt.gte).toBeUndefined()
+    expect(somenteTo.createdAt.lt).toEqual(new Date('2026-08-31T00:00:00.000Z'))
+
+    jest.clearAllMocks()
+
+    const semPeriodo = await whereOf('')
+    expect(semPeriodo.createdAt).toBeUndefined()
+  })
+
+  test('rejeita data inicial invalida com 422 e VAL-001', async () => {
+    mockGetAuthUser.mockResolvedValue({ user: { id: 'user-1' } })
+
+    const res = await GET(makeRequest('from=31-08-2026'))
+    expect(res.status).toBe(422)
+
+    const body = await res.json()
+    expect(body.error.code).toBe('VAL-001')
+    expect(body.error.message).toBe('Data inicial inválida.')
+    expect(mockFindMany).not.toHaveBeenCalled()
+  })
+
+  test('rejeita data final invalida com 422 e VAL-001', async () => {
+    mockGetAuthUser.mockResolvedValue({ user: { id: 'user-1' } })
+
+    const res = await GET(makeRequest('to=nao-e-data'))
+    expect(res.status).toBe(422)
+
+    const body = await res.json()
+    expect(body.error.code).toBe('VAL-001')
+    expect(body.error.message).toBe('Data final inválida.')
+  })
+
+  test('rejeita intervalo invertido com 422 e VAL-001', async () => {
+    mockGetAuthUser.mockResolvedValue({ user: { id: 'user-1' } })
+
+    const res = await GET(
+      makeRequest('from=2026-08-31T00:00:00.000Z&to=2026-08-01T00:00:00.000Z')
+    )
+    expect(res.status).toBe(422)
+
+    const body = await res.json()
+    expect(body.error.code).toBe('VAL-001')
+    expect(body.error.message).toBe('A data inicial deve ser anterior à data final.')
+    expect(mockFindMany).not.toHaveBeenCalled()
+  })
+
+  test('rejeita intervalo degenerado (from igual a to) com 422', async () => {
+    mockGetAuthUser.mockResolvedValue({ user: { id: 'user-1' } })
+
+    const res = await GET(
+      makeRequest('from=2026-08-01T00:00:00.000Z&to=2026-08-01T00:00:00.000Z')
+    )
+    expect(res.status).toBe(422)
+
+    const body = await res.json()
+    expect(body.error.code).toBe('VAL-001')
+  })
+
+  test('rejeita tipo de operacao invalido', async () => {
+    mockGetAuthUser.mockResolvedValue({ user: { id: 'user-1' } })
+
+    const res = await GET(makeRequest('type=INVALIDO'))
+    expect(res.status).toBe(422)
+
+    const body = await res.json()
+    expect(body.error.code).toBe('VAL-001')
+    expect(body.error.message).toBe('Tipo de transação inválido.')
+  })
+
+  test('combina operacao, tipo financeiro, ativo e periodo simultaneamente', async () => {
+    const where = await whereOf(
+      'type=LIMIT&financialType=TRADE&assetId=asset-9&from=2026-08-01&to=2026-08-15'
+    )
+
+    expect(where.userId).toBe('user-1')
+    expect(where.type).toBe('LIMIT')
+    expect(where.financialType).toBe('TRADE')
+    expect(where.assetId).toBe('asset-9')
+    expect(where.createdAt.gte.toISOString()).toBe('2026-08-01T03:00:00.000Z')
+    expect(where.createdAt.lt.toISOString()).toBe('2026-08-15T03:00:00.000Z')
+
+    // O count paginado usa exatamente o mesmo where do findMany.
+    expect(mockCount.mock.calls[0][0].where).toEqual(where)
+  })
+
+  test('espelha os filtros ativos no meta da resposta', async () => {
+    mockGetAuthUser.mockResolvedValue({ user: { id: 'user-1' } })
+    mockFindMany.mockResolvedValue([])
+    mockCount.mockResolvedValue(0)
+
+    const res = await GET(
+      makeRequest('type=LIMIT&financialType=TRADE&assetId=asset-9&from=2026-08-01&to=2026-08-15')
+    )
+    const body = await res.json()
+
+    expect(body.meta.filters).toEqual({
+      type: 'LIMIT',
+      financialType: 'TRADE',
+      assetId: 'asset-9',
+      from: '2026-08-01T03:00:00.000Z',
+      to: '2026-08-15T03:00:00.000Z',
+    })
+    // Contadores de auditoria seguem no mesmo meta, sem mudanca de assinatura.
+    expect(body.meta.missingAssetCount).toBe(0)
+    expect(body.meta.missingOrderCount).toBe(0)
+    expect(body.meta.cashDeltaDivergenceCount).toBe(0)
+  })
+
+  test('honra limit=200 no take do prisma (teto do relatorio)', async () => {
+    mockGetAuthUser.mockResolvedValue({ user: { id: 'user-1' } })
+    mockFindMany.mockResolvedValue([])
+    mockCount.mockResolvedValue(201)
+
+    const res = await GET(makeRequest('limit=200'))
+    expect(res.status).toBe(200)
+    expect(mockFindMany.mock.calls[0][0].take).toBe(200)
+    const body = await res.json()
+    expect(body.pagination.limit).toBe(200)
+    expect(body.pagination.total).toBe(201)
+  })
+
+  test('cap de paginacao desta rota e 200, nao o teto global de 100', async () => {
+    mockGetAuthUser.mockResolvedValue({ user: { id: 'user-1' } })
+    mockFindMany.mockResolvedValue([])
+    mockCount.mockResolvedValue(0)
+
+    await GET(makeRequest('limit=500'))
+    expect(mockFindMany.mock.calls[0][0].take).toBe(200)
   })
 })

@@ -6,6 +6,48 @@
 
 import type { Transaction } from '@prisma/client'
 
+// ---------------------------------------------------------------------------
+// Proveniencia do resultado realizado
+// ---------------------------------------------------------------------------
+
+/**
+ * Procedencia do valor de `realizedPnl` exibido ao usuario.
+ *
+ * - `PERSISTED`     — snapshot gravado pelo motor na liquidacao (TRADE com
+ *                     `realizedPnl` nao nulo). Numero conferido.
+ * - `RECONSTRUCTED` — valor recalculado por replay historico. **Nenhum caminho
+ *                     de codigo emite este valor nesta entrega.** O tipo o
+ *                     declara para que o replay futuro ja encaixe no contrato
+ *                     sem mudar a UI.
+ * - `UNAVAILABLE`   — sem base para calcular (transacao legada sem snapshot).
+ *                     A UI exibe texto explicativo em pt-BR, nunca zero
+ *                     fabricado.
+ *
+ * O enum tecnico NUNCA chega ao usuario final; a camada de apresentacao
+ * traduz cada valor para texto em portugues.
+ */
+export type PnlProvenance = 'PERSISTED' | 'RECONSTRUCTED' | 'UNAVAILABLE'
+
+/**
+ * Determina a proveniencia do resultado realizado de uma transacao TRADE.
+ * BUY e outras linhas sem `realizedPnl` persistido retornam `UNAVAILABLE`.
+ */
+export function resolvePnlProvenance(realizedPnl: number | null): PnlProvenance {
+  return realizedPnl !== null ? 'PERSISTED' : 'UNAVAILABLE'
+}
+
+/** Traduz a proveniencia tecnica para texto legivel em pt-BR. */
+export function pnlProvenanceLabel(provenance: PnlProvenance): string {
+  switch (provenance) {
+    case 'PERSISTED':
+      return 'Resultado confirmado na liquidação'
+    case 'UNAVAILABLE':
+      return 'Snapshot histórico indisponível — resultado não calculado'
+    default:
+      return 'Resultado reconstruído de histórico'
+  }
+}
+
 export interface TransactionAssetRelation {
   ticker: string
   displayName: string
@@ -71,6 +113,11 @@ export interface TransactionDto {
   // Campos financeiros canonicos
   grossAmount: number | null
   cashDelta: number | null
+  // Snapshot de custo do motor (nullable: transacoes legadas podem nao ter)
+  avgPriceAtExecution: number | null
+  costBasisAmount: number | null
+  realizedPnl: number | null
+  pnlProvenance: PnlProvenance
 }
 
 export interface TransactionMeta {
@@ -128,6 +175,9 @@ export function serializeTransaction(
   const fsAmount = decimalToNumber(tx.fsAmount)
   const balanceBefore = decimalToNumber(tx.balanceBefore)
   const balanceAfter = decimalToNumber(tx.balanceAfter)
+  const avgPriceAtExecution = decimalToNumber(tx.avgPriceAtExecution)
+  const costBasisAmount = decimalToNumber(tx.costBasisAmount)
+  const realizedPnl = decimalToNumber(tx.realizedPnl)
 
   const ticker = tx.asset?.ticker ?? null
   const displayName = tx.asset?.displayName ?? null
@@ -160,6 +210,138 @@ export function serializeTransaction(
     timestampSource,
     grossAmount: computeGrossAmount(tx.quantity ?? null, price),
     cashDelta: computeCashDelta(balanceBefore, balanceAfter, fsAmount),
+    avgPriceAtExecution,
+    costBasisAmount,
+    realizedPnl,
+    pnlProvenance: resolvePnlProvenance(realizedPnl),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Filtros da listagem de transacoes
+// ---------------------------------------------------------------------------
+
+// Transaction.type usa o enum OrderType; Transaction.financialType usa FinancialType.
+// BONUS inclui creditos de upgrade (T-021), dividendos futuros, etc.
+export const VALID_TRANSACTION_TYPES = [
+  'MARKET',
+  'LIMIT',
+  'STOP_LOSS',
+  'TAKE_PROFIT',
+  'OCO',
+  'SCHEDULED',
+] as const
+
+export const VALID_FINANCIAL_TYPES = [
+  'TRADE',
+  'BONUS',
+  'DEPOSIT',
+  'WITHDRAWAL',
+  'SHORT_INTEREST',
+  'MARGIN_BLOCKED',
+  'SHORT_CLOSE',
+  'LEVERAGE_INTEREST',
+  'FEE',
+] as const
+
+export interface TransactionFilters {
+  type: string | null
+  financialType: string | null
+  assetId: string | null
+  /** Limite inicial INCLUSIVO aplicado sobre `Transaction.createdAt` (gte). */
+  from: Date | null
+  /** Limite final EXCLUSIVO aplicado sobre `Transaction.createdAt` (lt). */
+  to: Date | null
+}
+
+/** Projecao serializavel dos filtros ativos, exposta no meta da resposta. */
+export interface TransactionFiltersMeta {
+  type: string | null
+  financialType: string | null
+  assetId: string | null
+  from: string | null
+  to: string | null
+}
+
+export type ParsedTransactionFilters =
+  | { ok: true; filters: TransactionFilters }
+  | { ok: false; message: string }
+
+/**
+ * Converte um parametro de data em `Date`.
+ * Data nua (`YYYY-MM-DD`) e lida no fuso do produto (America/Sao_Paulo).
+ * hipotese: o Brasil nao tem horario de verao desde 2019, entao o deslocamento
+ * fixo -03:00 e estavel; se voltar a existir DST isto precisa de tz database.
+ * Valor com fuso explicito (ISO completo) e respeitado como veio.
+ */
+function parseFilterDate(raw: string): Date | null {
+  const value = raw.trim()
+  if (!value) return null
+  const isBareDate = /^\d{4}-\d{2}-\d{2}$/.test(value)
+  const parsed = new Date(isBareDate ? `${value}T00:00:00.000-03:00` : value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+/**
+ * Valida e normaliza os filtros de `GET /api/v1/transactions`.
+ * `from` e INCLUSIVO e `to` e EXCLUSIVO: uma transacao exatamente em `from`
+ * entra no resultado e uma exatamente em `to` fica de fora. Isso deixa o filtro
+ * "dia inteiro" sem ambiguidade de milissegundo na virada.
+ * Retorna `{ ok: false, message }` para o caller responder 422/VAL-001.
+ */
+export function parseTransactionFilters(searchParams: URLSearchParams): ParsedTransactionFilters {
+  const type = searchParams.get('type')
+  const financialType = searchParams.get('financialType')
+  const assetId = searchParams.get('assetId')
+  const rawFrom = searchParams.get('from')
+  const rawTo = searchParams.get('to')
+
+  if (type && !(VALID_TRANSACTION_TYPES as readonly string[]).includes(type)) {
+    return { ok: false, message: 'Tipo de transação inválido.' }
+  }
+
+  if (financialType && !(VALID_FINANCIAL_TYPES as readonly string[]).includes(financialType)) {
+    return { ok: false, message: 'Tipo financeiro inválido.' }
+  }
+
+  const from = rawFrom ? parseFilterDate(rawFrom) : null
+  if (rawFrom && from === null) {
+    return { ok: false, message: 'Data inicial inválida.' }
+  }
+
+  const to = rawTo ? parseFilterDate(rawTo) : null
+  if (rawTo && to === null) {
+    return { ok: false, message: 'Data final inválida.' }
+  }
+
+  if (from && to && from.getTime() >= to.getTime()) {
+    return { ok: false, message: 'A data inicial deve ser anterior à data final.' }
+  }
+
+  return {
+    ok: true,
+    filters: {
+      type: type ?? null,
+      financialType: financialType ?? null,
+      assetId: assetId ?? null,
+      from,
+      to,
+    },
+  }
+}
+
+/**
+ * Projeta os filtros ativos para o meta da resposta.
+ * Campo proprio de proposito: `buildTransactionMeta` continua recebendo apenas
+ * `TransactionDto[]` e agregando contadores de auditoria.
+ */
+export function buildTransactionFiltersMeta(filters: TransactionFilters): TransactionFiltersMeta {
+  return {
+    type: filters.type,
+    financialType: filters.financialType,
+    assetId: filters.assetId,
+    from: filters.from ? filters.from.toISOString() : null,
+    to: filters.to ? filters.to.toISOString() : null,
   }
 }
 

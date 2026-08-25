@@ -38,10 +38,22 @@ export async function GET() {
       0,
     )
     const pnl = positionsValue - totalInvested
-    const pnlToday = todayTransactions.reduce(
-      (sum, t) => sum + t.totalAmount.toNumber(),
-      0,
-    )
+
+    // pnlToday: soma do realizedPnl das transacoes TRADE do dia.
+    // TRADE sem realizedPnl persistido fica FORA da soma (nunca zero silencioso)
+    // e e contado em pnlTodayUnavailableCount.
+    let pnlToday = 0
+    let pnlTodayUnavailableCount = 0
+    for (const t of todayTransactions) {
+      if (t.financialType !== 'TRADE') continue
+      const rpnl = t.realizedPnl?.toNumber() ?? null
+      if (rpnl !== null) {
+        pnlToday += rpnl
+      } else {
+        pnlTodayUnavailableCount++
+      }
+    }
+    pnlToday = Math.round(pnlToday * 100) / 100
 
     return ok({
       balance,
@@ -49,6 +61,7 @@ export async function GET() {
       totalValue: balance + positionsValue,
       pnl,
       pnlToday,
+      pnlTodayUnavailableCount,
       todayTransactionsCount: todayTransactions.length,
       positions: positions.map((p) => ({
         ticker: p.asset.ticker,

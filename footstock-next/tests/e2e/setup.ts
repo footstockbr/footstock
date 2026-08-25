@@ -15,23 +15,108 @@
  */
 
 import { type Page, type APIRequestContext } from '@playwright/test'
+import * as fs from 'node:fs'
+import * as path from 'node:path'
+
+/**
+ * Playwright nao carrega `.env` do Next. Sem isso o reset do contador
+ * diario no Redis e um no-op (`REDIS_URL` indefinido) e o submit de venda
+ * fica desabilitado com "Limite diario atingido".
+ */
+function loadLocalEnv(): void {
+  // Ultimo arquivo vence, como o Next: base depois override local.
+  const candidates = [
+    path.resolve(process.cwd(), '..', '.env'),
+    path.resolve(process.cwd(), '..', '.env.local'),
+    path.resolve(process.cwd(), '.env'),
+    path.resolve(process.cwd(), '.env.local'),
+  ]
+  for (const envPath of candidates) {
+    if (!fs.existsSync(envPath)) continue
+    for (const raw of fs.readFileSync(envPath, 'utf8').split('\n')) {
+      const line = raw.trim()
+      if (!line || line.startsWith('#')) continue
+      const eq = line.indexOf('=')
+      if (eq < 1) continue
+      const key = line.slice(0, eq).trim()
+      let value = line.slice(eq + 1).trim()
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1)
+      }
+      // Chave vazia no .env nao pode mascarar um valor ja carregado.
+      if (!value) continue
+      process.env[key] = value
+    }
+  }
+}
+
+loadLocalEnv()
+
+function envOr(key: string, fallback: string): string {
+  const value = process.env[key]
+  return value && value.trim() ? value.trim() : fallback
+}
+
+/** Mesma regra de `src/utils/timezone.ts#todayInBRT` (UTC-3 fixo). */
+function todayInBRT(now: Date = new Date()): string {
+  return new Date(now.getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10)
+}
+
+function secondsUntilMidnightBRT(now: Date = new Date()): number {
+  const dateStr = todayInBRT(now)
+  const nextMidnightUtc = new Date(`${dateStr}T00:00:00.000Z`).getTime() + 27 * 60 * 60 * 1000
+  return Math.max(1, Math.ceil((nextMidnightUtc - now.getTime()) / 1000))
+}
+
+/**
+ * Zera o contador diario de ordens no Redis SEM apagar a chave.
+ * `DEL` faz `_getDailyCount` cair no fallback do banco (ordens do dia),
+ * o que rebloqueia o CRAQUE depois de algumas runs do spec.
+ */
+export async function resetDailyOrderCounter(userId: string): Promise<void> {
+  loadLocalEnv()
+  const redisUrl = process.env.REDIS_URL
+  if (!redisUrl) {
+    console.warn('resetDailyOrderCounter: REDIS_URL ausente; contador nao resetado')
+    return
+  }
+  const { default: Redis } = await import('ioredis')
+  const redis = new Redis(redisUrl, {
+    maxRetriesPerRequest: 1,
+    connectTimeout: 8000,
+    lazyConnect: false,
+  })
+  try {
+    const key = `order:daily:${userId}:${todayInBRT()}`
+    await redis.set(key, '0', 'EX', secondsUntilMidnightBRT())
+  } catch (err) {
+    console.warn(`resetDailyOrderCounter: falhou (${(err as Error).message})`)
+  } finally {
+    redis.disconnect()
+  }
+}
 
 // ─── Credenciais via env ──────────────────────────────────────────────────────
 
+const seedPassword = envOr('DEV_TEST_PASSWORD', '')
+
 export const USERS = {
   jogador: {
-    email: process.env.TEST_JOGADOR_EMAIL ?? 'jogador@footstock.test',
-    password: process.env.TEST_JOGADOR_PASSWORD ?? 'TestJogador123!',
+    email: envOr('TEST_JOGADOR_EMAIL', 'usuario@foot-stock.dev'),
+    password: envOr('TEST_JOGADOR_PASSWORD', seedPassword),
     plan: 'JOGADOR' as const,
   },
   craque: {
-    email: process.env.TEST_CRAQUE_EMAIL ?? 'craque@footstock.test',
-    password: process.env.TEST_CRAQUE_PASSWORD ?? 'TestCraque123!',
+    email: envOr('TEST_CRAQUE_EMAIL', 'craque@foot-stock.dev'),
+    password: envOr('TEST_CRAQUE_PASSWORD', seedPassword),
     plan: 'CRAQUE' as const,
   },
   lenda: {
-    email: process.env.TEST_LENDA_EMAIL ?? 'lenda@footstock.test',
-    password: process.env.TEST_LENDA_PASSWORD ?? 'TestLenda123!',
+    email: envOr('TEST_LENDA_EMAIL', 'lenda@foot-stock.dev'),
+    password: envOr('TEST_LENDA_PASSWORD', seedPassword),
     plan: 'LENDA' as const,
   },
   admin: {
@@ -69,10 +154,10 @@ export async function loginAs(
   const user = USERS[userKey]
   await page.goto('/login')
   await page.waitForLoadState('networkidle')
-  await page.locator('[data-testid="email-input"]').fill(user.email)
-  await page.locator('[data-testid="password-input"]').fill(user.password)
-  await page.locator('[data-testid="login-submit"]').click()
-  await page.waitForURL(/mercado|onboarding|admin/, { timeout: 15_000 })
+  await page.locator('[data-testid="form-login-email-input"]').fill(user.email)
+  await page.locator('[data-testid="form-login-password-input"]').fill(user.password)
+  await page.locator('[data-testid="form-login-submit-button"]').click()
+  await page.waitForURL(/mercado|onboarding|admin/, { timeout: 30_000 })
 }
 
 export async function loginViaAPI(

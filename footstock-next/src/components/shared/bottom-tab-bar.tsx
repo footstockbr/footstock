@@ -29,6 +29,7 @@ export const DRAWER_ITEMS = [
   { label: "Assessor IA", href: ROUTES.ASSESSOR, emoji: "🤖" },
   { label: "Glossário", href: ROUTES.GLOSSARIO, emoji: "📚" },
   { label: "Minha Conta", href: ROUTES.CONTA, emoji: "👤" },
+  { label: "Relatórios", href: ROUTES.RELATORIOS, emoji: "📊" },
   { label: "Planos", href: ROUTES.PLANOS, emoji: "⭐" },
 ];
 

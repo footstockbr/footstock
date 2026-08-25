@@ -62,6 +62,7 @@ export const PLAN_DETAILS: Record<PlanType, PlanDetail> = {
       "5 ligas simultâneas",
       "Dividendos automáticos",
       "Alertas de preço",
+      "Relatórios exportáveis",
     ],
     missing: [
       "Cotações em tempo real",

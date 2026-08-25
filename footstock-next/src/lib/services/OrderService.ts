@@ -50,6 +50,55 @@ export interface OrderFilters {
   limit?: number
 }
 
+/**
+ * Referencia minima do ativo embutida nas ordens listadas.
+ * Evita que a UI renderize ticker vazio por falta de relation carregada.
+ */
+export interface OrderAssetRef {
+  ticker: string
+  displayName: string
+}
+
+export type OrderWithAsset = Order & { asset: OrderAssetRef | null }
+
+/**
+ * Linha de liquidacao carregada junto da ordem no historico.
+ * Somente as colunas necessarias para o contrato `OrderHistoryDto`: a linha
+ * TRADE traz o caixa (ja liquido de taxa) e a linha FEE detalha a taxa.
+ */
+export interface OrderSettlementTx {
+  financialType: string
+  quantity: number | null
+  price: Prisma.Decimal | null
+  fee: Prisma.Decimal | null
+  fsAmount: Prisma.Decimal | null
+  balanceBefore: Prisma.Decimal | null
+  balanceAfter: Prisma.Decimal | null
+}
+
+export type OrderWithSettlement = OrderWithAsset & { transactions: OrderSettlementTx[] }
+
+/**
+ * Disponibilidade de venda de um ativo para um usuario. Fonte UNICA consumida
+ * pela validacao de criacao de ordem (`_assertSellAvailable`) e pelo preview de
+ * venda exposto por HTTP, para que a UI nunca exiba um numero diferente do que o
+ * servidor vai cobrar na hora de criar a ordem.
+ */
+export interface SellAvailability {
+  /** Cotas em carteira (posicao LONG aberta). Zero quando nao ha posicao. */
+  ownedQty: number
+  /** Cotas ja comprometidas por ordens SELL OPEN/PARTIAL. OCO conta uma vez por grupo. */
+  reservedQty: number
+  /** Sempre max(0, ownedQty - reservedQty). */
+  availableQty: number
+  /** Preco medio da posicao LONG aberta; zero quando nao ha posicao. */
+  avgPrice: number
+  /** Id da posicao encontrada, aberta ou nao. null quando o usuario nunca teve o ativo. */
+  positionId: string | null
+  /** Status da posicao encontrada. null quando o usuario nunca teve o ativo. */
+  positionStatus: 'OPEN' | 'CLOSED' | null
+}
+
 export interface PaginatedResult<T> {
   data: T[]
   pagination: {
@@ -415,7 +464,7 @@ export class OrderService {
   /**
    * Lista ordens do usuário com paginação e filtros.
    */
-  async getOrders(userId: string, filters: OrderFilters): Promise<PaginatedResult<Order>> {
+  async getOrders(userId: string, filters: OrderFilters): Promise<PaginatedResult<OrderWithSettlement>> {
     const page = filters.page ?? 1
     const limit = Math.min(filters.limit ?? 20, 100)
     const skip = (page - 1) * limit
@@ -430,7 +479,29 @@ export class OrderService {
     }
 
     const [data, total] = await Promise.all([
-      prisma.order.findMany({ where, skip, take: limit, orderBy: { createdAt: 'desc' } }),
+      prisma.order.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          asset: { select: { ticker: true, displayName: true } },
+          // Liquidacao: base do contrato de historico. Sem isso a UI cai no
+          // fallback estimado (`Order.fee`) mesmo em ordem ja executada.
+          transactions: {
+            select: {
+              financialType: true,
+              quantity: true,
+              price: true,
+              fee: true,
+              fsAmount: true,
+              balanceBefore: true,
+              balanceAfter: true,
+            },
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+      }),
       prisma.order.count({ where }),
     ])
 
@@ -528,17 +599,19 @@ export class OrderService {
     }
   }
 
-  private async _assertSellAvailable(
+  /**
+   * Calcula a disponibilidade de venda dentro de uma transacao ja aberta.
+   * Nao lanca: apenas descreve o estado. Quem decide bloquear e o chamador.
+   */
+  private async _getSellAvailability(
     tx: Prisma.TransactionClient,
     userId: string,
     assetId: string,
-    ticker: string,
-    requestedQuantity: number,
-  ): Promise<void> {
+  ): Promise<SellAvailability> {
     const [position, sellOrders] = await Promise.all([
       tx.position.findFirst({
         where: { userId, assetId, side: 'LONG', status: 'OPEN' },
-        select: { quantity: true },
+        select: { id: true, quantity: true, avgPrice: true, status: true },
       }),
       tx.order.findMany({
         where: {
@@ -550,6 +623,17 @@ export class OrderService {
         select: { quantity: true, type: true, groupId: true },
       }),
     ])
+
+    // Sem posicao ABERTA, ainda importa distinguir "nunca teve o ativo" de "teve e
+    // fechou": a UI precisa dizer ao usuario qual dos dois e o caso. A busca extra
+    // so acontece nesse caminho e nao muda ownedQty, que continua zero.
+    const fallbackPosition = position
+      ? null
+      : await tx.position.findFirst({
+          where: { userId, assetId, side: 'LONG' },
+          select: { id: true, status: true },
+          orderBy: { updatedAt: 'desc' },
+        })
 
     const ownedQty = Number(position?.quantity ?? 0)
     // OCO reserva a quantidade UMA vez por grupo (as 2 pernas vendem a mesma cota;
@@ -563,7 +647,34 @@ export class OrderService {
       }
       reservedQty += Number(o.quantity)
     }
-    const availableQty = Math.max(0, ownedQty - reservedQty)
+
+    const found = position ?? fallbackPosition
+    return {
+      ownedQty,
+      reservedQty,
+      availableQty: Math.max(0, ownedQty - reservedQty),
+      avgPrice: Number(position?.avgPrice ?? 0),
+      positionId: found?.id ?? null,
+      positionStatus: (found?.status as 'OPEN' | 'CLOSED' | undefined) ?? null,
+    }
+  }
+
+  /**
+   * Versao publica: abre a propria transacao para que rotas HTTP nao precisem
+   * construir um `Prisma.TransactionClient`. Somente leitura.
+   */
+  async getSellAvailability(userId: string, assetId: string): Promise<SellAvailability> {
+    return prisma.$transaction((tx) => this._getSellAvailability(tx, userId, assetId))
+  }
+
+  private async _assertSellAvailable(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    assetId: string,
+    ticker: string,
+    requestedQuantity: number,
+  ): Promise<void> {
+    const { availableQty, reservedQty } = await this._getSellAvailability(tx, userId, assetId)
 
     if (availableQty < requestedQuantity) {
       throw new AppError('ORDER_050', 402, {

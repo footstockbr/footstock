@@ -224,6 +224,8 @@ describe('Contrato das APIs alteradas (tasks 12-17)', () => {
       missingAssetCount: 0,
       missingOrderCount: 0,
       cashDeltaDivergenceCount: 0,
+      // Task 09: filtros ativos expostos no meta como campo proprio
+      filters: { type: null, financialType: null, assetId: null, from: null, to: null },
     })
   })
 })

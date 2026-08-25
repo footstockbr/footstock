@@ -9,6 +9,86 @@ import { ORDER_TYPE, ORDER_SIDE, PLAN_TYPE, type PlanType } from '@/lib/enums'
 import { ALLOWED_ORDER_TYPES_BY_PLAN } from '@/lib/services/plan-order-limits'
 
 // ---------------------------------------------------------------------------
+// Contrato OCO — fonte unica da relacao de precos
+// ---------------------------------------------------------------------------
+
+/**
+ * Codigos de falha do contrato OCO.
+ * `SIDE_NOT_SELL`  — OCO so existe como venda protetiva de posicao LONG.
+ * `MISSING_PRICES` — falta price, stopLossPrice ou takeProfitPrice.
+ * `INVALID_RELATION` — a relacao canonica stopLoss < price < takeProfit foi violada.
+ */
+export type OcoViolationCode = 'SIDE_NOT_SELL' | 'MISSING_PRICES' | 'INVALID_RELATION'
+
+export type OcoViolationField = 'side' | 'price' | 'stopLossPrice'
+
+export interface OcoPriceRelationInput {
+  side: string
+  price?: number | null
+  stopLossPrice?: number | null
+  takeProfitPrice?: number | null
+}
+
+export interface OcoPriceRelationResult {
+  valid: boolean
+  code?: OcoViolationCode
+  field?: OcoViolationField
+  message?: string
+}
+
+/** Mensagens canonicas, compartilhadas entre formulario e validador. */
+export const OCO_VIOLATION_MESSAGES: Record<OcoViolationCode, string> = {
+  SIDE_NOT_SELL:
+    'OCO disponível apenas para venda protetiva (side=SELL) de posição existente. (ORDER_054)',
+  MISSING_PRICES: 'Ordens OCO requerem price, stopLossPrice e takeProfitPrice. (ORDER_054)',
+  INVALID_RELATION:
+    'OCO: stopLossPrice deve ser menor que price, que deve ser menor que takeProfitPrice. (ORDER_054)',
+}
+
+const OCO_VIOLATION_FIELDS: Record<OcoViolationCode, OcoViolationField> = {
+  SIDE_NOT_SELL: 'side',
+  MISSING_PRICES: 'price',
+  INVALID_RELATION: 'stopLossPrice',
+}
+
+function ocoViolation(code: OcoViolationCode): OcoPriceRelationResult {
+  return {
+    valid: false,
+    code,
+    field: OCO_VIOLATION_FIELDS[code],
+    message: OCO_VIOLATION_MESSAGES[code],
+  }
+}
+
+/**
+ * Fonte unica da relacao de precos OCO.
+ *
+ * OCO e uma protecao de posicao LONG: SELL-only, com take-profit acima e
+ * stop-loss abaixo do preco de referencia. A relacao canonica e
+ * `stopLossPrice < price < takeProfitPrice`, com limites de igualdade rejeitados.
+ *
+ * Formulario (`OrderForm.tsx`) e validador Zod chamam este helper, de modo que
+ * nao existe segunda definicao da relacao passivel de divergir de sinal.
+ */
+export function validateOcoPriceRelation(input: OcoPriceRelationInput): OcoPriceRelationResult {
+  if (input.side !== ORDER_SIDE.SELL) return ocoViolation('SIDE_NOT_SELL')
+
+  const { price, stopLossPrice, takeProfitPrice } = input
+  const missing =
+    price === undefined || price === null || !(price > 0) ||
+    stopLossPrice === undefined || stopLossPrice === null || !(stopLossPrice > 0) ||
+    takeProfitPrice === undefined || takeProfitPrice === null || !(takeProfitPrice > 0)
+
+  if (missing) return ocoViolation('MISSING_PRICES')
+
+  if (!((stopLossPrice as number) < (price as number) && (price as number) < (takeProfitPrice as number))) {
+    return ocoViolation('INVALID_RELATION')
+  }
+
+  return { valid: true }
+}
+
+// ---------------------------------------------------------------------------
 // Schema de criação de ordem
 // ---------------------------------------------------------------------------
 
@@ -66,32 +146,20 @@ export const CreateOrderSchema = z
     // abaixo do preço de referência). BUY OCO não tem posição a proteger e nunca
     // foi liquidado corretamente pelo motor — rejeitado explicitamente.
     if (data.type === ORDER_TYPE.OCO) {
-      if (data.side !== ORDER_SIDE.SELL) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['side'],
-          message: 'OCO disponível apenas para venda protetiva (side=SELL) de posição existente. (ORDER_054)',
-        })
-        return
-      }
-
-      if (data.price === undefined || data.stopLossPrice === undefined || data.takeProfitPrice === undefined) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['price'],
-          message: 'Ordens OCO requerem price, stopLossPrice e takeProfitPrice. (ORDER_054)',
-        })
-        return
-      }
-
-      // SELL OCO protetivo: stopLoss < price < takeProfit
-      //   stopLossPrice  → vende se o preço CAIR até esse piso (limita perda)
+      //   stopLossPrice   → vende se o preço CAIR até esse piso (limita perda)
       //   takeProfitPrice → vende se o preço SUBIR até esse alvo (realiza lucro)
-      if (!(data.stopLossPrice < data.price && data.price < data.takeProfitPrice)) {
+      // A relacao vive em validateOcoPriceRelation(), compartilhada com o formulario.
+      const oco = validateOcoPriceRelation({
+        side: data.side,
+        price: data.price,
+        stopLossPrice: data.stopLossPrice,
+        takeProfitPrice: data.takeProfitPrice,
+      })
+      if (!oco.valid) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ['stopLossPrice'],
-          message: 'OCO: stopLossPrice deve ser menor que price, que deve ser menor que takeProfitPrice. (ORDER_054)',
+          path: [oco.field as string],
+          message: oco.message as string,
         })
       }
     }

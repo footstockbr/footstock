@@ -13,6 +13,24 @@
  */
 export const LEVERAGE_DAILY_INTEREST_RATE = 0.003 // 0,3%/dia (provisório, LLD Q2)
 
+/**
+ * Rotulo pt-BR do percentual de juros diarios de alavancagem, derivado da taxa
+ * canonica acima. Task 20: a UI exibia tres numeros diferentes para a mesma taxa
+ * (card de atalho 0,1%, InfoTip do OrderForm 0,2%, LeverageToggle 0,3%). Toda
+ * superficie que fala de juros de alavancagem deve renderizar este rotulo, nunca
+ * um literal, para que uma mudanca da constante propague sozinha.
+ */
+export const LEVERAGE_DAILY_INTEREST_PERCENT_LABEL = `${(LEVERAGE_DAILY_INTEREST_RATE * 100)
+  .toFixed(1)
+  .replace('.', ',')}%`
+
+/**
+ * Plano minimo exigido para alavancagem. Fonte unica consumida pelo gate do
+ * OrderForm e pelo card de atalho, para que o plano anunciado nunca divirja do
+ * plano efetivamente exigido (mesma classe de bug corrigida na Task 19 no OCO).
+ */
+export const LEVERAGE_REQUIRED_PLAN = 'LENDA' as const
+
 /** Multiplicador de alavancagem disponível para o plano Lenda. */
 export const LEVERAGE_MULTIPLIER = 2
 
