@@ -379,8 +379,9 @@ export class MarketEngine {
    * corre contra os `for..of` do proprio tick. Um timer paralelo criaria exatamente
    * essa corrida.
    *
-   * Custo em regime: uma query indexada so de ids. A leitura completa da linha so
-   * acontece quando ha ativo novo.
+   * Custo em regime: uma query so de ids. Nao ha indice em `is_active`, entao isso e um
+   * seq scan — barato pelo tamanho da tabela (dezenas de linhas), nao por indice. A
+   * leitura completa da linha so acontece quando ha ativo novo.
    *
    * Publico por ser tambem a costura de teste e o gancho para um futuro disparo
    * reativo (admin action / canal Redis) — hoje o unico chamador e o tick.

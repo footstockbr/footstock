@@ -246,8 +246,11 @@ A causa foi fechada por `MarketEngine.syncAssetRoster()`:
   `for..of` do proprio ciclo. Um timer paralelo criaria exatamente essa corrida.
 - Cadencia por wall-clock: `MOTOR_ROSTER_SYNC_MS`, default **60s**, floor 5s. Essa e a janela
   maxima em que uma ordem de ativo recem-ativado fica sem preco.
-- Custo em regime: **uma** query indexada so de ids. A leitura completa da linha so acontece
-  quando ha delta.
+- Custo em regime: **uma** query so de ids. Nao ha indice em `is_active` (a tabela `assets`
+  so tem PK, `ticker` e `club_slug`), entao o censo e um seq scan — barato porque a tabela
+  tem dezenas de linhas, nao porque seja indexado. A leitura completa da linha so acontece
+  quando ha delta. Se o roster crescer uma ordem de grandeza, indexar `is_active` antes de
+  baixar `MOTOR_ROSTER_SYNC_MS`.
 - Falha de reconciliacao **nao** derruba o tick: log de erro e o ciclo segue com o roster
   anterior, que e literalmente o comportamento de antes desta correcao.
 - Simetria: o ativo **desativado** tambem sai (`forgetAsset`) — estado, book, timer de CB,
