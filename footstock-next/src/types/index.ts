@@ -130,6 +130,13 @@ export interface SendNotificationOptions {
   title: string
   body: string
   metadata?: Record<string, unknown>
+  /**
+   * Chave de deduplicacao (UNIQUE em `notifications.idempotency_key`). Quando
+   * presente, uma segunda gravacao da MESMA chave viola a constraint e o chamador
+   * trata como no-op. Obrigatoria em qualquer produtor que possa rodar duas vezes
+   * sobre o mesmo evento: cron sem lock, retry de fila, duas instancias do app.
+   */
+  idempotencyKey?: string
 }
 
 // ─── Entidades ─────────────────────────────────────────────────────────────────

@@ -32,6 +32,36 @@ export const SESSION_VOLATILITY: Record<MarketSession, number> = {
   [MarketSession.CLOSED]: 0.00,
 };
 
+// ─── Aceitacao de ordem a mercado (definicao unica) ──────────────────────────
+// Esta era a MESMA regra escrita em tres lugares independentes: o gate do
+// backend (OrderService._checkMarketSession), o disable do formulario
+// (OrderForm) e o texto do tooltip. Tres copias significam tres jeitos de
+// divergir, e foi assim que o produto passou a recusar no backend uma ordem que
+// o formulario deixava enviar.
+//
+// FORA daqui de proposito: motor/src/engine/ScheduledOrderRunner.ts, que dispara
+// ordens agendadas apenas em TRADING. Nao e a mesma regra — ordem agendada e
+// disparo automatico, nao ordem enviada por uma pessoa — e o motor nao importa
+// deste pacote. A divergencia esta declarada em comentario nos dois lados.
+
+/** Sessoes em que uma ordem a mercado enviada pelo usuario e aceita. */
+export const MARKET_ORDER_SESSIONS: ReadonlySet<MarketSession> = new Set([
+  MarketSession.TRADING,
+  MarketSession.CLOSING_CALL,
+])
+
+/**
+ * O pregao aceita ordem a mercado nesta sessao?
+ *
+ * Aceita string solta (o valor vem do Redis, onde e texto) alem do enum. Sessao
+ * desconhecida devolve false: nao ha sessao aberta que este arquivo nao liste, e
+ * um valor que ninguem reconhece nao pode virar permissao.
+ */
+export function acceptsMarketOrders(session: MarketSession | string | null | undefined): boolean {
+  if (!session) return false
+  return MARKET_ORDER_SESSIONS.has(session as MarketSession)
+}
+
 /** Horarios BRT de cada sessao (America/Sao_Paulo, UTC-3) */
 export const SESSION_SCHEDULE_BRT: Record<MarketSession, { start: string; end: string }> = {
   [MarketSession.PRE_OPENING]: { start: '10:45', end: '11:00' },

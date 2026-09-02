@@ -74,13 +74,24 @@ export class OrderFlowSnapshotService {
       // Ordem aberta (não-MARKET) só conta como OFI quando NEAR-TOUCH: BUY com price >=
       // current_price*(1-band); SELL com price <= current_price*(1+band). Fora da banda = passiva
       // (não entra no OFI). MARKET sempre conta. A liquidez em repouso continua no book/bookPressure.
+      //
+      // O `::numeric` na banda NAO e decorativo — nao remover (bug OFI-22P02, 2026-09-02).
+      // Sem ele o Postgres unifica o parametro $n de `(1 - $n)` como integer (quem manda na
+      // inferencia e o literal `1`, que chega sem tipo) e o bind estoura
+      // 22P02 `invalid input syntax for type integer: "0.15"` em TODO tick — a captura
+      // degradava para UNAVAILABLE em silencio, zerando openBuy/openSell/bookPressure que
+      // alimentam L4 OFI e L5 KyleLambda.
+      // Regra: parametro de $queryRaw sempre declara o proprio tipo, nunca herda do vizinho —
+      // mesmo motivo do `::text[]` em `ANY(${assetIds}::text[])` logo abaixo.
+      // numeric (e nao float8) porque assets.current_price e orders.price sao numeric(18,8):
+      // a comparacao de borda da banda tem que ser decimal exata.
       const rows = await this.prisma.$queryRaw<SnapshotRow[]>`
         SELECT
           o.asset_id,
           COALESCE(SUM(CASE WHEN o.side = 'BUY'  AND o.type <> 'MARKET'
-            AND o.price >= a.current_price * (1 - ${OFI_OPEN_PROXIMITY_BAND}) THEN o.quantity ELSE 0 END), 0)::bigint AS open_buy_qty,
+            AND o.price >= a.current_price * (1 - ${OFI_OPEN_PROXIMITY_BAND}::numeric) THEN o.quantity ELSE 0 END), 0)::bigint AS open_buy_qty,
           COALESCE(SUM(CASE WHEN o.side = 'SELL' AND o.type <> 'MARKET'
-            AND o.price <= a.current_price * (1 + ${OFI_OPEN_PROXIMITY_BAND}) THEN o.quantity ELSE 0 END), 0)::bigint AS open_sell_qty,
+            AND o.price <= a.current_price * (1 + ${OFI_OPEN_PROXIMITY_BAND}::numeric) THEN o.quantity ELSE 0 END), 0)::bigint AS open_sell_qty,
           COALESCE(SUM(CASE WHEN o.side = 'BUY'  AND o.type <> 'MARKET' THEN o.quantity ELSE 0 END), 0)::bigint AS total_open_buy_qty,
           COALESCE(SUM(CASE WHEN o.side = 'SELL' AND o.type <> 'MARKET' THEN o.quantity ELSE 0 END), 0)::bigint AS total_open_sell_qty,
           COALESCE(SUM(CASE WHEN o.side = 'BUY'  AND o.type = 'MARKET' THEN o.quantity ELSE 0 END), 0)::bigint AS market_buy_qty,
@@ -134,6 +145,16 @@ export class OrderFlowSnapshotService {
     return out
   }
 
+  // ATENCAO — esta string NAO e a query executada por capture(). Sao duas verdades separadas:
+  //   - aqui a banda entra por INTERPOLACAO DE STRING e vira o literal SQL `0.15`, que o
+  //     Postgres tipa como numeric sozinho;
+  //   - em capture() a banda entra como PARAMETRO ($n) do $queryRaw e depende de cast explicito.
+  // Foi essa divergencia que escondeu o bug OFI-22P02 (2026-09-02): o bind de capture()
+  // estourava em 100% dos ticks enquanto este EXPLAIN continuava verde. Alem disso este texto
+  // nem espelha a query inteira — falta o `ARRAY_AGG(o.id ...) AS top_order_ids`.
+  // Consequencia operacional: EXPLAIN passar NAO prova que capture() executa, e teste que le
+  // esta string NAO cobre a query real. Qualquer mudanca na clausula da banda tem que ser
+  // validada rodando capture() contra um Postgres de verdade, nunca por este metodo.
   static explainSql(): string {
     const band = OFI_OPEN_PROXIMITY_BAND
     return [

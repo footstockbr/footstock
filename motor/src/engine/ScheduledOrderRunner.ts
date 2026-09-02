@@ -9,6 +9,9 @@ import type Redis from 'ioredis'
 import { SessionManager } from './SessionManager'
 import { logger } from '../utils/logger'
 import { settleOrderFill } from './settlement'
+// Zero Silencio (2026-09-02): ordem agendada executava e cancelava so em canal Redis sem
+// assinante. Mesmo create compartilhado do OrderExecutor e do OrderMatcher.
+import { persistOrderNotification, sideLabel, costLabel } from './orderNotifications'
 import type { PrismaOrder } from '../types/prisma.types'
 
 export class ScheduledOrderRunner {
@@ -38,6 +41,12 @@ export class ScheduledOrderRunner {
 
     if (orders.length === 0) return
 
+    // DIVERGENCIA DELIBERADA com acceptsMarketOrders() do web
+    // (footstock-next/src/lib/constants/market.ts), que aceita TRADING E
+    // CLOSING_CALL. Aqui e so TRADING: ordem agendada dispara sozinha, sem
+    // ninguem olhando o book, e a call de fechamento tem volatilidade reduzida
+    // (20%) e liquidez rala. Se um dia as duas regras tiverem de convergir, a
+    // mudanca e aqui e precisa de decisao de produto — nao e drift acidental.
     if (session !== 'TRADING') {
       logger.info(`[ScheduledOrderRunner] ${orders.length} ordens aguardando sessão TRADING (atual: ${session})`)
       return
@@ -74,6 +83,24 @@ export class ScheduledOrderRunner {
       if (!result.settled) {
         if (result.reason === 'INSUFFICIENT_BALANCE') {
           logger.warn(`[ScheduledOrderRunner] INSUFFICIENT_BALANCE: ordem agendada ${order.id} cancelada no fill`)
+          // A linha duravel vem primeiro e por fora do allSettled: e o unico canal lido.
+          // Aqui o aviso importa MAIS que nos outros caminhos — o usuario agendou a ordem
+          // e nao estava olhando a tela na hora em que ela foi cancelada.
+          await persistOrderNotification(this.prisma, 'ScheduledOrderRunner', {
+            userId: order.userId,
+            type: 'ORDER_CANCELLED',
+            idempotencyKey: `motor:order_cancelled:scheduled_insufficient_balance:${order.id}`,
+            title: 'Ordem agendada cancelada: saldo insuficiente',
+            body: `Sua ordem agendada de ${sideLabel(order.side)} de ${order.quantity} ${order.asset.ticker} foi cancelada no horário programado porque seu saldo em FS não cobria ${costLabel(order.leverageMultiplier)}. Nenhum valor foi debitado da sua conta.`,
+            data: {
+              orderId: order.id,
+              ticker: order.asset.ticker,
+              side: order.side,
+              quantity: order.quantity,
+              motivo: 'INSUFFICIENT_BALANCE',
+              orderType: 'SCHEDULED',
+            },
+          })
           await Promise.allSettled([
             this.redis.publish(
               `orders:cancelled:${order.userId}`,
@@ -90,6 +117,27 @@ export class ScheduledOrderRunner {
         }
         return
       }
+
+      // ORDEM IMPORTA: linha duravel antes do publish. O publish roda dentro deste try e
+      // uma falha de Redis cairia no catch, matando o unico canal com assinante.
+      const scheduledFee = result.feeAmount ?? 0
+      await persistOrderNotification(this.prisma, 'ScheduledOrderRunner', {
+        userId: order.userId,
+        type: 'ORDER_EXECUTED',
+        idempotencyKey: `motor:order_executed:${order.id}`,
+        title: `Ordem agendada executada: ${order.asset.ticker}`,
+        body: `Sua ordem agendada de ${sideLabel(order.side)} de ${order.quantity} ${order.asset.ticker} foi executada a ${price.toFixed(2)} FS por unidade. Taxa cobrada: ${scheduledFee.toFixed(2)} FS. Confira o resultado na sua carteira.`,
+        data: {
+          orderId: order.id,
+          ticker: order.asset.ticker,
+          side: order.side,
+          quantity: order.quantity,
+          executedPrice: price,
+          fee: scheduledFee,
+          orderType: 'SCHEDULED',
+          executionDelay,
+        },
+      })
 
       await this.redis.publish(
         `orders:executed:${order.userId}`,

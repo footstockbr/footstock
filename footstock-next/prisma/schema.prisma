@@ -526,6 +526,19 @@ model Position {
 
   @@index([userId])
   @@index([userId, status])
+  // Indice unico parcial mantido por SQL cru, invisivel para o PSL:
+  //   positions_user_asset_side_key
+  //   UNIQUE (user_id, asset_id, side) WHERE status = 'OPEN'
+  // Regra: no maximo uma posicao ABERTA por (usuario, ativo, lado); posicoes
+  // CLOSED podem repetir o par a vontade.
+  //
+  // Nao existe @@unique aqui de proposito. Um @@unique([userId, assetId]) sem
+  // predicado e exatamente o indice TOTAL que M070 derrubou: ele prendia o par
+  // numa posicao ja fechada e fazia toda recompra do mesmo ativo falhar no
+  // position.create do settlement. Prisma 7.6 ate aceita `where` em @@unique,
+  // mas so com previewFeatures = ["partialIndexes"], que este schema nao
+  // declara — enquanto nao declarar, o indice vive em migrations
+  // (M021 criou, M070 limpou o total) e nao aqui.
   @@map("positions")
 }
 

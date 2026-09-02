@@ -7,10 +7,13 @@
 
 import { NextResponse } from 'next/server'
 import { getRedisClient } from '@/lib/redis'
+import { isTickFresh } from '@/lib/motor/tick-freshness'
 
 const HEALTH_KEY = 'market:tick:latest'
 const GLOBAL_HALT_KEY = 'motor:global-halt'
-const STALE_THRESHOLD_SECONDS = 10
+// O limiar de stale mora em lib/motor/tick-freshness.ts. NEXT_CHECK_SECONDS
+// continua 10s de propósito: é a cadência de polling do frontend, não o limiar.
+// Igualar os dois foi o que fazia jitter de rede virar "motor offline".
 const NEXT_CHECK_SECONDS = 10  // Reduzido de 30s para 10s — alinhado com polling do frontend
 
 export async function GET() {
@@ -69,7 +72,7 @@ export async function GET() {
     const nowMs = Date.now()
     const timeSinceLastTick = (nowMs - lastTickMs) / 1_000
 
-    if (timeSinceLastTick > STALE_THRESHOLD_SECONDS) {
+    if (!isTickFresh(timeSinceLastTick)) {
       return NextResponse.json(
         {
           status: 'offline',

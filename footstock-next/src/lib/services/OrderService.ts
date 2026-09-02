@@ -20,6 +20,9 @@ import { LEVERAGE_MULTIPLIER } from '@/lib/constants/leverage'
 import { leagueEventRecorder } from '@/lib/services/leagues/LeagueEventRecorder'
 import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
 import { AliasService } from '@/services/AliasService'
+import { isTickFresh } from '@/lib/motor/tick-freshness'
+import { getCurrentSession } from '@/lib/services/session-manager'
+import { acceptsMarketOrders } from '@/lib/constants/market'
 import { randomUUID } from 'crypto'
 import type { Order, Prisma } from '@prisma/client'
 
@@ -242,11 +245,9 @@ export class OrderService {
     // === Motor Health Check (todos os tipos de ordem) ===
     // Verifica: (1) admin global-halt, (2) tick stale/ausente, (3) Redis indisponível.
     // Chaves corretas: motor:global-halt + market:tick:latest (motor:health nunca é publicada).
-    // Threshold configurável (env): o motor pode tickar mais devagar que 2s
-    // (MOTOR_TICK_INTERVAL_MS) e publicar heartbeat a cada N ticks. O default 30s
-    // tolera ~3 ticks de jitter; o motor publica heartbeat a cada 10s e o TTL da
-    // chave é 60s, então 30s detecta motor morto bem antes da expiração.
-    const MOTOR_TICK_STALE_S = parseInt(process.env.MOTOR_TICK_STALE_S ?? '30', 10)
+    // Threshold em lib/motor/tick-freshness.ts (override por MOTOR_TICK_STALE_S).
+    // Este gate usava 30s enquanto o middleware e a rota de health usavam 10s: o
+    // mesmo motor era "online" para o formulário e "offline" para o banner.
     const motorGlobalHalt = await redis.exists('motor:global-halt').catch(() => 0)
     if (motorGlobalHalt) {
       throw new AppError('MOTOR_090', 503, { message: 'Motor de mercado pausado pelo administrador. Ordens suspensas temporariamente.' })
@@ -256,7 +257,7 @@ export class OrderService {
       throw new AppError('MOTOR_090', 503, { message: 'Motor de mercado temporariamente indisponível.' })
     }
     const lastTickMs = parseInt(tickRaw, 10)
-    if (isNaN(lastTickMs) || (Date.now() - lastTickMs) / 1_000 > MOTOR_TICK_STALE_S) {
+    if (isNaN(lastTickMs) || !isTickFresh((Date.now() - lastTickMs) / 1_000)) {
       throw new AppError('MOTOR_090', 503, { message: 'Motor de mercado temporariamente indisponível.' })
     }
 
@@ -688,10 +689,15 @@ export class OrderService {
 
   private async _checkMarketSession(): Promise<void> {
     try {
-      const session = await redis.get('market:session')
-      // Sessões abertas para ordens MARKET: TRADING e CLOSING_CALL
-      const openSessions = new Set(['TRADING', 'CLOSING_CALL'])
-      if (session && !openSessions.has(session)) {
+      // market:session tinha TTL de 15s contra republicação a cada 10s: a chave
+      // expirava dentro da janela normal de operação e este gate, com `session`
+      // nulo, deixava passar ordem MARKET com o mercado fechado. O TTL foi
+      // corrigido no motor (heartbeat.ts, SESSION_TTL_S), mas o gate não pode
+      // depender disso: ausência de chave agora cai no relógio do próprio
+      // processo, que é a mesma função usada pelo restante do web.
+      const session = (await redis.get('market:session')) ?? getCurrentSession()
+      // Sessões abertas para ordens MARKET: definição única em constants/market.
+      if (session && !acceptsMarketOrders(session)) {
         const messages: Record<string, string> = {
           CLOSED: 'Mercado fechado. Ordens MARKET são aceitas apenas durante o pregão.',
           PRE_OPENING: 'Mercado em pré-abertura. Aguarde o início do pregão.',

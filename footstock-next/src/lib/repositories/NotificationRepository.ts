@@ -7,8 +7,16 @@ import type { NotificationDTO, SendNotificationOptions, Pagination, Notification
 const NOTIFICATION_TTL_DAYS = 30
 const INBOX_PAGE_SIZE = 50
 
-// Tipos urgentes que ignoram preferências de canal
-const ALWAYS_ON_TYPES = new Set<string>([
+// Tipos urgentes que ignoram preferências de canal.
+//
+// FONTE ÚNICA (2026-09-02). Antes existia uma segunda cópia literal desta lista em
+// api/v1/users/me/notification-preferences/route.ts. Enquanto as duas eram iguais o
+// bug ficou latente; ao tornar ORDER_CANCELLED always-on aqui e não lá, a tela de
+// preferências passou a renderizar o toggle "Ordem cancelada" como editável, o PUT
+// respondia 200 com toast de sucesso e `upsertPreference` descartava a escrita no
+// early-return da linha marcada abaixo — o usuário salvava e o toggle voltava sozinho.
+// Quem importar esta lista NÃO pode redeclará-la.
+export const ALWAYS_ON_TYPES = new Set<string>([
   'MARGIN_CALL_ALERT',
   'CIRCUIT_BREAKER',
   'CANCELLATION_LOCK_ACTIVE',
@@ -19,6 +27,16 @@ const ALWAYS_ON_TYPES = new Set<string>([
   'ADMIN_BROADCAST',
   'PAYMENT_FAILED',
   'ORDER_EXECUTED',
+  // ORDER_CANCELLED e always-on desde 2026-09-02, junto com a persistencia de
+  // notificacao no motor (OrderExecutor._persistOrderNotification). Motivo: ordem a
+  // mercado cancelada some da lista de abertas sem deixar rastro, entao um opt-out
+  // de in-app transformava "sua ordem foi cancelada e nada foi debitado" em silencio
+  // total — foi exatamente o que fez o incidente de 31/08 chegar ao cliente como "o
+  // sistema esta com problemas". ORDER_EXECUTED ja era always-on; a assimetria entre
+  // os dois eventos do MESMO ciclo de vida era descuido, nao politica.
+  // Efeito colateral assumido: quem tinha desligado in-app para ORDER_CANCELLED
+  // volta a receber. Trocar por notificacao suprimivel exige decisao de produto.
+  'ORDER_CANCELLED',
 ])
 
 export class NotificationRepository {
@@ -115,6 +133,7 @@ export class NotificationRepository {
         body: options.body,
         data: options.metadata !== undefined ? (options.metadata as object) : undefined,
         expiresAt,
+        ...(options.idempotencyKey !== undefined && { idempotencyKey: options.idempotencyKey }),
       },
     })
     return this._serialize(notification)

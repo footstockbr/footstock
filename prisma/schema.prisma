@@ -364,6 +364,18 @@ model Position {
 
   @@index([userId])
   @@index([userId, status])
+  // Indice unico parcial mantido por SQL cru, invisivel para o PSL:
+  //   positions_user_asset_side_key
+  //   UNIQUE (user_id, asset_id, side) WHERE status = 'OPEN'
+  // Regra: no maximo uma posicao ABERTA por (usuario, ativo, lado); posicoes
+  // CLOSED podem repetir o par a vontade.
+  //
+  // Nao existe @@unique aqui de proposito. Um @@unique([userId, assetId]) sem
+  // predicado e exatamente o indice TOTAL que M070 derrubou: ele prendia o par
+  // numa posicao ja fechada e fazia toda recompra do mesmo ativo falhar no
+  // position.create do settlement. O client do motor e gerado por Prisma 6.19, que
+  // nao tem `where` em @@unique de forma alguma — enquanto nao declarar, o indice vive em migrations
+  // (M021 criou, M070 limpou o total) e nao aqui.
   @@map("positions")
 }
 
@@ -686,6 +698,16 @@ model Notification {
   data      Json?
   isRead    Boolean          @default(false) @map("is_read")
   createdAt DateTime         @default(now()) @map("created_at")
+
+  // Chave de deduplicacao de notificacao. A coluna e o indice UNIQUE
+  // (notifications_idempotency_key_key) ja existem em producao desde M059; este
+  // schema raiz e que estava atrasado, e sem o campo declarado o client do motor
+  // nao conseguia grava-lo. Ver M071_notification_idempotency_key para a paridade
+  // dos bancos de desenvolvimento criados a partir DESTA lineage.
+  // ATENCAO: este model esta deliberadamente ENXUTO em relacao ao de
+  // footstock-next/prisma/schema.prisma (que tem isArchived, expiresAt e os campos
+  // de email). O motor so precisa escrever; nao replique o resto sem necessidade.
+  idempotencyKey String?     @unique @map("idempotency_key")
 
   user User @relation(fields: [userId], references: [id])
 

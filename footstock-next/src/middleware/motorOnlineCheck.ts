@@ -4,15 +4,17 @@
 //
 // Fontes de "offline":
 //   1. motor:global-halt presente no Redis → admin pausou manualmente
-//   2. market:tick:latest ausente ou stale (>10s) → motor crashou ou está lento
+//   2. market:tick:latest ausente ou stale → motor crashou ou está lento
+//      (limiar em lib/motor/tick-freshness.ts, compartilhado com a rota de
+//       health e com o gate de criação de ordem — antes eram três números)
 //   3. Redis não configurado → fallback conservador (offline)
 //
 // Rastreabilidade: T-005 (Modo Degradado / Read-Only)
 // ============================================================================
 
 import { getRedisClient } from '@/lib/redis'
+import { isTickFresh } from '@/lib/motor/tick-freshness'
 
-const TICK_STALE_THRESHOLD_S = 10
 const GLOBAL_HALT_KEY = 'motor:global-halt'
 const TICK_KEY = 'market:tick:latest'
 
@@ -55,7 +57,7 @@ export async function isMotorOnline(): Promise<MotorOnlineResult> {
     }
 
     const ageS = (Date.now() - lastTickMs) / 1_000
-    if (ageS > TICK_STALE_THRESHOLD_S) {
+    if (!isTickFresh(ageS)) {
       return { online: false, reason: 'stale_tick' }
     }
 

@@ -20,6 +20,16 @@ export const HEARTBEAT_INTERVAL_MS = parseInt(
   10
 )
 export const HEARTBEAT_TTL_S = 60
+/**
+ * TTL de market:session.
+ *
+ * Era 15s com republicação a cada 10s — margem de 5s para GC, jitter de
+ * scheduler e latência de rede. Na prática a chave sumia em regime normal e o
+ * gate de sessão do web (OrderService._checkMarketSession) lia null e liberava
+ * ordem MARKET fora do pregão. 25s = 2 publicações perdidas + folga, alinhado
+ * com DEFAULT_TICK_STALE_S do web.
+ */
+export const SESSION_TTL_S = 25
 export const HEARTBEAT_KEY = 'motor:heartbeat'
 export const TICK_KEY = 'market:tick:latest'
 
@@ -40,7 +50,7 @@ export async function publishHeartbeat(redis: Redis, sessionPrisma?: string): Pr
     ]
 
     if (sessionPrisma) {
-      writes.push(redis.set('market:session', sessionPrisma, 'EX', 15))
+      writes.push(redis.set('market:session', sessionPrisma, 'EX', SESSION_TTL_S))
     }
 
     await Promise.all(writes)

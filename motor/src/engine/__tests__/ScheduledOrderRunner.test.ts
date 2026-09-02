@@ -72,12 +72,24 @@ function makePrisma(orders: any[] = [], user: any = makeUser()): any {
     },
   }
 
+  const notificationCreate = jest.fn().mockResolvedValue({})
+
+  // O modelo `notification` NAO e opcional neste mock.
+  //
+  // `persistOrderNotification` engole qualquer erro de proposito — ela nunca pode
+  // derrubar uma liquidacao ja commitada. A consequencia e que um mock SEM
+  // `notification.create` nao quebra teste nenhum: a chamada estoura TypeError
+  // ("Cannot read properties of undefined"), o catch engole, e a suite fica verde
+  // sobre exatamente o caminho que o defeito de 02/09 deixou quebrado em producao.
+  // Deixar o jest.fn() aqui e o que torna a gravacao observavel.
   return {
     order: {
       findMany: jest.fn().mockResolvedValue(orders),
     },
+    notification: { create: notificationCreate },
     $transaction: jest.fn().mockImplementation((fn: (tx: any) => Promise<any>) => fn(txMock)),
     _tx: txMock,
+    _notificationCreate: notificationCreate,
   }
 }
 

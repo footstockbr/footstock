@@ -6,23 +6,16 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { getAuthUser } from '@/lib/auth'
-import { notificationRepository } from '@/lib/repositories/NotificationRepository'
+import { notificationRepository, ALWAYS_ON_TYPES } from '@/lib/repositories/NotificationRepository'
 import { ok, errors, error as apiError } from '@/lib/api'
 import { NOTIFICATION_TYPE } from '@/lib/enums'
 
-// Tipos urgentes que não podem ser desabilitados
-const ALWAYS_ON_TYPES = new Set([
-  'MARGIN_CALL_ALERT',
-  'CIRCUIT_BREAKER',
-  'CANCELLATION_LOCK_ACTIVE',
-  'CANCELLATION_LOCK_LIQUIDATED',
-  'PASSWORD_RESET',
-  'ACCOUNT_DELETED',
-  'BRUTE_FORCE_BLOCKED',
-  'ADMIN_BROADCAST',
-  'PAYMENT_FAILED',
-  'ORDER_EXECUTED',
-])
+// Tipos urgentes que não podem ser desabilitados.
+// Importado do NotificationRepository DE PROPÓSITO: esta rota tinha uma cópia literal
+// da lista e as duas divergiram em 2026-09-02 (ORDER_CANCELLED entrou só numa),
+// deixando um toggle que aceitava a mudança, respondia 200 e não persistia nada.
+// Esta rota decide o que a TELA mostra; o repositório decide o que é ESCRITO. Com duas
+// listas, a tela mente sobre a escrita — por isso agora é uma só.
 
 const ALL_TYPES = Object.values(NOTIFICATION_TYPE)
 

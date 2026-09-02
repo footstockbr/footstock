@@ -23,7 +23,7 @@ import {
   LEVERAGE_DAILY_INTEREST_PERCENT_LABEL,
   LEVERAGE_REQUIRED_PLAN,
 } from '@/lib/constants/leverage'
-import { MarketSession } from '@/lib/constants/market'
+import { acceptsMarketOrders } from '@/lib/constants/market'
 import type { OrderType } from '@/lib/analytics'
 import type { SellPreviewDto } from '@/lib/contracts/sell-preview-contract'
 
@@ -281,8 +281,11 @@ export function OrderForm({ ticker, side, onSuccess, onClose, dailyOrdersUsed = 
   // Sem preview carregado o modal nao sabe quanto pode ser vendido; enviar assim
   // so produziria ORDER_050 do backend (Zero Assumido).
   const sellPreviewBlocking = isSell && (sellPreview.status !== 'success' || availableQty === 0)
-  // MARKET orders aceitos em TRADING e CLOSING_CALL (call de fechamento também é pregão aberto)
-  const isMarketClosed = session !== MarketSession.TRADING && session !== MarketSession.CLOSING_CALL
+  // MARKET orders aceitos em TRADING e CLOSING_CALL (call de fechamento também é
+  // pregão aberto). A lista mora em constants/market e é a MESMA que o backend
+  // usa no gate de criação — antes eram duas cópias que podiam divergir, e o
+  // formulário liberava um envio que a API recusava com SESS_040.
+  const isMarketClosed = !acceptsMarketOrders(session)
   const isMarketDisabled = orderType === 'MARKET' && isMarketClosed
   const atDailyLimit = ordersRemaining <= 0 && dailyLimit !== Infinity
   // T-019: saldo zero ou negativo bloqueia novas ordens BUY

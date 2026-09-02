@@ -8,6 +8,11 @@ import { PrismaClient, Prisma } from '@prisma/client'
 import type Redis from 'ioredis'
 import { logger } from '../utils/logger'
 import { settleOrderFill } from './settlement'
+// Zero Silencio (2026-09-02): LIMIT e OCO executavam e cancelavam publicando SO em canais
+// Redis que nao tem assinante nenhum no repositorio. O front le a TABELA `notifications`
+// por polling — a consulta de producao de 02/09 nao achou uma unica linha de
+// ORDER_EXECUTED/ORDER_CANCELLED desde 20/04. O create mora no modulo compartilhado.
+import { persistOrderNotification, sideLabel, costLabel } from './orderNotifications'
 import type { PrismaOrder } from '../types/prisma.types'
 
 const BATCH_SIZE = 100
@@ -119,10 +124,37 @@ export class OrderMatcher {
 
       if (!result.settled) {
         if (result.reason === 'INSUFFICIENT_BALANCE') {
-          await this._notifyCancelled(order, 'Saldo insuficiente no momento da execução LIMIT. Ordem cancelada.')
+          await this._notifyCancelled(
+            order,
+            'Saldo insuficiente no momento da execução LIMIT. Ordem cancelada.',
+            `Sua ordem limite de ${sideLabel(order.side)} de ${order.quantity} ${order.asset.ticker} foi cancelada porque seu saldo em FS não cobria ${costLabel(order.leverageMultiplier)} quando o preço atingiu o limite. Nenhum valor foi debitado da sua conta.`,
+            `motor:order_cancelled:limit_insufficient_balance:${order.id}`,
+            'INSUFFICIENT_BALANCE',
+          )
         }
         return
       }
+
+      // ORDEM IMPORTA: a linha duravel vem ANTES do publish. `redis.publish` roda dentro
+      // deste try e um `Connection is closed.` ali cairia no catch — o unico canal com
+      // assinante morreria por causa de um canal que nao tem nenhum.
+      const limitFee = result.feeAmount ?? 0
+      await persistOrderNotification(this.prisma, 'OrderMatcher', {
+        userId: order.userId,
+        type: 'ORDER_EXECUTED',
+        idempotencyKey: `motor:order_executed:${order.id}`,
+        title: `Ordem executada: ${order.asset.ticker}`,
+        body: `Sua ordem limite de ${sideLabel(order.side)} de ${order.quantity} ${order.asset.ticker} foi executada a ${executionPrice.toFixed(2)} FS por unidade. Taxa cobrada: ${limitFee.toFixed(2)} FS. Confira o resultado na sua carteira.`,
+        data: {
+          orderId: order.id,
+          ticker: order.asset.ticker,
+          side: order.side,
+          quantity: order.quantity,
+          executedPrice: executionPrice,
+          fee: limitFee,
+          orderType: 'LIMIT',
+        },
+      })
 
       await this.redis.publish(
         `orders:executed:${order.userId}`,
@@ -161,10 +193,74 @@ export class OrderMatcher {
 
       if (!result.settled) {
         if (result.reason === 'INSUFFICIENT_BALANCE') {
-          await this._notifyCancelled(executedLeg, 'Saldo insuficiente ao disparar OCO. Ordem cancelada.')
+          await this._notifyCancelled(
+            executedLeg,
+            'Saldo insuficiente ao disparar OCO. Ordem cancelada.',
+            `Sua ordem OCO de ${sideLabel(executedLeg.side)} de ${executedLeg.quantity} ${executedLeg.asset.ticker} foi disparada, mas cancelada porque seu saldo em FS não cobria ${costLabel(executedLeg.leverageMultiplier)}. Nenhum valor foi debitado da sua conta.`,
+            `motor:order_cancelled:oco_insufficient_balance:${executedLeg.id}`,
+            'INSUFFICIENT_BALANCE',
+          )
         }
         return
       }
+
+      // As duas linhas duraveis (perna executada + perna irma cancelada) vem ANTES dos
+      // publishes, pelo mesmo motivo do caminho LIMIT. `persistOrderNotification` nunca
+      // lanca, entao nenhuma delas pode derrubar a outra nem cair no catch.
+      const ocoFee = result.feeAmount ?? 0
+      const rawCancelledPrice = cancelledLeg.price == null ? null : Number(cancelledLeg.price)
+      const cancelledLegPrice =
+        rawCancelledPrice != null && Number.isFinite(rawCancelledPrice) ? rawCancelledPrice : null
+      await persistOrderNotification(this.prisma, 'OrderMatcher', {
+        userId: executedLeg.userId,
+        type: 'ORDER_EXECUTED',
+        idempotencyKey: `motor:order_executed:${executedLeg.id}`,
+        title: `Ordem executada: ${executedLeg.asset.ticker}`,
+        body: `${reason}. Sua ordem de ${sideLabel(executedLeg.side)} de ${executedLeg.quantity} ${executedLeg.asset.ticker} foi executada a ${executionPrice.toFixed(2)} FS por unidade. Taxa cobrada: ${ocoFee.toFixed(2)} FS.`,
+        data: {
+          orderId: executedLeg.id,
+          ticker: executedLeg.asset.ticker,
+          side: executedLeg.side,
+          quantity: executedLeg.quantity,
+          executedPrice: executionPrice,
+          fee: ocoFee,
+          orderType: 'OCO',
+          motivo: reason,
+        },
+      })
+
+      // A perna irma foi cancelada pelo updateMany DENTRO da transacao acima — este e o
+      // cancelamento que o usuario mais precisa ver: ele nao pediu, o par pediu por ele.
+      //
+      // ACOPLAMENTO (2026-09-02): o updateMany cancela TODAS as outras pernas vivas do
+      // grupo, e este aviso cobre so `cancelledLeg`. Hoje as duas coisas coincidem porque
+      // um grupo OCO tem exatamente duas pernas — `OrderService.createOrder` cria stop-loss
+      // e take-profit numa unica transaction sob um `randomUUID()` novo, e nenhum outro
+      // ponto do produto escreve `order.groupId`. Se algum dia um grupo puder ter tres ou
+      // mais pernas, `_checkOcoTrigger` (que escolhe duas por min/max de preco) e este
+      // aviso passam a ignorar as demais, e a terceira perna seria cancelada em silencio —
+      // exatamente o defeito que esta correcao veio matar. Nesse dia, notificar a lista
+      // que o updateMany devolve, lendo-a dentro da transaction como faz o job de
+      // expiracao (`footstock-next/src/lib/jobs/order-expiry.ts`).
+      await persistOrderNotification(this.prisma, 'OrderMatcher', {
+        userId: cancelledLeg.userId,
+        type: 'ORDER_CANCELLED',
+        idempotencyKey: `motor:order_cancelled:oco_pair:${cancelledLeg.id}`,
+        title: 'Ordem cancelada: par OCO',
+        // O preco entra porque e o UNICO campo que diferencia as duas pernas: elas
+        // compartilham side, quantity e ticker (OrderService.createOrder). Sem ele o
+        // usuario le "a outra perna de venda de 50 URU3" sem saber qual das duas era.
+        body: `${reason}. A outra perna do par (${sideLabel(cancelledLeg.side)} de ${cancelledLeg.quantity} ${cancelledLeg.asset.ticker}${cancelledLegPrice != null ? ` a ${cancelledLegPrice.toFixed(2)} FS` : ''}) foi cancelada automaticamente, como previsto na ordem OCO. Nenhum valor foi debitado por ela.`,
+        data: {
+          orderId: cancelledLeg.id,
+          ticker: cancelledLeg.asset.ticker,
+          side: cancelledLeg.side,
+          quantity: cancelledLeg.quantity,
+          orderType: 'OCO',
+          motivo: reason,
+          triggeredBy: executedLeg.id,
+        },
+      })
 
       await Promise.allSettled([
         this.redis.publish(
@@ -187,10 +283,38 @@ export class OrderMatcher {
     }
   }
 
+  /**
+   * Cancelamento por falha de liquidacao (saldo insuficiente).
+   *
+   * A linha duravel vem PRIMEIRO e por fora do Promise.allSettled: e o unico canal que
+   * o usuario le. Os dois publishes seguem mantidos para nao quebrar um assinante
+   * futuro, mas hoje nao tem nenhum. `persistOrderNotification` nunca lanca.
+   *
+   * A transacao Serializable ja commitou o status CANCELLED (settlement.ts) quando este
+   * metodo roda — nenhuma escrita daqui pode reverter liquidacao.
+   */
   private async _notifyCancelled(
     order: PrismaOrder & { asset: { ticker: string } },
     motivo: string,
+    body: string,
+    idempotencyKey: string,
+    motivoCode: string,
   ): Promise<void> {
+    await persistOrderNotification(this.prisma, 'OrderMatcher', {
+      userId: order.userId,
+      type: 'ORDER_CANCELLED',
+      idempotencyKey,
+      title: 'Ordem cancelada: saldo insuficiente',
+      body,
+      data: {
+        orderId: order.id,
+        ticker: order.asset.ticker,
+        side: order.side,
+        quantity: order.quantity,
+        motivo: motivoCode,
+      },
+    })
+
     await Promise.allSettled([
       this.redis.publish(
         `orders:cancelled:${order.userId}`,
