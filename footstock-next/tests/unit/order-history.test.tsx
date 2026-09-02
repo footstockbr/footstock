@@ -73,6 +73,7 @@ const filledOrder: OrderHistoryDto = {
   executedAt: '2026-08-24T14:31:10.000Z',
   scheduledAt: null,
   groupId: null,
+  cancelReason: null,
   avgPriceAtExecution: 10,
   costBasisAmount: 100,
   realizedPnl: 25,
@@ -100,6 +101,7 @@ const openOrder: OrderHistoryDto = {
   executedAt: null,
   scheduledAt: null,
   groupId: null,
+  cancelReason: null,
   avgPriceAtExecution: null,
   costBasisAmount: null,
   realizedPnl: null,
@@ -141,6 +143,7 @@ const legacyOrder: OrderHistoryDto = {
   executedAt: '2026-01-10T12:00:05.000Z',
   scheduledAt: null,
   groupId: null,
+  cancelReason: null,
   avgPriceAtExecution: null,
   costBasisAmount: null,
   realizedPnl: null,
@@ -324,6 +327,57 @@ describe('OrderHistory — drill-down', () => {
 
     expect(screen.getByTestId(`order-status-${cancelledOrder.id}`).textContent).toBe('Cancelada')
     expect(screen.getByTestId(`order-net-${cancelledOrder.id}`).textContent).toBe(UNAVAILABLE_TEXT)
+  })
+
+  // ── Fase 3: motivo do encerramento ─────────────────────────────────────────
+
+  test('ordem cancelada pelo motor explica o motivo em portugues', () => {
+    const esgotada = {
+      ...cancelledOrder,
+      id: 'ord-esgotada',
+      cancelReason: 'EXECUTION_RETRY_EXHAUSTED',
+    }
+    renderWith([esgotada])
+    expand(esgotada.id)
+
+    const nota = screen.getByTestId(`order-cancel-reason-${esgotada.id}`)
+    expect(nota.textContent).toContain('Motivo:')
+    expect(nota.textContent).toContain('tentou executar várias vezes')
+    // Codigo interno nunca aparece na tela do cliente.
+    expect(nota.textContent).not.toContain('EXECUTION_RETRY_EXHAUSTED')
+  })
+
+  test('cancelamento do usuario e queda por par OCO tem textos diferentes', () => {
+    const meu = { ...cancelledOrder, id: 'ord-meu', cancelReason: 'USER_REQUEST' }
+    const irma = { ...cancelledOrder, id: 'ord-irma', cancelReason: 'OCO_SIBLING' }
+    renderWith([meu, irma])
+    expand(meu.id)
+    expand(irma.id)
+
+    const t1 = screen.getByTestId(`order-cancel-reason-${meu.id}`).textContent
+    const t2 = screen.getByTestId(`order-cancel-reason-${irma.id}`).textContent
+    expect(t1).toContain('Você cancelou')
+    expect(t2).toContain('par OCO')
+    expect(t1).not.toBe(t2)
+  })
+
+  test('ordem viva nao mostra nota de motivo', () => {
+    renderWith([openOrder])
+    expand(openOrder.id)
+
+    expect(screen.queryByTestId(`order-cancel-reason-${openOrder.id}`)).toBeNull()
+  })
+
+  test('motivo desconhecido some da tela em vez de vazar codigo', () => {
+    // Ordem legada (pre-Fase 3) ou motivo novo ainda nao mapeado. Mostrar
+    // "Motivo: MOTIVO_NOVO_X" nao informa nada e parece defeito.
+    const legado = { ...cancelledOrder, id: 'ord-legado', cancelReason: 'MOTIVO_QUE_NAO_EXISTE' }
+    renderWith([legado])
+    expand(legado.id)
+
+    expect(screen.queryByTestId(`order-cancel-reason-${legado.id}`)).toBeNull()
+    // A ordem continua renderizando normalmente.
+    expect(screen.getByTestId(`order-details-${legado.id}`)).toBeTruthy()
   })
 
   test('varias ordens podem ficar abertas ao mesmo tempo', () => {

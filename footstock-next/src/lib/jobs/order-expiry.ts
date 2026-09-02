@@ -177,7 +177,11 @@ export async function processExpiredOrders(): Promise<ExpiryResult> {
           })
           await tx.order.updateMany({
             where: { groupId: order.groupId!, status: { in: [ORDER_STATUS.OPEN, ORDER_STATUS.PARTIAL] } },
-            data: { status: 'EXPIRED' },
+            // Fase 3 (M072): EXPIRED e EXECUTION_RETRY_EXHAUSTED sao desfechos
+            // DISTINTOS e ambos terminais. Aqui a ordem morreu de velhice (30
+            // dias), nao de falha de execucao — o historico precisa distinguir os
+            // dois, senao "cancelada" vira uma palavra sem informacao.
+            data: { status: 'EXPIRED', cancelReason: 'EXPIRED', nextAttemptAt: null },
           })
           return alive
         })
@@ -199,7 +203,7 @@ export async function processExpiredOrders(): Promise<ExpiryResult> {
         // agendamento: so a que ganhar o update notifica.
         const claimed = await prisma.order.updateMany({
           where: { id: order.id, status: { in: [ORDER_STATUS.OPEN, ORDER_STATUS.PARTIAL] } },
-          data: { status: 'EXPIRED' },
+          data: { status: 'EXPIRED', cancelReason: 'EXPIRED', nextAttemptAt: null },
         })
         if (claimed.count === 0) {
           console.info(`[order-expiry] ordem ${order.id} mudou de estado antes da expiracao; ignorada`)

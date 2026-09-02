@@ -68,6 +68,24 @@ const FINANCIAL_SOURCE_NOTES: Record<string, string> = {
   NONE: 'Esta ordem não foi executada, então não existem valores de liquidação.',
 }
 
+// Motivo do encerramento nao-executado (Fase 3, `Order.cancelReason`).
+// Vocabulario fechado gravado pelo motor, pelos jobs de expiracao e pelo
+// cancelamento do usuario; ver `docs/FASE3-ciclo-de-vida-da-ordem.md`. Codigo
+// desconhecido (ordem legada ou motivo novo ainda nao mapeado) NAO e exibido
+// cru para o usuario: a nota inteira some, porque codigo interno na tela nao
+// informa nada e parece defeito.
+const CANCEL_REASON_NOTES: Record<string, string> = {
+  USER_REQUEST: 'Você cancelou esta ordem.',
+  INSUFFICIENT_BALANCE: 'Saldo FS$ insuficiente no momento da execução.',
+  ASSET_HALTED: 'Negociação do ativo foi suspensa antes da execução.',
+  EXECUTION_RETRY_EXHAUSTED:
+    'O motor tentou executar várias vezes e não conseguiu. A ordem foi cancelada para não ficar presa.',
+  EXPIRED: 'A ordem expirou sem ser executada.',
+  OCO_SIBLING: 'A outra ponta do par OCO foi encerrada, então esta foi cancelada junto.',
+  PLAN_CANCELLED: 'Sua assinatura foi cancelada e as ordens pendentes foram encerradas.',
+  RECONCILIATION: 'Ordem encerrada pela reconciliação: ficou presa sem avançar.',
+}
+
 // Rotulo unico de ausencia de dado. Nunca usar zero no lugar: FS$ 0,00 afirma
 // que nao houve custo, e o que sabemos e que o dado nao existe.
 const UNAVAILABLE = 'Indisponível'
@@ -212,6 +230,15 @@ function OrderDetails({ order }: { order: OrderHistoryDto }) {
           </div>
         )}
       </dl>
+
+      {order.cancelReason && CANCEL_REASON_NOTES[order.cancelReason] && (
+        <p
+          className="mt-2 text-base text-primary"
+          data-testid={`order-cancel-reason-${order.id}`}
+        >
+          Motivo: {CANCEL_REASON_NOTES[order.cancelReason]}
+        </p>
+      )}
 
       <p className="mt-2 text-base text-primary">
         {FINANCIAL_SOURCE_NOTES[order.financialSource] ?? ''}

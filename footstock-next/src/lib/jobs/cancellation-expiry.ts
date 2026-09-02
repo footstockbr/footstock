@@ -107,7 +107,13 @@ async function closeAllOpenPositions(userId: string, subscriptionId: string): Pr
   try {
     await prisma.order.updateMany({
       where: { userId, status: { in: ['OPEN', 'PARTIAL'] } },
-      data: { status: 'CANCELLED' },
+      // Fase 3 (M072): o encerramento do plano e um desfecho de conta, nao de
+      // ordem. Sem o motivo na linha, o usuario reencontra as ordens como
+      // "Cancelada" sem nada que as ligue ao cancelamento do plano.
+      // O aviso ao usuario ja existe no nivel do plano (PLAN_CANCEL_ALERT); nao
+      // ha uma linha por ordem de proposito, para nao inundar a caixa de quem
+      // cancelou a assinatura com dezenas de avisos redundantes.
+      data: { status: 'CANCELLED', cancelReason: 'PLAN_CANCELLED', nextAttemptAt: null },
     })
   } catch (err) {
     console.error(`[cancellation-expiry T+7d] Falha ao cancelar ordens pendentes de ${userId}:`, err)

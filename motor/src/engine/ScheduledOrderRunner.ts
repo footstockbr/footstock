@@ -13,6 +13,8 @@ import { settleOrderFill } from './settlement'
 // assinante. Mesmo create compartilhado do OrderExecutor e do OrderMatcher.
 import { persistOrderNotification, sideLabel, costLabel } from './orderNotifications'
 import type { PrismaOrder } from '../types/prisma.types'
+// Fase 3 (2026-09-02): mesma maquina de tentativa/backoff dos outros dois executores.
+import { eligibleNowFilter, recordFailedAttempt, cancelExhaustedOrder } from './orderRetry'
 
 export class ScheduledOrderRunner {
   constructor(
@@ -34,9 +36,15 @@ export class ScheduledOrderRunner {
         type: 'SCHEDULED',
         status: 'OPEN',
         scheduledAt: { lte: now },
+        // Fase 3: ordem em backoff sai da varredura ate a proxima tentativa.
+        // Aqui nao ha `take`, entao nao ha slot a proteger — o ganho e nao repetir
+        // a cada 10s uma liquidacao que acabou de falhar.
+        ...eligibleNowFilter(now),
       },
       include: { asset: true },
-      orderBy: { scheduledAt: 'asc' },
+      // scheduledAt continua governando a ordem: e o horario que o usuario pediu.
+      // nextAttemptAt entra so como desempate para quem ja falhou.
+      orderBy: [{ nextAttemptAt: 'asc' }, { scheduledAt: 'asc' }],
     })
 
     if (orders.length === 0) return
@@ -147,6 +155,16 @@ export class ScheduledOrderRunner {
       logger.info(`[ScheduledOrderRunner] OK orderId=${order.id} delay=${executionDelay}ms`)
     } catch (err) {
       logger.error(`[ScheduledOrderRunner] FAIL orderId=${order.id}: ${String(err)}`)
+
+      // Fase 3: este catch nao relanca (nao ha agregado BATCH_FAIL aqui), entao
+      // antes a falha sumia no log e a ordem voltava intacta ao proximo tick para
+      // sempre. Agora o contador fica na linha e o esgotamento e terminal.
+      const outcome = await recordFailedAttempt(this.prisma, 'ScheduledOrderRunner', order, err, new Date())
+      if (outcome.exhausted) {
+        await cancelExhaustedOrder(this.prisma, 'ScheduledOrderRunner', order, (input) =>
+          persistOrderNotification(this.prisma, 'ScheduledOrderRunner', input)
+        )
+      }
     }
   }
 }

@@ -75,7 +75,10 @@ export async function POST(request: NextRequest) {
       // Cancelar ordens pendentes
       await tx.order.updateMany({
         where: { userId, status: { in: ['OPEN', 'PARTIAL'] } },
-        data: { status: 'CANCELLED' },
+        // Fase 3 (M072): mesmo motivo do cancelamento por expiracao de plano —
+        // o aviso ao usuario e o PLAN_CANCEL_ALERT logo abaixo; o que faltava era
+        // a rastreabilidade na propria ordem.
+        data: { status: 'CANCELLED', cancelReason: 'PLAN_CANCELLED', nextAttemptAt: null },
       })
 
       // Resetar usuário

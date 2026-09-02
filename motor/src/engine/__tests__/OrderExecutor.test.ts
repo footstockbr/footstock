@@ -499,7 +499,11 @@ describe('OrderExecutor', () => {
       await executor.processPendingMarketOrders({ CRAQUE10: 50 })
 
       expect(prisma.order.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { status: 'CANCELLED' } })
+        expect.objectContaining({
+          // Fase 3 (M072): o cancelamento por halt agora declara o motivo na
+          // propria linha da ordem, e zera o backoff para nao reagendar tentativa.
+          data: { status: 'CANCELLED', cancelReason: 'ASSET_HALTED', nextAttemptAt: null },
+        })
       )
       expect(prisma.$transaction).not.toHaveBeenCalled()
       expect(prisma.notification.create).toHaveBeenCalledTimes(1)

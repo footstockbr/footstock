@@ -483,6 +483,11 @@ model Order {
   groupId            String?     @map("group_id")
   leverageMultiplier Int         @default(1) @map("leverage_multiplier")
   executedAt         DateTime?   @map("executed_at")
+  attemptCount       Int         @default(0) @map("attempt_count")
+  lastAttemptAt      DateTime?   @map("last_attempt_at")
+  lastErrorCode      String?     @map("last_error_code")
+  nextAttemptAt      DateTime?   @map("next_attempt_at")
+  cancelReason       String?     @map("cancel_reason")
   version            Int         @default(0)
   createdAt          DateTime    @default(now()) @map("created_at")
   updatedAt          DateTime    @updatedAt @map("updated_at")
@@ -497,6 +502,7 @@ model Order {
   @@index([userId, status])
   @@index([groupId])
   @@index([assetId, status, side, type, createdAt])
+  @@index([status, type, nextAttemptAt])
   @@map("orders")
 }
 

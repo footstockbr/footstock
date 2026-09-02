@@ -14,6 +14,15 @@ import type { PrismaOrder, PrismaDecimal } from '../types/prisma.types'
 // mesma linha duravel e nao podem ter uma segunda copia do create nem do formato de log.
 import { describeError, sideLabel, costLabel, persistOrderNotification } from './orderNotifications'
 import type { OrderNotificationInput } from './orderNotifications'
+// Fase 3 (2026-09-02): a retentativa com backoff e o cancelamento por esgotamento
+// moram em orderRetry.ts para que MARKET, LIMIT/OCO e SCHEDULED usem a MESMA
+// classificacao de erro e o MESMO orcamento de tentativas.
+import {
+  eligibleNowFilter,
+  RETRY_ORDER_BY,
+  recordFailedAttempt,
+  cancelExhaustedOrder,
+} from './orderRetry'
 
 const BATCH_SIZE = 50
 
@@ -28,11 +37,15 @@ export class OrderExecutor {
    * Chama TransactionService via HTTP interno ou executa inline (Railway env).
    */
   async processPendingMarketOrders(currentPrices: Record<string, number>): Promise<void> {
+    // Fase 3: a elegibilidade e decidida NA QUERY. Filtrar depois do findMany
+    // gastaria slot do lote com ordem em backoff — que e exatamente a starvation
+    // que esta fase veio matar.
+    const now = new Date()
     const orders = await this.prisma.order.findMany({
-      where: { type: 'MARKET', status: 'OPEN' },
+      where: { type: 'MARKET', status: 'OPEN', ...eligibleNowFilter(now) },
       take: BATCH_SIZE,
       include: { asset: true },
-      orderBy: { createdAt: 'asc' },
+      orderBy: RETRY_ORDER_BY,
     })
 
     if (orders.length === 0) return
@@ -179,6 +192,18 @@ export class OrderExecutor {
       logger.error(
         `[OrderExecutor] FAIL orderId=${order.id} ticker=${order.asset.ticker} userId=${order.userId} ${describeError(err)}`
       )
+
+      // Fase 3: falha REAL de liquidacao conta como tentativa e agenda o retorno.
+      // So chega aqui excecao lancada pela transaction — precondicao (ticker sem
+      // preco, ativo em halt) e desfecho ja decidido pela settlement
+      // (ALREADY_SETTLED, INSUFFICIENT_BALANCE) nao passam por este catch.
+      const outcome = await recordFailedAttempt(this.prisma, 'OrderExecutor', order, err, new Date())
+      if (outcome.exhausted) {
+        await cancelExhaustedOrder(this.prisma, 'OrderExecutor', order, (input) =>
+          this._persistOrderNotification(input)
+        )
+      }
+
       throw err
     }
   }
@@ -194,7 +219,7 @@ export class OrderExecutor {
       // CAS: só cancela se ainda OPEN/PARTIAL (anti-corrida com fill no mesmo tick)
       const claim = await this.prisma.order.updateMany({
         where: { id: order.id, status: { in: ['OPEN', 'PARTIAL'] } },
-        data: { status: 'CANCELLED' },
+        data: { status: 'CANCELLED', cancelReason: 'ASSET_HALTED', nextAttemptAt: null },
       })
       if (claim.count !== 1) return
 

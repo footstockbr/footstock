@@ -24,7 +24,22 @@ import { isTickFresh } from '@/lib/motor/tick-freshness'
 import { getCurrentSession } from '@/lib/services/session-manager'
 import { acceptsMarketOrders } from '@/lib/constants/market'
 import { randomUUID } from 'crypto'
+import { notificationRepository } from '@/lib/repositories/NotificationRepository'
 import type { Order, Prisma } from '@prisma/client'
+
+/**
+ * Motivo terminal do cancelamento pedido pelo próprio usuário (Fase 3, M072).
+ *
+ * Vocabulário FECHADO — a coluna guarda o código, nunca a frase. O texto que o
+ * usuário lê é montado na UI a partir do código
+ * (`components/orders/OrderHistory.tsx`), pelo mesmo motivo que
+ * `ORDER_ERROR_MESSAGES` existe: gravar prosa na tabela congela a redação e
+ * impede tradução, e um `cancelReason` livre viraria filtro impossível de fazer.
+ * Códigos irmãos: EXPIRED, OCO_SIBLING, EXECUTION_RETRY_EXHAUSTED,
+ * INSUFFICIENT_BALANCE, ASSET_HALTED, PLAN_CANCELLED, RECONCILIATION.
+ * Catálogo completo: docs/FASE3-ciclo-de-vida-da-ordem.md §6.
+ */
+const CANCEL_REASON_USER_REQUEST = 'USER_REQUEST'
 
 // ---------------------------------------------------------------------------
 // Erros de domínio
@@ -411,6 +426,11 @@ export class OrderService {
         data: {
           status: 'CANCELLED',
           version: { increment: 1 },
+          // Fase 3 (M072): o motivo mora na propria linha. Este e o caminho de
+          // cancelamento MAIS disparado do produto; sem ele o historico mostraria
+          // "Cancelada" sem distinguir escolha do usuario de falha de execucao.
+          cancelReason: CANCEL_REASON_USER_REQUEST,
+          nextAttemptAt: null,
         },
       })
 
@@ -424,7 +444,13 @@ export class OrderService {
       if (order.type === ORDER_TYPE.OCO && order.groupId) {
         await tx.order.updateMany({
           where: { groupId: order.groupId, id: { not: orderId }, status: { in: ['OPEN', 'PARTIAL'] } },
-          data: { status: 'CANCELLED', version: { increment: 1 } },
+          data: {
+            status: 'CANCELLED',
+            version: { increment: 1 },
+            // A perna irma nao foi cancelada por escolha direta: caiu junto.
+            cancelReason: 'OCO_SIBLING',
+            nextAttemptAt: null,
+          },
         })
       }
 
@@ -433,6 +459,16 @@ export class OrderService {
 
       return updated
     })
+
+    // Zero Silencio (Fase 3): a linha em `notifications` e a entrega REAL — o
+    // front faz polling da tabela, e os dois `redis.publish` logo abaixo nao tem
+    // assinante em nenhum ponto do repositorio. Este caminho e o cancelamento mais
+    // comum do produto e, ate aqui, era o unico dos cinco que nao gravava nada.
+    //
+    // Nao lanca e nao bloqueia o retorno em caso de erro: o cancelamento ja
+    // commitou; falhar no aviso nao pode transformar um cancelamento bem-sucedido
+    // em erro 500 na cara do usuario que acabou de clicar.
+    await this._notifyCancelledByUser(cancelled, order.assetId)
 
     // EVT-014: rastrear cancelamento da ordem
     // Buscar ticker do ativo para analytics (async, sem bloquear retorno)
@@ -460,6 +496,74 @@ export class OrderService {
     ])
 
     return cancelled
+  }
+
+  /**
+   * Grava o aviso DURÁVEL do cancelamento pedido pelo usuário.
+   *
+   * Inclui as pernas OCO derrubadas junto: quem cancela uma perna de um par
+   * cancela as duas, e receber aviso de uma só deixaria o usuário achando que a
+   * outra continua viva.
+   *
+   * Idempotência por chave própria (`user_cancel:order:{id}`), disjunta da chave
+   * do expiry (`expiry:order:{id}`) e da do motor
+   * (`motor:order_cancelled:retry_exhausted:{id}`): uma mesma ordem pode ter no
+   * máximo um desfecho terminal, mas as chaves não podem colidir entre origens,
+   * senão o UNIQUE de `notifications.idempotency_key` engoliria o aviso do
+   * caminho que de fato aconteceu.
+   *
+   * Nunca lança.
+   */
+  private async _notifyCancelledByUser(cancelled: Order, assetId: string): Promise<void> {
+    try {
+      const asset = await prisma.asset.findUnique({ where: { id: assetId }, select: { ticker: true } })
+      const ticker = asset?.ticker ?? null
+
+      // As pernas do grupo OCO são relidas DEPOIS do commit e filtradas por
+      // cancelReason: só avisa sobre o que esta operação de fato derrubou. Ler o
+      // grupo inteiro sem filtro mandaria "cancelada" para perna já FILLED — o
+      // defeito exato que o job de expiração teve de corrigir.
+      const legs: Array<Pick<Order, 'id' | 'userId' | 'side' | 'quantity' | 'cancelReason'>> =
+        cancelled.groupId
+          ? await prisma.order.findMany({
+              where: { groupId: cancelled.groupId, status: 'CANCELLED', cancelReason: { in: [CANCEL_REASON_USER_REQUEST, 'OCO_SIBLING'] } },
+              select: { id: true, userId: true, side: true, quantity: true, cancelReason: true },
+            })
+          : [cancelled]
+
+      for (const leg of legs) {
+        const alvo = `${leg.side === 'BUY' ? 'de compra' : 'de venda'} de ${leg.quantity}${ticker ? ` ${ticker}` : ''}`
+        const desfecho =
+          leg.cancelReason === 'OCO_SIBLING'
+            ? 'foi cancelada junto com a ordem par (OCO) que você cancelou. Nenhum valor foi debitado.'
+            : 'foi cancelada a seu pedido. Nenhum valor foi debitado.'
+        try {
+          await notificationRepository.create({
+            userId: leg.userId,
+            type: 'ORDER_CANCELLED',
+            title: 'Ordem cancelada',
+            body: `Sua ordem ${alvo} ${desfecho}`,
+            idempotencyKey: `user_cancel:order:${leg.id}`,
+            metadata: {
+              orderId: leg.id,
+              ticker,
+              side: leg.side,
+              quantity: leg.quantity,
+              motivo: leg.cancelReason ?? CANCEL_REASON_USER_REQUEST,
+              status: 'CANCELLED',
+            },
+          })
+        } catch (err) {
+          // P2002 = a chave já existe, ou seja, o aviso JÁ foi entregue. É a
+          // deduplicação funcionando, não falha.
+          if ((err as { code?: string })?.code !== 'P2002') {
+            console.error(`[OrderService] Falha ao notificar cancelamento da ordem ${leg.id}:`, err)
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`[OrderService] Falha ao preparar aviso de cancelamento da ordem ${cancelled.id}:`, err)
+    }
   }
 
   /**

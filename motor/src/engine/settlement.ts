@@ -118,7 +118,17 @@ export async function settleOrderFill(
       // deixada OPEN (evita retry infinito a cada tick).
       await tx.order.update({
         where: { id: order.id },
-        data: { status: 'CANCELLED', executedPrice: null, executedAt: null, fee: 0 },
+        // Fase 3: o motivo passa a viver na linha. Antes so existia como texto em
+        // log e num canal Redis sem assinante, entao o historico da ordem nao
+        // sabia dizer por que ela foi cancelada.
+        data: {
+          status: 'CANCELLED',
+          executedPrice: null,
+          executedAt: null,
+          fee: 0,
+          cancelReason: 'INSUFFICIENT_BALANCE',
+          nextAttemptAt: null,
+        },
       })
       return { settled: false, reason: 'INSUFFICIENT_BALANCE' }
     }

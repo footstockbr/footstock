@@ -101,6 +101,12 @@ export interface OrderHistorySource {
   /** Hora EXECUTADA (`Order.executedAt`). */
   executedAt?: Date | string | null
   groupId?: string | null
+  /**
+   * `Order.cancelReason` — motivo do cancelamento/expiracao (Fase 3).
+   * Vocabulario fechado documentado em `docs/FASE3-ciclo-de-vida-da-ordem.md`.
+   * Nulo em ordem que nunca saiu por cancelamento.
+   */
+  cancelReason?: string | null
   asset?: OrderHistoryAssetRef | null
   transactions?: OrderSettlementTransaction[] | null
 }
@@ -134,6 +140,12 @@ export interface OrderHistoryDto {
   executedAt: string | null
   scheduledAt: string | null
   groupId: string | null
+  /**
+   * Motivo do encerramento nao-executado. Preenchido apenas quando o motor, o
+   * job de expiracao ou o proprio usuario encerrou a ordem (Fase 3).
+   * `null` em ordem viva, executada ou cancelada antes da Fase 3 (legado).
+   */
+  cancelReason: string | null
   // Snapshot de custo do motor (nullable: ordens legadas podem nao ter)
   avgPriceAtExecution: number | null
   costBasisAmount: number | null
@@ -162,6 +174,7 @@ export const ORDER_HISTORY_DTO_FIELDS: readonly (keyof OrderHistoryDto)[] = [
   'executedAt',
   'scheduledAt',
   'groupId',
+  'cancelReason',
   'avgPriceAtExecution',
   'costBasisAmount',
   'realizedPnl',
@@ -333,6 +346,7 @@ export function serializeOrderHistory(order: OrderHistorySource): OrderHistoryDt
     executedAt: isExecutedSource ? toIsoOrNull(order.executedAt ?? null) : null,
     scheduledAt: toIsoOrNull(order.scheduledAt ?? null),
     groupId: order.groupId ?? null,
+    cancelReason: order.cancelReason ?? null,
     avgPriceAtExecution: financials.avgPriceAtExecution,
     costBasisAmount: financials.costBasisAmount,
     realizedPnl: financials.realizedPnl,

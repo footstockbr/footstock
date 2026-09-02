@@ -18,7 +18,8 @@
     "test:integration": "jest tests/integration",
     "test:unit": "jest tests/unit",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "reconcile:orders": "tsx --conditions=react-server scripts/reconcile-stuck-orders.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.82.0",

@@ -14,6 +14,14 @@ import { settleOrderFill } from './settlement'
 // ORDER_EXECUTED/ORDER_CANCELLED desde 20/04. O create mora no modulo compartilhado.
 import { persistOrderNotification, sideLabel, costLabel } from './orderNotifications'
 import type { PrismaOrder } from '../types/prisma.types'
+// Fase 3 (2026-09-02): mesma classificacao de erro, mesmo orcamento de tentativas e
+// mesmo cancelamento terminal que MARKET e SCHEDULED usam.
+import {
+  eligibleNowFilter,
+  RETRY_ORDER_BY,
+  recordFailedAttempt,
+  cancelExhaustedOrder,
+} from './orderRetry'
 
 const BATCH_SIZE = 100
 
@@ -28,11 +36,13 @@ export class OrderMatcher {
    * Executa quando o preço-alvo é atingido (com price improvement).
    */
   async checkLimitOrders(currentPrices: Record<string, number>): Promise<void> {
+    // Fase 3: elegibilidade decidida na query (ver orderRetry.eligibleNowFilter).
+    const now = new Date()
     const orders = await this.prisma.order.findMany({
-      where: { type: { in: ['LIMIT', 'OCO'] }, status: 'OPEN' },
+      where: { type: { in: ['LIMIT', 'OCO'] }, status: 'OPEN', ...eligibleNowFilter(now) },
       take: BATCH_SIZE,
       include: { asset: true },
-      orderBy: { createdAt: 'asc' },
+      orderBy: RETRY_ORDER_BY,
     })
 
     if (orders.length === 0) return
@@ -163,6 +173,7 @@ export class OrderMatcher {
       logger.info(`[OrderMatcher] LIMIT OK orderId=${order.id} ticker=${order.asset.ticker} price=${executionPrice}`)
     } catch (err) {
       logger.error(`[OrderMatcher] LIMIT fail orderId=${order.id}: ${String(err)}`)
+      await this._accountFailedAttempt(order, err)
     }
   }
 
@@ -185,7 +196,9 @@ export class OrderMatcher {
               id: { not: executedLeg.id },
               status: { in: ['OPEN', 'PARTIAL'] },
             },
-            data: { status: 'CANCELLED' },
+            // Fase 3: a perna irma passa a carregar o motivo. Sem isso o historico
+            // mostraria "Cancelada" sem dizer que foi a irma que executou.
+            data: { status: 'CANCELLED', cancelReason: 'OCO_SIBLING', nextAttemptAt: null },
           })
         }
         return r
@@ -279,8 +292,30 @@ export class OrderMatcher {
 
       logger.info(`[OrderMatcher] OCO executado: ${executedLeg.id} (${reason}), grupo ${executedLeg.groupId} cancelado`)
     } catch (err) {
-      logger.error(`[OrderMatcher] OCO fail: ${String(err)}`)
+      logger.error(`[OrderMatcher] OCO fail orderId=${executedLeg.id}: ${String(err)}`)
+      await this._accountFailedAttempt(executedLeg, err)
     }
+  }
+
+  /**
+   * Contabiliza a falha de liquidacao na propria ordem e, se o orcamento acabou,
+   * cancela terminalmente com motivo.
+   *
+   * Diferente do OrderExecutor, os catches deste modulo NAO relancam — nao existe
+   * agregado BATCH_FAIL para LIMIT/OCO. Antes da Fase 3 isso significava que a
+   * falha inesperada sumia no log e a ordem voltava intacta ao lote no proximo
+   * tick, para sempre. Agora o contador fica na linha, entao a falha e visivel
+   * tanto no historico da ordem quanto no relatorio de reconciliacao.
+   */
+  private async _accountFailedAttempt(
+    order: PrismaOrder & { asset: { ticker: string } },
+    err: unknown,
+  ): Promise<void> {
+    const outcome = await recordFailedAttempt(this.prisma, 'OrderMatcher', order, err, new Date())
+    if (!outcome.exhausted) return
+    await cancelExhaustedOrder(this.prisma, 'OrderMatcher', order, (input) =>
+      persistOrderNotification(this.prisma, 'OrderMatcher', input)
+    )
   }
 
   /**

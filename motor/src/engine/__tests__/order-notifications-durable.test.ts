@@ -255,7 +255,8 @@ describe('OrderMatcher — OCO', () => {
 
     expect(prisma._tx.order.updateMany).toHaveBeenCalledWith({
       where: { groupId: 'grp-1', id: { not: 'leg-tp' }, status: { in: ['OPEN', 'PARTIAL'] } },
-      data: { status: 'CANCELLED' },
+      // Fase 3 (M072): a perna irma cancelada carrega o motivo OCO_SIBLING.
+      data: { status: 'CANCELLED', cancelReason: 'OCO_SIBLING', nextAttemptAt: null },
     })
     // O preco e o unico campo que distingue as pernas (side/quantity/ticker sao iguais).
     expect(rows(prisma)[1].body).toContain('80.00 FS')

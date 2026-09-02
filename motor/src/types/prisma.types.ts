@@ -33,6 +33,12 @@ export interface PrismaOrder {
   executedAt: Date | null
   createdAt: Date
   updatedAt: Date
+  // Fase 3 (M072) — ciclo de vida da tentativa. Ver docs/FASE3-ciclo-de-vida-da-ordem.md.
+  attemptCount: number
+  lastAttemptAt: Date | null
+  lastErrorCode: string | null
+  nextAttemptAt: Date | null
+  cancelReason: string | null
 }
 
 export interface PrismaPosition {

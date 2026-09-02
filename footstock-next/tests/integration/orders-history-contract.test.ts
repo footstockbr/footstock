@@ -301,6 +301,32 @@ describe('GET /api/v1/orders — contrato de historico', () => {
     expect(item.netAmount).toBeNull()
   })
 
+  // ── Fase 3: motivo do encerramento ───────────────────────────────────────
+  test('cancelReason atravessa do banco ate o DTO', async () => {
+    const cancelled = {
+      ...openOrder(),
+      id: 'order-reason',
+      status: 'CANCELLED',
+      cancelReason: 'EXECUTION_RETRY_EXHAUSTED',
+    }
+    mockFindMany.mockResolvedValue([cancelled])
+    const [item] = await getPayload()
+
+    // O campo e escrito pelo MOTOR (schema raiz) e lido pelo front (schema
+    // canonico). Drift entre as duas linhagens vira campo nulo eterno sem erro
+    // nenhum — risco 8.4 do design. Este teste e a trava do lado da leitura.
+    expect(item.cancelReason).toBe('EXECUTION_RETRY_EXHAUSTED')
+  })
+
+  test('ordem viva ou legada expoe cancelReason null, nunca undefined', () => {
+    // `undefined` some no JSON.stringify e o campo desaparece da resposta; a UI
+    // entao nao consegue distinguir "sem motivo" de "campo nao veio".
+    const dto = serializeOrderHistory(openOrder())
+
+    expect(dto.cancelReason).toBeNull()
+    expect(Object.prototype.hasOwnProperty.call(dto, 'cancelReason')).toBe(true)
+  })
+
   // ── Fallback explicito ───────────────────────────────────────────────────
   test('ordem executada sem TRADE usa Order.fee marcado como ORDER_FALLBACK', () => {
     const order = { ...executedSellOrder(), transactions: [] }
