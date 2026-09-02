@@ -43,6 +43,16 @@ const TICK_INTERVAL_MS = (() => {
   const n = parseInt(process.env.MOTOR_TICK_INTERVAL_MS ?? '10000', 10)
   return Number.isFinite(n) && n >= 1000 ? n : 10000
 })()
+// Cadencia da reconciliacao do roster de ativos (ver MarketEngine.syncAssetRoster).
+// Ativo criado/reativado/desativado DEPOIS do boot do lider so entra (ou sai) do
+// motor por essa reconciliacao — antes dela, `loadAssets()` rodava uma unica vez e
+// o roster ficava congelado ate o proximo restart. Default 60s: a janela maxima em
+// que uma ordem de um ativo recem-ativado fica sem preco no tick. Floor 5s para nao
+// transformar a reconciliacao em carga de banco.
+const ROSTER_SYNC_INTERVAL_MS = (() => {
+  const n = parseInt(process.env.MOTOR_ROSTER_SYNC_MS ?? '60000', 10)
+  return Number.isFinite(n) && n >= 5000 ? n : 60000
+})()
 const PERSIST_HISTORY_EVERY = 6  // Persistir PriceHistory a cada N ticks ≈ 1min com tick=10s (reduzido de 30 para evitar gráficos degrau-degrau em B_LIQUID/B_ILLIQ; A_TOP persiste sempre — ver item 004)
 const PAUSE_RESUME_MS = 5 * 60 * 1000  // 5 minutos absolutos (independente de TICK_INTERVAL_MS)
 // Heartbeat a cada N ticks (reduz comandos Redis — TTL do MotorHealthService: 60s)
@@ -194,6 +204,8 @@ export class MarketEngine {
   private pendingAdminAdjustments = new Map<string, AdminPriceAdjustment[]>()
   /** Timers de retomada do circuit breaker por assetId — cancelados no stop(). */
   private circuitBreakerTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  /** Wall-clock da ultima reconciliacao de roster (ver syncAssetRoster). */
+  private lastRosterSyncMs = 0
 
   constructor(redis: Redis) {
     this.redis = redis
@@ -340,9 +352,107 @@ export class MarketEngine {
     MAC3: 3.75, NAF3: 3.75, ABT3: 3.00, TUB3: 3.22, CAV3: 3.03,
   }
 
+  /**
+   * Carga inicial do roster — le todos os ativos ativos e materializa o estado em
+   * memoria. Roda UMA vez, no boot do lider. A manutencao continua (ativo criado,
+   * reativado ou desativado depois do boot) e de `syncAssetRoster()`.
+   */
   private async loadAssets(): Promise<void> {
-    const loadTime = Date.now()
     const assets = await this.prisma.asset.findMany({ where: { isActive: true } })
+    await this.ingestAssets(assets)
+    this.lastRosterSyncMs = Date.now()
+    logger.info(`[engine] AgentOrchestrator inicializado para ${this.assetStates.size} ativos`)
+  }
+
+  /**
+   * Reconcilia o roster em memoria com `asset.isActive` do banco.
+   *
+   * Causa raiz que este metodo fecha: `loadAssets()` so rodava no boot do lider, entao
+   * um ativo ativado (ou reativado) depois disso nunca entrava em `assetStates`. Como
+   * `runTick()` monta `currentPrices` a partir de `assetStates`, o ticker desse ativo
+   * nunca aparecia no mapa e o `OrderExecutor` classificava toda ordem dele como
+   * skip — para sempre, ate o cron de expiry. O caminho simetrico tambem existia: um
+   * ativo desativado continuava tickando, publicando preco e casando ordem.
+   *
+   * Roda DENTRO do tick (chamado no topo de `runTick`), nao num setInterval proprio:
+   * o guard `tickInFlight` ja serializa o ciclo, entao mutar `assetStates` aqui nao
+   * corre contra os `for..of` do proprio tick. Um timer paralelo criaria exatamente
+   * essa corrida.
+   *
+   * Custo em regime: uma query indexada so de ids. A leitura completa da linha so
+   * acontece quando ha ativo novo.
+   *
+   * Publico por ser tambem a costura de teste e o gancho para um futuro disparo
+   * reativo (admin action / canal Redis) — hoje o unico chamador e o tick.
+   */
+  async syncAssetRoster(): Promise<{ added: string[]; removed: string[] }> {
+    const active = await this.prisma.asset.findMany({
+      where: { isActive: true },
+      select: { id: true },
+    })
+    const activeIds = new Set(active.map(a => a.id))
+
+    const added = [...activeIds].filter(id => !this.assetStates.has(id))
+    const removed = [...this.assetStates.keys()].filter(id => !activeIds.has(id))
+    if (added.length === 0 && removed.length === 0) return { added, removed }
+
+    for (const assetId of removed) this.forgetAsset(assetId)
+
+    if (added.length > 0) {
+      const rows = await this.prisma.asset.findMany({ where: { id: { in: added } } })
+      await this.ingestAssets(rows)
+    }
+
+    logger.warn(
+      `[engine] roster reconciliado: +${added.length} ativo(s), -${removed.length} ativo(s) ` +
+      `— total ${this.assetStates.size}`
+    )
+    return { added, removed }
+  }
+
+  /**
+   * Remove um ativo do estado em memoria. Simetrico ao que `ingestAssets` cria:
+   * estado, book, timer de CB, series temporais por assetId, ultimo resultado de
+   * camada (chaveado por ticker) e os agentes do orchestrator. Sem isso, desativar
+   * um ativo vazava memoria e o ativo seguia tickando.
+   *
+   * Atribuicoes ainda nao persistidas do ativo sao descartadas — a persistencia so
+   * acontece no candle, e o ativo saiu do roster antes de fechar. Perda de dado de
+   * auditoria, entao vai em log com a contagem em vez de sumir em silencio.
+   */
+  private forgetAsset(assetId: string): void {
+    const state = this.assetStates.get(assetId)
+    const timer = this.circuitBreakerTimers.get(assetId)
+    if (timer) {
+      clearTimeout(timer)
+      this.circuitBreakerTimers.delete(assetId)
+    }
+    const droppedAttributions = this.pendingAttributions.get(assetId)?.length ?? 0
+    this.assetStates.delete(assetId)
+    this.orderBooks.delete(assetId)
+    this.previousTickDeltas.delete(assetId)
+    this.previousTickPrices.delete(assetId)
+    this.pendingAttributions.delete(assetId)
+    this.pendingAdminAdjustments.delete(assetId)
+    if (state) this.lastLayerResults.delete(state.ticker)
+    agentOrchestrator.removeAsset(assetId)
+    logger.warn(
+      `[engine] ativo removido do roster (isActive=false): ${state?.ticker ?? assetId}` +
+      (droppedAttributions > 0 ? ` — ${droppedAttributions} atribuicao(oes) pendente(s) descartada(s)` : '')
+    )
+  }
+
+  /**
+   * Materializa `AssetState` (+ book, agentes, timer de CB, hidratacao do Redis) para
+   * um lote de linhas de `asset`. Caminho UNICO de construcao de estado: usado tanto
+   * pela carga do boot quanto pela reconciliacao de roster. Duplicar este bloco faria
+   * auto-recovery, warm-start e reconciliacao de halt divergirem entre os dois.
+   */
+  private async ingestAssets(assets: Awaited<ReturnType<PrismaClient['asset']['findMany']>>): Promise<void> {
+    if (assets.length === 0) return
+    const loadTime = Date.now()
+    /** Estados criados NESTE lote — so eles sao hidratados do Redis no final. */
+    const ingested: AssetState[] = []
 
     // C1 (06-18): o warm-start re-ancora ativos fora da banda do CB usando o MESMO
     // threshold por cluster que o L10 usa no tick (runtime config do Redis ->
@@ -468,6 +578,7 @@ export class MarketEngine {
 
       this.assetStates.set(asset.id, state)
       this.orderBooks.set(asset.id, new OrderBook())
+      ingested.push(state)
 
       // CB ainda ativo: reagendar retomada pelo tempo restante
       if (isCbHaltActive && haltedUntilMs) {
@@ -511,13 +622,12 @@ export class MarketEngine {
     }
 
     // Hydratar estados críticos do Redis (variance GARCH, OFI state, daily vol)
-    // Executado após todos os ativos terem sido carregados com defaults seguros
-    const hydratePromises = [...this.assetStates.values()].map(state =>
-      this.calculator.hydrateFromRedis(state)
-    )
+    // Executado após todos os ativos terem sido carregados com defaults seguros.
+    // APENAS os estados deste lote: numa reconciliacao de roster em pleno tick,
+    // re-hidratar o roster inteiro sobrescreveria variance/OFI vivos em memoria pelo
+    // ultimo snapshot persistido no Redis — teria o efeito de um restart parcial.
+    const hydratePromises = ingested.map(state => this.calculator.hydrateFromRedis(state))
     await Promise.allSettled(hydratePromises)
-
-    logger.info(`[engine] AgentOrchestrator inicializado para ${this.assetStates.size} ativos`)
   }
 
   private async runAttributionPreflight(): Promise<{ ok: boolean; failures: string[] }> {
@@ -538,6 +648,18 @@ export class MarketEngine {
     const tickStartedAt = new Date()
     const tickStartedMs = Date.now()
     this.tickCount++
+
+    // Roster: ativo criado/reativado/desativado depois do boot entra (ou sai) por aqui.
+    // Falha de reconciliacao NAO derruba o tick — o ciclo segue com o roster anterior,
+    // que e exatamente o comportamento de antes desta correcao.
+    if (tickStartedMs - this.lastRosterSyncMs >= ROSTER_SYNC_INTERVAL_MS) {
+      this.lastRosterSyncMs = tickStartedMs
+      try {
+        await this.syncAssetRoster()
+      } catch (err) {
+        logger.error('[engine] reconciliacao de roster falhou — tick segue com o roster anterior:', err)
+      }
+    }
     const sessionType = sessionManager.getCurrentSession()
     const runtimeConfig = await this.layerRuntimeConfig.getConfig()
     const volatilityMultiplier =

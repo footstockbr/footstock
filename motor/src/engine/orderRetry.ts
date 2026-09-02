@@ -118,8 +118,9 @@ export interface AttemptOutcome {
  * Contabiliza UMA falha de execucao na propria ordem.
  *
  * So deve ser chamado para falha real de liquidacao. NAO chamar para:
- * ticker ausente de `currentPrices` (precondicao, nao falha — a causa raiz e o
- * `loadAssets()` que so roda no boot), ativo em halt (ja tem terminal proprio) e
+ * ticker ausente de `currentPrices` (precondicao, nao falha — o roster do motor se
+ * reconcilia sozinho via MarketEngine.syncAssetRoster e a ordem destrava no proximo
+ * ciclo), ativo em halt (ja tem terminal proprio) e
  * ALREADY_SETTLED/INSUFFICIENT_BALANCE (a settlement ja decidiu). Contar
  * precondicao como falha cancelaria ordem perfeitamente sa por
  * EXECUTION_RETRY_EXHAUSTED — e o risco numero um desta fase.

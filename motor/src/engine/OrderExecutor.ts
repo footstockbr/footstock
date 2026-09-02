@@ -62,10 +62,14 @@ export class OrderExecutor {
         const price = currentPrices[order.asset.ticker]
         if (price === undefined || price <= 0) {
           // Zero Silencio: sem orderId/userId o operador ve o ticker repetindo a cada
-          // tick e nao consegue achar a ordem presa. Causa tipica: o ativo entrou (ou
-          // foi reativado) DEPOIS do boot do motor — MarketEngine.loadAssets() so roda
-          // no boot, entao o ticker nunca entra em currentPrices e a ordem fica OPEN
-          // ate o cron de expiry. Ordem presa aqui e sinal de reinicio devido.
+          // tick e nao consegue achar a ordem presa. A causa historica era o roster
+          // congelado (`loadAssets()` so no boot: ativo ativado depois nunca entrava em
+          // currentPrices e a ordem ficava OPEN ate o cron de expiry). Isso foi fechado
+          // por MarketEngine.syncAssetRoster(), que reconcilia o roster dentro do tick
+          // — logo a ordem aqui deve destravar sozinha no proximo ciclo de
+          // reconciliacao (MOTOR_ROSTER_SYNC_MS, default 60s). O mesmo ticker repetindo
+          // por VARIAS janelas dessas ja NAO e mais espera normal: e ativo com preco
+          // <= 0 no banco ou reconciliacao falhando (procurar o log de roster).
           logger.warn(
             `[OrderExecutor] skip: ticker sem preço no tick ticker=${order.asset.ticker} orderId=${order.id} userId=${order.userId}`
           )

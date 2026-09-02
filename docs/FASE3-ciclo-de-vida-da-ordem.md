@@ -232,13 +232,49 @@ que nao funciona — defeito preexistente, fora do escopo desta fase.
 
 ## 8. Riscos assumidos por escrito
 
-### 8.1 A causa raiz do ticker-sem-preco continua de pe
+### 8.1 A causa raiz do ticker-sem-preco — CORRIGIDA depois da Fase 3
 
-`loadAssets()` so roda no boot do lider. A Fase 3 **mitiga** o sintoma (a ordem nao entope
-mais a fila) mas nao corrige a causa. Por isso preco ausente e classificado como
-**skip-para-sempre** (§3.1) e nao pode escorregar para o contador em nenhuma circunstancia —
-caso contrario o mecanismo cancelaria como falha uma ordem sa. A correcao real (`loadAssets`
-periodico ou reativo) fica declarada aqui como trabalho de fase futura.
+Registro original: `loadAssets()` so rodava no boot do lider, entao um ativo ativado (ou
+reativado) depois disso nunca entrava em `assetStates`; como `runTick()` monta `currentPrices`
+iterando `assetStates`, o ticker nunca aparecia e toda ordem daquele ativo virava
+skip-para-sempre ate o cron de expiry. A Fase 3 **mitigou** o sintoma sem tocar na causa.
+
+A causa foi fechada por `MarketEngine.syncAssetRoster()`:
+
+- Roda **dentro** de `runTick()`, no topo do ciclo, nao num `setInterval` proprio — o guard
+  `tickInFlight` ja serializa o tick, entao mutar `assetStates` ali nao corre contra os
+  `for..of` do proprio ciclo. Um timer paralelo criaria exatamente essa corrida.
+- Cadencia por wall-clock: `MOTOR_ROSTER_SYNC_MS`, default **60s**, floor 5s. Essa e a janela
+  maxima em que uma ordem de ativo recem-ativado fica sem preco.
+- Custo em regime: **uma** query indexada so de ids. A leitura completa da linha so acontece
+  quando ha delta.
+- Falha de reconciliacao **nao** derruba o tick: log de erro e o ciclo segue com o roster
+  anterior, que e literalmente o comportamento de antes desta correcao.
+- Simetria: o ativo **desativado** tambem sai (`forgetAsset`) — estado, book, timer de CB,
+  series por assetId, ultimo resultado de camada e agentes do orchestrator. Antes ele
+  continuava tickando, publicando preco e casando ordem para sempre.
+- A construcao de `AssetState` virou caminho unico (`ingestAssets`), usado pelo boot e pela
+  reconciliacao. Duplicar aquele bloco faria auto-recovery, warm-start e reconciliacao de halt
+  divergirem entre os dois caminhos.
+- A hidratacao do Redis e restrita ao lote ingerido. Re-hidratar o roster inteiro numa
+  reconciliacao em pleno tick sobrescreveria variance/OFI vivos pelo ultimo snapshot
+  persistido — um restart parcial silencioso a cada ativo novo.
+
+**O que continua valendo da Fase 3:** preco ausente segue sendo **skip que nao conta** (§3.1).
+A reconciliacao encurta a espera de "para sempre" para "ate uma janela", mas a precondicao
+continua nao sendo falha de liquidacao e nao pode escorregar para o contador de tentativas.
+
+**Riscos residuais aceitos:**
+
+- Janela de ate `MOTOR_ROSTER_SYNC_MS` entre a ativacao no banco e o primeiro preco. Nao ha
+  disparo reativo (o motor nao tem canal de comando para isso hoje); `syncAssetRoster()` e
+  publico justamente para receber esse gancho depois.
+- `forgetAsset` descarta atribuicoes de preco ainda nao persistidas do ativo removido (a
+  persistencia so acontece no fechamento do candle). Perda de dado de auditoria, por isso vai
+  em log com a contagem em vez de sumir em silencio.
+- Ordem aberta de ativo desativado deixa de ter preco e passa a esperar o expiry. E a
+  semantica pretendida (ativo inativo nao negocia), mas e mudanca de comportamento em relacao
+  ao estado anterior, onde o ativo desativado continuava casando ordem.
 
 ### 8.2 Chaves de idempotencia disjuntas por caminho
 

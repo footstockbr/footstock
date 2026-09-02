@@ -381,6 +381,21 @@ export class AgentOrchestrator {
     this.clusters.set(assetId, cluster)
   }
 
+  /** true quando o ativo tem agentes inicializados (roster vivo do orchestrator). */
+  hasAsset(assetId: string): boolean {
+    return this.agents.has(assetId)
+  }
+
+  /**
+   * Descarta os agentes de um ativo — contraparte de initAsset().
+   * Chamado quando o ativo sai do roster (isActive=false). Sem isso os agentes de um
+   * ativo desativado ficariam no Map ate o proximo restart do processo.
+   */
+  removeAsset(assetId: string): void {
+    this.agents.delete(assetId)
+    this.clusters.delete(assetId)
+  }
+
   /**
    * Executa tick para um ativo e retorna impacto agregado + volume sintético.
    * O impacto usa a lei sublinear de Kyle por cluster (T1.3); `opts.legacyImpact`
