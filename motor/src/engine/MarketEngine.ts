@@ -266,6 +266,23 @@ export class MarketEngine {
 
   async start(): Promise<void> {
     const preflight = await this.runAttributionPreflight()
+    // Semantica de ATTRIBUTION_STRICT_MODE no boot -- DECIDIDA, nao herdada (09-02).
+    // Decisao: preflight vermelho sob modo estrito CONTINUA bloqueando o boot, e a
+    // escolha e deliberada. O preflight so checa pre-condicoes de INTEGRIDADE da
+    // atribuicao de preco (colunas presentes, schemas Prisma em sincronia, metricas
+    // registradas, parser round-trip, escrita+releitura transacional). Se qualquer
+    // uma falha, o motor ainda liga, mas grava price_history com atribuicao ausente
+    // ou degradada -- e atribuicao errada em serie e pior que motor parado, porque
+    // contamina historico que ninguem reconcilia depois. Modo estrito e exatamente
+    // o contrato "prefiro nao operar a operar sujo"; enfraquecer isso para warn
+    // esvaziaria a flag.
+    // Consequencia aceita: um defeito trivial no proprio preflight vira outage sob
+    // modo estrito. Foi o risco real de 06-06 a 09-02, quando o canario transacional
+    // ficou vermelho por falta de um `::text` (ver AttributionPreflightService.
+    // pickSessionType). O que mitiga isso NAO e afrouxar o gate, e sim: (a) a flag
+    // fica DESLIGADA em producao hoje -- preflight vermelho e warn por boot; (b) so
+    // se liga a flag depois de ver `preflight.ok === true` no log de boot; (c) o
+    // proprio preflight tem teste de regressao que emula o driver adapter.
     if (!preflight.ok && process.env.ATTRIBUTION_STRICT_MODE === 'true') {
       throw new Error(`[engine] ATTRIBUTION_STRICT_MODE bloqueado: ${preflight.failures.join('; ')}`)
     }

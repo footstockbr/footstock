@@ -33,6 +33,30 @@ model MarketSessionLog {
 }
 `
 
+// 09-02: o mock antigo devolvia fixture para QUALQUER sql, entao este suite ficava
+// verde enquanto producao falhava em todo boot do motor. O helper abaixo emula a
+// unica coisa que o mock permissivo escondia: o driver adapter `PrismaPg` -- o
+// client que o MarketEngine realmente usa -- nao desserializa coluna de tipo
+// Postgres `name` em raw query. `pg_enum.enumlabel` e `name`. Se o `::text` sumir
+// de pickSessionType(), os testes do canario quebram aqui, com a mensagem literal
+// que producao emitiu de 06-06 a 09-02.
+const ERRO_NAME_NAO_DESSERIALIZAVEL =
+  "Raw query failed. Code: `N/A`. Message: `Failed to deserialize column of type 'name'. " +
+  "If you're using $queryRaw and this column is explicitly marked as `Unsupported` in your " +
+  'Prisma schema, try casting this column to any supported Prisma type such as `String`.`'
+
+function queryRawUnsafeSobAdapterPg(assetRows: unknown[]) {
+  return jest.fn(async (sql: string) => {
+    if (sql.includes('information_schema.columns')) return [{ exists: true }]
+    if (sql.includes('SELECT id FROM assets')) return assetRows
+    if (sql.includes('FROM pg_enum')) {
+      if (!sql.includes('enumlabel::text')) throw new Error(ERRO_NAME_NAO_DESSERIALIZAVEL)
+      return [{ enumlabel: 'TRADING' }]
+    }
+    return []
+  })
+}
+
 describe('AttributionPreflightService', () => {
   it('detecta drift relevante entre schemas Prisma de PriceHistory/SessionType', () => {
     const drifted = SYNCED_SCHEMA.replace('TRADING', 'REGULAR')
@@ -75,12 +99,7 @@ describe('AttributionPreflightService', () => {
       $queryRawUnsafe: jest.fn(async () => [{ attribution: insertedAttribution }]),
     }
     const prisma = {
-      $queryRawUnsafe: jest.fn(async (sql: string) => {
-        if (sql.includes('information_schema.columns')) return [{ exists: true }]
-        if (sql.includes('SELECT id FROM assets')) return [{ id: 'asset-1' }]
-        if (sql.includes('FROM pg_enum')) return [{ enumlabel: 'TRADING' }]
-        return []
-      }),
+      $queryRawUnsafe: queryRawUnsafeSobAdapterPg([{ id: 'asset-1' }]),
       $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<void>) => callback(tx)),
     }
 
@@ -96,6 +115,43 @@ describe('AttributionPreflightService', () => {
     })
     expect(prisma.$transaction).toHaveBeenCalledTimes(1)
     expect(tx.$executeRawUnsafe).toHaveBeenCalledTimes(1)
+  })
+
+  it('reporta canario vermelho, sem escrita, quando o driver recusa a coluna do catalogo', async () => {
+    // Regressao do defeito de 06-06 a 09-02: `pickSessionType()` estourava ANTES do
+    // INSERT, entao o canario transacional morria carimbado com o codigo certo pelo
+    // motivo errado -- nunca chegou a exercitar escrita, releitura de JSONB nem
+    // round-trip do parser. Este teste trava as duas metades do contrato: a falha
+    // aparece (Zero Silencio) e `$transaction` nao roda (prova de que a query do
+    // catalogo precede a escrita, e por isso o cast e obrigatorio).
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'attribution-preflight-name-'))
+    mkdirSync(join(workspaceRoot, 'prisma'), { recursive: true })
+    mkdirSync(join(workspaceRoot, 'footstock-next/prisma'), { recursive: true })
+    writeFileSync(join(workspaceRoot, 'prisma/schema.prisma'), SYNCED_SCHEMA)
+    writeFileSync(join(workspaceRoot, 'footstock-next/prisma/schema.prisma'), SYNCED_SCHEMA)
+
+    const prisma = {
+      $queryRawUnsafe: jest.fn(async (sql: string) => {
+        if (sql.includes('information_schema.columns')) return [{ exists: true }]
+        if (sql.includes('SELECT id FROM assets')) return [{ id: 'asset-1' }]
+        if (sql.includes('FROM pg_enum')) throw new Error(ERRO_NAME_NAO_DESSERIALIZAVEL)
+        return []
+      }),
+      $transaction: jest.fn(),
+    }
+
+    const result = await new AttributionPreflightService(prisma as never, workspaceRoot).run()
+
+    expect(result.ok).toBe(false)
+    expect(result.checks.transactionalCanary).toBe(false)
+    expect(
+      result.failures.some(
+        (failure) =>
+          failure.startsWith('ATTRIBUTION_TRANSACTIONAL_CANARY_FAILED')
+          && failure.includes("column of type 'name'"),
+      ),
+    ).toBe(true)
+    expect(prisma.$transaction).not.toHaveBeenCalled()
   })
 
   it('falha quando metrica obrigatoria nao esta registrada', async () => {
@@ -114,12 +170,7 @@ describe('AttributionPreflightService', () => {
       $queryRawUnsafe: jest.fn(async () => [{ attribution: null }]),
     }
     const prisma = {
-      $queryRawUnsafe: jest.fn(async (sql: string) => {
-        if (sql.includes('information_schema.columns')) return [{ exists: true }]
-        if (sql.includes('SELECT id FROM assets')) return []
-        if (sql.includes('FROM pg_enum')) return [{ enumlabel: 'TRADING' }]
-        return []
-      }),
+      $queryRawUnsafe: queryRawUnsafeSobAdapterPg([]),
       $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<void>) => callback(tx)),
     }
 

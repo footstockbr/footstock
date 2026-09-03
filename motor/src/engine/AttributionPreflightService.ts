@@ -269,8 +269,19 @@ export class AttributionPreflightService {
   }
 
   private async pickSessionType(): Promise<string> {
+    // O `::text` NAO e decorativo (09-02). `pg_enum.enumlabel` e do tipo Postgres
+    // `name`, e o motor fala com o banco pelo driver adapter `PrismaPg`
+    // (MarketEngine), que desserializa raw query no lado JS mapeando OID -> tipo
+    // Prisma e nao tem mapeamento para `name` (OID 19). Sem o cast, esta query
+    // lanca "Failed to deserialize column of type 'name'" ANTES do INSERT, e o
+    // canario transacional inteiro morre carimbado com o codigo errado, sem
+    // nunca ter exercitado escrita, releitura de JSONB nem round-trip do parser.
+    // Foi exatamente o que aconteceu de 06-06 a 09-02: quase tres meses de check
+    // vermelho pelo motivo errado. A engine default do Prisma desserializa `name`
+    // sem reclamar, entao o defeito e invisivel fora do adapter -- por isso o
+    // teste desta classe emula o adapter em vez de confiar num mock permissivo.
     const rows = await this.prisma.$queryRawUnsafe(`
-      SELECT enumlabel
+      SELECT enumlabel::text AS enumlabel
       FROM pg_enum
       JOIN pg_type ON pg_enum.enumtypid = pg_type.oid
       WHERE typname = 'SessionType'
