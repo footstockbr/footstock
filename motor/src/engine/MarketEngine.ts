@@ -279,10 +279,14 @@ export class MarketEngine {
     // Consequencia aceita: um defeito trivial no proprio preflight vira outage sob
     // modo estrito. Foi o risco real de 06-06 a 09-02, quando o canario transacional
     // ficou vermelho por falta de um `::text` (ver AttributionPreflightService.
-    // pickSessionType). O que mitiga isso NAO e afrouxar o gate, e sim: (a) a flag
-    // fica DESLIGADA em producao hoje -- preflight vermelho e warn por boot; (b) so
-    // se liga a flag depois de ver `preflight.ok === true` no log de boot; (c) o
-    // proprio preflight tem teste de regressao que emula o driver adapter.
+    // pickSessionType). O que mitiga isso NAO e afrouxar o gate, e sim: (a) so se
+    // liga a flag depois de ver `preflight.ok === true` no log de boot; (b) o
+    // proprio preflight tem teste de regressao que emula o driver adapter; (c) o
+    // rollback e um comando so (ATTRIBUTION_STRICT_MODE=false no servico).
+    // Estado desde 09-03: a flag esta LIGADA em producao. Ver
+    // blacksmith/value-analysis-causal-rollout.md -- inclusive para o ponto
+    // contra-intuitivo de que os dois sites de runtime da flag, em
+    // persistPriceHistory, NAO derrubam o motor: descartam o candle em silencio.
     if (!preflight.ok && process.env.ATTRIBUTION_STRICT_MODE === 'true') {
       throw new Error(`[engine] ATTRIBUTION_STRICT_MODE bloqueado: ${preflight.failures.join('; ')}`)
     }
