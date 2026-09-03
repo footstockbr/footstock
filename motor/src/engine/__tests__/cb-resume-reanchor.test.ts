@@ -79,22 +79,55 @@ describe('T4.2 warm-start — closePrice adota o close persistido, não currentP
 })
 
 describe('C2 — re-ancora da banda do CB so no rollover diario (PRE_OPENING)', () => {
-  // RED antes do fix: o engine re-ancorava closePrice em QUALQUER transicao de sessao
-  // (`previousSessionType !== sessionType`). GREEN depois: so ao ENTRAR em PRE_OPENING.
-  it('CLOSED -> PRE_OPENING (rollover diario): re-ancora', () => {
-    expect(shouldReanchorCbAnchor('CLOSED', 'PRE_OPENING')).toBe(true)
+  // RED antes do fix C2 (06-18): o engine re-ancorava closePrice em QUALQUER
+  // transicao de sessao (`previousSessionType !== sessionType`). GREEN depois: so
+  // ao ENTRAR em PRE_OPENING.
+  //
+  // A5 (09-02): a assinatura deixou de ser transition-shaped
+  // (`previousSession -> nextSession`) e passou a ser day-shaped
+  // (`nextSession, lastAnchorDay, todayBrtDay`). O predicado nao pergunta mais "o
+  // processo VIU a transicao?" e sim "a re-ancora deste dia BRT ja rodou?".
+  const HOJE = '2026-09-02'
+  const ONTEM = '2026-09-01'
+
+  it('primeiro PRE_OPENING do dia: re-ancora', () => {
+    expect(shouldReanchorCbAnchor('PRE_OPENING', ONTEM, HOJE)).toBe(true)
   })
 
-  it('transicoes intradia NAO re-ancoram (mantem a banda diaria)', () => {
-    expect(shouldReanchorCbAnchor('PRE_OPENING', 'TRADING')).toBe(false)
-    expect(shouldReanchorCbAnchor('TRADING', 'CLOSING_CALL')).toBe(false)
-    expect(shouldReanchorCbAnchor('CLOSING_CALL', 'AFTER_MARKET')).toBe(false)
-    expect(shouldReanchorCbAnchor('AFTER_MARKET', 'CLOSED')).toBe(false)
+  it('sessoes que nao sao PRE_OPENING NUNCA re-ancoram (mantem a banda diaria)', () => {
+    expect(shouldReanchorCbAnchor('TRADING', ONTEM, HOJE)).toBe(false)
+    expect(shouldReanchorCbAnchor('CLOSING_CALL', ONTEM, HOJE)).toBe(false)
+    expect(shouldReanchorCbAnchor('AFTER_MARKET', ONTEM, HOJE)).toBe(false)
+    expect(shouldReanchorCbAnchor('CLOSED', ONTEM, HOJE)).toBe(false)
   })
 
-  it('primeiro tick (sem sessao anterior) e mesma sessao NAO re-ancoram', () => {
-    expect(shouldReanchorCbAnchor(null, 'PRE_OPENING')).toBe(false)  // boot, sem transicao
-    expect(shouldReanchorCbAnchor('PRE_OPENING', 'PRE_OPENING')).toBe(false)  // sem mudanca
+  it('idempotencia dentro da janela: segundo tick do mesmo dia NAO re-ancora', () => {
+    // A janela de PRE_OPENING dura ~15min e o tick roda a cada poucos segundos.
+    // Sem esta guarda, `volume` seria zerado a cada tick da janela.
+    expect(shouldReanchorCbAnchor('PRE_OPENING', HOJE, HOJE)).toBe(false)
+  })
+
+  // A5 (09-02) — REGRESSAO PRINCIPAL. Restart do motor DENTRO da janela de
+  // PRE_OPENING. O processo novo tem `previousSessionType = null`, entao a regra
+  // antiga (`previousSession !== null && previousSession !== next`) devolvia false
+  // e o pregao inteiro rodava sem reset de closePrice/openPrice/volume — o mesmo
+  // vetor que fazia Momentum/PanicSeller disparar permanentemente.
+  it('restart dentro da janela de PRE_OPENING ainda re-ancora (marca do dia anterior)', () => {
+    expect(shouldReanchorCbAnchor('PRE_OPENING', ONTEM, HOJE)).toBe(true)
+  })
+
+  it('restart sem marca nenhuma (Redis vazio / primeiro deploy) re-ancora', () => {
+    expect(shouldReanchorCbAnchor('PRE_OPENING', null, HOJE)).toBe(true)
+  })
+
+  it('restart DEPOIS da re-ancora do dia nao repete o reset', () => {
+    // Marca durada em `motor:cb_anchor:day` sobrevive ao restart: o processo novo
+    // hidrata HOJE do Redis e nao zera `volume` de novo.
+    expect(shouldReanchorCbAnchor('PRE_OPENING', HOJE, HOJE)).toBe(false)
+  })
+
+  it('virada de dia: a marca de ontem nao segura a re-ancora de hoje', () => {
+    expect(shouldReanchorCbAnchor('PRE_OPENING', '2026-08-31', '2026-09-01')).toBe(true)
   })
 })
 

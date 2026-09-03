@@ -12,7 +12,7 @@ import { MotorLayerRuntimeConfigService } from './MotorLayerRuntimeConfig'
 import { OrderFlowSnapshotService } from './OrderFlowSnapshotService'
 import { AttributionPreflightService } from './AttributionPreflightService'
 import { OrderBook } from './OrderBook'
-import { sessionManager } from './SessionManager'
+import { brtDayKey, sessionManager } from './SessionManager'
 import { agentOrchestrator, AssetCluster } from '../agents/AgentOrchestrator'
 import type { MarketContext } from '../agents/BaseAgent'
 import { getClusterParams } from '../microstructure/clusters'
@@ -53,6 +53,13 @@ const ROSTER_SYNC_INTERVAL_MS = (() => {
   const n = parseInt(process.env.MOTOR_ROSTER_SYNC_MS ?? '60000', 10)
   return Number.isFinite(n) && n >= 5000 ? n : 60000
 })()
+// A5 (09-02): chave durada da re-ancora diaria do CB. Guarda o dia-calendario BRT
+// (`YYYY-MM-DD`) em que o reset ja rodou, para que N restarts dentro da janela de
+// PRE_OPENING resultem em exatamente UMA re-ancora por pregao.
+const CB_ANCHOR_DAY_KEY = 'motor:cb_anchor:day'
+// 48h: folga de mais de um pregao para o proximo PRE_OPENING reescrever a chave, e
+// nenhum residuo eterno se o motor ficar desligado por semanas.
+const CB_ANCHOR_DAY_TTL_S = 48 * 60 * 60
 const PERSIST_HISTORY_EVERY = 6  // Persistir PriceHistory a cada N ticks ≈ 1min com tick=10s (reduzido de 30 para evitar gráficos degrau-degrau em B_LIQUID/B_ILLIQ; A_TOP persiste sempre — ver item 004)
 const PAUSE_RESUME_MS = 5 * 60 * 1000  // 5 minutos absolutos (independente de TICK_INTERVAL_MS)
 // Heartbeat a cada N ticks (reduz comandos Redis — TTL do MotorHealthService: 60s)
@@ -130,17 +137,42 @@ export function resolveWarmStartClosePrice(
 }
 
 /**
- * C2 (06-18) — decide se a transicao de sessao deve re-ancorar a banda diaria do CB
- * (closePrice = currentPrice). A re-ancora e LEGITIMA apenas no rollover diario, isto e,
- * ao ENTRAR em PRE_OPENING. Antes (bug) re-ancorava em QUALQUER troca de sessao
- * (PRE_OPENING->TRADING, TRADING->CLOSING_CALL, ...), reabrindo a banda ~4-5x/dia e
- * permitindo drift intradiario maior que o limite diario pretendido. Pura e deterministica.
+ * C2 (06-18) + A5 (09-02) — decide se a re-ancora diaria do CB (closePrice =
+ * currentPrice, reset de openPrice/volume/DailyVolTarget) deve rodar NESTE tick.
+ *
+ * C2 (06-18): a re-ancora e LEGITIMA apenas no rollover diario, isto e, dentro de
+ * PRE_OPENING. Antes (bug) re-ancorava em QUALQUER troca de sessao (PRE_OPENING->
+ * TRADING, TRADING->CLOSING_CALL, ...), reabrindo a banda ~4-5x/dia e permitindo
+ * drift intradiario maior que o limite diario pretendido.
+ *
+ * A5 (09-02): a regra era TRANSICAO-SHAPED (`previousSession !== null && previous
+ * !== next && next === 'PRE_OPENING'`), entao dependia de o processo ter OBSERVADO
+ * a troca ao vivo. Restart do motor dentro dos 15 minutos de PRE_OPENING zerava
+ * `previousSessionType`, a condicao caia no primeiro termo e o pregao inteiro
+ * rodava SEM reset diario: `openPrice` seguia ancorado no startup antigo e
+ * `priceChange24h` acumulava desde entao (o mesmo vetor que fazia Momentum e
+ * PanicSeller dispararem permanentemente).
+ *
+ * A regra agora e DIA-SHAPED: roda uma vez por dia-calendario BRT, na primeira vez
+ * que o motor observa PRE_OPENING naquele dia — tenha ele visto a transicao ou nao.
+ * `lastAnchorDay` e a chave de idempotencia (durada em Redis, ver
+ * MarketEngine.maybeReanchorDailyCbAnchor), o que torna a re-ancora exatamente-uma-
+ * vez-por-pregao mesmo com N restarts dentro da janela.
+ *
+ * RESIDUO DECLARADO: motor que perde a janela inteira de PRE_OPENING (down as 10:45,
+ * sobe as 12:00 ja em TRADING) segue sem re-ancora naquele dia. E deliberado —
+ * re-ancorar no meio do pregao redefiniria `openPrice` para o preco corrente e
+ * destruiria o `priceChange24h` do dia, que e pior que a ausencia do reset.
+ *
+ * Pura e deterministica.
  */
 export function shouldReanchorCbAnchor(
-  previousSession: SessionType | null,
   nextSession: SessionType,
+  lastAnchorDay: string | null,
+  todayBrtDay: string,
 ): boolean {
-  return previousSession !== null && previousSession !== nextSession && nextSession === 'PRE_OPENING'
+  if (nextSession !== 'PRE_OPENING') return false
+  return lastAnchorDay !== todayBrtDay
 }
 
 /**
@@ -206,6 +238,15 @@ export class MarketEngine {
   private circuitBreakerTimers = new Map<string, ReturnType<typeof setTimeout>>()
   /** Wall-clock da ultima reconciliacao de roster (ver syncAssetRoster). */
   private lastRosterSyncMs = 0
+
+  /**
+   * Dia-calendario BRT (`YYYY-MM-DD`) da ultima re-ancora diaria do CB aplicada por
+   * ESTE processo. Espelho em memoria da chave durada `motor:cb_anchor:day` — guarda
+   * o caso em que o Redis aceita o GET mas rejeita o SET: sem ele, uma falha de
+   * escrita faria a re-ancora repetir a cada tick da janela de PRE_OPENING, zerando
+   * `volume` de novo e de novo. `null` = ainda nao hidratado do Redis neste processo.
+   */
+  private lastCbAnchorDay: string | null = null
 
   constructor(redis: Redis) {
     this.redis = redis
@@ -421,6 +462,70 @@ export class MarketEngine {
    * acontece no candle, e o ativo saiu do roster antes de fechar. Perda de dado de
    * auditoria, entao vai em log com a contagem em vez de sumir em silencio.
    */
+  /**
+   * A5 (09-02) — aplica a re-ancora diaria do CB no maximo UMA vez por dia-calendario
+   * BRT, na primeira vez que o motor observa PRE_OPENING naquele dia.
+   *
+   * Idempotencia em duas camadas, ambas necessarias:
+   *   - `motor:cb_anchor:day` no Redis: sobrevive a restart, que e exatamente o caso
+   *     que o bug A5 deixava passar (motor reinicia dentro dos 15min de PRE_OPENING,
+   *     `previousSessionType` volta a null e o dia inteiro roda sem reset).
+   *   - `this.lastCbAnchorDay` em memoria: sobrevive a Redis indisponivel. Sem ele,
+   *     um SET que falha faria a re-ancora repetir a cada tick da janela.
+   *
+   * TTL de 48h na chave: folga de mais de um pregao para o proximo PRE_OPENING
+   * reescrever, e nenhum lixo eterno se o motor for desligado por semanas.
+   *
+   * Nunca lanca: falha de Redis DEGRADA a durabilidade (volta a valer so a memoria do
+   * processo) mas nao pode derrubar o tick.
+   */
+  private async maybeReanchorDailyCbAnchor(sessionType: SessionType, at: Date): Promise<void> {
+    if (sessionType !== 'PRE_OPENING') return
+
+    const today = brtDayKey(at)
+
+    // Hidratacao preguicosa: so custa um GET no primeiro PRE_OPENING apos o boot.
+    if (this.lastCbAnchorDay === null) {
+      try {
+        this.lastCbAnchorDay = await this.redis.get(CB_ANCHOR_DAY_KEY)
+      } catch (err) {
+        logger.warn(`[engine] leitura de ${CB_ANCHOR_DAY_KEY} falhou — re-ancora diaria cai para memoria do processo: ${String(err)}`)
+      }
+    }
+
+    if (!shouldReanchorCbAnchor(sessionType, this.lastCbAnchorDay, today)) return
+
+    for (const s of this.assetStates.values()) {
+      s.closePrice = s.currentPrice  // âncora diária do CB = preço de abertura do dia
+      this.calculator.resetDailyVolTarget(s)
+      s.volume = 0  // Reset volume 24h (evita acumulação ilimitada de volume sintético)
+      // BUG FIX: openPrice nunca era resetado, fazendo priceChange24h acumular
+      // negativamente desde o startup do motor. Depois de algumas horas, o
+      // MomentumAgent (vende quando change < -2%) e o PanicSellerAgent (vende
+      // quando change < -10%) disparavam permanentemente, sobrepondo o pull do
+      // L2_FundamentalAnchor (+0.3%/tick) com pressão vendedora de -2%/tick.
+      // Combinado com o ciclo de circuit breaker (re-âncora closePrice para baixo
+      // a cada 5 min), os preços desciam em escada até bater no floor R$1.
+      // Reseta openPrice junto com closePrice a cada sessão PRE_OPENING, tornando
+      // priceChange24h relativo à abertura do dia corrente — não ao startup.
+      s.openPrice = s.currentPrice
+    }
+    this.calculator.resetDailyVolCap()  // compatibilidade retroativa
+
+    // Marca ANTES de persistir: o espelho em memoria e o que impede a repeticao no
+    // proximo tick caso o SET abaixo falhe.
+    this.lastCbAnchorDay = today
+    try {
+      await this.redis.set(CB_ANCHOR_DAY_KEY, today, 'EX', CB_ANCHOR_DAY_TTL_S)
+    } catch (err) {
+      logger.warn(`[engine] escrita de ${CB_ANCHOR_DAY_KEY} falhou — re-ancora do dia ${today} nao sobrevive a restart: ${String(err)}`)
+    }
+
+    logger.info(
+      `[engine] CB anchor (closePrice), DailyVolTarget, volume e openPrice resetados para novo dia (PRE_OPENING) — dia BRT ${today}, ${this.assetStates.size} ativos`
+    )
+  }
+
   private forgetAsset(assetId: string): void {
     const state = this.assetStates.get(assetId)
     const timer = this.circuitBreakerTimers.get(assetId)
@@ -670,35 +775,16 @@ export class MarketEngine {
     const ticks: MotorTick[] = []
     const orderFlowSnapshots = await this.orderFlowSnapshotService.capture([...this.assetStates.keys()], tickStartedAt)
 
-    // Transição de sessão.
+    // Transição de sessão (apenas log — a re-âncora diária NÃO depende dela; ver A5).
     if (this.previousSessionType !== null && this.previousSessionType !== sessionType) {
       logger.info(`[engine] Transição de sessão: ${this.previousSessionType} → ${sessionType}`)
-      // C2 (06-18): a âncora diária do CB (closePrice) só é re-ancorada no ROLLOVER
-      // diário (entrada em PRE_OPENING), NÃO em toda troca de sessão. Re-ancorar em
-      // qualquer transição reabria a banda ~4-5x/dia e permitia drift intradiário >
-      // o limite diário pretendido (ver shouldReanchorCbAnchor). closePrice, volume e
-      // openPrice são resetados juntos, no mesmo ponto, para a abertura do novo dia.
-      if (shouldReanchorCbAnchor(this.previousSessionType, sessionType)) {
-        for (const s of this.assetStates.values()) {
-          s.closePrice = s.currentPrice  // âncora diária do CB = preço de abertura do dia
-          this.calculator.resetDailyVolTarget(s)
-          s.volume = 0  // Reset volume 24h (evita acumulação ilimitada de volume sintético)
-          // BUG FIX: openPrice nunca era resetado, fazendo priceChange24h acumular
-          // negativamente desde o startup do motor. Depois de algumas horas, o
-          // MomentumAgent (vende quando change < -2%) e o PanicSellerAgent (vende
-          // quando change < -10%) disparavam permanentemente, sobrepondo o pull do
-          // L2_FundamentalAnchor (+0.3%/tick) com pressão vendedora de -2%/tick.
-          // Combinado com o ciclo de circuit breaker (re-âncora closePrice para baixo
-          // a cada 5 min), os preços desciam em escada até bater no floor R$1.
-          // Reseta openPrice junto com closePrice a cada sessão PRE_OPENING, tornando
-          // priceChange24h relativo à abertura do dia corrente — não ao startup.
-          s.openPrice = s.currentPrice
-        }
-        this.calculator.resetDailyVolCap()  // compatibilidade retroativa
-        logger.info('[engine] CB anchor (closePrice), DailyVolTarget, volume e openPrice resetados para novo dia (PRE_OPENING)')
-      }
     }
     this.previousSessionType = sessionType
+
+    // A5 (09-02): a re-âncora diária roda FORA do `if` de transição. Amarrada à
+    // transição observada ao vivo, um restart dentro dos 15min de PRE_OPENING pulava
+    // o reset do dia inteiro (ver shouldReanchorCbAnchor).
+    await this.maybeReanchorDailyCbAnchor(sessionType, tickStartedAt)
 
     // Incluir ticks de halt para ativos suspensos (frontend precisa saber do halt em tempo real)
     for (const [, state] of this.assetStates) {

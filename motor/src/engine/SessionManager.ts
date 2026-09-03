@@ -13,6 +13,25 @@ import { logger } from '../utils/logger'
 
 export const BRT_TIMEZONE = 'America/Sao_Paulo'
 
+/**
+ * Dia-calendario BRT de um instante, no formato `YYYY-MM-DD`.
+ *
+ * Usado como CHAVE DE IDEMPOTENCIA DIARIA por quem precisa rodar "uma vez por
+ * pregao" e nao pode depender de ter observado a transicao de sessao ao vivo
+ * (re-ancora do CB no MarketEngine, trilha de auditoria de sessao). Postgres
+ * guarda o instante em UTC de proposito; o dia do produto e SEMPRE BRT, e a
+ * conversao aqui e explicita via date-fns-tz — nao depende do TZ do processo.
+ *
+ * Pura e deterministica.
+ */
+export function brtDayKey(instant: Date): string {
+  const brt = toZonedTime(instant, BRT_TIMEZONE)
+  const y = brt.getFullYear()
+  const m = String(brt.getMonth() + 1).padStart(2, '0')
+  const d = String(brt.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 export interface NextTransition {
   session: SessionType
   transitionAt: Date

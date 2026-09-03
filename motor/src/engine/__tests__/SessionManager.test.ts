@@ -7,7 +7,7 @@
 //        próxima transição, isMarketOpen.
 // ============================================================================
 
-import { SessionManager } from '../SessionManager'
+import { SessionManager, brtDayKey } from '../SessionManager'
 import type { SessionType } from '../../types/motor.types'
 
 // ─── Helper: cria Date UTC para um horário BRT de inverno (UTC-3) ─────────
@@ -160,5 +160,33 @@ describe('SessionManager', () => {
       const sm = new SessionManager(() => fixedTime)
       expect(sm.getCurrentSession()).toBe('TRADING')
     })
+  })
+})
+
+// ============================================================================
+// A5 (09-02) — brtDayKey: chave de idempotencia diaria do produto.
+// O dia do produto e SEMPRE BRT; Postgres guarda o instante em UTC de proposito.
+// A conversao aqui e explicita (date-fns-tz) e NAO depende do TZ do processo.
+// ============================================================================
+describe('brtDayKey — dia-calendario BRT de um instante', () => {
+  it('meia-noite UTC ainda e o dia ANTERIOR em BRT (UTC-3)', () => {
+    // 2026-09-02T00:30Z = 2026-09-01 21:30 BRT.
+    expect(brtDayKey(new Date('2026-09-02T00:30:00.000Z'))).toBe('2026-09-01')
+  })
+
+  it('a virada do dia BRT acontece as 03:00Z no inverno (UTC-3)', () => {
+    expect(brtDayKey(new Date('2026-09-02T02:59:59.000Z'))).toBe('2026-09-01')
+    expect(brtDayKey(new Date('2026-09-02T03:00:00.000Z'))).toBe('2026-09-02')
+  })
+
+  it('a janela de PRE_OPENING (09:45 BRT) cai no dia corrente', () => {
+    // 09:45 BRT = 12:45Z no inverno.
+    expect(brtDayKey(new Date('2026-09-02T12:45:00.000Z'))).toBe('2026-09-02')
+  })
+
+  it('formata com zero a esquerda (YYYY-MM-DD, 10 chars sempre)', () => {
+    const k = brtDayKey(new Date('2026-01-05T15:00:00.000Z'))
+    expect(k).toBe('2026-01-05')
+    expect(k).toHaveLength(10)
   })
 })
