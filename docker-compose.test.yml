@@ -1,9 +1,14 @@
 # docker-compose.test.yml — Banco de dados ISOLADO para testes de integração
 # Porta 5433 (separado do dev na 5432) para evitar conflitos.
 # Uso:
-#   docker compose -f docker-compose.test.yml up -d
-#   DATABASE_URL=$TEST_DATABASE_URL npx prisma migrate deploy
+#   cp .env.test.example .env.test          # so na primeira vez (.env.test e gitignored)
+#   npm run test:integration:setup          # sobe os containers e aplica o schema
 #   npm run test:integration
+#
+# O setup usa `prisma db push` contra o schema do app
+# (footstock-next/prisma/schema.prisma), NAO `migrate deploy` contra o schema do
+# motor: sao dois schemas diferentes e o do motor nao tem os models que as suites
+# de auth, ordens e forum usam.
 
 services:
   postgres-test:
