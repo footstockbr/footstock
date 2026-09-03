@@ -55,6 +55,12 @@ export const errors = {
   forbidden: (msg = 'Acesso negado.', requiredPlan?: string) =>
     error('AUTH-002', msg, 403, requiredPlan ? { requiredPlan } : undefined),
 
+  // Conta bloqueada (SUSPENDED/BANNED) numa sessao JA EMITIDA. Distinto de
+  // `forbidden` (AUTH-002, falta de plano/permissao) porque o front precisa
+  // rotear para reativacao, nao para upgrade. Ver src/lib/auth/account-status.ts.
+  accountBlocked: (code: string, msg: string, reason?: string | null) =>
+    error(code, msg, 403, reason ? { reason } : undefined),
+
   notFound: (msg = 'Recurso não encontrado.') =>
     error('NOT-FOUND-001', msg, 404),
 

@@ -63,8 +63,14 @@ describe('reconcileRenewalPayment (item 4b — recuperação de ciclo pago)', ()
     expect(upd.data.status).toBe('ACTIVE')
     expect(upd.data.expiresAt).toBeInstanceOf(Date)
     expect(upd.where.status).toEqual({ notIn: ['CANCELLED', 'CANCELLATION_LOCK'] }) // anti-ressurreição
+    // `suspensionReason: null` (2026-09-03): religa só quem o cron de vencimento
+    // suspendeu. Suspensão de admin/moderação sempre carrega motivo e não casa com o
+    // filtro, então pagar não anistia sanção.
     expect(prisma.user.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'u1', status: 'SUSPENDED' }, data: { status: 'ACTIVE' } }),
+      expect.objectContaining({
+        where: { id: 'u1', status: 'SUSPENDED', suspensionReason: null },
+        data: { status: 'ACTIVE' },
+      }),
     )
   })
 

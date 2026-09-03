@@ -13,6 +13,7 @@ import { applyRateLimitHeaders, msToResetSeconds, retryAfterFromReset } from '@/
 import { moderationEngine } from '@/lib/services/ModerationEngine'
 import { forumRepository } from '@/lib/repositories/ForumRepository'
 import type { RateLimitInfo } from '@/middleware/rateLimit'
+import { getAuthUserOrBlock } from '@/lib/auth/require-active'
 
 const CreateCommentSchema = z.object({
   content: z.string({ message: 'Conteúdo é obrigatório.' }),
@@ -74,8 +75,8 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await getAuthUser()
-  if (!auth) return errors.unauthorized()
+  const auth = await getAuthUserOrBlock()
+  if ('response' in auth) return auth.response
 
   const { id } = await params
 

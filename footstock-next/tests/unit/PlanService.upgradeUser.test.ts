@@ -202,10 +202,35 @@ describe('PlanService.upgradeUser — R3', () => {
 
     // reset ESCOPADO em SUSPENDED (não toca BANNED nem outros estados). Sem isto o assinante
     // suspenso por lapso pagava e continuava sem login.
+    //
+    // `suspensionReason: null` entrou em 2026-09-03 e é o que separa as DUAS suspensões
+    // que hoje escrevem no mesmo campo: o cron de vencimento
+    // (src/lib/jobs/subscription-expiry.ts) nunca grava motivo, admin e moderação sempre
+    // gravam. Sem esse recorte, pagar levantava sanção administrativa -- bastava ao
+    // usuário banido/suspenso por conduta assinar um plano para se auto-anistiar.
     expect(usr.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'u1', status: 'SUSPENDED' },
+      where: { id: 'u1', status: 'SUSPENDED', suspensionReason: null },
       data: { status: 'ACTIVE' },
     }))
+  })
+
+  it('#5b: pagamento NÃO levanta sanção administrativa (suspensionReason preenchido fica de fora do where)', async () => {
+    sub.findUnique.mockResolvedValue({
+      id: 'new', userId: 'u1', planType: 'CRAQUE', status: 'PENDING', amount: 100,
+    })
+    usr.findUnique.mockResolvedValue({ planType: 'JOGADOR', adminRole: null })
+    sub.findMany.mockResolvedValue([])
+    sub.updateMany.mockResolvedValue({ count: 1 })
+
+    await planService.upgradeUser('u1', 'new')
+
+    // O filtro é a defesa: quem tem motivo registrado simplesmente não casa com o
+    // `where`, então o updateMany passa em branco (count 0) em vez de reativar.
+    // Testar o filtro, e não a linha do banco, é deliberado -- este suite mocka o
+    // Prisma, então o que dá para provar aqui é o predicado enviado.
+    const chamada = usr.updateMany.mock.calls.at(-1)?.[0]
+    expect(chamada.where.suspensionReason).toBeNull()
+    expect(chamada.where).not.toHaveProperty('suspendedAt')
   })
 
   it('upgrade recorrente: cancela TERMINALMENTE o preapproval da assinatura ANTERIOR no gateway (anti double-charge)', async () => {

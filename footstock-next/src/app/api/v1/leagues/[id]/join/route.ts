@@ -9,13 +9,14 @@ import { prisma } from '@/lib/prisma'
 import { requireActiveSubscription } from '@/lib/middleware/requireActiveSubscription'
 import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
 import type { UserPlan } from '@/lib/analytics'
+import { getAuthUserOrBlock } from '@/lib/auth/require-active'
 
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await getAuthUser()
-  if (!auth) return errors.unauthorized()
+  const auth = await getAuthUserOrBlock()
+  if ('response' in auth) return auth.response
 
   // Staff (ADMIN / CLUB_PARTNER) nao participa de ligas (orthogonal ao trading).
   if (auth.user.userType === 'ADMIN' || auth.user.userType === 'CLUB_PARTNER') {

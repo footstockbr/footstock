@@ -902,8 +902,14 @@ export class PlanService extends BaseService {
       // Sem isto, um assinante que caiu para status=SUSPENDED (subscription-expiry) e depois PAGOU
       // ficava SUSPENDED para sempre (sem login) mesmo com a assinatura ACTIVE. Escopo estrito em
       // status:'SUSPENDED' — NÃO toca BANNED (ban admin) nem nenhum outro estado.
+      //
+      // 2026-09-03: passou a exigir tambem `suspensionReason: null`. Desde que a
+      // suspensao administrativa/moderacao escreve o enum, um pagamento
+      // levantaria a sancao do admin -- bastava o usuario pagar para desfazer a
+      // punicao. O cron de cobranca (subscription-expiry.ts) NUNCA grava motivo;
+      // admin e moderacao SEMPRE gravam. Motivo nulo = suspensao de cobranca.
       await tx.user.updateMany({
-        where: { id: userId, status: 'SUSPENDED' },
+        where: { id: userId, status: 'SUSPENDED', suspensionReason: null },
         data:  { status: 'ACTIVE' },
       })
     })
@@ -1230,8 +1236,10 @@ export class PlanService extends BaseService {
         })
         if (upd.count === 0) throw new RenewalRaceError() // corrida: sub saiu do estado recuperável
         // Religa o assinante suspenso por lapso (escopo estrito SUSPENDED, não toca BANNED).
+        // `suspensionReason: null` discrimina suspensao de cobranca (cron, sem motivo)
+        // de sancao administrativa (admin/moderacao, sempre com motivo) — 2026-09-03.
         await tx.user.updateMany({
-          where: { id: userId, status: 'SUSPENDED' },
+          where: { id: userId, status: 'SUSPENDED', suspensionReason: null },
           data: { status: 'ACTIVE' },
         })
       })

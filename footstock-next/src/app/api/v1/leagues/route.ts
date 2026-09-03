@@ -10,6 +10,7 @@ import { createLeagueSchema } from '@/lib/validators/league.schema'
 import { requireActiveSubscription } from '@/lib/middleware/requireActiveSubscription'
 import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
 import type { UserPlan } from '@/lib/analytics'
+import { getAuthUserOrBlock } from '@/lib/auth/require-active'
 
 // GET /api/v1/leagues
 export async function GET(request: NextRequest) {
@@ -57,8 +58,8 @@ export async function GET(request: NextRequest) {
 
 // POST /api/v1/leagues
 export async function POST(request: NextRequest) {
-  const auth = await getAuthUser()
-  if (!auth) return errors.unauthorized()
+  const auth = await getAuthUserOrBlock()
+  if ('response' in auth) return auth.response
 
   // Criação de ligas bloqueada em CANCELLATION_LOCK
   const lockGuard = await requireActiveSubscription(auth.user.id, 'CREATE_LEAGUE')

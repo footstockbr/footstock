@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { ok, error, errors } from '@/lib/api'
 import { orderService, AppError } from '@/lib/services/OrderService'
 import type { OrderStatus } from '@/types'
+import { getAuthUserOrBlock } from '@/lib/auth/require-active'
 
 function serializeOrder(o: {
   id: string; userId: string; assetId: string; type: string; side: string
@@ -61,8 +62,8 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await getAuthUser()
-  if (!auth) return errors.unauthorized()
+  const auth = await getAuthUserOrBlock()
+  if ('response' in auth) return auth.response
 
   const { id } = await params
 

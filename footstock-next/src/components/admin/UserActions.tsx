@@ -32,6 +32,11 @@ export function UserActions({ user, currentAdminRole, onActionComplete }: UserAc
 
   const isSuperAdmin = currentAdminRole === 'SUPER_ADMIN'
   const isSuspended = user.status === 'suspended'
+  // 2026-09-03: a listagem admin passou a devolver tambem 'banned' (antes o
+  // status era derivado de `suspendedAt` e so tinha dois valores). Ban e
+  // desfeito pelo fluxo proprio de ban/unban, entao aqui a acao some em vez de
+  // oferecer um botao que a API rejeita com 403.
+  const isBanned = user.status === 'banned'
 
   // Fechar menu ao clicar fora + Escape + navegacao por setas
   useEffect(() => {
@@ -281,7 +286,11 @@ export function UserActions({ user, currentAdminRole, onActionComplete }: UserAc
           <div className="my-1 border-t border-[rgba(240,185,11,.08)]" />
 
           {/* Suspend / Unsuspend */}
-          {isSuspended ? (
+          {isBanned ? (
+            <div className="px-3 py-2.5 text-sm text-[#848E9C]">
+              Conta banida. Use o fluxo de ban/unban.
+            </div>
+          ) : isSuspended ? (
             <button
               role="menuitem"
               onClick={handleUnsuspend}

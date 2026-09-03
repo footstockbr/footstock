@@ -6,6 +6,7 @@ import { ok, error as apiError, errors } from '@/lib/api'
 import { leagueRepository } from '@/lib/repositories/LeagueRepository'
 import { LeagueError, LEAGUE_ERRORS } from '@/lib/errors/leagueErrors'
 import { prisma } from '@/lib/prisma'
+import { getAuthUserOrBlock } from '@/lib/auth/require-active'
 
 async function getCreatorLeague(id: string, userId: string) {
   return prisma.league.findUnique({
@@ -24,8 +25,8 @@ export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await getAuthUser()
-  if (!auth) return errors.unauthorized()
+  const auth = await getAuthUserOrBlock()
+  if ('response' in auth) return auth.response
 
   try {
     const { id } = await params
@@ -57,8 +58,8 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await getAuthUser()
-  if (!auth) return errors.unauthorized()
+  const auth = await getAuthUserOrBlock()
+  if ('response' in auth) return auth.response
 
   try {
     const { id } = await params

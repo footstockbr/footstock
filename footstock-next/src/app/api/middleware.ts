@@ -11,6 +11,7 @@ import { canAccess, type AdminResource } from '@/lib/auth/canAccess'
 import { hasPlanAccess } from '@/lib/auth/planAccess'
 import { recordPaidFeatureUsage } from '@/lib/auth'
 import { ERROR_CODES, ERROR_MESSAGES } from '@/lib/constants/errors'
+import { evaluateAccountAccess } from '@/lib/auth/account-status'
 import type { AdminRole, PlanType } from '@/lib/enums'
 import type { User } from '@/types/models'
 
@@ -61,6 +62,37 @@ export type RouteHandler = (req: NextRequest, context: AuthContext) => Promise<N
 
 function errorResponse(code: string, message: string, status: number) {
   return NextResponse.json({ success: false, error: { code, message } }, { status })
+}
+
+/**
+ * Gate de conta suspensa/banida em sessao JA EMITIDA (2026-09-03).
+ *
+ * Aqui, ao contrario de `getAuthUser()`, o 403 sai completo: `withAuth` recebe
+ * a NextRequest, entao rota e metodo vem de graca, e `SAFE_USER_SELECT` ja
+ * trazia `status`/`suspendedAt`/`suspensionReason` do banco -- eram lidos por
+ * ninguem. A politica (quem bloqueia o que) mora em @/lib/auth/account-status,
+ * compartilhada com o caminho do `getAuthUser`, para os dois nao divergirem.
+ *
+ * Devolve a resposta 403 quando bloqueado, ou `null` quando pode seguir.
+ */
+function accountGate(req: NextRequest, user: unknown) {
+  const candidate = user as { status?: string | null; suspensionReason?: string | null }
+  const restriction = evaluateAccountAccess(candidate, {
+    pathname: req.nextUrl.pathname,
+    method: req.method,
+  })
+  if (!restriction) return null
+  return NextResponse.json(
+    {
+      success: false,
+      error: {
+        code: restriction.code,
+        message: restriction.message,
+        ...(restriction.reason ? { reason: restriction.reason } : {}),
+      },
+    },
+    { status: restriction.httpStatus },
+  )
 }
 
 // E2E-2026-05-22: descobri via E2E que GET /api/v1/me ecoava `user` inteiro,
@@ -124,6 +156,8 @@ export function withAuth(handler: RouteHandler) {
         if (!user) {
           return errorResponse(ERROR_CODES.AUTH_010, ERROR_MESSAGES['AUTH-010'], 401)
         }
+        const blocked = accountGate(req, user)
+        if (blocked) return blocked
         return handler(req, { user: user as unknown as User })
       }
 
@@ -133,6 +167,8 @@ export function withAuth(handler: RouteHandler) {
         if (session?.user?.id) {
           const user = await loadSafeUser(session.user.id)
           if (user) {
+            const blocked = accountGate(req, user)
+            if (blocked) return blocked
             return handler(req, { user: user as unknown as User })
           }
         }
@@ -148,6 +184,8 @@ export function withAuth(handler: RouteHandler) {
             select: SAFE_USER_SELECT,
           })
           if (devUser) {
+            const blocked = accountGate(req, devUser)
+            if (blocked) return blocked
             return handler(req, { user: devUser as unknown as User })
           }
         }

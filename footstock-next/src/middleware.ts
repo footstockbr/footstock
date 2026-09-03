@@ -14,8 +14,21 @@ import { authConfig } from '@/auth.config'
 
 const { auth: authjsMiddleware } = NextAuth(authConfig)
 
+// 2026-09-03: injeta rota e metodo como headers de request para que
+// `getAuthUser()` (src/lib/auth.ts) consiga aplicar a politica de conta
+// bloqueada sem que as 126 rotas que a chamam precisem passar o contexto na mao.
+// `headers()` do App Router so devolve headers de REQUEST, entao isto e a unica
+// via barata de levar pathname/method para dentro de um helper sem argumento.
+// Sao headers INTERNOS: sobrescritos incondicionalmente aqui, para que um
+// cliente nao possa forjar `/api/v1/payments` e comprar liberacao de escrita.
+export const FS_PATH_HEADER = 'x-fs-path'
+export const FS_METHOD_HEADER = 'x-fs-method'
+
 export default authjsMiddleware(async (request) => {
-  return NextResponse.next({ request })
+  const headers = new Headers(request.headers)
+  headers.set(FS_PATH_HEADER, request.nextUrl.pathname)
+  headers.set(FS_METHOD_HEADER, request.method)
+  return NextResponse.next({ request: { headers } })
 })
 
 export const config = {

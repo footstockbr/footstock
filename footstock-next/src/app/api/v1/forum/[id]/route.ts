@@ -2,14 +2,15 @@ import { NextRequest } from 'next/server'
 import { getAuthUser, hasAdminRole } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
+import { getAuthUserOrBlock } from '@/lib/auth/require-active'
 
 // DELETE /api/v1/forum/:id — remover post (autor OU MODERADOR+)
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await getAuthUser()
-  if (!auth) return errors.unauthorized()
+  const auth = await getAuthUserOrBlock()
+  if ('response' in auth) return auth.response
 
   const { id } = await params
 

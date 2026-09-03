@@ -11,14 +11,15 @@ import { shortService } from '@/lib/services/ShortService'
 import { AppError } from '@/lib/services/OrderService'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { getAuthUserOrBlock } from '@/lib/auth/require-active'
 
 // DELETE /api/v1/positions/short/[id] — fecha posição short e retorna P&L
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await getAuthUser()
-  if (!auth) return errors.unauthorized()
+  const auth = await getAuthUserOrBlock()
+  if ('response' in auth) return auth.response
 
   try {
     const { id: positionId } = await params

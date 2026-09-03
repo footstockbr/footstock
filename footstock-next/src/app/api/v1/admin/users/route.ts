@@ -4,6 +4,7 @@ import { getAuthUser, hasAdminRole, serializeUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { list, errors, parsePagination, buildPagination } from '@/lib/api'
 import type { PlanType, AdminRole, User } from '@/types'
+import { USER_STATUS } from '@/lib/enums'
 
 // GET /api/v1/admin/users — MONITOR+
 // Suporta filtros: search, planType, adminRole, status (active/suspended), userType, page
@@ -60,8 +61,13 @@ export async function GET(request: NextRequest) {
       where.adminRole = { in: ['SUPER_ADMIN', 'ADMINISTRADOR', 'MONITOR', 'EDITOR', 'MODERADOR'] as PrismaAdminRole[] }
     }
     if (userType) where.userType = userType
-    if (status === 'suspended') where.suspendedAt = { not: null }
-    if (status === 'active') where.suspendedAt = null
+    // 2026-09-03: o filtro derivava status de `suspendedAt`, que so a rota de
+    // suspensao administrativa escrevia. Resultado: as contas suspensas pelo
+    // cron de cobranca (que grava o enum e nao toca `suspendedAt`) apareciam
+    // como "active" na listagem. A verdade e o enum.
+    if (status === 'suspended') where.status = USER_STATUS.SUSPENDED
+    if (status === 'active') where.status = USER_STATUS.ACTIVE
+    if (status === 'banned') where.status = USER_STATUS.BANNED
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
@@ -86,7 +92,7 @@ export async function GET(request: NextRequest) {
 
     const serialized = users.map((u) => ({
       ...serializeUser(u),
-      status: u.suspendedAt ? 'suspended' : 'active',
+      status: u.status.toLowerCase(),
       suspendedAt: u.suspendedAt?.toISOString() ?? null,
       suspensionReason: u.suspensionReason ?? null,
       affiliateCode: u.affiliateCode ?? null,

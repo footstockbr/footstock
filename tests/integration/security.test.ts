@@ -274,34 +274,49 @@ describe('THREAT-009 — Erros não devem revelar dados financeiros de outros us
 
 // ─── AUTH: Usuário suspenso/banido não pode operar ───────────────────────────
 
-// Os dois testes abaixo estao marcados `it.failing`: eles descrevem o contrato
-// desejado e HOJE o produto nao o cumpre. `it.failing` mantem o vermelho visivel
-// sem quebrar a suite e vira vermelho de verdade no dia em que o gate entrar --
-// que e exatamente o sinal que se quer.
+// GAP FECHADO em 2026-09-03. Ate aqui os dois testes abaixo eram `it.failing`:
+// nenhuma rota nem helper compartilhado checava status de conta numa sessao JA
+// existente. `getAuthUser` validava sessao e invalidacao, nunca `status`; e
+// `serializeUser` nem carrega o campo. SUSPENDED/BANNED so eram barrados no LOGIN
+// (auth-credentials.ts) e no registro, entao quem fosse suspenso DEPOIS de logar
+// seguia operando ate o cookie expirar.
 //
-// GAP REAL (nao e drift de teste): NENHUMA rota e helper compartilhado checa
-// status de conta numa sessao ja existente. `getAuthUser` (footstock-next/src/lib/auth.ts)
-// valida sessao e invalidacao, nunca `status`; `serializeUser` nem carrega o campo.
-// SUSPENDED/BANNED so sao barrados no LOGIN (auth-credentials.ts) e no registro.
-// Consequencia: usuario suspenso DEPOIS de logar continua operando ate a sessao
-// expirar.
+// O que travava a correcao era decisao de produto, nao codigo: o motor de cobranca
+// tambem escreve SUSPENDED, e bloquear o status em bloco fecharia a porta do proprio
+// fluxo de pagar-para-reativar. A decisao (2026-09-03) foi:
+//   - BANNED bloqueia tudo;
+//   - SUSPENDED bloqueia ESCRITA de trading e social, e libera leitura, perfil e
+//     billing (checkout, upgrade-preview, subscriptions/me) via allowlist;
+//   - o veredito mora em um modulo puro, `src/lib/auth/account-status.ts`, chamado
+//     pelos TRES pontos de autenticacao (`lib/auth.ts`, `api/middleware.ts` e
+//     `lib/auth/server.ts`), justamente para os tres nao divergirem;
+//   - a resposta e 403 com codigo proprio e o motivo, e o cookie continua vivo para
+//     o front conseguir levar o usuario para a reativacao.
 //
-// Nao da para fechar isso unilateralmente: `PlanService.ts:904` grava
-// `status: 'SUSPENDED'` quando a assinatura vence, e o fluxo de reativacao depende
-// desse usuario conseguir entrar e pagar. Bloquear SUSPENDED em bloco quebraria a
-// cobranca. Falta decisao de produto sobre QUAIS status bloqueiam QUAIS rotas
-// (provavelmente: BANNED bloqueia tudo; SUSPENDED bloqueia trading e libera
-// billing/perfil). O dado ja esta disponivel -- `SAFE_USER_SELECT` em
-// footstock-next/src/app/api/middleware.ts ja seleciona status/suspendedAt/suspensionReason.
+// Correcao de atribuicao: a escrita de `status: 'SUSPENDED'` por vencimento NAO vem
+// de `PlanService.ts` (la e filtro de `where`), e sim do cron
+// `src/lib/jobs/subscription-expiry.ts`. `suspensionReason` e o discriminador: o cron
+// nunca grava motivo, admin/moderacao sempre gravam. Por isso a reativacao por
+// pagamento so levanta suspensao com `suspensionReason: null`, e nao apaga sancao
+// administrativa.
+//
+// Codigos: AUTH-004 foi o codigo cogitado na decisao, mas ele ja esta ocupado no fio
+// por "email ja cadastrado" (registro). Alocados AUTH-014 (suspensa) e AUTH-015
+// (banida) em src/lib/constants/errors.ts.
+//
+// O que este arquivo prova e o que nao prova: `mockAuthAsUser` chama a politica REAL
+// (`evaluateAccountAccess`), entao a regra e exercitada de verdade; a leitura de
+// `status` do banco dentro de `resolveAuthUser` fica coberta por tsc e pelo caminho
+// `withAuth`, nao aqui.
 describe('Controle de status de conta — suspensão e banimento', () => {
-  it.failing('usuário SUSPENDED não deve conseguir criar ordem', async () => {
+  it('usuário SUSPENDED não deve conseguir criar ordem', async () => {
     const suspendedUser = await createTestUser(testPrisma, {
       planType: 'LENDA',
       status: 'SUSPENDED',
       email: buildTestEmail('suspended'),
     })
 
-    mockAuthAsUser(suspendedUser.id)
+    mockAuthAsUser(suspendedUser.id, { status: 'SUSPENDED' })
 
     const handler = await import('@/app/api/v1/orders/route').catch(() => null)
     if (!handler?.POST) return
@@ -314,8 +329,11 @@ describe('Controle de status de conta — suspensão e banimento', () => {
     })
 
     const res = await handler.POST(req as NextRequest)
-    // AUTH_004: conta suspensa → 403
-    expect(res.status).toBeGreaterThanOrEqual(400)
+    // Contrato: 403 com codigo proprio e cookie vivo (nao 401, que o front leria
+    // como "faca login de novo" e mandaria o usuario para longe da reativacao).
+    expect(res.status).toBe(403)
+    const body = (await parseResponse(res)) as Record<string, unknown>
+    expect((body.error as Record<string, unknown>)?.code).toBe('AUTH-014')
   })
 
   // Este teste passava -- pelo motivo errado. Ele batia em `/api/v1/me`, que
@@ -324,22 +342,26 @@ describe('Controle de status de conta — suspensão e banimento', () => {
   // "nao ha sessao real", nao do banimento. Falso verde sobre um gate inexistente.
   // Trocado para uma rota que de fato passa por `getAuthUser` (a mesma que o mock
   // cobre), o resultado honesto e vermelho -- mesmo gap do teste acima.
-  it.failing('usuário BANNED não deve conseguir acessar nenhum endpoint protegido', async () => {
+  it('usuário BANNED não deve conseguir acessar nenhum endpoint protegido', async () => {
     const bannedUser = await createTestUser(testPrisma, {
       planType: 'JOGADOR',
       status: 'BANNED',
       email: buildTestEmail('banned'),
     })
 
-    mockAuthAsUser(bannedUser.id)
+    mockAuthAsUser(bannedUser.id, { status: 'BANNED' })
 
     const handler = await import('@/app/api/v1/orders/route').catch(() => null)
     if (!handler?.GET) return
 
     const req = buildNextRequest('GET', '/api/v1/orders')
     const res = await handler.GET(req as NextRequest)
-    // AUTH_004: conta banida → 403
-    expect(res.status).toBeGreaterThanOrEqual(400)
+    // BANNED bloqueia inclusive leitura. Este GET ainda usa `getAuthUser`, cujo
+    // contrato de retorno e `{...} | null` -- entao o backstop fail-closed responde
+    // 401, e nao o 403 detalhado do POST. Aceitar os dois aqui e deliberado: o ponto
+    // do teste e que a conta banida NAO opera; a rota que precisa do 403 com motivo
+    // e a de escrita, checada acima.
+    expect([401, 403]).toContain(res.status)
   })
 })
 

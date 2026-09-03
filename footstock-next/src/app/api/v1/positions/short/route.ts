@@ -13,6 +13,7 @@ import { AppError } from '@/lib/services/OrderService'
 import { prisma } from '@/lib/prisma'
 import { redisPublisher as redis } from '@/lib/redis'
 import { requireActiveSubscription } from '@/lib/middleware/requireActiveSubscription'
+import { getAuthUserOrBlock } from '@/lib/auth/require-active'
 
 const OpenShortSchema = z.object({
   ticker: z
@@ -28,8 +29,8 @@ const OpenShortSchema = z.object({
 
 // POST /api/v1/positions/short — abre posição short
 export async function POST(request: NextRequest) {
-  const auth = await getAuthUser()
-  if (!auth) return errors.unauthorized()
+  const auth = await getAuthUserOrBlock()
+  if ('response' in auth) return auth.response
 
   // Bloqueado em CANCELLATION_LOCK: novas shorts são proibidas
   const lockGuard = await requireActiveSubscription(auth.user.id, 'NEW_SHORT')

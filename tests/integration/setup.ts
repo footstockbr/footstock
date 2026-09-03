@@ -99,8 +99,20 @@ afterAll(async () => {
 // ─── Mock: Auth (Auth.js getAuthUser) ─────────────────────────────────────────
 // A autenticação é simulada via mock de `@/lib/auth` (ver helpers/auth.helper).
 // A integração real (service ↔ DB) é testada via Prisma direto.
+// O factory precisa cobrir OS DOIS resolvedores. As rotas de escrita de trading e
+// social passaram a usar `getAuthUserOrBlock` (src/lib/auth/require-active.ts), que
+// consome `resolveAuthUser`; com o factory so declarando `getAuthUser`, a rota
+// recebia `undefined` e o teste morria em "Cannot read properties of undefined" --
+// falha do harness disfarcada de falha de produto, o mesmo padrao ja documentado
+// logo abaixo para o mock antigo de Redis.
+//
+// Os demais exports de `@/lib/auth` (hasPlan, hasAdminRole, serializeUser,
+// clearDualCookies, recordPaidFeatureUsage, checkAccountAccess) NAO estao aqui de
+// proposito: nenhuma rota exercitada nesta suite os usa hoje. Se uma passar a usar,
+// declare o mock aqui -- o sintoma sera o mesmo `undefined is not a function`.
 jest.mock('@/lib/auth', () => ({
   getAuthUser: jest.fn(),
+  resolveAuthUser: jest.fn(),
 }))
 
 // ─── Redis: SEM mock, container real ─────────────────────────────────────────

@@ -1,9 +1,13 @@
 import 'server-only'
 
 import * as Sentry from '@sentry/nextjs'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 import { readAuthjsSession, isSessionInvalidated } from '@/lib/auth/authjs-session'
+import {
+  evaluateAccountAccess,
+  type AccountRestriction,
+} from '@/lib/auth/account-status'
 import { isPaidFeature, type PlanFeature } from '@/lib/auth/planAccess'
 import { shouldSuspendAccount, type SubscriptionForLogic } from '@/lib/services/plan-logic'
 import { recordPaidFeatureGraceUsage } from '@/lib/observability/paid-feature-grace-counter'
@@ -18,6 +22,7 @@ type AuthFailReason =
   | 'serialize-threw'
   | 'unexpected-throw'
   | 'session-invalidated'
+  | 'account-blocked'
 
 async function reportAuthFail(reason: AuthFailReason, err?: unknown): Promise<void> {
   // stdout SEMPRE (inclusive no-cookie-session) — canal de diagnostico que
@@ -113,7 +118,59 @@ export async function clearDualCookies(): Promise<void> {
 //
 // Retorna o id canônico do usuário (Prisma) em `userId` e o usuário serializado.
 
-export async function getAuthUser(): Promise<{ user: User; userId: string } | null> {
+// Le a rota/metodo que o middleware raiz injetou (src/middleware.ts). Fora de
+// um request HTTP (job, script, teste chamando handler direto) nao ha header:
+// devolve `{}`, e a politica trata isso como mutacao (fail-closed).
+async function currentRequestShape(): Promise<{ pathname?: string; method?: string }> {
+  try {
+    const h = await headers()
+    return {
+      pathname: h.get('x-fs-path') ?? undefined,
+      method: h.get('x-fs-method') ?? undefined,
+    }
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * Avalia a politica de conta bloqueada para um usuario ja resolvido.
+ * Exportado para os callers que precisam do 403 real com motivo
+ * (`getAuthUserOrBlock`, `withAuth`), em vez do 401 de backstop.
+ */
+export async function checkAccountAccess(user: {
+  status?: string | null
+  suspensionReason?: string | null
+}): Promise<AccountRestriction | null> {
+  return evaluateAccountAccess(user, await currentRequestShape())
+}
+
+// ----------------------------------------------------------------------------
+// Politica de conta bloqueada dentro de getAuthUser (2026-09-03)
+//
+// Ate aqui NENHUM ponto do runtime olhava `user.status` numa sessao ja emitida.
+// O login barra (src/lib/auth-credentials.ts:80), mas o cron de expiracao
+// (src/lib/jobs/subscription-expiry.ts:112) vira a conta para SUSPENDED com o
+// cookie do usuario ainda valido -- e ele seguia operando ate o cookie morrer.
+//
+// getAuthUser retorna `{user,userId} | null`, e null vira 401 nas 126 rotas que
+// a chamam. Entao aqui o bloqueio e um BACKSTOP fail-closed: nega o acesso,
+// mesmo que a resposta saia como 401 em vez do 403 decidido. Quem precisa do
+// contrato completo (403 + codigo + motivo, cookie preservado) usa
+// `getAuthUserOrBlock()` logo abaixo -- e e isso que as rotas de trading e
+// social usam. `withAuth` (src/app/api/middleware.ts) tambem emite o 403 real.
+// ----------------------------------------------------------------------------
+export type AuthResolution =
+  | { kind: 'ok'; user: User; userId: string }
+  | { kind: 'blocked'; restriction: AccountRestriction }
+  | { kind: 'anonymous' }
+
+/**
+ * Resolve a sessao E aplica a politica de conta bloqueada, preservando a razao
+ * da negativa. Use quando a resposta precisa distinguir 401 (nao autenticado)
+ * de 403 (autenticado, conta suspensa/banida) -- ver `getAuthUserOrBlock`.
+ */
+export async function resolveAuthUser(): Promise<AuthResolution> {
   try {
     // DEV local fallback: fs_dev_auth cookie em desenvolvimento.
     if (process.env.NODE_ENV !== 'production') {
@@ -123,7 +180,12 @@ export async function getAuthUser(): Promise<{ user: User; userId: string } | nu
       if (devAuthEmail) {
         const devUser = await prisma.user.findUnique({ where: { email: devAuthEmail } })
         if (devUser) {
-          return { userId: devUser.id, user: serializeUser(devUser) }
+          const restriction = await checkAccountAccess(devUser)
+          if (restriction) {
+            await reportAuthFail('account-blocked')
+            return { kind: 'blocked', restriction }
+          }
+          return { kind: 'ok', userId: devUser.id, user: serializeUser(devUser) }
         }
       }
     }
@@ -137,29 +199,50 @@ export async function getAuthUser(): Promise<{ user: User; userId: string } | nu
         // (logout de outras sessoes). dbUser ja foi buscado -> custo zero.
         if (isSessionInvalidated(dbUser.passwordChangedAt, authjs.iat)) {
           await reportAuthFail('session-invalidated')
-          return null
+          return { kind: 'anonymous' }
+        }
+        // Conta suspensa/banida numa sessao JA EMITIDA (2026-09-03). Antes disto
+        // o cron de expiracao virava o status para SUSPENDED e o usuario seguia
+        // operando ate o cookie morrer, porque nada no runtime lia `status`.
+        const restriction = await checkAccountAccess(dbUser)
+        if (restriction) {
+          await reportAuthFail('account-blocked')
+          return { kind: 'blocked', restriction }
         }
         try {
-          return { userId: dbUser.id, user: serializeUser(dbUser) }
+          return { kind: 'ok', userId: dbUser.id, user: serializeUser(dbUser) }
         } catch (err) {
           // serializeUser lancou (ex: Decimal nulo) — falha fechada, mas
           // distinguimos do "sem sessao" para nao mascarar dado corrompido.
           await reportAuthFail('serialize-threw', err)
-          return null
+          return { kind: 'anonymous' }
         }
       }
       // Cookie decodificou mas o id nao existe no DB (token de outro DB,
       // usuario deletado, ou troca de banco). Distinto de "sem cookie".
       await reportAuthFail('user-not-found')
-      return null
+      return { kind: 'anonymous' }
     }
 
     await reportAuthFail('no-cookie-session')
-    return null
+    return { kind: 'anonymous' }
   } catch (err) {
     await reportAuthFail('unexpected-throw', err)
-    return null
+    return { kind: 'anonymous' }
   }
+}
+
+/**
+ * Compatibilidade: as 126 rotas que ja chamavam getAuthUser continuam vendo a
+ * mesma assinatura. Conta bloqueada colapsa em `null`, o que vira 401 nessas
+ * rotas -- backstop fail-closed. Para o 403 com motivo, usar
+ * `getAuthUserOrBlock` (src/lib/auth/require-active.ts).
+ */
+export async function getAuthUser(): Promise<{ user: User; userId: string } | null> {
+  const resolution = await resolveAuthUser()
+  return resolution.kind === 'ok'
+    ? { user: resolution.user, userId: resolution.userId }
+    : null
 }
 
 // ─── FIX-09: instrumentar uso de feature paga pos-expiracao (graca preservada) ──

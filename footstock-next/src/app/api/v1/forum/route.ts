@@ -14,6 +14,7 @@ import { mixpanelServer } from '@/lib/services/analytics/MixpanelServerService'
 import type { RateLimitInfo } from '@/middleware/rateLimit'
 import type { PostModerationStatus } from '@prisma/client'
 import type { UserPlan } from '@/lib/analytics'
+import { getAuthUserOrBlock } from '@/lib/auth/require-active'
 
 // Zod valida apenas tipo e presença do campo; os limites de tamanho (min/max)
 // são validados explicitamente abaixo para garantir os códigos FORUM_021 e
@@ -122,8 +123,8 @@ export async function GET(request: NextRequest) {
 
 // POST /api/v1/forum
 export async function POST(request: NextRequest) {
-  const auth = await getAuthUser()
-  if (!auth) return errors.unauthorized()
+  const auth = await getAuthUserOrBlock()
+  if ('response' in auth) return auth.response
 
   try {
     // Rate limit: 10 posts / 1 hora por userId (FDD noticias-comunidade §4.2 — TASK-026)

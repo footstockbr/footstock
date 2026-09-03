@@ -3,14 +3,15 @@ import { getAuthUser } from '@/lib/auth'
 import { forumRepository } from '@/lib/repositories/ForumRepository'
 import { leagueEventRecorder } from '@/lib/services/leagues/LeagueEventRecorder'
 import { ok, errors } from '@/lib/api'
+import { getAuthUserOrBlock } from '@/lib/auth/require-active'
 
 // POST /api/v1/forum/:id/like — toggle curtir/descurtir
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await getAuthUser()
-  if (!auth) return errors.unauthorized()
+  const auth = await getAuthUserOrBlock()
+  if ('response' in auth) return auth.response
 
   const { id } = await params
 

@@ -16,6 +16,13 @@ export const ERROR_CODES = {
   AUTH_011: 'AUTH-011',
   AUTH_012: 'AUTH-012',
   AUTH_013: 'AUTH-013',
+  // Conta bloqueada em sessao ja emitida (2026-09-03).
+  // NAO reaproveitar AUTH-004 para "conta suspensa": nesta catalogo AUTH-004 ja
+  // significa "email ja cadastrado" e e o codigo que /api/v1/auth/register emite.
+  // O catalogo paralelo src/constants/errors.ts usava AUTH_004 com o texto
+  // "Conta suspensa", mas ele nunca foi wire; a divergencia esta anotada la.
+  AUTH_014: 'AUTH-014',
+  AUTH_015: 'AUTH-015',
   // Validação
   VAL_001: 'VAL-001',
   VAL_002: 'VAL-002',
@@ -60,6 +67,8 @@ export const ERROR_MESSAGES: Record<string, string> = {
   'AUTH-011': 'CPF identificado como menor de idade. Cadastro não permitido.',
   'AUTH-012': 'Sua verificação de idade está pendente. Aguarde a conclusão.',
   'AUTH-013': 'Não foi possível concluir o cadastro com os dados informados. Verifique e tente novamente.',
+  'AUTH-014': 'Conta suspensa. Regularize sua assinatura para voltar a operar.',
+  'AUTH-015': 'Conta banida. Entre em contato com o suporte.',
   'VAL-001': 'Dados inválidos. Verifique os campos e tente novamente.',
   'VAL-002': 'Você deve ter ao menos 18 anos para se cadastrar (ECA Digital).',
   'VAL-003': 'Valor fora do intervalo permitido.',

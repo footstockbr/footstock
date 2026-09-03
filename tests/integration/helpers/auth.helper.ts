@@ -9,7 +9,8 @@
 
 import { NextRequest } from 'next/server'
 
-import { getAuthUser } from '@/lib/auth'
+import { getAuthUser, resolveAuthUser } from '@/lib/auth'
+import { evaluateAccountAccess } from '@/lib/auth/account-status'
 
 // ─── Mock Auth.js (getAuthUser) ───────────────────────────────────────────────
 
@@ -17,30 +18,60 @@ import { getAuthUser } from '@/lib/auth'
  * Configura o mock para retornar um usuário autenticado específico.
  * Deve ser chamado em beforeEach para cada suite de testes de rota.
  *
+ * Mocka os DOIS resolvedores de `@/lib/auth` (`getAuthUser` e `resolveAuthUser`),
+ * porque as rotas de escrita de trading/social passaram a usar
+ * `getAuthUserOrBlock` (src/lib/auth/require-active.ts), que consome
+ * `resolveAuthUser`. Com o automock do jest, deixar o segundo de fora faria a
+ * rota receber `undefined` e responder 500 -- falha de harness disfarcada de
+ * falha de produto.
+ *
+ * A politica de conta bloqueada NAO e simulada: o mock chama o modulo real
+ * (`evaluateAccountAccess`). Entao um teste que criar um usuario SUSPENDED ou
+ * BANNED exercita a regra de verdade, e nao uma copia dela que pode divergir.
+ *
+ * Limite honesto do que este mock prova: ele cobre a POLITICA e a resposta da
+ * rota, nao a leitura de `status` do banco dentro de `resolveAuthUser` -- essa
+ * metade e coberta por tsc e pelo caminho `withAuth`. Como nao ha request HTTP
+ * real aqui, o shape vai vazio e a politica trata como mutacao (fail-closed),
+ * que e o mesmo default de qualquer chamador sem contexto.
+ *
  * @param userId - ID do usuário (= ID no banco Prisma)
+ * @param account - status/motivo da conta; ausente = conta ACTIVE
  */
-export function mockAuthAsUser(userId: string): void {
-  const mockGetAuthUser = getAuthUser as jest.Mock
-  mockGetAuthUser.mockResolvedValue({
-    userId,
-    user: { id: userId, email: 'mock@integration-test.local' },
+export function mockAuthAsUser(
+  userId: string,
+  account: { status?: string | null; suspensionReason?: string | null } = {}
+): void {
+  const user = { id: userId, email: 'mock@integration-test.local', ...account }
+
+  const mockResolve = resolveAuthUser as jest.Mock
+  mockResolve.mockImplementation(async () => {
+    const restriction = evaluateAccountAccess(account, {})
+    return restriction
+      ? { kind: 'blocked', restriction }
+      : { kind: 'ok', userId, user }
   })
+
+  const mockGetAuthUser = getAuthUser as jest.Mock
+  mockGetAuthUser.mockImplementation(async () =>
+    evaluateAccountAccess(account, {}) ? null : { userId, user }
+  )
 }
 
 /**
  * Configura o mock para simular sessão inválida/ausente (401).
  */
 export function mockAuthInvalid(): void {
-  const mockGetAuthUser = getAuthUser as jest.Mock
-  mockGetAuthUser.mockResolvedValue(null)
+  ;(getAuthUser as jest.Mock).mockResolvedValue(null)
+  ;(resolveAuthUser as jest.Mock).mockResolvedValue({ kind: 'anonymous' })
 }
 
 /**
  * Configura o mock para simular ausência de usuário no banco (401).
  */
 export function mockAuthUserNotFound(): void {
-  const mockGetAuthUser = getAuthUser as jest.Mock
-  mockGetAuthUser.mockResolvedValue(null)
+  ;(getAuthUser as jest.Mock).mockResolvedValue(null)
+  ;(resolveAuthUser as jest.Mock).mockResolvedValue({ kind: 'anonymous' })
 }
 
 // ─── NextRequest Helper ───────────────────────────────────────────────────────

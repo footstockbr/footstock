@@ -30,6 +30,8 @@ export interface ApiError {
   resetAt?: string | null
   ticker?: string | null
   estimatedResume?: string | null
+  /** Motivo da sancao quando a conta esta suspensa/banida (AUTH-014/AUTH-015). */
+  reason?: string | null
 }
 
 // ─── Paginação ─────────────────────────────────────────────────────────────────

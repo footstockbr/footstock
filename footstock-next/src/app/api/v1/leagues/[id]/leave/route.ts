@@ -3,14 +3,15 @@ import { getAuthUser } from '@/lib/auth'
 import { ok, error as apiError, errors } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
 import { LEAGUE_ERRORS } from '@/lib/errors/leagueErrors'
+import { getAuthUserOrBlock } from '@/lib/auth/require-active'
 
 /** DELETE /api/v1/leagues/[id]/leave — Sair de uma liga */
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await getAuthUser()
-  if (!auth) return errors.unauthorized()
+  const auth = await getAuthUserOrBlock()
+  if ('response' in auth) return auth.response
 
   const { id } = await params
   const userId = auth.user.id

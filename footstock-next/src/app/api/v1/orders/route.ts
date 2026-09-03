@@ -14,11 +14,12 @@ import { AliasService } from '@/services/AliasService'
 import { serializeOrderHistory } from '@/lib/contracts/order-history-contract'
 import type { RateLimitInfo } from '@/middleware/rateLimit'
 import type { PlanType } from '@/lib/enums'
+import { getAuthUserOrBlock } from '@/lib/auth/require-active'
 
 // POST /api/v1/orders — cria ordem com validação de plano
 export async function POST(request: NextRequest) {
-  const auth = await getAuthUser()
-  if (!auth) return errors.unauthorized()
+  const auth = await getAuthUserOrBlock()
+  if ('response' in auth) return auth.response
 
   // ── Rate limiting: 100 req / 60s por userId (sliding window ZSET, TASK-026) ──
   const ordersLimiter = getOrdersRateLimit()

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { ok, errors } from '@/lib/api'
 import { recordModerationAction } from '@/lib/moderation'
 import type { User, AdminRole } from '@/types'
+import { USER_STATUS } from '@/lib/enums'
 
 function getDevAuthFromCookie(request: NextRequest) {
   if (process.env.NODE_ENV !== 'development') return null
@@ -98,9 +99,17 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
           where: { id: params.id },
           data: { isDeleted: true, isFlagged: true },
         }),
+        // 2026-09-03: passou a gravar tambem o enum `status`. Antes so os
+        // metadados eram escritos, e nada no runtime os lia -- a "suspensao por
+        // moderacao" nao suspendia coisa alguma. O gate e o enum
+        // (src/lib/auth/account-status.ts).
         prisma.user.update({
           where: { id: post.userId },
-          data: { suspendedAt: new Date(), suspensionReason: suspendReason },
+          data: {
+            status: USER_STATUS.SUSPENDED,
+            suspendedAt: new Date(),
+            suspensionReason: suspendReason,
+          },
         }),
       ])
       await recordModerationAction(params.id, auth.user.id, 'REMOVED', 'Banimento de usuário')

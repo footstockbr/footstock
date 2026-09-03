@@ -1,5 +1,21 @@
 // FootStock — Constantes de erro
 // Referência: output/docs/foot-stock/project/ERROR-CATALOG.md
+//
+// ATENCAO (2026-09-03): este arquivo NAO e o catalogo de wire e nao e importado
+// por nenhum modulo de `src/`. O catalogo que as respostas HTTP de fato usam e
+// `src/lib/constants/errors.ts`, e a numeracao dos dois DIVERGE:
+//
+//   codigo    | aqui (morto)              | src/lib/constants (wire real)
+//   ----------|---------------------------|------------------------------------
+//   AUTH_002  | e-mail ou senha incorretos | Acesso negado
+//   AUTH_003  | acesso negado              | CPF ja cadastrado
+//   AUTH_004  | conta suspensa             | e-mail ja cadastrado (usado no register)
+//   AUTH_007  | e-mail ja cadastrado       | senha fora dos requisitos
+//
+// Por isso a suspensao de conta implantada em 2026-09-03 recebeu codigos NOVOS
+// (AUTH-014 suspensa, AUTH-015 banida) em vez de reaproveitar o AUTH_004 daqui:
+// AUTH-004 no wire ja significa outra coisa e ja esta em producao.
+// Nao usar este arquivo como fonte. Ou ele e reconciliado, ou e apagado.
 
 export const ERROR_CODES = {
   // VAL — Validação
