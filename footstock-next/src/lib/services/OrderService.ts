@@ -166,6 +166,26 @@ export class OrderService {
     const asset = await prisma.asset.findUnique({ where: { ticker: resolvedTicker } })
     if (!asset) throw new AppError('ASSET_031', 422, { message: 'Ativo não encontrado.' })
 
+    // === Camada 0 — Ativo desativado (B1, 09-02) ===
+    // `isActive=false` retira o ativo do roster do motor (MarketEngine.syncAssetRoster
+    // chama forgetAsset). Sem este gate a ordem ERA aceita, nascia OPEN e ficava
+    // INVISÍVEL ao motor: ninguém a precifica, ninguém a casa, ninguém a cancela —
+    // ela só morre na expiração de 30 dias, com o saldo do usuário reservado até lá.
+    // Zero Silêncio: erro explícito agora é estritamente melhor que ordem presa.
+    //
+    // Bloqueia BUY *e* SELL de propósito: a SELL trava exatamente do mesmo jeito.
+    // PENDÊNCIA DE PRODUTO (declarada, não resolvida aqui): quem já carrega posição
+    // num ativo desativado fica sem saída pelo book. A saída precisa ser um
+    // settlement administrativo (liquidação compulsória ao último preço), não uma
+    // exceção silenciosa neste gate — ver o gap adjacente em
+    // /api/v1/admin/assets/[ticker], que hoje desativa sem checar posições abertas.
+    if (!asset.isActive) {
+      throw new AppError('ASSET_033', 422, {
+        ticker: dto.ticker,
+        message: 'Ativo desativado: não aceita novas ordens.',
+      })
+    }
+
     // === Camada 1 — Validação de Alavancagem (tem prioridade de contexto de liga PRO) ===
     // LeverageService verifica: liga PRO com permiteAlavancagem=true → qualquer plano pode usar 2x;
     //   liga PRO com permiteAlavancagem=false → bloqueia até LENDA;

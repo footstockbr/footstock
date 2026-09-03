@@ -57,6 +57,7 @@ const ORDER_ERROR_MESSAGES: Record<string, string> = {
   SESS_040: 'Mercado fechado para ordens a mercado.',
   ASSET_030: 'Ativo temporariamente suspenso.',
   ASSET_031: 'Ativo não encontrado.',
+  ASSET_033: 'Ativo desativado: não aceita novas ordens.',
   PAYMENT_054: 'Assinatura em cancelamento: novas ordens de risco estão bloqueadas.',
   'VAL-001': 'Dados inválidos. Verifique os campos e tente novamente.',
   'RATE-001': 'Muitas tentativas. Aguarde antes de enviar novas ordens.',

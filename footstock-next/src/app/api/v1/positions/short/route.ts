@@ -52,6 +52,12 @@ export async function POST(request: NextRequest) {
       return error('ASSET_031', 'Ativo não encontrado.', 422, { ticker })
     }
 
+    // B1 (09-02): ativo desativado sai do roster do motor — a posição short abriria
+    // e nunca seria precificada nem liquidada. Mesmo gate de OrderService.createOrder.
+    if (!asset.isActive) {
+      return error('ASSET_033', 'Ativo desativado: não aceita novas operações.', 422, { ticker })
+    }
+
     const currentPrice = Number(asset.currentPrice)
     if (currentPrice <= 0) {
       return error('ASSET_032', 'Preço do ativo inválido.', 422, { ticker })
