@@ -43,7 +43,7 @@
     "test:integration": "jest --config jest.integration.config.ts --runInBand",
     "test:integration:watch": "jest --config jest.integration.config.ts --watch",
     "test:all": "jest && npm run test:integration",
-    "test:integration:setup": "docker compose -f docker-compose.test.yml up -d && sleep 3 && TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5433/foot_stock_test npx prisma migrate deploy",
+    "test:integration:setup": "docker compose -f docker-compose.test.yml up -d && sleep 3 && DATABASE_URL=postgresql://postgres:postgres@localhost:5433/foot_stock_test DIRECT_URL=postgresql://postgres:postgres@localhost:5433/foot_stock_test npx prisma db push --schema footstock-next/prisma/schema.prisma --url postgresql://postgres:postgres@localhost:5433/foot_stock_test --accept-data-loss",
     "test:contracts": "jest --config tests/contracts/jest.contract.config.ts",
     "test:a11y": "playwright test tests/a11y",
     "test:load:smoke": "k6 run --env SCENARIO=smoke tests/load/run-all.js",

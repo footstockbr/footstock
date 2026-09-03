@@ -6,16 +6,18 @@
 // Segurança:
 //   - THREAT-005: IDOR — usuário A não pode acessar/cancelar ordens de B
 //   - THREAT-006: Race condition — saldo não vai negativo
-//   - ORDER_050: Saldo insuficiente → 402
+//   - INSUFFICIENT_BALANCE: saldo FS$ insuficiente na COMPRA → 402
+//   - ORDER_050: quantidade de ativo insuficiente na VENDA → 402
 //   - ORDER_051: Tipo de ordem não permitido pelo plano → 403
 //   - ORDER_052: Limite diário atingido → 429
 //   - ORDER_053: Cancelar ordem não-OPEN → 422
 // ============================================================================
 
-import { testPrisma, TEST_EMAIL_DOMAIN } from './setup'
+import { testPrisma, limparUsuariosDeTeste } from './setup'
 import {
   createTestUser,
   createTestOrder,
+  createTestPosition,
   buildTestEmail,
   buildOrderPayload,
 } from './helpers/factory.helper'
@@ -38,7 +40,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  await testPrisma.user.deleteMany({ where: { email: { endsWith: TEST_EMAIL_DOMAIN } } })
+  await limparUsuariosDeTeste()
 })
 
 // ─── Cenário 1 — Happy Path: Criar ordem MARKET ───────────────────────────────
@@ -51,16 +53,29 @@ describe('OrderService — POST /orders (happy path)', () => {
 
     expect(order).toBeDefined()
     expect(order.userId).toBe(lendaUser.id)
-    expect(order.ticker).toBe(payload.ticker)
+
+    // `ticker` NAO e coluna de `orders` -- vive em `assets`, e createOrder devolve
+    // a linha crua da ordem. O vinculo se verifica pelo assetId resolvido.
+    const assetDaOrdem = await testPrisma.asset.findUnique({
+      where: { id: order.assetId },
+      select: { ticker: true },
+    })
+    expect(assetDaOrdem!.ticker).toBe(payload.ticker)
 
     // Verificar persistência no banco
     const dbOrder = await testPrisma.order.findUnique({ where: { id: order.id } })
     expect(dbOrder).toBeTruthy()
     expect(dbOrder!.status).toMatch(/OPEN|FILLED/)
 
-    // Verificar que o saldo foi debitado
+    // Criar ordem NAO debita saldo -- so reserva capacidade. O debito acontece no
+    // fill, no settlement do motor, que e a autoridade unica de liquidacao (ver o
+    // comentario em OrderService.createOrder, antes da tx Serializable). O teste
+    // afirmava o contrario e so passava enquanto a factory de ordens estava
+    // quebrada. O que se verifica aqui e a ausencia de debito na criacao; o
+    // desconto do comprometido vive em `_assertBuyCapacity` e tem teste proprio
+    // no cenario de saldo insuficiente.
     const dbUser = await testPrisma.user.findUnique({ where: { id: lendaUser.id } })
-    expect(dbUser!.fsBalance.toNumber()).toBeLessThan(100000)
+    expect(dbUser!.fsBalance.toNumber()).toBe(100000)
   })
 
   it('[happy] CRAQUE cria ordem LIMIT → persiste no banco', async () => {
@@ -116,7 +131,11 @@ describe('OrderService — Restrições de plano', () => {
 // ─── Cenário 2b — Saldo Insuficiente ─────────────────────────────────────────
 
 describe('OrderService — Saldo insuficiente (THREAT-006)', () => {
-  it('[saldo] deve rejeitar ordem com saldo insuficiente → ORDER_050', async () => {
+  // O codigo aqui e INSUFFICIENT_BALANCE, nao ORDER_050. Os dois ja foram a mesma
+  // coisa; hoje ORDER_050 significa quantidade de ATIVO insuficiente na venda
+  // (`_assertSellAvailable`), e saldo em FS$ na compra sai por
+  // `_assertBuyCapacity`, que ainda desconta o comprometido em ordens abertas.
+  it('[saldo] deve rejeitar compra com saldo insuficiente → INSUFFICIENT_BALANCE', async () => {
     // Criar usuário com saldo mínimo
     const brokeUser = await createTestUser(testPrisma, {
       planType: 'LENDA',
@@ -126,7 +145,7 @@ describe('OrderService — Saldo insuficiente (THREAT-006)', () => {
 
     await expect(
       orderService.createOrder(brokeUser.id, buildOrderPayload({ quantity: 100 }))
-    ).rejects.toMatchObject({ code: 'ORDER_050' })
+    ).rejects.toMatchObject({ code: 'INSUFFICIENT_BALANCE' })
 
     // THREAT-006: Verificar que o saldo não ficou negativo
     const dbUser = await testPrisma.user.findUnique({ where: { id: brokeUser.id } })
@@ -164,7 +183,7 @@ describe('OrderService — Saldo insuficiente (THREAT-006)', () => {
     // Se houve rejeição, deve ser por saldo insuficiente (não erro de sistema)
     if (rejected.length > 0) {
       const reason = (rejected[0] as PromiseRejectedResult).reason
-      expect(['ORDER_050', 'SYS_004']).toContain(reason?.code)
+      expect(['INSUFFICIENT_BALANCE', 'SYS_004']).toContain(reason?.code)
     }
   })
 })
@@ -182,7 +201,7 @@ describe('OrderService — Controle de ownership / IDOR (THREAT-005)', () => {
 
     // Usuário A (craqueUser) tenta acessar a ordem de B
     await expect(
-      orderService.getOrderById(craqueUser.id, orderOfB.id)
+      orderService.getOrder(craqueUser.id, orderOfB.id)
     ).rejects.toMatchObject({ code: expect.stringMatching(/ORDER_080|ORDER_081|AUTH_005/) })
   })
 
@@ -290,7 +309,15 @@ describe('OrderService — Listagem de ordens (isolamento)', () => {
 // RESOLVED: Nenhum teste de SELL (venda) — Gap #2 DELIVERY-AUDIT-milestone-10
 
 describe('OrderService — Ordens SELL (venda)', () => {
+  // Toda venda exige posicao LONG aberta: `_assertSellAvailable` compara a
+  // quantidade pedida com `availableQty` (posicao aberta menos o que ja esta
+  // reservado em ordens SELL abertas) e rejeita com ORDER_050 quando falta. Sem
+  // a posicao, os testes abaixo morriam nesse guard e nenhum chegava a criar
+  // ordem -- o cenario de venda nunca foi exercitado de fato.
+
   it('[happy] LENDA cria ordem MARKET SELL → saldo creditado após execução', async () => {
+    await createTestPosition(testPrisma, { userId: lendaUser.id, quantity: 10 })
+
     const balanceBefore = (
       await testPrisma.user.findUnique({ where: { id: lendaUser.id } })
     )!.fsBalance.toNumber()
@@ -316,6 +343,8 @@ describe('OrderService — Ordens SELL (venda)', () => {
   })
 
   it('[happy] CRAQUE cria ordem LIMIT SELL → persiste no banco com side=SELL', async () => {
+    await createTestPosition(testPrisma, { userId: craqueUser.id, quantity: 10 })
+
     const payload = buildOrderPayload({ type: 'LIMIT', side: 'SELL', quantity: 1, price: 50 })
     const order = await orderService.createOrder(craqueUser.id, payload)
 
@@ -332,6 +361,8 @@ describe('OrderService — Ordens SELL (venda)', () => {
     // A tentativa de criar ordem para outro userId deve ser bloqueada pelo service
     // O createOrder usa o userId passado explicitamente — o service deve vincular ao
     // usuário autenticado, não a um userId arbitrário do payload
+    await createTestPosition(testPrisma, { userId: jogadorUser.id, quantity: 10 })
+
     const payloadSell = buildOrderPayload({ side: 'SELL', quantity: 1 })
 
     // Criar ordem de A normalmente
@@ -352,6 +383,9 @@ describe('OrderService — Ordens SELL (venda)', () => {
       return
     }
 
+    // Sem posicao de proposito: o guard de ativo em halt precisa disparar ANTES
+    // do guard de disponibilidade de venda. Se este teste passar a ver ORDER_050,
+    // a ordem dos checks em createOrder foi invertida.
     await expect(
       orderService.createOrder(
         lendaUser.id,

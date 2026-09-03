@@ -24,3 +24,20 @@ services:
     # Sem volume persistente para testes — dados efêmeros
     tmpfs:
       - /var/lib/postgresql/data
+
+  # Redis ISOLADO para testes (dev usa 6379). O harness NAO mocka `@/lib/redis`:
+  # o modulo real e usado contra este container, porque metade do contrato de
+  # ordens vive em Redis (`market:tick:latest`, `motor:global-halt`, rate limit
+  # por sliding window em Lua). Mock feito a mao aqui ja escondeu 8 falhas.
+  redis-test:
+    image: redis:7-alpine
+    container_name: foot-stock-redis-test
+    ports:
+      - '6380:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    # Sem volume persistente — dados efemeros, como o postgres-test

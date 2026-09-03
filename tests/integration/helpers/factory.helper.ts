@@ -17,7 +17,10 @@ export interface CreateTestUserOptions {
   adminRole?: TestAdminRole | null
   status?: 'ACTIVE' | 'SUSPENDED' | 'BANNED'
   fsBalance?: number
-  ageVerificationPending?: boolean
+  // `birthDate` substituiu a antiga coluna `ageVerificationPending`: a verificacao
+  // de maioridade virou funcao pura sobre a data declarada (verifyAge, T-023),
+  // aplicada no cadastro -- nao ha mais flag persistida por usuario.
+  birthDate?: Date | null
   email?: string
   name?: string
   favoriteClub?: string
@@ -56,7 +59,7 @@ export async function createTestUser(
     adminRole = null,
     status = 'ACTIVE',
     fsBalance = 10000,
-    ageVerificationPending = false,
+    birthDate = new Date('1990-01-01'),
     email = buildTestEmail(planType.toLowerCase()),
     name = `Teste ${planType}`,
     favoriteClub = 'URU3',
@@ -72,7 +75,7 @@ export async function createTestUser(
       status,
       fsBalance,
       marginBlocked: 0,
-      ageVerificationPending,
+      birthDate,
       favoriteClub,
       tourCompleted: true,
       investorProfile: planType === 'LENDA' ? 'AVANCADO' : planType === 'CRAQUE' ? 'INTERMEDIARIO' : 'INICIANTE',
@@ -124,17 +127,68 @@ export async function createTestOrder(
   const asset = await prisma.asset.findFirst({ where: { ticker }, select: { id: true } })
   if (!asset) throw new Error(`[factory] Asset com ticker=${ticker} não encontrado. Rode o seed primeiro.`)
 
+  // `ticker` nao e coluna de `orders` -- o ticker vive em `assets` e chega aqui so
+  // para resolver o assetId acima. A taxa e `fee`, nao `feeAmount`. Os dois nomes
+  // eram herdados de um schema anterior e faziam TODA criacao de ordem de teste
+  // morrer em PrismaClientValidationError.
   return prisma.order.create({
     data: {
       userId,
       assetId: asset.id,
-      ticker,
       type,
       side,
       quantity,
       status,
       price,
-      feeAmount: 0,
+      fee: 0,
+    },
+  })
+}
+
+// ─── Factory: createTestPosition ─────────────────────────────────────────────
+
+export interface CreateTestPositionOptions {
+  userId: string
+  ticker?: string
+  quantity?: number
+  avgPrice?: number
+}
+
+/**
+ * Cria posicao LONG aberta -- pre-condicao de QUALQUER ordem SELL.
+ *
+ * `OrderService._assertSellAvailable` le a posicao ABERTA do par (usuario, ativo)
+ * e rejeita com ORDER_050 quando `availableQty < quantidade pedida`. Sem esta
+ * factory os testes de venda so exercitavam esse guard: nenhum chegava a criar
+ * ordem. Nao existe indice unico total em (user_id, asset_id) -- o unico e
+ * PARCIAL, so sobre `status = 'OPEN'` (ver comentario do model Position) --, por
+ * isso duas chamadas para o mesmo par no mesmo teste estouram, e e correto que
+ * estourem.
+ */
+export async function createTestPosition(
+  prisma: PrismaClient,
+  options: CreateTestPositionOptions
+) {
+  const { userId, ticker = 'URU3', quantity = 10, avgPrice } = options
+
+  const asset = await prisma.asset.findFirst({
+    where: { ticker },
+    select: { id: true, currentPrice: true },
+  })
+  if (!asset) throw new Error(`[factory] Asset com ticker=${ticker} não encontrado. Rode o seed primeiro.`)
+
+  const preco = avgPrice ?? Number(asset.currentPrice)
+
+  return prisma.position.create({
+    data: {
+      userId,
+      assetId: asset.id,
+      quantity,
+      avgPrice: preco,
+      totalInvested: Number((preco * quantity).toFixed(2)),
+      side: 'LONG',
+      status: 'OPEN',
+      openedAt: new Date(),
     },
   })
 }
@@ -153,6 +207,8 @@ export async function createTestSubscription(
       status: 'ACTIVE',
       gateway: 'MERCADO_PAGO',
       period: 'MONTHLY',
+      // Obrigatorio no schema: centavos BRL, nunca Float (PCI-DSS).
+      amount: 2990,
       startsAt: new Date(),
       expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     },

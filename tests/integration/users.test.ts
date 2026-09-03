@@ -9,7 +9,7 @@
 // ============================================================================
 
 import { NextRequest } from 'next/server'
-import { testPrisma, TEST_EMAIL_DOMAIN } from './setup'
+import { testPrisma, limparUsuariosDeTeste } from './setup'
 import { createTestUser, buildTestEmail } from './helpers/factory.helper'
 import { mockAuthAsUser, mockAuthInvalid, buildNextRequest, parseResponse } from './helpers/auth.helper'
 
@@ -25,7 +25,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  await testPrisma.user.deleteMany({ where: { email: { endsWith: TEST_EMAIL_DOMAIN } } })
+  await limparUsuariosDeTeste()
 })
 
 // ─── GET /api/v1/me ───────────────────────────────────────────────────────────

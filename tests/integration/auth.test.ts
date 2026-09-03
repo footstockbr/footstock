@@ -5,12 +5,15 @@
 // Segurança testada:
 //   - THREAT-008: Enumeração de usuários (forgot-password deve retornar 200 sempre)
 //   - AUTH_002: Credenciais incorretas — mensagem genérica (sem enumerar campo)
-//   - AUTH_009: Menor de 18 anos bloqueado (ECA Digital)
+//   - AUTH_009 / THREAT-003: Menor de 18 anos bloqueado no cadastro (ECA Digital)
 //   - AUTH_008: CPF duplicado
 // ============================================================================
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
 import { NextRequest } from 'next/server'
-import { testPrisma, TEST_EMAIL_DOMAIN } from './setup'
+import { testPrisma, TEST_EMAIL_DOMAIN, limparUsuariosDeTeste } from './setup'
 import { buildRegisterPayload, buildTestEmail } from './helpers/factory.helper'
 import { parseResponse } from './helpers/auth.helper'
 
@@ -22,7 +25,7 @@ import { parseResponse } from './helpers/auth.helper'
 
 describe('POST /api/v1/auth/register', () => {
   afterEach(async () => {
-    await testPrisma.user.deleteMany({ where: { email: { endsWith: TEST_EMAIL_DOMAIN } } })
+    await limparUsuariosDeTeste()
   })
 
   it('[happy] deve registrar usuário adulto com dados válidos → 201', async () => {
@@ -44,7 +47,7 @@ describe('POST /api/v1/auth/register', () => {
           planType: 'JOGADOR',
           fsBalance: 10000,
           marginBlocked: 0,
-          ageVerificationPending: false,
+          birthDate: new Date('1990-01-01'),
           favoriteClub: 'URU3',
         },
       })
@@ -67,7 +70,7 @@ describe('POST /api/v1/auth/register', () => {
     // Verificar que usuário foi persistido no banco
     const dbUser = await testPrisma.user.findUnique({ where: { email: payload.email as string } })
     expect(dbUser).toBeTruthy()
-    expect(dbUser!.ageVerificationPending).toBe(false)
+    expect(dbUser!.birthDate).toBeTruthy()
   })
 
   // ─── Cenário 2 — Validação: email inválido ────────────────────────────────
@@ -119,26 +122,41 @@ describe('POST /api/v1/auth/register', () => {
     ).rejects.toThrow() // Prisma lança P2002 (unique constraint)
   })
 
-  // ─── Cenário 4 — Segurança: THREAT-003 — conta bloqueada se ageVerificationPending ──
+  // ─── Cenário 4 — Segurança: THREAT-003 — menor de idade barrado no cadastro ──
+  //
+  // O controle MIGROU, nao sumiu. O modelo antigo era uma flag persistida
+  // (`users.ageVerificationPending`) checada no `withAuth` a cada request; a coluna
+  // nao existe mais. Hoje a maioridade e decidida por `verifyAge(birthDate)` na
+  // ROTA DE REGISTRO, antes de qualquer escrita no Prisma -- ou seja, menor nem
+  // chega a virar linha na tabela, entao nao ha estado "pendente" para bloquear
+  // depois. Os dois testes abaixo cobrem as duas metades desse contrato.
 
-  it('[seguranca] usuário com ageVerificationPending=true deve ter acesso bloqueado', async () => {
-    const email = buildTestEmail('age-pending')
-    await testPrisma.user.create({
-      data: {
-        email,
-        name: 'Age Pending',
-        cpfHash: `hash-age-${Date.now()}`,
-        planType: 'JOGADOR',
-        fsBalance: 10000,
-        marginBlocked: 0,
-        ageVerificationPending: true, // THREAT-003
-      },
-    })
+  it('[seguranca] verifyAge deve reprovar menor de 18 e aprovar adulto (THREAT-003)', async () => {
+    const { verifyAge } = await import('@/lib/services/age-verification')
 
-    const dbUser = await testPrisma.user.findUnique({ where: { email } })
-    expect(dbUser!.ageVerificationPending).toBe(true)
-    // Garantir que o campo existe e está marcado corretamente para bloqueio de acesso
-    // A validação de bloqueio ocorre no withAuth middleware ao verificar ageVerificationPending
+    const hoje = new Date()
+    const menor = new Date(hoje.getFullYear() - 17, hoje.getMonth(), hoje.getDate())
+    const adulto = new Date(hoje.getFullYear() - 30, hoje.getMonth(), hoje.getDate())
+
+    expect(verifyAge(menor.toISOString().slice(0, 10)).isAdult).toBe(false)
+    expect(verifyAge(adulto.toISOString().slice(0, 10)).isAdult).toBe(true)
+  })
+
+  it('[seguranca] rota de registro deve chamar o gate de idade antes do write (THREAT-003)', () => {
+    const rota = readFileSync(
+      join(process.cwd(), 'footstock-next/src/app/api/v1/auth/register/route.ts'),
+      'utf8'
+    )
+
+    const posGate = rota.indexOf('verifyAge(birthDate)')
+    const posWrite = rota.indexOf('user.create')
+
+    expect(posGate).toBeGreaterThan(-1)
+    expect(posWrite).toBeGreaterThan(-1)
+    // Zero Fluxos Incompletos: se o gate cair para depois da escrita, menor entra no
+    // banco antes de ser rejeitado. Este assert e o que trava essa reordenacao.
+    expect(posGate).toBeLessThan(posWrite)
+    expect(rota).toContain('VAL_002')
   })
 })
 

@@ -6,8 +6,10 @@ describe('value analysis causal order snapshot contract', () => {
   const migration = readFileSync(join(process.cwd(), 'footstock-next/prisma/migrations/M057-order-flow-snapshot-index.sql'), 'utf8')
 
   it('usa consulta agrupada por asset_id e nao query por ativo', () => {
-    expect(service).toContain('GROUP BY asset_id')
-    expect(service).toContain('asset_id = ANY')
+    // O SELECT usa alias (`FROM orders o`), entao o GROUP BY tambem e qualificado.
+    // Assercao sem o alias ficava vermelha sem que nada de fato tivesse regredido.
+    expect(service).toContain('GROUP BY o.asset_id')
+    expect(service).toContain('o.asset_id = ANY')
   })
 
   it('possui indice compativel com filtros do snapshot', () => {

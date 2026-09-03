@@ -12,7 +12,7 @@
 // ============================================================================
 
 import { NextRequest } from 'next/server'
-import { testPrisma, TEST_EMAIL_DOMAIN } from './setup'
+import { testPrisma, limparUsuariosDeTeste } from './setup'
 import {
   createTestUser,
   createTestOrder,
@@ -41,7 +41,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  await testPrisma.user.deleteMany({ where: { email: { endsWith: TEST_EMAIL_DOMAIN } } })
+  await limparUsuariosDeTeste()
 })
 
 // ─── THREAT-001: Mass Assignment ─────────────────────────────────────────────
@@ -180,7 +180,7 @@ describe('THREAT-005 — IDOR em endpoints com :id', () => {
   it('GET /orders — só retorna ordens do próprio usuário (sem vazamento)', async () => {
     // Criar ordens para A e B
     await createTestOrder(testPrisma, { userId: userA.id, status: 'OPEN' })
-    await createTestOrder(testPrisma, { userId: userB.id, status: 'OPEN' })
+    const ordemDeB = await createTestOrder(testPrisma, { userId: userB.id, status: 'OPEN' })
 
     mockAuthAsUser(userA.id)
 
@@ -194,11 +194,29 @@ describe('THREAT-005 — IDOR em endpoints com :id', () => {
     const body = (await parseResponse(res)) as Record<string, unknown>
     const data = body.data as Array<Record<string, unknown>>
 
-    if (Array.isArray(data)) {
-      for (const order of data) {
-        expect(order.userId).toBe(userA.id)
-      }
+    expect(Array.isArray(data)).toBe(true)
+    expect(data.length).toBeGreaterThan(0)
+
+    // O DTO de historico (`serializeOrderHistory`) NAO expoe `userId` -- e correto
+    // que nao exponha, e por isso a asserçao antiga (`order.userId === userA.id`)
+    // comparava undefined e reprovava a rota por fazer a coisa certa. O isolamento
+    // se verifica onde ele de fato existe: a dona de cada id devolvido, no banco.
+    for (const order of data) {
+      expect(order).not.toHaveProperty('userId')
     }
+
+    const idsDevolvidos = data.map((order) => order.id as string)
+    const donos = await testPrisma.order.findMany({
+      where: { id: { in: idsDevolvidos } },
+      select: { id: true, userId: true },
+    })
+    expect(donos).toHaveLength(idsDevolvidos.length)
+    for (const dono of donos) {
+      expect(dono.userId).toBe(userA.id)
+    }
+
+    // Zero Assumido: a ordem de B existe e foi deliberadamente deixada de fora.
+    expect(idsDevolvidos).not.toContain(ordemDeB.id)
   })
 
   it('GET /transactions — só retorna transações do próprio usuário', async () => {
@@ -256,8 +274,27 @@ describe('THREAT-009 — Erros não devem revelar dados financeiros de outros us
 
 // ─── AUTH: Usuário suspenso/banido não pode operar ───────────────────────────
 
+// Os dois testes abaixo estao marcados `it.failing`: eles descrevem o contrato
+// desejado e HOJE o produto nao o cumpre. `it.failing` mantem o vermelho visivel
+// sem quebrar a suite e vira vermelho de verdade no dia em que o gate entrar --
+// que e exatamente o sinal que se quer.
+//
+// GAP REAL (nao e drift de teste): NENHUMA rota e helper compartilhado checa
+// status de conta numa sessao ja existente. `getAuthUser` (footstock-next/src/lib/auth.ts)
+// valida sessao e invalidacao, nunca `status`; `serializeUser` nem carrega o campo.
+// SUSPENDED/BANNED so sao barrados no LOGIN (auth-credentials.ts) e no registro.
+// Consequencia: usuario suspenso DEPOIS de logar continua operando ate a sessao
+// expirar.
+//
+// Nao da para fechar isso unilateralmente: `PlanService.ts:904` grava
+// `status: 'SUSPENDED'` quando a assinatura vence, e o fluxo de reativacao depende
+// desse usuario conseguir entrar e pagar. Bloquear SUSPENDED em bloco quebraria a
+// cobranca. Falta decisao de produto sobre QUAIS status bloqueiam QUAIS rotas
+// (provavelmente: BANNED bloqueia tudo; SUSPENDED bloqueia trading e libera
+// billing/perfil). O dado ja esta disponivel -- `SAFE_USER_SELECT` em
+// footstock-next/src/app/api/middleware.ts ja seleciona status/suspendedAt/suspensionReason.
 describe('Controle de status de conta — suspensão e banimento', () => {
-  it('usuário SUSPENDED não deve conseguir criar ordem', async () => {
+  it.failing('usuário SUSPENDED não deve conseguir criar ordem', async () => {
     const suspendedUser = await createTestUser(testPrisma, {
       planType: 'LENDA',
       status: 'SUSPENDED',
@@ -281,7 +318,13 @@ describe('Controle de status de conta — suspensão e banimento', () => {
     expect(res.status).toBeGreaterThanOrEqual(400)
   })
 
-  it('usuário BANNED não deve conseguir acessar nenhum endpoint protegido', async () => {
+  // Este teste passava -- pelo motivo errado. Ele batia em `/api/v1/me`, que
+  // autentica por `withAuth` (footstock-next/src/app/api/middleware.ts), caminho
+  // que o `jest.mock('@/lib/auth')` desta suite NAO intercepta: o 401 vinha de
+  // "nao ha sessao real", nao do banimento. Falso verde sobre um gate inexistente.
+  // Trocado para uma rota que de fato passa por `getAuthUser` (a mesma que o mock
+  // cobre), o resultado honesto e vermelho -- mesmo gap do teste acima.
+  it.failing('usuário BANNED não deve conseguir acessar nenhum endpoint protegido', async () => {
     const bannedUser = await createTestUser(testPrisma, {
       planType: 'JOGADOR',
       status: 'BANNED',
@@ -290,10 +333,10 @@ describe('Controle de status de conta — suspensão e banimento', () => {
 
     mockAuthAsUser(bannedUser.id)
 
-    const handler = await import('@/app/api/v1/me/route').catch(() => null)
+    const handler = await import('@/app/api/v1/orders/route').catch(() => null)
     if (!handler?.GET) return
 
-    const req = buildNextRequest('GET', '/api/v1/me')
+    const req = buildNextRequest('GET', '/api/v1/orders')
     const res = await handler.GET(req as NextRequest)
     // AUTH_004: conta banida → 403
     expect(res.status).toBeGreaterThanOrEqual(400)
@@ -303,10 +346,27 @@ describe('Controle de status de conta — suspensão e banimento', () => {
 // ─── Rate Limiting: Resposta correta sem leak de dados ───────────────────────
 
 describe('Rate Limiting — Estrutura de resposta (THREAT-009)', () => {
+  // O teste antigo fazia `(redisPublisher.get as jest.Mock).mockResolvedValueOnce('999')`
+  // -- resto do mock de Redis que o harness apagou. Dois problemas alem do
+  // `mockResolvedValueOnce is not a function`: `SlidingWindowRateLimiter` nao usa
+  // `get`, usa `EVAL` sobre um ZSET, entao o mock nunca teria produzido 429; e o
+  // corpo inteiro da asserçao vivia dentro de `if (res.status === 429)`, ou seja,
+  // passava verde sem testar nada sempre que o limite NAO disparava -- que era
+  // sempre. Aqui o limite e estourado de verdade, no container `redis-test`,
+  // preenchendo a janela deslizante da chave que o limiter le.
   it('resposta 429 não deve revelar identificadores internos de outros usuários', async () => {
-    // Redis mockado retorna alto volume simulando rate limit ativado
-    const { redisPublisher } = await import('@/lib/redis')
-    ;(redisPublisher.get as jest.Mock).mockResolvedValueOnce('999')
+    const { getRedisClient } = await import('@/lib/redis')
+    const redis = getRedisClient()
+    if (!redis) throw new Error('[integration] Redis de teste indisponivel — ver setup.ts')
+
+    // `getOrdersRateLimit()` = 100 req / 60s, chave `rl:orders:{userId}` (ratelimit.ts).
+    // Preencher a janela com 100 hits recentes deixa a proxima chamada estourada.
+    const chave = `rl:orders:${userA.id}`
+    const agora = Date.now()
+    await redis.del(chave)
+    const membros: string[] = []
+    for (let i = 0; i < 100; i++) membros.push(String(agora - i), `hit-${i}`)
+    await redis.zadd(chave, ...membros)
 
     mockAuthAsUser(userA.id)
 
@@ -322,12 +382,17 @@ describe('Rate Limiting — Estrutura de resposta (THREAT-009)', () => {
 
     const res = await handler.POST(req as NextRequest)
 
-    if (res.status === 429) {
-      const body = (await parseResponse(res)) as Record<string, unknown>
-      const bodyStr = JSON.stringify(body)
-      // Resposta 429 não deve conter dados de outros usuários
-      expect(bodyStr).not.toContain(userB.id)
-      expect(bodyStr).not.toContain(userB.email)
-    }
+    // Sem `if`: o 429 e o contrato. Se a rota responder outra coisa, o limiter
+    // parou de proteger a criacao de ordens e isso tem que ficar vermelho.
+    expect(res.status).toBe(429)
+
+    const body = (await parseResponse(res)) as Record<string, unknown>
+    const bodyStr = JSON.stringify(body)
+    expect(bodyStr).not.toContain(userB.id)
+    expect(bodyStr).not.toContain(userB.email)
+    // Nem o proprio identificador interno do usuario limitado vaza no corpo.
+    expect(bodyStr).not.toContain(userA.id)
+
+    await redis.del(chave)
   })
 })

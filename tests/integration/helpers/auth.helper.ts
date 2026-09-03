@@ -7,6 +7,8 @@
 // Simular autenticação diretamente via mock de `@/lib/auth` getAuthUser.
 // ============================================================================
 
+import { NextRequest } from 'next/server'
+
 import { getAuthUser } from '@/lib/auth'
 
 // ─── Mock Auth.js (getAuthUser) ───────────────────────────────────────────────
@@ -44,7 +46,13 @@ export function mockAuthUserNotFound(): void {
 // ─── NextRequest Helper ───────────────────────────────────────────────────────
 
 /**
- * Cria um NextRequest simulado para testar route handlers.
+ * Cria um NextRequest de verdade para testar route handlers.
+ *
+ * Devolve `NextRequest`, nao `Request`: as rotas leem `request.nextUrl` para
+ * paginacao e filtro (`parsePagination(searchParams, ...)`), e num `Request` nu
+ * essa propriedade e undefined -- o handler morria em
+ * "Cannot destructure property 'searchParams'" e o teste registrava 500 como se
+ * fosse falha da rota. `nextUrl` so existe na subclasse do Next.
  *
  * Exemplo:
  *   const req = buildNextRequest('POST', '/api/v1/orders', { ticker: 'URU3', ... })
@@ -55,7 +63,7 @@ export function buildNextRequest(
   path: string,
   body?: unknown,
   headers: Record<string, string> = {}
-): Request {
+): NextRequest {
   const url = `http://localhost:3000${path}`
   const options: RequestInit = {
     method,
@@ -70,7 +78,7 @@ export function buildNextRequest(
     options.body = JSON.stringify(body)
   }
 
-  return new Request(url, options)
+  return new NextRequest(url, options)
 }
 
 /**
