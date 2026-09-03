@@ -21,6 +21,16 @@ model PriceHistory {
   attribution Json?       @map("attribution") @db.JsonB
   @@map("price_history")
 }
+
+model MarketSessionLog {
+  id            String      @id @default(cuid())
+  fromSession   SessionType @map("from_session")
+  toSession     SessionType @map("to_session")
+  transitionAt  DateTime    @default(now()) @map("transition_at") @db.Timestamptz
+  transitionDay String      @map("transition_day") @db.VarChar(10)
+  @@unique([transitionDay, fromSession, toSession])
+  @@map("market_session_logs")
+}
 `
 
 describe('AttributionPreflightService', () => {
@@ -29,6 +39,24 @@ describe('AttributionPreflightService', () => {
 
     expect(comparePriceHistoryContract(SYNCED_SCHEMA, drifted)).toEqual([
       'enum SessionType divergente entre prisma/schema.prisma e footstock-next/prisma/schema.prisma',
+    ])
+  })
+
+  // 09-02: MarketSessionLog entrou no guard depois de os dois schemas terem
+  // divergido em nome de tabela e tipo de coluna por meses sem sinal nenhum.
+  it('detecta drift no model MarketSessionLog', () => {
+    const drifted = SYNCED_SCHEMA.replace('@@map("market_session_logs")', '@@map("market_session_log")')
+
+    expect(comparePriceHistoryContract(SYNCED_SCHEMA, drifted)).toEqual([
+      'model MarketSessionLog divergente entre prisma/schema.prisma e footstock-next/prisma/schema.prisma',
+    ])
+  })
+
+  it('acusa ausencia do bloco em um dos schemas', () => {
+    const semModel = SYNCED_SCHEMA.slice(0, SYNCED_SCHEMA.indexOf('model MarketSessionLog'))
+
+    expect(comparePriceHistoryContract(SYNCED_SCHEMA, semModel)).toEqual([
+      'model MarketSessionLog ausente em um dos schemas Prisma',
     ])
   })
 

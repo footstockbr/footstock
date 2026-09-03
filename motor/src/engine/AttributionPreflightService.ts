@@ -60,6 +60,11 @@ export function comparePriceHistoryContract(rootSchema: string, nextSchema: stri
   for (const [kind, name] of [
     ['model', 'PriceHistory'],
     ['enum', 'SessionType'],
+    // 09-02: MarketSessionLog entrou no guard depois de os dois schemas terem
+    // divergido em NOME de tabela e TIPO de coluna sem ninguem notar (a trilha de
+    // auditoria de sessao nunca chegou a ser criada em producao). Unificados os
+    // blocos, o guard impede a divergencia de voltar em silencio.
+    ['model', 'MarketSessionLog'],
   ] as const) {
     const rootBlock = extractPrismaBlock(rootSchema, kind, name)
     const nextBlock = extractPrismaBlock(nextSchema, kind, name)

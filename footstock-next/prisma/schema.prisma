@@ -1578,16 +1578,31 @@ model ImpactMatrixConfig {
 }
 
 // ─── Auditoria de transições de sessão de mercado ─────────────────────────────
-// Rastreabilidade: T-008 (cron/session-transition)
-// Usa String para fromSession/toSession pois os valores vêm do enum MarketSession
-// (PRE_OPENING, TRADING, CLOSING_CALL, AFTER_MARKET, CLOSED) — distinto do SessionType do Prisma.
-
+// Escritor UNICO: o job `session-transition` do motor (motor/src/services/cron/).
+//
+// 09-02: os dois schemas divergiam em NOME de tabela (market_session_log na raiz,
+// market_session_logs aqui) e em TIPO de coluna (String aqui, SessionType la).
+// Nenhum dos dois existia em producao — a trilha simplesmente nunca foi criada.
+// Unificado no plural, que e a convencao da casa e o nome da arvore que o CI
+// aplica. As colunas passam a ser SessionType: os valores gravados pelo motor
+// (PRE_OPENING, TRADING, CLOSING_CALL, AFTER_MARKET, CLOSED) SAO labels do pg
+// enum SessionType — a nota antiga de que seriam "um enum distinto" estava
+// errada. Bloco identico em prisma/schema.prisma, por contrato:
+// AttributionPreflightService.comparePriceHistoryContract compara os dois.
+//
+// transitionDay e o dia-calendario BRT (`YYYY-MM-DD`, brtDayKey do SessionManager).
+// Existe para dar CHAVE NATURAL a linha: cada uma das transicoes do pregao
+// acontece no maximo uma vez por dia, entao @@unique([transitionDay, fromSession,
+// toSession]) transforma "best effort" em invariante — uma falha de Redis nao
+// duplica a linha e um retry de escrita e seguro.
 model MarketSessionLog {
-  id           String   @id @default(cuid())
-  fromSession  String   @map("from_session")
-  toSession    String   @map("to_session")
-  transitionAt DateTime @map("transition_at")
+  id            String      @id @default(cuid())
+  fromSession   SessionType @map("from_session")
+  toSession     SessionType @map("to_session")
+  transitionAt  DateTime    @default(now()) @map("transition_at") @db.Timestamptz
+  transitionDay String      @map("transition_day") @db.VarChar(10)
 
+  @@unique([transitionDay, fromSession, toSession])
   @@index([transitionAt])
   @@map("market_session_logs")
 }

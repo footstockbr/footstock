@@ -162,22 +162,52 @@ enum SubscriptionPeriod {
   YEARLY
 }
 
+// ATENCAO — este enum e o pg enum "SessionType" que JA EXISTE em producao com 7
+// labels. Declarar so os 5 do pregao virtual (o que este schema fazia ate 09-02)
+// nao restringia nada no banco: apenas fazia o client do motor quebrar com
+// "Value 'REGULAR' not found" ao LER qualquer linha gravada com os labels
+// antigos. O drift era real e o guard de AttributionPreflightService.comparePriceHistoryContract
+// existe exatamente para flagra-lo — mas ele e pulado em container motor-only
+// (ATTRIBUTION_SCHEMA_SYNC_SKIPPED e informativo, nao falha). Bloco identico ao
+// de footstock-next/prisma/schema.prisma, por contrato.
 enum SessionType {
-  PRE_OPENING
-  TRADING
+  PRE_MARKET
+  REGULAR
   CLOSING_CALL
   AFTER_MARKET
   CLOSED
+  // Valores do pregao virtual escritos pelo motor (drift fix 2026-06-08): o pg enum
+  // SessionType ja contem PRE_OPENING/TRADING (M049) e price_history os usa em ~224k
+  // linhas; sem eles o Prisma client quebra findMany com "Value 'TRADING' not found".
+  PRE_OPENING
+  TRADING
 }
 
+// ─── Auditoria de transições de sessão de mercado ─────────────────────────────
+// Escritor UNICO: o job `session-transition` do motor (motor/src/services/cron/).
+//
+// 09-02: os dois schemas divergiam em NOME de tabela (market_session_log aqui,
+// market_session_logs no canonico) e em TIPO de coluna (SessionType aqui, String
+// la). Nenhum dos dois existia em producao — a trilha simplesmente nunca foi
+// criada. Unificado no plural, que e a convencao da casa e o nome da arvore que o
+// CI aplica. Bloco identico em footstock-next/prisma/schema.prisma, por contrato:
+// AttributionPreflightService.comparePriceHistoryContract compara os dois.
+//
+// transitionDay e o dia-calendario BRT (`YYYY-MM-DD`, brtDayKey do SessionManager).
+// Existe para dar CHAVE NATURAL a linha: cada uma das transicoes do pregao
+// acontece no maximo uma vez por dia, entao @@unique([transitionDay, fromSession,
+// toSession]) transforma "best effort" em invariante — uma falha de Redis nao
+// duplica a linha e um retry de escrita e seguro.
 model MarketSessionLog {
-  id           String      @id @default(cuid())
-  fromSession  SessionType @map("from_session")
-  toSession    SessionType @map("to_session")
-  transitionAt DateTime    @default(now()) @map("transition_at") @db.Timestamptz
+  id            String      @id @default(cuid())
+  fromSession   SessionType @map("from_session")
+  toSession     SessionType @map("to_session")
+  transitionAt  DateTime    @default(now()) @map("transition_at") @db.Timestamptz
+  transitionDay String      @map("transition_day") @db.VarChar(10)
 
+  @@unique([transitionDay, fromSession, toSession])
   @@index([transitionAt])
-  @@map("market_session_log")
+  @@map("market_session_logs")
 }
 
 enum ConsentPurpose {
