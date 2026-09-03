@@ -8,15 +8,19 @@ import { ORDER_STATUS, type OrderStatus } from '@/lib/enums'
 
 // ---------------------------------------------------------------------------
 // State Machine — imutável (Object.freeze)
-// OPEN = aguardando execução (equivale a PENDING na spec do módulo)
-// FILLED = executada (equivale a EXECUTED na spec do módulo)
+//
+// Vocabulário canônico, igual ao enum OrderStatus do Prisma:
+//   OPEN   = aguardando execução  (a spec do módulo chamava de PENDING)
+//   FILLED = executada            (a spec do módulo chamava de EXECUTED)
+// B7 (09-02): os aliases PENDING/EXECUTED saíram de `ORDER_STATUS`; a tradução
+// para a linguagem da spec é comentário, não uma segunda chave no enum.
 // ---------------------------------------------------------------------------
 
 export const ORDER_STATE_MACHINE: Readonly<Record<string, readonly OrderStatus[]>> =
   Object.freeze({
-    [ORDER_STATUS.PENDING]:   Object.freeze([ORDER_STATUS.EXECUTED, ORDER_STATUS.CANCELLED, ORDER_STATUS.EXPIRED, ORDER_STATUS.PARTIAL]),
-    [ORDER_STATUS.PARTIAL]:   Object.freeze([ORDER_STATUS.EXECUTED, ORDER_STATUS.CANCELLED, ORDER_STATUS.EXPIRED]),
-    [ORDER_STATUS.EXECUTED]:  Object.freeze([] as OrderStatus[]),  // terminal
+    [ORDER_STATUS.OPEN]:      Object.freeze([ORDER_STATUS.FILLED, ORDER_STATUS.CANCELLED, ORDER_STATUS.EXPIRED, ORDER_STATUS.PARTIAL]),
+    [ORDER_STATUS.PARTIAL]:   Object.freeze([ORDER_STATUS.FILLED, ORDER_STATUS.CANCELLED, ORDER_STATUS.EXPIRED]),
+    [ORDER_STATUS.FILLED]:    Object.freeze([] as OrderStatus[]),  // terminal
     [ORDER_STATUS.CANCELLED]: Object.freeze([] as OrderStatus[]),  // terminal
     [ORDER_STATUS.EXPIRED]:   Object.freeze([] as OrderStatus[]),  // terminal
   })

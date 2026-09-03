@@ -55,11 +55,14 @@ export const ORDER_STATUS = {
   EXPIRED: 'EXPIRED',
   /** Parcialmente executada */
   PARTIAL: 'PARTIAL',
-  // Aliases legados (mapeiam para os valores canônicos)
-  /** @deprecated Use OPEN */
-  PENDING: 'OPEN',
-  /** @deprecated Use FILLED */
-  EXECUTED: 'FILLED',
+  // B7 (09-02): os aliases legados PENDING->'OPEN' e EXECUTED->'FILLED' foram
+  // REMOVIDOS. Eram nomes da spec original do modulo que nunca existiram como
+  // valor no enum OrderStatus do Prisma: duas chaves TS apontando para o mesmo
+  // literal fazem `Object.keys(ORDER_STATUS)` devolver 7 entradas para 5 estados
+  // reais, e qualquer `Object.entries` sobre este mapa (dropdown de filtro,
+  // validacao de payload, tabela de rotulos) gerava duplicata silenciosa.
+  // O vocabulario canonico e OPEN/FILLED/CANCELLED/EXPIRED/PARTIAL — o mesmo do
+  // banco. A traducao para a linguagem da spec vive no texto da UI, nao aqui.
 } as const;
 export type OrderStatus = (typeof ORDER_STATUS)[keyof typeof ORDER_STATUS];
 
