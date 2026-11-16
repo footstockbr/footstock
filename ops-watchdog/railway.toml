@@ -1,0 +1,12 @@
+# FootStock ops-watchdog (servico Railway "ops-watchdog", cron).
+# Volume do servico montado em /state guarda o estado de deduplicacao.
+# Variaveis: DATABASE_URL, RESEND_API_KEY, RESEND_FROM_EMAIL (referencias ao
+# postgres/web), ALERT_EMAIL_TO. Opcionais: ver cabecalho de watchdog.sh.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+cronSchedule = "*/5 * * * *"
+restartPolicyType = "NEVER"
