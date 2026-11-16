@@ -32,7 +32,7 @@
 **Importante:** [Codex] `footstock-next/src/lib/redis.ts:45,90` prefere `REDIS_CLOUD_URL` sobre `REDIS_URL` na resolução do client. Se essa var existir setada no Railway env, o flip de `REDIS_URL` é **no-op**.
 
 ```bash
-RAILWAY_API_TOKEN='<token>'
+RAILWAY_TOKEN='<token>'  # token de PROJETO: vai no header Project-Access-Token, nao Bearer (desde 2026-11-16)
 # IDs estado 2026-05-09; revalidar via `railway service list` se Railway recriou os services.
 PROJ='45677912-3487-4978-b20b-fc7cdb8b93cf'
 ENV='6104895d-50c2-4c25-afc2-64a0b467565b'
@@ -42,7 +42,7 @@ SVC_WEB='ae3d2626-3213-4c22-b90c-c6f578e1c69a'
 # Listar todas as vars REDIS-relacionadas em motor + web
 for svc in "$SVC_MOTOR" "$SVC_WEB"; do
   curl -sS -X POST https://backboard.railway.com/graphql/v2 \
-    -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+    -H "Project-Access-Token: $RAILWAY_TOKEN" \
     -H "Content-Type: application/json" \
     -d "{\"query\":\"query{ variables(projectId:\\\"$PROJ\\\",environmentId:\\\"$ENV\\\",serviceId:\\\"$svc\\\") }\"}" \
     | jq '.data.variables | with_entries(select(.key | test("REDIS|UPSTASH")))'
@@ -62,7 +62,7 @@ Procurar especificamente: `REDIS_URL`, `REDIS_CLOUD_URL`, `UPSTASH_REDIS_URL`, `
 SVC_REDIS='<id do service redis>'  # buscar via Railway dashboard ou GraphQL services()
 
 curl -sS -X POST https://backboard.railway.com/graphql/v2 \
-  -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+  -H "Project-Access-Token: $RAILWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"query\":\"query{ variables(projectId:\\\"$PROJ\\\",environmentId:\\\"$ENV\\\",serviceId:\\\"$SVC_REDIS\\\") }\"}" \
   | jq -r '.data.variables.REDIS_URL'
@@ -80,7 +80,7 @@ Anotar o valor (vai para `$REDIS_INTERNAL`).
 upsert() {
   local svc="$1" name="$2" value="$3"
   curl -sS -X POST https://backboard.railway.com/graphql/v2 \
-    -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+    -H "Project-Access-Token: $RAILWAY_TOKEN" \
     -H "Content-Type: application/json" \
     -d @- <<JSON
 {"query":"mutation(\$input: VariableUpsertInput!){ variableUpsert(input: \$input) }",
@@ -91,7 +91,7 @@ JSON
 vdelete() {
   local svc="$1" name="$2"
   curl -sS -X POST https://backboard.railway.com/graphql/v2 \
-    -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+    -H "Project-Access-Token: $RAILWAY_TOKEN" \
     -H "Content-Type: application/json" \
     -d "{\"query\":\"mutation{ variableDelete(input:{projectId:\\\"$PROJ\\\",environmentId:\\\"$ENV\\\",serviceId:\\\"$svc\\\",name:\\\"$name\\\"}) }\"}"
 }

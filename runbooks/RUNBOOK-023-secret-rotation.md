@@ -62,7 +62,7 @@ Anotar os 4 prefixos `sha256_16` — usados na §6 para verificar paridade pós-
 ## 3. Aplicar em Railway (motor + web)
 
 ```bash
-RAILWAY_API_TOKEN='<de credentials.railway.api_token>'
+RAILWAY_TOKEN='<de credentials.railway.api_token>'  # token de PROJETO: vai no header Project-Access-Token, nao Bearer (desde 2026-11-16)
 
 # IDs Railway (estado 2026-05-09; revalidar antes de cada rotação:
 #   railway service list  OU  GraphQL { projects { edges { node { id services { ... } } } } })
@@ -75,7 +75,7 @@ PROJ='45677912-3487-4978-b20b-fc7cdb8b93cf'
 upsert() {
   local svc="$1" name="$2" value="$3"
   curl -sS -X POST https://backboard.railway.com/graphql/v2 \
-    -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+    -H "Project-Access-Token: $RAILWAY_TOKEN" \
     -H "Content-Type: application/json" \
     -d @- <<JSON
 {"query":"mutation(\$input: VariableUpsertInput!){ variableUpsert(input: \$input) }",
@@ -144,7 +144,7 @@ done < "$TMP"
 for svc in "$SVC_MOTOR" "$SVC_WEB"; do
   out="/tmp/railway-secrets-$svc.txt" ; : > "$out" ; chmod 600 "$out"
   curl -sS -X POST https://backboard.railway.com/graphql/v2 \
-    -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+    -H "Project-Access-Token: $RAILWAY_TOKEN" \
     -H "Content-Type: application/json" \
     -d "{\"query\":\"query{ variables(projectId:\\\"$PROJ\\\",environmentId:\\\"$ENV\\\",serviceId:\\\"$svc\\\") }\"}" \
     | jq -r '.data.variables | to_entries[]
