@@ -152,6 +152,37 @@ describe('SentimentCycle', () => {
     expect(a.sentimentLastFlipTick).toBeGreaterThan(0)
   })
 
+  it('cada virada de rotulo gera um log sentiment_label_flip (e so viradas)', async () => {
+    const { logger } = jest.requireActual('../../utils/logger') as typeof import('../../utils/logger')
+    const spy = jest.spyOn(logger, 'info').mockImplementation(() => logger as any)
+    try {
+      const rows = Array.from({ length: 30 }, (_, i) => newsRow('TKa', 'BULLISH', i))
+      const prisma = makePrisma(rows)
+      const states = new Map([
+        ['a', makeState('a', { currentPrice: 10.6 })],
+        ['b', makeState('b')],
+        ['c', makeState('c', { currentPrice: 9.9 })],
+      ])
+      const cycle = new SentimentCycle({ prisma: prisma as any, assetStates: states })
+      for (
+        let t = SENTIMENT_WRITE_CADENCE;
+        t <= 40 * SENTIMENT_WRITE_CADENCE;
+        t += SENTIMENT_WRITE_CADENCE
+      ) {
+        await cycle.run(t, 'TRADING')
+      }
+      const flips = spy.mock.calls
+        .map(c => String(c[0]))
+        .filter(m => m.includes('"sentiment_label_flip"'))
+        .map(m => JSON.parse(m))
+      expect(flips).toHaveLength(1)
+      expect(flips[0]).toMatchObject({ ticker: 'TKa', from: 'NEUTRAL', to: 'BULLISH', newsCount: 30 })
+      expect(flips[0].tick).toBe(states.get('a')!.sentimentLastFlipTick)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
   it('sessao CLOSED congela: nao calcula nem consulta o banco', async () => {
     const prisma = makePrisma([newsRow('TKa', 'BEARISH', 1)])
     const states = new Map([

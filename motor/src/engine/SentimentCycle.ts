@@ -284,11 +284,13 @@ export class SentimentCycle {
           F: { value: fast.value, weight: SENTIMENT_WEIGHTS.F },
         }
         const totalPublished = window.count + unclassified
+        const previousLabel = asLabel(state.sentimentLabel)
+        const previousFlipTick = state.sentimentLastFlipTick ?? 0
         const output = calculateSentiment({
           components,
           previousScore: state.sentimentScore ?? 0,
-          previousLabel: asLabel(state.sentimentLabel),
-          previousFlipTick: state.sentimentLastFlipTick ?? 0,
+          previousLabel,
+          previousFlipTick,
           currentTick: tickCount,
           sessionType,
           metadata: window.lowCoverage
@@ -323,7 +325,25 @@ export class SentimentCycle {
             fastNews: { active: fast.activeCount },
           },
         }
-        if (output.flipOccurred) state.sentimentLastFlipTick = tickCount
+        if (output.flipOccurred) {
+          state.sentimentLastFlipTick = tickCount
+          // Uma linha por virada: base para calibrar THRESHOLD_BULLISH/BEARISH e
+          // MIN_PERMANENCE_TICKS com dados de prod (deploymentLogs filter "sentiment_label_flip").
+          logger.info(
+            JSON.stringify({
+              event: 'sentiment_label_flip',
+              ticker: state.ticker,
+              from: previousLabel,
+              to: output.label,
+              score: round(output.score),
+              tick: tickCount,
+              ticksSincePreviousFlip: tickCount - previousFlipTick,
+              newsCount: window.count,
+              momentumZ: round(mom.z),
+              fastNewsActive: fast.activeCount,
+            })
+          )
+        }
       } catch (err) {
         logger.warn(`[engine] SentimentCycle: falha no ativo ${state.ticker}: ${String(err)}`)
       }
