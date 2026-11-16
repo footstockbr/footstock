@@ -22,7 +22,7 @@ Este runbook consolida `footstock-next/prisma/` como **canonical** e cria a migr
 - [ ] Snapshot do Railway PG concluído (RUNBOOK-016 §3 ou TASK-P0-09).
 - [ ] `pgcrypto` instalado no Railway PG (RUNBOOK pgcrypto / TASK-P0-03).
 - [ ] `psql`, `pg_dump`, `prisma` v6+ disponíveis localmente.
-- [ ] DATABASE_URL e DIRECT_URL apontam para Railway PG (interno em runtime, externo `tramway.proxy.rlwy.net` para baseline).
+- [ ] DATABASE_URL e DIRECT_URL apontam para Railway PG (interno em runtime, externo via TCP proxy publico do Railway para baseline: host/porta atuais em `credentials.database.primary` do project.json, `sslmode=require`; o host muda quando o proxy e recriado, ex.: `tramway:39979` sumiu e virou `switchback.proxy.rlwy.net:58516` em 2026-11-16).
 - [ ] Branch dedicada criada (`chore/p0-05-prisma-baseline`).
 - [ ] Auto-deploy de web e motor desabilitado durante a operação (`serviceInstanceAutoDeployUpdate enabled=false`).
 - [ ] Decisão registrada: canonical tree = `footstock-next/prisma/` (auq-interview 2026-05-09).
