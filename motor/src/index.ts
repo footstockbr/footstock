@@ -209,13 +209,49 @@ async function main() {
     }
   }
 
-  /** Polling com backoff para assumir liderança se o líder atual morrer. */
-  function startPolling(): void {
+  // Falhas consecutivas de onBecameLeader. Alimenta o backoff da re-tentativa e
+  // zera quando o engine sobe.
+  let startFailures = 0
+
+  /**
+   * Assume a lideranca de fato ou devolve a lease.
+   *
+   * Ter a lease sem engine ticando e o pior estado possivel: nenhuma outra
+   * instancia consegue assumir e esta nunca tenta de novo. Se onBecameLeader
+   * falhar (ex.: banco fora -> preflight de atribuicao vermelho sob
+   * ATTRIBUTION_STRICT_MODE), paramos o que tiver subido, liberamos a lease e
+   * voltamos ao polling com backoff. O bloqueio do modo estrito continua valendo:
+   * o engine so liga quando o preflight passar, mas agora ele tenta de novo.
+   */
+  async function becomeLeaderOrYield(): Promise<void> {
+    try {
+      await onBecameLeader()
+      startFailures = 0
+    } catch (err) {
+      startFailures++
+      _engineReady = false
+      logger.error(
+        `[motor] Falha ao iniciar como lider (falhas_consecutivas=${startFailures}); liberando a lideranca e tentando de novo:`,
+        err
+      )
+      await engine.stop(false).catch(e => logger.error('[motor] Erro ao parar engine apos falha de start:', e))
+      await leader.release().catch(e => logger.error('[motor] Erro ao liberar lideranca apos falha de start:', e))
+      startPolling(startFailures)
+    }
+  }
+
+  /**
+   * Polling com backoff para assumir liderança se o líder atual morrer.
+   * @param initialAttempt expoente inicial do backoff (0 = primeiro poll em 5s).
+   *   Re-tentativas apos falha de start passam o numero de falhas consecutivas,
+   *   para nao martelar um banco fora a cada 5s.
+   */
+  function startPolling(initialAttempt = 0): void {
     logger.info('[motor] Instância secundária: aguardando liderança...')
     const baseDelay = 5_000
     const maxDelay = 60_000
-    let attempt = 0
-    let delay = baseDelay
+    let attempt = initialAttempt
+    let delay = Math.min(maxDelay, baseDelay * Math.pow(2, attempt))
 
     // Flaps sucessivos chamam startPolling varias vezes; sem limpar o timer da
     // rodada anterior os ciclos acumulam e passam a disputar tryAcquire em paralelo.
@@ -230,7 +266,11 @@ async function main() {
           const acquired = await leader.tryAcquire()
           if (acquired) {
             pollTimer = null
-            await onBecameLeader()
+            // Nunca chamar onBecameLeader direto aqui: se o start falhar, o catch abaixo
+            // so reagendaria o poll, e tryAcquire (SET NX) devolveria false para sempre
+            // porque a lease continua nossa, renovada pelo heartbeat. Foi o que travou o
+            // motor de 2026-11-10 a 2026-11-16 com o banco fora.
+            await becomeLeaderOrYield()
             return
           }
         } catch (err) {
@@ -250,7 +290,7 @@ async function main() {
   // Tentar ganhar liderança imediatamente
   const isLeader = await leader.tryAcquire()
   if (isLeader) {
-    await onBecameLeader()
+    await becomeLeaderOrYield()
   } else {
     startPolling()
   }

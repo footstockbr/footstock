@@ -60,13 +60,15 @@ jest.mock('../services/RedisClientService', () => ({
   },
 }))
 
+const mockEngine = {
+  start: jest.fn().mockResolvedValue(undefined),
+  stop: jest.fn().mockResolvedValue(undefined),
+  getLayersDebug: jest.fn().mockResolvedValue({}),
+  getOfiHistory: jest.fn().mockResolvedValue([]),
+}
+
 jest.mock('../engine/MarketEngine', () => ({
-  MarketEngine: jest.fn().mockImplementation(() => ({
-    start: jest.fn().mockResolvedValue(undefined),
-    stop: jest.fn().mockResolvedValue(undefined),
-    getLayersDebug: jest.fn().mockResolvedValue({}),
-    getOfiHistory: jest.fn().mockResolvedValue([]),
-  })),
+  MarketEngine: jest.fn().mockImplementation(() => mockEngine),
 }))
 
 jest.mock('../services/MotorHealthService', () => ({
@@ -145,6 +147,10 @@ describe('index — leadership lifecycle (T-07)', () => {
     loggerCalls.length = 0
     mockLeader.tryAcquire.mockReset()
     mockLeader.tryAcquire.mockResolvedValue(true)
+    mockLeader.release.mockReset()
+    mockLeader.release.mockResolvedValue(undefined)
+    mockEngine.start.mockReset()
+    mockEngine.start.mockResolvedValue(undefined)
     jest.spyOn(process, 'exit').mockImplementation((() => undefined) as unknown as (code?: number | string | null) => never)
   })
 
@@ -224,5 +230,76 @@ describe('index — leadership lifecycle (T-07)', () => {
     await jest.advanceTimersByTimeAsync(5_000)
     // 1 do startup + 1 unico poll (nao 2) = 2. Com timers acumulados seriam 3.
     expect(mockLeader.tryAcquire).toHaveBeenCalledTimes(2)
+  })
+
+  // Incidente 2026-11-10: lideranca perdida com o banco fora, re-adquirida 5s depois,
+  // engine.start() falhou no preflight (ATTRIBUTION_STRICT_MODE) e o motor ficou 6 dias
+  // segurando a lease sem tickar: o catch do poll so reagendava, e tryAcquire (SET NX)
+  // devolvia false porque a chave continuava dele.
+  test('start falha depois de adquirir no poll: libera a lease, re-tenta com backoff e sobe quando o banco volta', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] })
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation((() => undefined) as unknown as (code?: number | string | null) => never)
+
+    mockLeader.tryAcquire
+      .mockResolvedValueOnce(false) // startup: outro lider
+      .mockResolvedValue(true)      // polls: lease livre
+    mockEngine.start
+      .mockRejectedValueOnce(new Error('[engine] ATTRIBUTION_STRICT_MODE bloqueado: banco fora'))
+      .mockResolvedValue(undefined)
+
+    await import('../index')
+    await jest.advanceTimersByTimeAsync(0)
+
+    // 1o poll (5s): adquire, start falha -> devolve a lease em vez de segura-la.
+    await jest.advanceTimersByTimeAsync(5_000)
+    expect(mockEngine.start).toHaveBeenCalledTimes(1)
+    expect(mockLeader.release).toHaveBeenCalledTimes(1)
+    expect(mockEngine.stop).toHaveBeenCalledWith(false)
+    expect(loggerCalls.some(
+      c => c.level === 'error' && String(c.args[0]).includes('Falha ao iniciar como lider (falhas_consecutivas=1)')
+    )).toBe(true)
+
+    // Re-tentativa com backoff (10s apos 1 falha), nao 5s.
+    await jest.advanceTimersByTimeAsync(5_000)
+    expect(mockLeader.tryAcquire).toHaveBeenCalledTimes(2)
+    await jest.advanceTimersByTimeAsync(5_000)
+    expect(mockLeader.tryAcquire).toHaveBeenCalledTimes(3)
+
+    // Banco de volta: engine sobe, lease mantida, onLeadershipLost instalado.
+    expect(mockEngine.start).toHaveBeenCalledTimes(2)
+    expect(mockLeader.release).toHaveBeenCalledTimes(1)
+    expect(capturedOnLeadershipLost).toBeDefined()
+
+    // Lider de fato: polling encerrado.
+    await jest.advanceTimersByTimeAsync(120_000)
+    expect(mockLeader.tryAcquire).toHaveBeenCalledTimes(3)
+    expect(exitSpy).not.toHaveBeenCalled()
+  })
+
+  test('start falha no boot (ja lider): libera a lease e cai no polling em vez de derrubar o processo', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] })
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation((() => undefined) as unknown as (code?: number | string | null) => never)
+
+    mockLeader.tryAcquire.mockResolvedValue(true)
+    mockEngine.start
+      .mockRejectedValueOnce(new Error('db fora'))
+      .mockRejectedValueOnce(new Error('db fora'))
+      .mockResolvedValue(undefined)
+
+    await import('../index')
+    await jest.advanceTimersByTimeAsync(0)
+    expect(mockLeader.release).toHaveBeenCalledTimes(1)
+    expect(exitSpy).not.toHaveBeenCalled()
+
+    // 2a falha: backoff de 10s; depois 20s ate a proxima tentativa.
+    await jest.advanceTimersByTimeAsync(10_000)
+    expect(mockEngine.start).toHaveBeenCalledTimes(2)
+    expect(mockLeader.release).toHaveBeenCalledTimes(2)
+    await jest.advanceTimersByTimeAsync(19_999)
+    expect(mockEngine.start).toHaveBeenCalledTimes(2)
+    await jest.advanceTimersByTimeAsync(1)
+    expect(mockEngine.start).toHaveBeenCalledTimes(3)
+    expect(mockLeader.release).toHaveBeenCalledTimes(2)
+    expect(exitSpy).not.toHaveBeenCalled()
   })
 })

@@ -90,4 +90,18 @@ describe('LeaderElection — duas instancias no mesmo Redis (T-07)', () => {
     const tokenB = (await motorB.getState()).fencingToken
     expect(tokenB).toBe(tokenA + 1)
   })
+
+  test('[REGRESSAO 2026-11-10] o dono da lease nao re-adquire com tryAcquire; so depois do release', async () => {
+    // A armadilha do incidente: com a lease ainda nossa (heartbeat renovando),
+    // SET NX devolve false e o polling nunca mais "ganha". Por isso index.ts
+    // libera a lease quando o start do engine falha.
+    expect(await motorA.tryAcquire()).toBe(true)
+    expect(await motorA.tryAcquire()).toBe(false)
+    expect(await motorB.tryAcquire()).toBe(false)
+
+    await motorA.release()
+    expect(await redis.get(LEADER_KEY)).toBeNull()
+    // Lease livre: qualquer instancia (inclusive a mesma) assume na proxima tentativa.
+    expect(await motorB.tryAcquire()).toBe(true)
+  })
 })

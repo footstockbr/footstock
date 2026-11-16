@@ -2,7 +2,33 @@
 // Testes do ImpactReconciler (T-22 / item 023)
 // ============================================================================
 
-import { ImpactReconciler, isImpactReconcilerEnabled, getImpactBacklogCount } from '../impact-reconciler'
+import {
+  ImpactReconciler,
+  isImpactReconcilerEnabled,
+  getImpactBacklogCount,
+  getImpactStaleCount,
+  _resetImpactReconcilerMetricsForTests,
+} from '../impact-reconciler'
+import { logger } from '../../utils/logger'
+
+jest.mock('../../utils/logger', () => ({
+  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+}))
+
+const mockLogger = logger as unknown as Record<'info' | 'warn' | 'error', jest.Mock>
+
+function loggedEvents(level: 'info' | 'warn' | 'error', event: string): Array<Record<string, unknown>> {
+  return mockLogger[level].mock.calls
+    .map(c => { try { return JSON.parse(String(c[0])) } catch { return null } })
+    .filter((e): e is Record<string, unknown> => !!e && e.event === event)
+}
+
+/** count(): 1a chamada = backlog dentro do limite; 2a = vencidos. */
+function mockCounts(inWindow: number, stale: number) {
+  mockPrisma.news.count.mockImplementation(({ where }: { where: { createdAt: Record<string, unknown> } }) =>
+    Promise.resolve('gte' in where.createdAt ? inWindow : stale)
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -54,6 +80,8 @@ function makeRow(overrides: Partial<{
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockPrisma.news.count.mockReset()
+  _resetImpactReconcilerMetricsForTests()
   delete process.env.IMPACT_RECONCILER_ENABLED
 })
 
@@ -247,18 +275,71 @@ describe('getImpactBacklogCount', () => {
 // ---------------------------------------------------------------------------
 
 describe('alerta de backlog', () => {
-  test('emite alerta quando backlog >= threshold', async () => {
-    mockPrisma.news.count.mockResolvedValue(100)
+  test('emite alerta quando o backlog dentro do limite de idade >= threshold', async () => {
+    mockCounts(100, 0)
     mockPrisma.news.findMany.mockResolvedValue([])
 
-    const reconciler = createReconciler({ backlogAlertThreshold: 50 })
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+    await createReconciler({ backlogAlertThreshold: 50 }).run()
 
+    const alerts = loggedEvents('warn', 'impact_reconciler_backlog_alert')
+    expect(alerts).toHaveLength(1)
+    expect(alerts[0].backlog).toBe(100)
+  })
+
+  test('as duas contagens separam a janela: gte no acionavel, lt no vencido', async () => {
+    mockCounts(0, 0)
+    const before = Date.now()
+    await createReconciler({ staleThresholdHours: 72 }).run()
+
+    const wheres = mockPrisma.news.count.mock.calls.map(c => c[0].where)
+    expect(wheres).toHaveLength(2)
+    const gte = wheres[0].createdAt.gte as Date
+    expect(wheres[1].createdAt.lt).toEqual(gte)
+    expect(Math.abs(before - 72 * 3600_000 - gte.getTime())).toBeLessThan(5_000)
+    for (const w of wheres) {
+      expect(w).toMatchObject({ impactDispatchedAt: null, ticker: { not: null }, isPublished: true })
+    }
+  })
+
+  // Prod 2026-11-16: 4284 noticias de jun-jul sem despacho, nenhuma dentro de 72h.
+  // O alerta disparava a cada 5 min para sempre.
+  test('[REGRESSAO] backlog so de vencidos nao alerta nem busca elegiveis', async () => {
+    mockCounts(0, 4284)
+
+    const result = await createReconciler({ backlogAlertThreshold: 50 }).run()
+
+    expect(result).toMatchObject({ status: 'ok', backlog: 0, stale: 4284, processed: 0 })
+    expect(loggedEvents('warn', 'impact_reconciler_backlog_alert')).toHaveLength(0)
+    expect(mockPrisma.news.findMany).not.toHaveBeenCalled()
+    expect(getImpactBacklogCount()).toBe(0)
+    expect(getImpactStaleCount()).toBe(4284)
+  })
+
+  test('vencidos: loga em info so quando o numero muda', async () => {
+    const reconciler = createReconciler()
+    mockCounts(0, 4284)
+    await reconciler.run()
+    await reconciler.run()
+    await reconciler.run()
+    mockCounts(0, 4290)
     await reconciler.run()
 
-    // O alerta é emitido via logger.warn — verificamos que o count foi chamado
-    expect(mockPrisma.news.count).toHaveBeenCalled()
-    warnSpy.mockRestore()
+    const staleLogs = loggedEvents('info', 'impact_reconciler_stale_backlog')
+    expect(staleLogs.map(e => [e.previous, e.stale])).toEqual([[null, 4284], [4284, 4290]])
+    expect(mockLogger.warn).not.toHaveBeenCalled()
+  })
+
+  test('falha na contagem de vencidos nao derruba o ciclo', async () => {
+    mockPrisma.news.count
+      .mockResolvedValueOnce(1)
+      .mockRejectedValueOnce(new Error('timeout'))
+    mockPrisma.news.findMany.mockResolvedValue([makeRow({ id: 'news-1' })])
+    mockPrisma.news.updateMany.mockResolvedValue({ count: 1 })
+
+    const result = await createReconciler().run()
+
+    expect(result).toMatchObject({ status: 'ok', processed: 1, backlog: 1, stale: null })
+    expect(getImpactStaleCount()).toBeNull()
   })
 })
 

@@ -124,4 +124,16 @@ describe('LeaderElection', () => {
     const longId = 'a'.repeat(129)
     expect(() => new LeaderElection(mockRedis as any, longId)).toThrow()
   })
+
+  test('release com Redis fora: rejeita, mas deixa de se considerar lider (lease expira sozinha)', async () => {
+    mockRedis.set.mockResolvedValue('OK')
+    mockRedis.incr.mockResolvedValue(1)
+    await leader.tryAcquire()
+    expect(leader.isLeader).toBe(true)
+
+    mockRedis.eval.mockRejectedValueOnce(new Error('ECONNRESET'))
+    await expect(leader.release()).rejects.toThrow('ECONNRESET')
+    // Sem isso o scheduler seguiria rodando jobs de lider sem lease.
+    expect(leader.isLeader).toBe(false)
+  })
 })

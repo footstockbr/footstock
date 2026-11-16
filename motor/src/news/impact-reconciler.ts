@@ -83,10 +83,29 @@ function sentimentEnumToNumber(sentiment: string): number {
 // ---------------------------------------------------------------------------
 
 let _lastBacklogCount = 0
+let _lastStaleCount: number | null = null
 
-/** Retorna o contador de backlog da última execução do reconciliador. */
+/**
+ * Retorna o backlog ACIONAVEL da última execução: linhas sem despacho dentro do
+ * limite de idade, isto é, o que o reconciliador ainda vai tentar reenviar.
+ */
 export function getImpactBacklogCount(): number {
   return _lastBacklogCount
+}
+
+/**
+ * Linhas sem despacho que já passaram do limite de idade (nunca serão reenviadas:
+ * aplicar impacto de notícia velha distorceria o preço atual). Informativo, não
+ * alerta. null antes da primeira contagem bem-sucedida.
+ */
+export function getImpactStaleCount(): number | null {
+  return _lastStaleCount
+}
+
+/** Só para testes: zera o estado de módulo entre casos. */
+export function _resetImpactReconcilerMetricsForTests(): void {
+  _lastBacklogCount = 0
+  _lastStaleCount = null
 }
 
 // ---------------------------------------------------------------------------
@@ -148,7 +167,8 @@ export class ImpactReconciler {
    * Executa um ciclo do reconciliador.
    *
    * 1. Verifica kill switch.
-   * 2. Conta backlog total (para métrica e alerta).
+   * 2. Conta o backlog dentro do limite de idade (métrica e alerta) e, à parte,
+   *    as linhas que já passaram do limite (só informativo).
    * 3. Busca registros elegíveis (NULL + ticker + published + dentro do limite).
    * 4. Para cada registro, tenta reenviar o evento no Redis.
    * 5. Ao sucesso, marca `impactDispatchedAt`.
@@ -164,15 +184,19 @@ export class ImpactReconciler {
 
     const staleCutoff = new Date(Date.now() - this.staleThresholdMs)
 
-    // Conta backlog total (para métrica)
+    const pendingWhere = {
+      impactDispatchedAt: null,
+      ticker: { not: null },
+      isPublished: true,
+    }
+
+    // Backlog ACIONAVEL: só o que está dentro do limite de idade. Contar a tabela
+    // inteira fazia o alerta disparar a cada 5 min para sempre com linhas que este
+    // reconciliador por desenho nunca reenvia (em 2026-11: 4284 notícias de jun-jul).
     let backlogTotal: number
     try {
       backlogTotal = await this.prisma.news.count({
-        where: {
-          impactDispatchedAt: null,
-          ticker: { not: null },
-          isPublished: true,
-        },
+        where: { ...pendingWhere, createdAt: { gte: staleCutoff } },
       })
     } catch (err) {
       logger.error(`[impact-reconciler] Erro ao contar backlog: ${(err as Error).message}`)
@@ -181,7 +205,28 @@ export class ImpactReconciler {
 
     _lastBacklogCount = backlogTotal
 
-    // Alerta se backlog cresceu acima do threshold
+    // Linhas vencidas: só observabilidade, best-effort. Loga apenas quando o número
+    // muda, para não repetir a mesma linha a cada ciclo.
+    let staleTotal: number | null = null
+    try {
+      staleTotal = await this.prisma.news.count({
+        where: { ...pendingWhere, createdAt: { lt: staleCutoff } },
+      })
+      if (staleTotal !== _lastStaleCount) {
+        logger.info(JSON.stringify({
+          event: 'impact_reconciler_stale_backlog',
+          stale: staleTotal,
+          previous: _lastStaleCount,
+          stale_threshold_hours: this.staleThresholdMs / 3600000,
+          message: 'Notícias sem impacto despachado além do limite de idade; não serão reenviadas.',
+        }))
+      }
+      _lastStaleCount = staleTotal
+    } catch (err) {
+      logger.warn(`[impact-reconciler] Erro ao contar backlog vencido (ignorado): ${(err as Error).message}`)
+    }
+
+    // Alerta se o backlog acionável cresceu acima do threshold
     if (backlogTotal >= this.backlogAlertThreshold) {
       logger.warn(JSON.stringify({
         event: 'impact_reconciler_backlog_alert',
@@ -192,8 +237,7 @@ export class ImpactReconciler {
     }
 
     if (backlogTotal === 0) {
-      logger.info('[impact-reconciler] Backlog vazio. Nada a fazer.')
-      return { status: 'ok', processed: 0, failed: 0, backlog: 0 }
+      return { status: 'ok', processed: 0, failed: 0, backlog: 0, stale: staleTotal }
     }
 
     // Busca registros elegíveis (dentro do limite de idade)
@@ -233,12 +277,13 @@ export class ImpactReconciler {
       })
     } catch (err) {
       logger.error(`[impact-reconciler] Erro ao buscar elegíveis: ${(err as Error).message}`)
-      return { status: 'error', processed: 0, failed: 0, backlog: backlogTotal }
+      return { status: 'error', processed: 0, failed: 0, backlog: backlogTotal, stale: staleTotal }
     }
 
     if (eligible.length === 0) {
-      logger.info(`[impact-reconciler] Backlog=${backlogTotal}, mas nenhum registro dentro do limite de idade (${this.staleThresholdMs / 3600000}h). Skip.`)
-      return { status: 'ok', processed: 0, failed: 0, backlog: backlogTotal }
+      // Só acontece em corrida (linha despachada ou vencida entre o count e o findMany).
+      logger.info(`[impact-reconciler] Backlog=${backlogTotal}, mas nenhum registro elegível nesta busca. Skip.`)
+      return { status: 'ok', processed: 0, failed: 0, backlog: backlogTotal, stale: staleTotal }
     }
 
     let processed = 0
@@ -288,6 +333,7 @@ export class ImpactReconciler {
     logger.info(JSON.stringify({
       event: 'impact_reconciler_cycle_complete',
       backlog: backlogTotal,
+      stale: staleTotal,
       eligible: eligible.length,
       processed,
       failed,
@@ -299,6 +345,7 @@ export class ImpactReconciler {
       processed,
       failed,
       backlog: backlogTotal,
+      stale: staleTotal,
     }
   }
 
@@ -347,5 +394,8 @@ export interface ImpactReconcilerResult {
   status: 'ok' | 'error' | 'disabled'
   processed: number
   failed: number
+  /** Backlog acionável (dentro do limite de idade). */
   backlog: number
+  /** Linhas vencidas (fora do limite). null se a contagem falhou ou não rodou. */
+  stale?: number | null
 }

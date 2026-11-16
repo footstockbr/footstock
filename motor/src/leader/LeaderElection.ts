@@ -134,8 +134,15 @@ export class LeaderElection {
       end
       return 0
     `
-    const result = await this.redis.eval(luaScript, 1, LEADER_KEY, this.motorId)
-    this._isLeader = false
+    let result: unknown
+    try {
+      result = await this.redis.eval(luaScript, 1, LEADER_KEY, this.motorId)
+    } finally {
+      // O heartbeat ja parou: mesmo que o DEL falhe (Redis fora), a lease expira
+      // sozinha em LEADER_TTL_MS. Continuar com isLeader=true faria o scheduler
+      // rodar jobs de lider numa instancia que nao e mais lider.
+      this._isLeader = false
+    }
 
     if (result === 1) {
       console.log('[leader] Liderança liberada.')
