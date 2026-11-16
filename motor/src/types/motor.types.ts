@@ -106,6 +106,8 @@ export interface AssetState {
   newsImpactTicks: number    // Ticks restantes do efeito da notícia
   newsCbGraceTicks?: number  // 06-18: ticks de decaimento do threshold do CB pos-noticia
                              // (evita snap 20%->8% instantaneo na expiracao -> halt loop)
+  cbHaltNewsDriven?: boolean // 11-16: halt do CB disparado com noticia ativa ou na grace
+                             // pos-noticia; a retomada re-ancora closePrice (ver MarketEngine)
   activeNewsImpacts?: ActiveNewsImpact[]
   // L4 — OFI: estado do decaimento exponencial (OFI_t = rho*OFI_{t-1} + (1-rho)*ofi_raw_t)
   ofiState: number

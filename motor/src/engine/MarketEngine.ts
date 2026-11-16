@@ -137,6 +137,54 @@ export function resolveWarmStartClosePrice(
 }
 
 /**
+ * 11-16 — o halt do CB foi causado por noticia? Verdadeiro quando a noticia ainda
+ * esta ativa (L10 usa 20%) ou quando o ativo esta na janela de grace pos-noticia
+ * (threshold decaindo de 20% para 8%).
+ *
+ * Por que importa: a retomada NAO re-ancora (T4.2, anti-catraca). Mas um ativo que
+ * a noticia levou para [8%, 20%) da ancora e que a reversao nao trouxe de volta
+ * dentro da grace fica preso no trava-destrava de 5 em 5 min ate o PRE_OPENING do
+ * dia seguinte: durante o halt o pipeline nao roda, entao nem o preco nem a grace
+ * andam, e cada retomada re-dispara no tick seguinte (incidente 2026-11-16: PEI3
+ * +18,86% apos noticia BULLISH; antes do restart das 18:03, POR3/TIM3/IMO3 tambem).
+ *
+ * Pura e deterministica.
+ */
+export function isNewsDrivenCbHalt(
+  state: Pick<AssetState, 'newsImpact' | 'newsImpactTicks' | 'newsCbGraceTicks'>,
+): boolean {
+  const newsActive = state.newsImpact !== 0 && state.newsImpactTicks > 0
+  return newsActive || (state.newsCbGraceTicks ?? 0) > 0
+}
+
+/**
+ * 11-16 — aplica a ancora do CB na retomada de um halt (muta `state`).
+ *
+ * Halt causado por noticia (`cbHaltNewsDriven`): re-ancora closePrice ao preco
+ * corrente. O movimento da noticia e legitimo e passa a valer como referencia. Se a
+ * noticia ja expirou (halt na grace), zera a grace: o movimento foi absorvido e a
+ * banda volta a ser a normal (8%) a partir da ancora nova. Assim e no maximo UMA
+ * re-ancora por noticia, o que nao recria a catraca do T4.2 (halts por ruido).
+ * Qualquer outro halt: preserva a ancora do dia (T4.2 intacto).
+ *
+ * Sempre limpa a marca. Nunca grava ancora nula/invalida (L10 ignora closePrice 0).
+ */
+export function applyCbResumeAnchor(
+  state: Pick<AssetState, 'closePrice' | 'currentPrice' | 'cbHaltNewsDriven' | 'newsImpact' | 'newsImpactTicks' | 'newsCbGraceTicks'>,
+): { reanchored: boolean; previousClose: number } {
+  const previousClose = state.closePrice
+  const newsDriven = state.cbHaltNewsDriven === true
+  state.cbHaltNewsDriven = false
+  if (!newsDriven || !Number.isFinite(state.currentPrice) || state.currentPrice <= 0) {
+    return { reanchored: false, previousClose }
+  }
+  state.closePrice = state.currentPrice
+  const newsActive = state.newsImpact !== 0 && state.newsImpactTicks > 0
+  if (!newsActive) state.newsCbGraceTicks = 0
+  return { reanchored: true, previousClose }
+}
+
+/**
  * C2 (06-18) + A5 (09-02) — decide se a re-ancora diaria do CB (closePrice =
  * currentPrice, reset de openPrice/volume/DailyVolTarget) deve rodar NESTE tick.
  *
@@ -378,15 +426,17 @@ export class MarketEngine {
       state.sentimentFrozenAtTick = undefined
       state.sentimentFrozenScore = undefined
       state.sentimentFrozenLabel = undefined
-      // T4.2: NÃO re-ancorar closePrice na retomada. A âncora do dia é preservada
-      // da pré-halt. O L9/L10 travam o movimento que excederia a banda, então na
-      // retomada currentPrice está logo abaixo de 8% da âncora e o CB não
-      // re-dispara. Re-ancorar em currentPrice criava uma catraca: cada halt abria
-      // uma banda de 8% nova a partir do preço de retomada, escalando o preço em
-      // escada (sintoma documentado: queda em escada até o floor R$1). A re-âncora
-      // legítima ocorre apenas na abertura do dia (transição de sessão PRE_OPENING).
+      // T4.2: NÃO re-ancorar closePrice na retomada de halt por ruído. A âncora do
+      // dia é preservada da pré-halt. O L9/L10 travam o movimento que excederia a
+      // banda, então na retomada currentPrice está logo abaixo de 8% da âncora e o
+      // CB não re-dispara. Re-ancorar em currentPrice criava uma catraca: cada halt
+      // abria uma banda de 8% nova a partir do preço de retomada, escalando o preço
+      // em escada (sintoma documentado: queda em escada até o floor R$1).
+      // Exceção 11-16: halt causado por notícia re-ancora (applyCbResumeAnchor),
+      // senão o ativo fica no trava-destrava até o PRE_OPENING do dia seguinte.
+      const { reanchored, previousClose } = applyCbResumeAnchor(state)
       const sessionType = sessionManager.getCurrentSession()
-      logger.info(`[engine] ${state.ticker} retomado após circuit breaker (closePrice=${state.closePrice.toFixed(4)}, currentPrice=${state.currentPrice.toFixed(4)})`)
+      logger.info(`[engine] ${state.ticker} retomado após circuit breaker (closePrice=${state.closePrice.toFixed(4)}, currentPrice=${state.currentPrice.toFixed(4)}${reanchored ? `, halt por noticia: ancora ${previousClose.toFixed(4)} -> ${state.closePrice.toFixed(4)}` : ''})`)
       this.persistHaltState(assetId, false, null, null).catch(console.error)
       const resumeTick = buildHaltTick(state, sessionType, null, null)
       resumeTick.isHalted = false
@@ -901,6 +951,7 @@ export class MarketEngine {
           state.isPaused = true
           state.haltReason = 'CIRCUIT_BREAKER'
           state.haltResumeAt = resumeAt
+          state.cbHaltNewsDriven = isNewsDrivenCbHalt(state)
           this.notifyCircuitBreaker(
             assetId,
             state.ticker,
