@@ -15,6 +15,10 @@
 #              (o motor persiste A_TOP a cada tick, 24h, independente da sessao)
 #   disk_warn  bancos + WAL >= $DISK_WARN_PCT % de $DISK_CAPACITY_MB
 #   disk_crit  bancos + WAL >= $DISK_CRIT_PCT % de $DISK_CAPACITY_MB
+#   sentiment  GET $SENTIMENT_STALENESS_URL (Bearer $CRON_SECRET) nao responde
+#              200 com {"status":"OK"}: o SentimentWriter do motor parou de
+#              gravar (heartbeat de sentimentUpdatedAt a cada ~60s). Sem
+#              CRON_SECRET ou com a web fora fica skip (a falha ja e da "web").
 #
 # Disciplina de alerta (estado em $STATE_DIR, um arquivo por chave):
 #   - so alerta depois de $FAILS_BEFORE_ALERT falhas seguidas (deploy do motor
@@ -25,7 +29,8 @@
 #   Com o banco fora, ticks/disk ficam sem medicao (skip) e so "db" alerta.
 #
 # Variaveis obrigatorias: DATABASE_URL, RESEND_API_KEY, RESEND_FROM_EMAIL,
-# ALERT_EMAIL_TO (lista separada por virgula).
+# ALERT_EMAIL_TO (lista separada por virgula). Opcional: CRON_SECRET (liga a
+# checagem "sentiment").
 # ============================================================================
 
 set -u
@@ -33,6 +38,7 @@ set -u
 STATE_DIR=${STATE_DIR:-/state}
 WEB_HEALTH_URL=${WEB_HEALTH_URL:-https://www.footstock.com.br/api/health}
 MOTOR_READY_URL=${MOTOR_READY_URL:-https://api.footstock.com.br/ready}
+SENTIMENT_STALENESS_URL=${SENTIMENT_STALENESS_URL:-https://www.footstock.com.br/api/cron/sentiment-staleness}
 TICK_STALE_S=${TICK_STALE_S:-300}
 DISK_CAPACITY_MB=${DISK_CAPACITY_MB:-46627}
 DISK_WARN_PCT=${DISK_WARN_PCT:-75}
@@ -81,7 +87,9 @@ fmt_dur() {
 # ---------------------------------------------------------------- web
 code=$(curl -sS -o "$WORK/web" -w '%{http_code}' --max-time "$HTTP_TIMEOUT_S" "$WEB_HEALTH_URL" 2>"$WORK/web.err") || code=000
 status=$(jq -r '.status // empty' "$WORK/web" 2>/dev/null)
+web_ok=0
 if [ "$code" = 200 ] && [ "$status" = ok ]; then
+  web_ok=1
   record web ok "HTTP 200"
 else
   detail=$(head -c 300 "$WORK/web" 2>/dev/null | tr '\n' ' ')
@@ -97,6 +105,28 @@ else
   detail=$(head -c 300 "$WORK/motor" 2>/dev/null | tr '\n' ' ')
   [ -n "$detail" ] || detail=$(head -c 200 "$WORK/motor.err" | tr '\n' ' ')
   record motor fail "$MOTOR_READY_URL -> HTTP $code $detail"
+fi
+
+# ---------------------------------------------------------------- sentiment
+if [ -z "${CRON_SECRET:-}" ]; then
+  record sentiment skip "CRON_SECRET ausente"
+elif [ "$web_ok" != 1 ]; then
+  record sentiment skip "web fora"
+else
+  code=$(curl -sS -o "$WORK/sent" -w '%{http_code}' --max-time "$HTTP_TIMEOUT_S" \
+    -H "Authorization: Bearer $CRON_SECRET" "$SENTIMENT_STALENESS_URL" 2>"$WORK/sent.err") || code=000
+  status=$(jq -r '.status // empty' "$WORK/sent" 2>/dev/null)
+  if [ "$code" = 200 ] && [ "$status" = OK ]; then
+    record sentiment ok "$(jq -r '.summary | "fresco=\(.FRESCO) pausado=\(.PAUSADO)"' "$WORK/sent" 2>/dev/null)"
+  elif [ "$code" = 200 ]; then
+    detail=$(jq -r '"status=\(.status) obsoleto=\(.summary.OBSOLETO) nunca_escrito=\(.summary.NUNCA_ESCRITO) limite=\(.threshold)s; mais antigos: " + ([.assets[] | select(.state == "OBSOLETO")] | sort_by(-.ageSeconds) | .[0:5] | map("\(.ticker) \(.ageSeconds)s") | join(", "))' "$WORK/sent" 2>/dev/null)
+    [ -n "$detail" ] || detail="resposta inesperada: $(head -c 200 "$WORK/sent" | tr '\n' ' ')"
+    record sentiment fail "sentimento sem gravacao recente: $detail"
+  else
+    detail=$(head -c 300 "$WORK/sent" 2>/dev/null | tr '\n' ' ')
+    [ -n "$detail" ] || detail=$(head -c 200 "$WORK/sent.err" | tr '\n' ' ')
+    record sentiment fail "$SENTIMENT_STALENESS_URL -> HTTP $code $detail"
+  fi
 fi
 
 # ---------------------------------------------------------------- db, ticks, disk

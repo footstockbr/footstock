@@ -7,7 +7,7 @@
 // Suite deterministica e sem rede/DB que cobre os cinco contratos do
 // SentimentCalculator:
 //
-//   1. Histerese com tempo minimo de permanencia (MIN_PERMANENCE_TICKS = 6).
+//   1. Histerese com tempo minimo de permanencia (MIN_PERMANENCE_TICKS = 30).
 //   2. Gating por sessao CLOSED dentro do calculador puro (applySessionGate).
 //   3. Gating por sessao de mercado (CLOSED -> score 0, NEUTRAL).
 //   4. Componente F em zero quando nao ha impactos ativos.
@@ -204,16 +204,16 @@ describe('histerese com tempo minimo de permanencia', () => {
     //   smoothed = 0.3*(-1) + 0.7*(0.5) = 0.05 -> NEUTRAL zone -> label=NEUTRAL (flip)
     // Tick 2: previousLabel=NEUTRAL, previousScore=0.05, raw=-1
     //   smoothed = 0.3*(-1) + 0.7*(0.05) = -0.265 -> <= -0.2 -> BEARISH zone
-    //   previousLabel=NEUTRAL != BEARISH, ticksSinceFlip=1 >= MIN_PERMANENCE_TICKS=6? NO
+    //   previousLabel=NEUTRAL != BEARISH, ticksSinceFlip=1 >= MIN_PERMANENCE_TICKS=30? NO
     //   -> histerese bloqueia! Mantem NEUTRAL.
-    // Tick 7: ticksSinceFlip = 6 >= 6 -> flip para BEARISH.
+    // Tick 31: ticksSinceFlip = 30 >= 30 -> flip para BEARISH.
     // Este teste verifica a transicao completa em multi-ticks.
     let label: SentimentLabel = 'BULLISH'
     let score = 0.5
     let flipTick = 0
     const labels: SentimentLabel[] = []
 
-    for (let tick = 1; tick <= 10; tick++) {
+    for (let tick = 1; tick <= MIN_PERMANENCE_TICKS + 4; tick++) {
       const out = calculateSentiment({
         components: makeComponents({ A: -1, B: -1, C: -1, D: -1, E: -1, F: -1 }),
         previousScore: score,
@@ -228,16 +228,16 @@ describe('histerese com tempo minimo de permanencia', () => {
       if (out.flipOccurred) flipTick = tick
     }
 
-    // Apos 10 ticks com raw=-1: label deve ser BEARISH (flipou em algum ponto)
+    // Apos MIN_PERMANENCE_TICKS+4 ticks com raw=-1: label deve ser BEARISH (flipou em algum ponto)
     expect(label).toBe('BEARISH')
 
     // SENSIBILIDADE A MUTACAO (aceite da task-020): as assertivas abaixo falham se o
     // gate de permanencia (ticksSinceFlip >= MIN_PERMANENCE_TICKS) for removido de
     // resolveLabel. Sem o gate o flip para BEARISH ocorreria no tick 2 (indice 1).
     // Com o gate: flip em NEUTRAL no tick 1 (flipTick=1) e flip em BEARISH somente
-    // quando 7 - 1 = 6 >= MIN_PERMANENCE_TICKS, isto e, no tick 7 (indice 6).
+    // quando 31 - 1 = 30 >= MIN_PERMANENCE_TICKS, isto e, no tick 31 (indice 30).
     expect(labels.indexOf('BEARISH')).toBe(MIN_PERMANENCE_TICKS)
-    // Ticks 2..6 permanecem NEUTRAL apesar de o smoothed score ja estar na zona BEARISH.
+    // Ticks 2..30 permanecem NEUTRAL apesar de o smoothed score ja estar na zona BEARISH.
     expect(labels.slice(1, MIN_PERMANENCE_TICKS)).toEqual(
       Array(MIN_PERMANENCE_TICKS - 1).fill('NEUTRAL'),
     )
@@ -955,8 +955,8 @@ describe('baixa cobertura do componente A (task-021)', () => {
 // =============================================================================
 
 describe('constantes e invariantes do SentimentCalculator', () => {
-  it('MIN_PERMANENCE_TICKS e 6 (guard contra mudanca acidental)', () => {
-    expect(MIN_PERMANENCE_TICKS).toBe(6)
+  it('MIN_PERMANENCE_TICKS e 30 (guard contra mudanca acidental)', () => {
+    expect(MIN_PERMANENCE_TICKS).toBe(30)
   })
 
   it('THRESHOLD_BULLISH e 0.2', () => {

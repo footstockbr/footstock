@@ -11,12 +11,13 @@ mkdir -p "$T/bin" "$T/state"
 # curl falso: decide pela URL; grava o payload do Resend em $T/mails
 cat >"$T/bin/curl" <<'EOF'
 #!/bin/sh
-out=""; url=""; data=""
+out=""; url=""; data=""; auth=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out=$2; shift ;;
     --data-binary) data=${2#@}; shift ;;
-    -w|--max-time|-X|-H) shift ;;
+    -H) case "$2" in Authorization:*) auth=$2 ;; esac; shift ;;
+    -w|--max-time|-X) shift ;;
     http*) url=$1 ;;
   esac
   shift
@@ -24,6 +25,8 @@ done
 case "$url" in
   *health*) code=$FAKE_WEB_CODE; body=$FAKE_WEB_BODY ;;
   *ready*) code=$FAKE_MOTOR_CODE; body='{"status":"x"}' ;;
+  *sentiment-staleness*) code=$FAKE_SENT_CODE; body=$FAKE_SENT_BODY
+            echo "$auth" >"$FAKE_DIR/sent_auth" ;;
   *resend*) code=$FAKE_RESEND_CODE; body='{"id":"1"}'
             if [ "$code" = 200 ]; then jq -c . "$data" >>"$FAKE_DIR/mails"; fi ;;
 esac
@@ -40,12 +43,15 @@ chmod +x "$T/bin/curl" "$T/bin/psql"
 
 export PATH="$T/bin:$PATH" FAKE_DIR="$T" STATE_DIR="$T/state"
 export DATABASE_URL=postgres://x RESEND_API_KEY=re_test RESEND_FROM_EMAIL=noreply@x.test ALERT_EMAIL_TO="a@x.test, b@x.test"
-export RESEND_API_URL=https://api.resend.test/emails
+export RESEND_API_URL=https://api.resend.test/emails CRON_SECRET=cron_test
+SENT_OK='{"status":"OK","threshold":300,"summary":{"FRESCO":40,"OBSOLETO":0,"PAUSADO":0,"NUNCA_ESCRITO":0},"assets":[]}'
+SENT_STALE='{"status":"DEGRADED","threshold":300,"summary":{"FRESCO":38,"OBSOLETO":2,"PAUSADO":0,"NUNCA_ESCRITO":0},"assets":[{"ticker":"PEI3","state":"OBSOLETO","ageSeconds":900},{"ticker":"FLA3","state":"OBSOLETO","ageSeconds":1800},{"ticker":"VAS3","state":"FRESCO","ageSeconds":20}]}'
 
 ok_all() {
   FAKE_WEB_CODE=200; FAKE_WEB_BODY='{"status":"ok"}'; FAKE_MOTOR_CODE=200
   FAKE_PSQL_EXIT=0; FAKE_PSQL_OUT='4|300|80'; FAKE_RESEND_CODE=200
-  export FAKE_WEB_CODE FAKE_WEB_BODY FAKE_MOTOR_CODE FAKE_PSQL_EXIT FAKE_PSQL_OUT FAKE_RESEND_CODE
+  FAKE_SENT_CODE=200; FAKE_SENT_BODY=$SENT_OK
+  export FAKE_WEB_CODE FAKE_WEB_BODY FAKE_MOTOR_CODE FAKE_PSQL_EXIT FAKE_PSQL_OUT FAKE_RESEND_CODE FAKE_SENT_CODE FAKE_SENT_BODY
 }
 NOW=1000000
 run() { NOW=$((NOW + 300)); WATCHDOG_NOW=$NOW sh "$SCRIPT" >"$T/log" 2>&1; RC=$?; }
@@ -126,6 +132,22 @@ reset; FAKE_MOTOR_CODE=503; run; FAKE_WEB_CODE=503; run; FAKE_MOTOR_CODE=200; ru
 check "alerta com recuperacao" "$(last_subject)" "[FootStock] ALERTA producao: web (+ recuperacao)"
 
 [ -n "${SHOW_MAIL:-}" ] && tail -n 1 "$T/mails" | jq -r .subject,.text
+
+# 9b. sentimento: DEGRADED alerta com os tickers mais antigos; manda o segredo
+reset; FAKE_SENT_BODY=$SENT_STALE; run; run
+check "sentimento obsoleto alerta" "$(last_subject)" "[FootStock] ALERTA producao: sentiment"
+grep -q 'FLA3 1800s, PEI3 900s' "$T/mails"; check "detalhe ordena por idade" $? 0
+check "manda Bearer CRON_SECRET" "$(cat "$T/sent_auth")" "Authorization: Bearer cron_test"
+FAKE_SENT_BODY=$SENT_OK; run
+check "sentimento recuperado" "$(last_subject)" "[FootStock] RECUPERADO: sentiment"
+reset; FAKE_SENT_CODE=401; FAKE_SENT_BODY='{"error":"Nao autorizado"}'; run; run
+check "sentimento 401 alerta" "$(last_subject)" "[FootStock] ALERTA producao: sentiment"
+# web fora: sentimento fica skip, so a web alerta
+reset; FAKE_WEB_CODE=503; FAKE_SENT_CODE=000; run; run
+check "web fora nao duplica em sentiment" "$(last_subject)" "[FootStock] ALERTA producao: web"
+# sem CRON_SECRET: skip silencioso
+reset; FAKE_SENT_CODE=500; CRON_SECRET= run; CRON_SECRET= run
+check "sem CRON_SECRET nao alerta" "$(mails)" 0
 
 # 10. configuracao faltando
 reset; ALERT_EMAIL_TO= run

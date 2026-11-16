@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { errors } from '@/lib/api'
 import { tickerSchema } from '@/lib/validators/tickerSchema'
 import { resolveAlias } from '@/lib/utils/resolve-alias'
+import { getDelayedSentimentBatch } from '@/lib/services/DelayService'
 
 // GET /api/v1/market/:ticker
 // Rota pública — detalhe de ativo com preço atual, OHLCV e fair value.
@@ -51,6 +52,7 @@ export async function GET(
         isHalted: true,
         haltReason: true,
         sentiment: true,
+        sentimentScore: true,
         colorPrimary: true,
         colorSecondary: true,
         financials: true,
@@ -74,6 +76,21 @@ export async function GET(
       ? Number(((currentPrice - fairValue) / fairValue * 100).toFixed(2))
       : null
 
+    // Sentimento coerente com a janela do plano (D18, E.7.3). Rota sem auth:
+    // piso JOGADOR (60 min), igual a /market/assets, para nao abrir canal lateral
+    // com o sentimento em tempo real que so o plano LENDA recebe.
+    const [ds] = await getDelayedSentimentBatch(
+      [{
+        id: asset.id,
+        ticker: asset.ticker,
+        displayName: asset.displayName,
+        currentPrice,
+        sentiment: asset.sentiment,
+        sentimentScore: asset.sentimentScore?.toNumber() ?? null,
+      }],
+      'JOGADOR',
+    )
+
     const response = NextResponse.json({
       data: {
         id: asset.id,
@@ -94,7 +111,8 @@ export async function GET(
         marketCap: asset.marketCap.toNumber(),
         isHalted: asset.isHalted,
         haltReason: asset.haltReason ?? null,
-        sentiment: asset.sentiment,
+        sentiment: ds?.sentimentLabel ?? null,
+        sentimentScore: ds?.sentimentScore ?? null,
         colors: { primary: asset.colorPrimary, secondary: asset.colorSecondary },
         financials: asset.financials,
         updatedAt: asset.updatedAt.toISOString(),

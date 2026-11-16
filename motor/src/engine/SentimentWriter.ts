@@ -5,10 +5,15 @@
 // concorrencia: (1) colunas disjuntas de updateAssetPrices, (2) sem transacao
 // cruzada, (3) processo lider unico (confia no caller), (4) nao grava para
 // ativo pausado (isPaused).
+//
+// 2026-11-16: com `cycle`, o writer primeiro CALCULA (SentimentCycle) e depois
+// grava. Ao fim de cada cadencia grava um heartbeat de `sentimentUpdatedAt`
+// (updateMany unico) nos ativos nao pausados que nao mudaram: o watchdog
+// /api/cron/sentiment-staleness mede o writer vivo, nao a mudanca de valor.
 // ============================================================================
 
 import { Prisma, type PrismaClient } from '@prisma/client'
-import type { AssetState } from '../types/motor.types'
+import type { AssetState, SessionType } from '../types/motor.types'
 import { logger } from '../utils/logger'
 
 // ─── Constantes exportadas ───────────────────────────────────────────────
@@ -21,10 +26,21 @@ export const SENTIMENT_SCORE_EPSILON = 0.01
 
 // ─── Interfaces ──────────────────────────────────────────────────────────
 
+export interface SentimentComputeStep {
+  run(tickCount: number, sessionType: SessionType): Promise<void>
+}
+
+export interface SentimentTickContext {
+  tickCount: number
+  sessionType: SessionType
+}
+
 export interface SentimentWriterDeps {
   prisma: PrismaClient
   assetStates: Map<string, AssetState>
   layersEnabled?: Partial<Record<string, boolean>>
+  /** Passo de calculo rodado na cadencia, antes da gravacao. */
+  cycle?: SentimentComputeStep
 }
 
 // ─── Classe ──────────────────────────────────────────────────────────────
@@ -35,12 +51,15 @@ export class SentimentWriter {
   private layersEnabled: Partial<Record<string, boolean>> | undefined
   private lastWrittenScore: Map<string, number> = new Map()
   private lastWrittenLabel: Map<string, string> = new Map()
+  private lastWrittenFlipTick: Map<string, number> = new Map()
+  private cycle: SentimentComputeStep | undefined
   private tickCounter = 0
 
   constructor(deps: SentimentWriterDeps) {
     this.prisma = deps.prisma
     this.assetStates = deps.assetStates
     this.layersEnabled = deps.layersEnabled
+    this.cycle = deps.cycle
   }
 
   updateLayersEnabled(layersEnabled: Partial<Record<string, boolean>>): void {
@@ -76,7 +95,7 @@ export class SentimentWriter {
    * sentimento via Promise.allSettled de prisma.asset.update (mesmo padrao
    * do updateAssetPrices). Apos gravacao bem-sucedida, atualiza lastWritten*.
    */
-  private async writeSentiments(): Promise<void> {
+  private async writeSentiments(): Promise<Set<string>> {
     const eligible: AssetState[] = []
     for (const state of this.assetStates.values()) {
       if (state.isPaused) continue
@@ -84,7 +103,8 @@ export class SentimentWriter {
       eligible.push(state)
     }
 
-    if (eligible.length === 0) return
+    const written = new Set<string>()
+    if (eligible.length === 0) return written
 
     const updates = eligible.map(state =>
       this.prisma.asset.update({
@@ -97,8 +117,12 @@ export class SentimentWriter {
             ? (state.sentimentComponents as Prisma.InputJsonValue)
             : Prisma.JsonNull,
           sentimentUpdatedAt: new Date(),
+          // So quando houve flip novo desde a ultima gravacao (antes regravava
+          // a data a cada escrita depois do primeiro flip).
           sentimentLastFlipAt:
-            (state.sentimentLastFlipTick ?? 0) > 0 ? new Date() : undefined,
+            (state.sentimentLastFlipTick ?? 0) > (this.lastWrittenFlipTick.get(state.id) ?? 0)
+              ? new Date()
+              : undefined,
         },
       }),
     )
@@ -114,7 +138,28 @@ export class SentimentWriter {
         const state = eligible[i]
         this.lastWrittenScore.set(state.id, state.sentimentScore ?? 0)
         this.lastWrittenLabel.set(state.id, state.sentimentLabel ?? 'NEUTRAL')
+        this.lastWrittenFlipTick.set(state.id, state.sentimentLastFlipTick ?? 0)
+        written.add(state.id)
       }
+    })
+    return written
+  }
+
+  /**
+   * Heartbeat: um updateMany de sentimentUpdatedAt nos ativos nao pausados que
+   * nao foram gravados nesta cadencia. Mantem o valor congelado (sessao CLOSED,
+   * score estavel) visivel como "writer vivo" para o watchdog.
+   */
+  private async writeHeartbeat(alreadyWritten: Set<string>): Promise<void> {
+    const ids: string[] = []
+    for (const state of this.assetStates.values()) {
+      if (state.isPaused || alreadyWritten.has(state.id)) continue
+      ids.push(state.id)
+    }
+    if (ids.length === 0) return
+    await this.prisma.asset.updateMany({
+      where: { id: { in: ids } },
+      data: { sentimentUpdatedAt: new Date() },
     })
   }
 
@@ -125,12 +170,16 @@ export class SentimentWriter {
    * e multiplo de SENTIMENT_WRITE_CADENCE. Erro em writeSentiments nao
    * propaga (o writer nao deve travar o tick loop).
    */
-  async tick(): Promise<void> {
+  async tick(ctx?: SentimentTickContext): Promise<void> {
     if (this.layersEnabled?.sentimentCalc === false) return
     this.tickCounter++
     if (this.tickCounter % SENTIMENT_WRITE_CADENCE !== 0) return
     try {
-      await this.writeSentiments()
+      if (this.cycle && ctx) {
+        await this.cycle.run(ctx.tickCount, ctx.sessionType)
+      }
+      const written = await this.writeSentiments()
+      await this.writeHeartbeat(written)
     } catch (err) {
       logger.error('[engine] SentimentWriter: erro inesperado:', err)
     }

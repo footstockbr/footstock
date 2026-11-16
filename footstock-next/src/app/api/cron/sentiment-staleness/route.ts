@@ -83,7 +83,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const now = new Date()
 
   try {
+    // So ativos ativos: o motor nao carrega os inativos, entao eles nunca
+    // recebem o heartbeat e ficariam OBSOLETO para sempre.
     const assets = await prisma.asset.findMany({
+      where: { isActive: true },
       select: {
         id: true,
         ticker: true,

@@ -27,6 +27,7 @@ import { ScheduledOrderRunner } from './ScheduledOrderRunner'
 import { MarginCallChecker } from './MarginCallChecker'
 import { LeverageInterestRunner } from './LeverageInterestRunner'
 import { SentimentWriter } from './SentimentWriter'
+import { SentimentCycle } from './SentimentCycle'
 import { CLUB_STATE_BY_TICKER } from '../microstructure/clubStates'
 import type { PreviousTickDelta } from '../types/motor.types'
 import { NUDGE_MIN_PRICE } from './nudge-constants'
@@ -309,7 +310,11 @@ export class MarketEngine {
     this.scheduledOrderRunner = new ScheduledOrderRunner(this.prisma, redis, sessionManager)
     this.marginCallChecker = new MarginCallChecker(this.prisma, redis)
     this.leverageInterestRunner = new LeverageInterestRunner(this.prisma, redis)
-    this.sentimentWriter = new SentimentWriter({ prisma: this.prisma, assetStates: this.assetStates })
+    this.sentimentWriter = new SentimentWriter({
+      prisma: this.prisma,
+      assetStates: this.assetStates,
+      cycle: new SentimentCycle({ prisma: this.prisma, assetStates: this.assetStates }),
+    })
   }
 
   async start(): Promise<void> {
@@ -1177,8 +1182,9 @@ export class MarketEngine {
     }
 
     // SentimentWriter: cadencia propria (~6 ticks, ~60s). Independente do
-    // updateAssetPrices (colunas disjuntas, sem transacao cruzada).
-    this.sentimentWriter.tick().catch(console.error)
+    // updateAssetPrices (colunas disjuntas, sem transacao cruzada). Calcula via
+    // SentimentCycle (congela em CLOSED) e grava heartbeat de sentimentUpdatedAt.
+    this.sentimentWriter.tick({ tickCount: this.tickCount, sessionType }).catch(console.error)
     motorMetrics.observe('motor_tick_duration_ms', Date.now() - tickStartedMs)
   }
 

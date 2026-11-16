@@ -115,8 +115,12 @@ export const THRESHOLD_BULLISH = 0.2
 /** Limiar inferior para rotulo BEARISH (score <= este valor). */
 export const THRESHOLD_BEARSISH = -0.2
 
-/** Tempo minimo de permanencia (em ticks) antes de permitir flip de rotulo. */
-export const MIN_PERMANENCE_TICKS = 6
+/**
+ * Tempo minimo de permanencia (em ticks) antes de permitir flip de rotulo.
+ * 30 ticks = ~5 min com tick=10s (2026-11-16; era 6 = ~1 min, curto demais com
+ * o calculo ligado: o rotulo piscava em ruido de momentum).
+ */
+export const MIN_PERMANENCE_TICKS = 30
 
 // ─── Helpers internos (puros) ────────────────────────────────────────────
 

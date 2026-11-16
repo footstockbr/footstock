@@ -1,10 +1,15 @@
 name: Sentiment Watchdog (backup diario)
 
 # BACKUP diario do watchdog de frescor do sentimento.
-# PRIMARIO: service Railway `watchdog-sentiment` (Alpine+curl, loop interno 60s).
-# Este workflow e o BACKUP: varredura diaria profunda + workflow_dispatch manual.
+# PRIMARIO: checagem "sentiment" do service Railway `ops-watchdog` (cron a cada
+# 5 min, alerta por email; ver ops-watchdog/watchdog.sh). O service
+# `watchdog-sentiment` citado antes NUNCA existiu no Railway.
+# Este workflow e o BACKUP: varredura diaria + workflow_dispatch manual.
 # O schedule do GitHub Actions para crons frequentes provou-se atrasado/nao-confiavel
 # (incidente 2026-07-03: nenhum disparo em 1h+ apos criacao).
+# Ate 2026-11-16 ficou vermelho todo dia porque o motor nunca calculava nem
+# regravava o sentimento; o motor agora grava um heartbeat de sentimentUpdatedAt
+# a cada ~60s (SentimentWriter).
 
 on:
   schedule:
