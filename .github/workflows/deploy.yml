@@ -121,8 +121,10 @@ jobs:
       - name: Deploy para Railway
         run: railway up --service web --environment production --detach --ci
         env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: 45677912-3487-4978-b20b-fc7cdb8b93cf
+          # Token de PROJETO (escopo: projeto foot-stock, ambiente production).
+          # Nao usar RAILWAY_API_TOKEN aqui: o token de conta antigo morreu em
+          # 2026-11 (Unauthorized) e token de projeto e o caminho do CLI para CI.
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
       - name: Deployment summary
         run: echo "### Deployed to Railway production :rocket:" >> $GITHUB_STEP_SUMMARY
