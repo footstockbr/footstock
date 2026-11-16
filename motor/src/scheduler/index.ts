@@ -36,6 +36,7 @@ import { reconcilePaymentsJob } from './jobs/reconcilePayments'
 import { classifyNewsSentimentJob } from './jobs/classifyNewsSentiment'
 import { reconcileNullTickersJob } from './jobs/reconcileNullTickers'
 import { reconcileImpactDispatchJob } from './jobs/reconcileImpactDispatch'
+import { priceHistoryRetentionJob } from './jobs/priceHistoryRetention'
 
 interface Job {
   name: string
@@ -91,6 +92,10 @@ export function registerAllJobs(): void {
   // NULL e reenvia o evento no Redis. Kill switch: IMPACT_RECONCILER_ENABLED=false.
   // Schedule: a cada 5 minutos.
   registerJob('reconcile-impact-dispatch', '*/5 * * * *', reconcileImpactDispatchJob)
+  // Retencao de price_history: compacta para 1 snapshot/hora apos 31 dias e anula
+  // attribution. Sem ela a tabela encheu o volume do Postgres em 2026-10-29.
+  // Kill switch: PRICE_HISTORY_RETENTION_ENABLED=false. Diario 03:40 UTC.
+  registerJob('price-history-retention', '40 3 * * *', priceHistoryRetentionJob)
 }
 
 /**
