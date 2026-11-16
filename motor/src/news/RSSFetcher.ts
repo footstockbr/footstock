@@ -22,13 +22,19 @@ import { normalizeNewsText } from './news-text'
 // Config
 // ---------------------------------------------------------------------------
 
-/** Fallback hardcoded — usado quando DB não está disponível */
+/**
+ * Fallback hardcoded — usado quando o DB não está disponível.
+ * Espelha os feeds ATIVOS de `rss_feeds` em prod (2026-11-16). Jovem Pan (sem item
+ * desde 2026-06-05) e Mercado da Bola (feed parado desde 2026-02-26, nunca passou
+ * no filtro de 12h) saíram: estão is_active=false no DB e não devem voltar por aqui.
+ * Ao (des)ativar um feed no DB, atualizar esta lista junto.
+ */
 const FEEDS_FALLBACK = [
   { url: 'https://www.espn.com.br/rss',                  source: 'ESPN Brasil'       },
   { url: 'https://www.gazetaesportiva.com/feed/',         source: 'Gazeta Esportiva'  },
   { url: 'https://trivela.com.br/feed/',                  source: 'Trivela'           },
-  { url: 'https://jovempan.com.br/esportes/feed',         source: 'Jovem Pan Esportes'},
-  { url: 'https://www.mercadodabola.com.br/feed/',        source: 'Mercado da Bola'   },
+  { url: 'https://www.vavel.com/br/feed/index.rss',       source: 'VAVEL Brasil'      },
+  { url: 'https://www.ogol.com.br/rss/noticias.php',      source: 'O Gol'             },
 ]
 
 const NEWS_LAST_FETCH_KEY = 'news:last_fetch'
