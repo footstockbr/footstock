@@ -2,6 +2,10 @@
 # Volume do servico montado em /state guarda o estado de deduplicacao.
 # Variaveis: DATABASE_URL, RESEND_API_KEY, RESEND_FROM_EMAIL (referencias ao
 # postgres/web), ALERT_EMAIL_TO. Opcionais: ver cabecalho de watchdog.sh.
+#
+# ATENCAO: o `railway up ops-watchdog --path-as-root` NAO aplicou este arquivo
+# no 1o deploy (2026-11-16); cron e restart NEVER foram gravados direto na
+# instancia (serviceInstanceUpdate). Conferir no painel se mudar algo aqui.
 
 [build]
 builder = "DOCKERFILE"

@@ -106,15 +106,25 @@ SQL="select
        select p.timestamp t from price_history p where p.asset_id = a.id
        order by p.timestamp desc limit 1) x
      where a.is_active), -1),
-  (select sum(pg_database_size(datname)) from pg_database) / 1048576,
-  (select coalesce(sum(size), 0) from pg_ls_waldir()) / 1048576"
+  ((select sum(pg_database_size(datname)) from pg_database) / 1048576)::bigint,
+  ((select coalesce(sum(size), 0) from pg_ls_waldir()) / 1048576)::bigint"
 
+out_ok=0
 if out=$(PGCONNECT_TIMEOUT=10 PGOPTIONS='-c statement_timeout=20000' \
     psql "$DATABASE_URL" -XAtq -F '|' -v ON_ERROR_STOP=1 -c "$SQL" 2>"$WORK/psql.err"); then
-  record db ok "conectado"
+  out_ok=1
   tick_age=$(echo "$out" | cut -d'|' -f1)
   db_mb=$(echo "$out" | cut -d'|' -f2)
   wal_mb=$(echo "$out" | cut -d'|' -f3)
+fi
+is_int() { case "$1" in ''|-|*[!0-9-]*|?*-*) return 1 ;; *) return 0 ;; esac; }
+if [ "$out_ok" = 1 ] && ! { is_int "$tick_age" && is_int "$db_mb" && is_int "$wal_mb"; }; then
+  # Nunca deixar uma saida inesperada derrubar o script (aritmetica do sh aborta).
+  echo "saida inesperada do psql: $(echo "$out" | head -c 200)" >"$WORK/psql.err"
+  out_ok=0
+fi
+if [ "$out_ok" = 1 ]; then
+  record db ok "conectado"
 
   if [ "$tick_age" -lt 0 ]; then
     record ticks fail "nenhum price_history para ativos ativos"

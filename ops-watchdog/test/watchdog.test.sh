@@ -90,6 +90,12 @@ reset; FAKE_PSQL_EXIT=2; run; run
 check "db fora alerta" "$(last_subject)" "[FootStock] ALERTA producao: db"
 grep -q 'connection refused' "$T/mails"; check "detalhe do psql" $? 0
 
+# 4b. saida nao inteira do psql (bug do 1o deploy: aritmetica abortava o script)
+reset; FAKE_PSQL_OUT='4|300.5|80'; run; run
+check "saida decimal nao derruba" "$RC" 0
+check "saida decimal alerta db" "$(last_subject)" "[FootStock] ALERTA producao: db"
+grep -q 'saida inesperada' "$T/mails"; check "detalhe da saida inesperada" $? 0
+
 # 5. disco: 80% -> warn, 95% -> crit
 reset; FAKE_PSQL_OUT='4|37000|302'; run; run
 check "disco 80% avisa" "$(last_subject)" "[FootStock] ALERTA producao: disk_warn"
